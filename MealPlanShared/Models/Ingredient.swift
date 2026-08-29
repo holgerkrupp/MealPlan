@@ -9,6 +9,11 @@ final class Ingredient {
     /// Lowercased / trimmed form used for matching and aggregation.
     var normalizedName: String = ""
     var categoryRaw: String = IngredientCategory.other.rawValue
+    /// Optional household-specific store aisle, e.g. "Turkish market".
+    var customAisleName: String?
+    /// Pantry staples are normally on hand and are omitted when rebuilding a
+    /// generated shopping list. They can still be added manually.
+    var isPantryStaple: Bool = false
 
     @Relationship(deleteRule: .nullify, inverse: \DishIngredient.ingredient)
     var dishIngredients: [DishIngredient]? = []
@@ -27,6 +32,11 @@ final class Ingredient {
     var category: IngredientCategory {
         get { IngredientCategory(rawValue: categoryRaw) ?? .other }
         set { categoryRaw = newValue.rawValue }
+    }
+
+    var aisleName: String {
+        let custom = customAisleName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return custom.isEmpty ? category.localizedName : custom
     }
 
     static func normalize(_ raw: String) -> String {

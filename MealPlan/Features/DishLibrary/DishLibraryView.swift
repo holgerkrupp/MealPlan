@@ -9,11 +9,17 @@ struct DishLibraryView: View {
 
     @State private var newDish: Dish?
     @State private var editingNewDish = false
+    @State private var exportedArchive: ExportedRecipeArchive?
+    @State private var exportError: String?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
     private var filteredDishes: [Dish] {
         appState.dishFilter.apply(to: allDishes)
+    }
+
+    private var collections: [String] {
+        Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
 
     var body: some View {
@@ -53,7 +59,19 @@ struct DishLibraryView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                DishFilterMenu(filter: $appState.dishFilter)
+                DishFilterMenu(filter: $appState.dishFilter, availableCollections: collections)
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
+                    do {
+                        exportedArchive = ExportedRecipeArchive(
+                            url: try MealPlanRecipeArchive.temporaryFile(for: allDishes)
+                        )
+                    } catch {
+                        exportError = error.localizedDescription
+                    }
+                }
+                .disabled(allDishes.isEmpty)
             }
         }
         .sheet(isPresented: $editingNewDish) {
@@ -62,6 +80,15 @@ struct DishLibraryView: View {
                     DishEditorView(dish: newDish, isNew: true)
                 }
             }
+        }
+        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
+        .alert(
+            String(localized: "Couldn’t export recipes"),
+            isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
         }
         .task(id: appState.pendingAddDish?.id) {
             guard let request = appState.pendingAddDish else { return }

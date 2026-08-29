@@ -10,6 +10,14 @@ struct ShoppingListView: View {
     @State private var newItemName = ""
     @State private var exportMessage: String?
     @State private var isExporting = false
+    @State private var customAisleItem: ShoppingListItem?
+    @State private var customAisleName = ""
+
+    private struct AisleGroup {
+        var name: String
+        var sortOrder: Int
+        var items: [ShoppingListItem]
+    }
 
     private var range: DayRange {
         appState.shoppingRange.dayRange(
@@ -18,10 +26,16 @@ struct ShoppingListView: View {
         )
     }
 
-    private var grouped: [(category: IngredientCategory, items: [ShoppingListItem])] {
-        Dictionary(grouping: items, by: { $0.category })
-            .map { ($0.key, $0.value.sorted { $0.sortIndex < $1.sortIndex }) }
-            .sorted { $0.0.sortOrder < $1.0.sortOrder }
+    private var grouped: [AisleGroup] {
+        Dictionary(grouping: items, by: \.aisleName)
+            .map { name, values in
+                AisleGroup(
+                    name: name,
+                    sortOrder: values.map { $0.category.sortOrder }.min() ?? IngredientCategory.other.sortOrder,
+                    items: values.sorted { $0.sortIndex < $1.sortIndex }
+                )
+            }
+            .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
     }
 
     var body: some View {
@@ -51,10 +65,16 @@ struct ShoppingListView: View {
                 )
             }
 
-            ForEach(grouped, id: \.category) { group in
-                Section(group.category.localizedName) {
+            ForEach(grouped, id: \.name) { group in
+                Section(group.name) {
                     ForEach(group.items) { item in
-                        ShoppingListRow(item: item) { toggle(item) }
+                        ShoppingListRow(
+                            item: item,
+                            onToggle: { toggle(item) },
+                            onCategoryChange: { changeCategory(item, to: $0) },
+                            onCustomAisle: { beginCustomAisle(for: item) },
+                            onMarkStaple: { markAsStaple(item) }
+                        )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
                 }
@@ -106,6 +126,17 @@ struct ShoppingListView: View {
         } message: {
             Text(exportMessage ?? "")
         }
+        .alert(
+            String(localized: "Custom aisle"),
+            isPresented: Binding(get: { customAisleItem != nil }, set: { if !$0 { customAisleItem = nil } })
+        ) {
+            TextField(String(localized: "Aisle name"), text: $customAisleName)
+            Button(String(localized: "Save")) { saveCustomAisle() }
+            Button(String(localized: "Use standard aisle")) { clearCustomAisle() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("This aisle name will be remembered for the ingredient.")
+        }
     }
 
     // MARK: - Text for sharing
@@ -114,7 +145,7 @@ struct ShoppingListView: View {
         var lines: [String] = [String(localized: "Shopping list")]
         for group in grouped {
             lines.append("")
-            lines.append(group.category.localizedName.uppercased())
+            lines.append(group.name.uppercased())
             for item in group.items where !item.isChecked {
                 if let amount = item.displayText, !amount.isEmpty {
                     lines.append("• \(item.name) — \(amount)")
@@ -174,6 +205,43 @@ struct ShoppingListView: View {
         for item in items where item.isChecked {
             context.delete(item)
         }
+        try? context.save()
+    }
+
+    private func changeCategory(_ item: ShoppingListItem, to category: IngredientCategory) {
+        item.category = category
+        item.customAisleName = nil
+        item.ingredient?.category = category
+        item.ingredient?.customAisleName = nil
+        item.sortIndex = category.sortOrder * 1000 + item.sortIndex % 1000
+        try? context.save()
+    }
+
+    private func beginCustomAisle(for item: ShoppingListItem) {
+        customAisleName = item.customAisleName ?? ""
+        customAisleItem = item
+    }
+
+    private func saveCustomAisle() {
+        guard let item = customAisleItem else { return }
+        let trimmed = customAisleName.trimmingCharacters(in: .whitespacesAndNewlines)
+        item.customAisleName = trimmed.isEmpty ? nil : trimmed
+        item.ingredient?.customAisleName = item.customAisleName
+        try? context.save()
+        customAisleItem = nil
+    }
+
+    private func clearCustomAisle() {
+        guard let item = customAisleItem else { return }
+        item.customAisleName = nil
+        item.ingredient?.customAisleName = nil
+        try? context.save()
+        customAisleItem = nil
+    }
+
+    private func markAsStaple(_ item: ShoppingListItem) {
+        item.ingredient?.isPantryStaple = true
+        context.delete(item)
         try? context.save()
     }
 

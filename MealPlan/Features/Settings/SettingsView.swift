@@ -65,6 +65,14 @@ struct SettingsView: View {
                 }
             }
 
+            Section(String(localized: "Shopping")) {
+                NavigationLink {
+                    PantryStaplesView()
+                } label: {
+                    Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
+                }
+            }
+
             Section {
                 LabeledContent(String(localized: "Version"), value: appVersion)
             } footer: {

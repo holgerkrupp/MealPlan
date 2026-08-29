@@ -11,94 +11,29 @@ struct DishEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
 
     @State private var photoItems: [PhotosPickerItem] = []
     @State private var showingCamera = false
     @State private var showingImagePlayground = false
+    @State private var showingRecipeScanner = false
     @State private var newIngredientText = ""
     @State private var sourceURLText = ""
+    @State private var collectionsText = ""
+    @State private var duplicateDish: Dish?
 
     var body: some View {
         Form {
-            Section(String(localized: "Name")) {
-                TextField(String(localized: "e.g. Spaghetti Bolognese"), text: $dish.name)
-                    .font(.headline)
-            }
+            identitySections
+            detailsSection
+            organizationSection
 
-            Section(String(localized: "Photos")) {
-                photoRow
-            }
-
-            Section {
-                DishGlyphPicker(dish: dish, tint: DishGlyph.tint(forName: dish.name))
-            } footer: {
-                Text("Pick an emoji or a symbol to stand in for dishes you don\u{2019}t have a photo of.")
-            }
-
-            Section(String(localized: "Details")) {
-                Stepper(value: $dish.servings, in: 1...50) {
-                    Text(String(localized: "\(dish.servings) servings"))
-                }
-                minutePicker(String(localized: "Prep time"), value: $dish.prepTimeMinutes)
-                minutePicker(String(localized: "Cook time"), value: $dish.cookTimeMinutes)
-                Picker(String(localized: "Season"), selection: Binding(
-                    get: { dish.season },
-                    set: { dish.season = $0 }
-                )) {
-                    Text(String(localized: "Any")).tag(Season?.none)
-                    ForEach(Season.allCases) { Text($0.localizedName).tag(Season?.some($0)) }
-                }
-            }
-
-            Section(String(localized: "Meal type")) {
-                FlowLayout(spacing: 8) {
-                    ForEach(MealTypeTag.allCases) { tag in
-                        chip(tag.localizedName, on: dish.mealTypeTags.contains(tag)) { toggleMealType(tag) }
-                    }
-                }
-            }
-
-            Section(String(localized: "Diet")) {
-                FlowLayout(spacing: 8) {
-                    ForEach(DietaryTag.allCases) { tag in
-                        chip(tag.localizedName, on: dish.dietaryTags.contains(tag)) { toggleDietary(tag) }
-                    }
-                }
-            }
-
-            Section(String(localized: "Ingredients")) {
-                ForEach(dish.sortedIngredients) { line in
-                    IngredientRowEditor(line: line)
-                }
-                .onDelete(perform: deleteIngredients)
-
-                HStack {
-                    TextField(String(localized: "e.g. 200 g flour"), text: $newIngredientText)
-                        .onSubmit(addIngredient)
-                    Button(String(localized: "Add"), action: addIngredient)
-                        .disabled(newIngredientText.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-
-            Section(String(localized: "Recipe")) {
-                TextField(
-                    String(localized: "Steps, notes, anything…"),
-                    text: Binding(get: { dish.recipeText ?? "" }, set: { dish.recipeText = $0.isEmpty ? nil : $0 }),
-                    axis: .vertical
-                )
-                .lineLimit(4...12)
-            }
-
-            Section(String(localized: "Source link")) {
-                TextField("https://…", text: $sourceURLText)
-                    #if os(iOS)
-                    .keyboardType(.URL)
-                    .textInputAutocapitalization(.never)
-                    #endif
-                    .autocorrectionDisabled()
-            }
+            tagsSections
+            ingredientsSection
+            recipeSection
+            sourceSection
         }
         .formStyle(.grouped)
         .navigationTitle(isNew ? String(localized: "New dish") : String(localized: "Edit dish"))
@@ -107,14 +42,17 @@ struct DishEditorView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "Cancel"), role: .cancel, action: cancel)
+                Button(String(localized: "Cancel"), role: .cancel) { cancel() }
             }
             ToolbarItem(placement: .confirmationAction) {
-                Button(String(localized: "Save"), action: save)
+                Button(String(localized: "Save")) { save() }
                     .disabled(dish.name.trimmingCharacters(in: .whitespaces).isEmpty)
             }
         }
-        .onAppear { sourceURLText = dish.sourceURLString ?? "" }
+        .onAppear {
+            sourceURLText = dish.sourceURLString ?? ""
+            collectionsText = dish.collectionNames.joined(separator: ", ")
+        }
         .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
         // While the placeholder is still the app's suggestion it follows what
         // the dish becomes; `refreshAutoGlyph` is a no-op once the user picks.
@@ -130,9 +68,136 @@ struct DishEditorView: View {
             guard let data = try? Data(contentsOf: url) else { return }
             addImage(ImagePreparation.prepared(from: data))
         }
+        .sheet(isPresented: $showingRecipeScanner) {
+            NavigationStack { RecipeScannerView(dish: dish) }
+        }
+        .alert(item: $duplicateDish) { duplicate in
+            Alert(
+                title: Text("Possible duplicate"),
+                message: Text(verbatim: "“\(duplicate.name)” is already in your library."),
+                primaryButton: .default(Text("Save anyway")) { save(checkDuplicates: false) },
+                secondaryButton: .cancel(Text("Keep editing"))
+            )
+        }
     }
 
     // MARK: - Photos
+
+    private var identitySections: some View {
+        Group {
+            Section(String(localized: "Name")) {
+                TextField(String(localized: "e.g. Spaghetti Bolognese"), text: $dish.name)
+                    .font(.headline)
+            }
+            Section(String(localized: "Photos")) {
+                photoRow
+            }
+            Section {
+                DishGlyphPicker(dish: dish, tint: DishGlyph.tint(forName: dish.name))
+            } footer: {
+                Text("Pick an emoji or a symbol to stand in for dishes you don\u{2019}t have a photo of.")
+            }
+        }
+    }
+
+    private var detailsSection: some View {
+        Section(String(localized: "Details")) {
+            Stepper(value: $dish.servings, in: 1...50) {
+                Text(String(localized: "\(dish.servings) servings"))
+            }
+            minutePicker(String(localized: "Prep time"), value: $dish.prepTimeMinutes)
+            minutePicker(String(localized: "Cook time"), value: $dish.cookTimeMinutes)
+            Picker(String(localized: "Season"), selection: Binding(
+                get: { dish.season },
+                set: { dish.season = $0 }
+            )) {
+                Text(String(localized: "Any")).tag(Season?.none)
+                ForEach(Season.allCases) { season in
+                    Text(season.localizedName).tag(Season?.some(season))
+                }
+            }
+        }
+    }
+
+    private var organizationSection: some View {
+        Section(String(localized: "Organization")) {
+            Toggle(String(localized: "Favorite"), isOn: $dish.isFavorite)
+            Picker(String(localized: "Rating"), selection: ratingBinding) {
+                ForEach(Array(0...5), id: \.self) { value in
+                    Text(verbatim: ratingLabel(value)).tag(value)
+                }
+            }
+            TextField(String(localized: "Collections, separated by commas"), text: $collectionsText)
+        }
+    }
+
+    private var tagsSections: some View {
+        Group {
+            Section(String(localized: "Meal type")) {
+                FlowLayout(spacing: 8) {
+                    ForEach(MealTypeTag.allCases) { tag in
+                        chip(tag.localizedName, on: dish.mealTypeTags.contains(tag)) { toggleMealType(tag) }
+                    }
+                }
+            }
+            Section(String(localized: "Diet")) {
+                FlowLayout(spacing: 8) {
+                    ForEach(DietaryTag.allCases) { tag in
+                        chip(tag.localizedName, on: dish.dietaryTags.contains(tag)) { toggleDietary(tag) }
+                    }
+                }
+            }
+        }
+    }
+
+    private var ingredientsSection: some View {
+        Section(String(localized: "Ingredients")) {
+            ForEach(dish.sortedIngredients) { line in
+                IngredientRowEditor(line: line)
+            }
+            .onDelete(perform: deleteIngredients)
+
+            HStack {
+                TextField(String(localized: "e.g. 200 g flour"), text: $newIngredientText)
+                    .onSubmit(addIngredient)
+                Button(String(localized: "Add"), action: addIngredient)
+                    .disabled(newIngredientText.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private var recipeSection: some View {
+        Section(String(localized: "Recipe")) {
+            TextField(
+                String(localized: "Steps, notes, anything…"),
+                text: Binding(get: { dish.recipeText ?? "" }, set: { dish.recipeText = $0.isEmpty ? nil : $0 }),
+                axis: .vertical
+            )
+            .lineLimit(4...12)
+            Button { showingRecipeScanner = true } label: {
+                Label(String(localized: "Scan from photo or PDF"), systemImage: "doc.viewfinder")
+            }
+        }
+    }
+
+    private var sourceSection: some View {
+        Section(String(localized: "Source link")) {
+            TextField("https://…", text: $sourceURLText)
+                #if os(iOS)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                #endif
+                .autocorrectionDisabled()
+        }
+    }
+
+    private func ratingLabel(_ value: Int) -> String {
+        value == 0 ? "—" : String(repeating: "★", count: value)
+    }
+
+    private var ratingBinding: Binding<Int> {
+        Binding(get: { dish.rating }, set: { dish.rating = $0 })
+    }
 
     private var photoRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
@@ -293,10 +358,20 @@ struct DishEditorView: View {
         }
     }
 
-    private func save() {
+    private func save(checkDuplicates: Bool = true) {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.sourceURLString = trimmedURL.isEmpty ? nil : trimmedURL
+        dish.collectionNames = Array(Set(collectionsText.split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }))
+            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        if checkDuplicates, let duplicate = RecipeDuplicateDetector.match(
+            name: dish.name, sourceURL: dish.sourceURL, in: allDishes, excluding: dish
+        ) {
+            duplicateDish = duplicate
+            return
+        }
         if dish.household == nil { dish.household = appState.currentHousehold }
         try? context.save()
         dismiss()

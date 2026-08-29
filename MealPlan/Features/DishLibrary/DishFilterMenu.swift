@@ -5,6 +5,7 @@ import SwiftUI
 @MainActor
 struct DishFilterMenu: View {
     @Binding var filter: DishFilter
+    var availableCollections: [String] = []
 
     var body: some View {
         Menu {
@@ -13,6 +14,24 @@ struct DishFilterMenu: View {
             }
 
             Divider()
+
+            Toggle(String(localized: "Favorites only"), isOn: $filter.favoritesOnly)
+
+            Menu(String(localized: "Rating")) {
+                Button(String(localized: "Any")) { filter.minimumRating = nil }
+                ForEach(1...5, id: \.self) { rating in
+                    Button(String(repeating: "★", count: rating)) { filter.minimumRating = rating }
+                }
+            }
+
+            if !availableCollections.isEmpty {
+                Menu(String(localized: "Collection")) {
+                    Button(String(localized: "Any")) { filter.collection = nil }
+                    ForEach(availableCollections, id: \.self) { name in
+                        Button(name) { filter.collection = name }
+                    }
+                }
+            }
 
             Menu(String(localized: "Meal type")) {
                 Button(String(localized: "Any")) { filter.mealType = nil }

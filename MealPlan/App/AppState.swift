@@ -28,6 +28,7 @@ final class AppState {
     var requestedSection: AppSection?
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
+    var importNotice: String?
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -107,10 +108,48 @@ final class AppState {
     func handle(url: URL) {
         if let link = DeepLink(url: url) { handle(link) }
     }
+
+    /// Handles recipe archives opened from Files/Finder as well as the app's
+    /// normal deep links. Existing exact-name/source matches are skipped so
+    /// re-opening the same backup is safe.
+    func handle(openedURL url: URL, context: ModelContext) {
+        let ext = url.pathExtension.lowercased()
+        guard ["mealplanrecipes", "paprikarecipes", "paprikarecipe"].contains(ext) else {
+            handle(url: url)
+            return
+        }
+
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
+        do {
+            let data = try Data(contentsOf: url)
+            let recipes = ext == "mealplanrecipes"
+                ? try MealPlanRecipeArchive.importedRecipes(from: data)
+                : try PaprikaArchive.recipes(from: data)
+            var existing = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+            var imported = 0
+            for recipe in recipes {
+                guard RecipeDuplicateDetector.match(recipe, in: existing) == nil else { continue }
+                let dish = DishBuilder.makeDish(
+                    from: recipe,
+                    household: currentHousehold,
+                    createdByName: currentMemberName,
+                    context: context
+                )
+                existing.append(dish)
+                imported += 1
+            }
+            requestedSection = .dishes
+            importNotice = String(localized: "Imported \(imported) recipes; skipped \(recipes.count - imported) duplicates.")
+        } catch {
+            importNotice = String(localized: "Couldn’t import that recipe archive: \(error.localizedDescription)")
+        }
+    }
 }
 
 /// Best-effort human name for the person using this device.
 enum DeviceOwner {
+    @MainActor
     static var name: String {
         #if os(macOS)
         let full = Host.current().localizedName ?? ""

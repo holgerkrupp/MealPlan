@@ -91,4 +91,12 @@ struct ShoppingListBuilderTests {
         #expect(text.contains("≈"))
         #expect(text.contains("ml"))
     }
+
+    @Test func pantryStaplesAreExcluded() {
+        let d = dish("Pasta", servings: 2)
+        line(d, "Salt", 2, .mass, category: .spices)
+        d.sortedIngredients.first?.ingredient?.isPantryStaple = true
+        let lines = ShoppingListBuilder.aggregate([MealPlanEntry(date: .now, slot: .dinner, dish: d)])
+        #expect(lines.isEmpty)
+    }
 }

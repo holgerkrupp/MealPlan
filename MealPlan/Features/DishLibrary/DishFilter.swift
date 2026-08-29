@@ -32,10 +32,14 @@ struct DishFilter: Equatable {
     var maxMinutes: Int?
     /// Only dishes not cooked within this many days (or never).
     var notCookedWithinDays: Int?
+    var favoritesOnly = false
+    var minimumRating: Int?
+    var collection: String?
 
     var isActive: Bool {
         mealType != nil || !dietary.isEmpty || season != nil
             || maxMinutes != nil || notCookedWithinDays != nil
+            || favoritesOnly || minimumRating != nil || collection != nil
     }
 
     /// Apply the non-sort filters and search ranking to a fetched list.
@@ -52,13 +56,24 @@ struct DishFilter: Equatable {
                     return false
                 }
             }
+            if favoritesOnly, !dish.isFavorite { return false }
+            if let minimumRating, dish.rating < minimumRating { return false }
+            if let collection, !dish.collectionNames.contains(where: {
+                $0.localizedCaseInsensitiveCompare(collection) == .orderedSame
+            }) { return false }
             return true
         }
 
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
+            let words = query.searchFolded.split(whereSeparator: \.isWhitespace).map(String.init)
             result = result
-                .map { (dish: $0, score: $0.name.fuzzyScore(query: query)) }
+                .map { dish in
+                    let nameScore = dish.name.fuzzyScore(query: query)
+                    let content = dish.searchableText.searchFolded
+                    let deepMatch = words.allSatisfy(content.contains) ? 0.70 : 0
+                    return (dish: dish, score: max(nameScore, deepMatch))
+                }
                 .filter { $0.score > 0 }
                 .sorted { $0.score > $1.score }
                 .map(\.dish)

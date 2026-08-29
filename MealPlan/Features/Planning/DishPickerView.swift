@@ -33,7 +33,11 @@ struct DishPickerView: View {
     private var matches: [Dish] {
         guard !query.isEmpty else { return Array(allDishes.prefix(12)) }
         return allDishes
-            .map { (dish: $0, score: $0.name.fuzzyScore(query: query)) }
+            .map { dish in
+                let name = dish.name.fuzzyScore(query: query)
+                let content = dish.searchableText.searchFolded
+                return (dish: dish, score: max(name, content.contains(query.searchFolded) ? 0.7 : 0))
+            }
             .filter { $0.score > 0 }
             .sorted { $0.score > $1.score }
             .prefix(12)
@@ -168,6 +172,10 @@ struct DishPickerView: View {
         defer { isImporting = false }
         do {
             var recipe = try await importer.importRecipe(from: url)
+            if let existing = RecipeDuplicateDetector.match(recipe, in: allDishes) {
+                planExisting(existing)
+                return
+            }
             if let tag = MealTypeTag(rawValue: mealKey), recipe.categories.isEmpty {
                 recipe.categories = [tag.rawValue]
             }

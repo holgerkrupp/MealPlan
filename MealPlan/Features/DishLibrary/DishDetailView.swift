@@ -11,6 +11,9 @@ struct DishDetailView: View {
     @State private var showingEditor = false
     @State private var showingPlanSheet = false
     @State private var showingRecipeFinder = false
+    @State private var showingCookingMode = false
+    @State private var exportedArchive: ExportedRecipeArchive?
+    @State private var exportError: String?
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -61,12 +64,24 @@ struct DishDetailView: View {
         #endif
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
-                Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
-                    showingPlanSheet = true
+                HStack {
+                    if !dish.sortedIngredients.isEmpty || !(dish.recipeText ?? "").isEmpty {
+                        Button(String(localized: "Cook"), systemImage: "frying.pan") {
+                            showingCookingMode = true
+                        }
+                    }
+                    Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
+                        showingPlanSheet = true
+                    }
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Edit"), systemImage: "pencil") { showingEditor = true }
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Export recipe"), systemImage: "square.and.arrow.up") {
+                    exportRecipe()
+                }
             }
         }
         .onAppear { if targetServings == 0 { targetServings = max(1, dish.servings) } }
@@ -81,6 +96,19 @@ struct DishDetailView: View {
         }
         .sheet(isPresented: $showingRecipeFinder) {
             NavigationStack { RecipeFinderView(dish: dish) }
+        }
+        .sheet(isPresented: $showingCookingMode) {
+            NavigationStack { CookingModeView(dish: dish) }
+                .environment(appState)
+        }
+        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
+        .alert(
+            String(localized: "Couldn’t export recipe"),
+            isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(exportError ?? "")
         }
     }
 
@@ -119,6 +147,15 @@ struct DishDetailView: View {
 
     private var tagRow: some View {
         WrapHStack(spacing: 8) {
+            if dish.isFavorite {
+                badge(String(localized: "Favorite"), system: "heart.fill", tint: .pink)
+            }
+            if dish.rating > 0 {
+                badge(String(repeating: "★", count: dish.rating), system: "star.fill", tint: .yellow)
+            }
+            ForEach(dish.collectionNames, id: \.self) { collection in
+                badge(collection, system: "folder", tint: .indigo)
+            }
             ForEach(Array(dish.mealTypeTags).sorted(by: { $0.rawValue < $1.rawValue })) { tag in
                 badge(tag.localizedName, system: "circle.fill", tint: .accentColor)
             }
@@ -217,6 +254,14 @@ struct DishDetailView: View {
         VStack(alignment: .leading) {
             Text(label).font(.caption).foregroundStyle(.secondary)
             Text(value).font(.body.weight(.medium))
+        }
+    }
+
+    private func exportRecipe() {
+        do {
+            exportedArchive = ExportedRecipeArchive(url: try MealPlanRecipeArchive.temporaryFile(for: [dish]))
+        } catch {
+            exportError = error.localizedDescription
         }
     }
 }

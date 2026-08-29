@@ -47,6 +47,17 @@ struct RootView: View {
                 appState.requestedSection = nil
             }
         }
+        .alert(
+            String(localized: "Recipe import"),
+            isPresented: Binding(
+                get: { appState.importNotice != nil },
+                set: { if !$0 { appState.importNotice = nil } }
+            )
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(appState.importNotice ?? "")
+        }
     }
 
     private var nonNilSelection: Binding<AppSection> {

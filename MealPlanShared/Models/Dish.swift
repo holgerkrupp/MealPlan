@@ -11,6 +11,13 @@ final class Dish {
     var sourceURLString: String?
     /// Identifier of the app a recipe was imported from, e.g. "Paprika".
     var importedSourceApp: String?
+    /// Lightweight personal organization that stays useful even when a
+    /// household does not want to maintain a deep category hierarchy.
+    var isFavorite: Bool = false
+    /// Zero means unrated; 1...5 is the cook's personal rating.
+    var rating: Int = 0
+    /// User-defined collections such as "Weeknight" or "Christmas".
+    var collectionNames: [String] = []
     var servings: Int = 2
     var prepTimeMinutes: Int?
     var cookTimeMinutes: Int?
@@ -119,6 +126,15 @@ final class Dish {
         case let (nil, c?): c
         case (nil, nil): nil
         }
+    }
+
+    /// Text searched by the recipe library. Keeping this as a computed value
+    /// avoids a migration-prone denormalized search index.
+    var searchableText: String {
+        ([name, recipeText ?? ""]
+            + sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
+            + collectionNames)
+            .joined(separator: " ")
     }
 
     /// Whole days since the dish was last cooked, or `nil` if never cooked.

@@ -14,6 +14,7 @@ struct ShareRootView: View {
     @State private var date = Date.now
     @State private var mealKey = ""
     @State private var meals: [(key: String, name: String, symbol: String)] = []
+    @State private var saveMessage = String(localized: "Saved to MealPlan")
 
     private let container = SharedStore.container(cloudKit: false)
 
@@ -32,7 +33,7 @@ struct ShareRootView: View {
                     ProgressView(String(localized: "Saving…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .done:
-                    ContentUnavailableView(String(localized: "Saved to MealPlan"), systemImage: "checkmark.circle.fill")
+                    ContentUnavailableView(saveMessage, systemImage: "checkmark.circle.fill")
                 case .ready:
                     form
                 }
@@ -121,6 +122,13 @@ struct ShareRootView: View {
             } catch {
                 phase = .failed(error.localizedDescription)
             }
+        case .mealPlan(let data):
+            do {
+                recipes = try MealPlanRecipeArchive.importedRecipes(from: data)
+                phase = recipes.isEmpty ? .failed(String(localized: "No recipes in that file.")) : .ready
+            } catch {
+                phase = .failed(error.localizedDescription)
+            }
         }
     }
 
@@ -145,13 +153,21 @@ struct ShareRootView: View {
         let context = container.mainContext
         let household = try? context.fetch(FetchDescriptor<Household>()).first
         let member = DeviceOwnerName.value
+        var existing = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        var saved = 0
 
         for recipe in recipes {
+            guard RecipeDuplicateDetector.match(recipe, in: existing) == nil else { continue }
             let dish = DishBuilder.makeDish(from: recipe, household: household, createdByName: member, context: context)
+            existing.append(dish)
+            saved += 1
             if plan {
                 MealPlanner.plan(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context)
             }
         }
+        saveMessage = saved == 0
+            ? String(localized: "Already in MealPlan")
+            : String(localized: "Saved \(saved) recipes to MealPlan")
         phase = .done
     }
 
@@ -175,6 +191,7 @@ struct ShareRootView: View {
 
 /// Device owner name, duplicated here so the extension needn't import app code.
 enum DeviceOwnerName {
+    @MainActor
     static var value: String {
         #if canImport(UIKit)
         let name = UIDevice.current.name

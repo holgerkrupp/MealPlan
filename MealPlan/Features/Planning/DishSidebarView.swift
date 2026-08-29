@@ -20,6 +20,10 @@ struct DishSidebarView: View {
         appState.planDishFilter.apply(to: allDishes)
     }
 
+    private var collections: [String] {
+        Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+    }
+
     var body: some View {
         @Bindable var appState = appState
 
@@ -62,7 +66,7 @@ struct DishSidebarView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                DishFilterMenu(filter: filter)
+                DishFilterMenu(filter: filter, availableCollections: collections)
                     .labelStyle(.iconOnly)
                     .menuIndicator(.hidden)
                     .fixedSize()

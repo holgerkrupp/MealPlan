@@ -8,6 +8,7 @@ final class ShoppingListItem {
     var name: String = ""
     var normalizedName: String = ""
     var categoryRaw: String = IngredientCategory.other.rawValue
+    var customAisleName: String?
     /// Aggregated amount in canonical units, when known.
     var canonicalValue: Double?
     var canonicalDimensionRaw: String?
@@ -47,5 +48,10 @@ final class ShoppingListItem {
     var dimension: QuantityDimension? {
         get { canonicalDimensionRaw.flatMap(QuantityDimension.init(rawValue:)) }
         set { canonicalDimensionRaw = newValue?.rawValue }
+    }
+
+    var aisleName: String {
+        let custom = customAisleName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return custom.isEmpty ? category.localizedName : custom
     }
 }

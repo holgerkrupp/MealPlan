@@ -29,7 +29,14 @@ struct IngredientRowEditor: View {
                 }
                 .labelsHidden()
                 .font(.caption)
+                Toggle(isOn: pantryBinding) {
+                    Label(String(localized: "Usually have"), systemImage: "shippingbox")
+                        .font(.caption)
+                }
+                .toggleStyle(.button)
             }
+            TextField(String(localized: "Custom aisle (optional)"), text: customAisleBinding)
+                .font(.caption)
         }
         .onAppear { if text.isEmpty { text = composedText } }
     }
@@ -56,6 +63,24 @@ struct IngredientRowEditor: View {
         Binding(
             get: { line.ingredient?.category ?? .other },
             set: { line.ingredient?.category = $0; try? context.save() }
+        )
+    }
+
+    private var pantryBinding: Binding<Bool> {
+        Binding(
+            get: { line.ingredient?.isPantryStaple ?? false },
+            set: { line.ingredient?.isPantryStaple = $0; try? context.save() }
+        )
+    }
+
+    private var customAisleBinding: Binding<String> {
+        Binding(
+            get: { line.ingredient?.customAisleName ?? "" },
+            set: { value in
+                let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                line.ingredient?.customAisleName = trimmed.isEmpty ? nil : value
+                try? context.save()
+            }
         )
     }
 

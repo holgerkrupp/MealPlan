@@ -23,29 +23,60 @@ enum DishBuilder {
         dish.prepTimeMinutes = recipe.prepTimeMinutes
         dish.cookTimeMinutes = recipe.cookTimeMinutes
         dish.needsReview = recipe.needsReview
+        dish.isFavorite = recipe.isFavorite
+        dish.rating = min(max(recipe.rating, 0), 5)
+        dish.collectionNames = recipe.collectionNames
+        dish.mealTypeTags = recipe.mealTypeTags
+        dish.dietaryTags = recipe.dietaryTags
+        dish.season = recipe.season
+        if let glyph = recipe.glyph {
+            dish.glyph = glyph
+            dish.glyphIsAuto = false
+        }
         context.insert(dish)
 
-        if let imageData = recipe.imageData {
-            let image = DishImage(data: imageData, isPrimary: true)
+        for (index, imageData) in ([recipe.imageData].compactMap { $0 } + recipe.additionalImageData).enumerated() {
+            let image = DishImage(data: imageData, sortIndex: index, isPrimary: index == 0)
             image.dish = dish
             context.insert(image)
         }
 
-        for (index, rawLine) in recipe.ingredientLines.enumerated() {
-            let parsed = GermanUnitParser.parse(rawLine)
-            let ingredient = upsertIngredient(named: parsed.name, household: household, context: context)
-            let line = DishIngredient(
-                canonicalValue: parsed.quantity?.value,
-                dimension: parsed.quantity?.dimension,
-                displayUnit: parsed.displayUnit,
-                isApproximate: parsed.isApproximate,
-                note: parsed.note,
-                rawText: parsed.rawText,
-                sortIndex: index
-            )
-            line.dish = dish
-            line.ingredient = ingredient
-            context.insert(line)
+        if let structured = recipe.structuredIngredients {
+            for (index, value) in structured.enumerated() {
+                let ingredient = upsertIngredient(named: value.name, household: household, context: context)
+                ingredient.category = value.category
+                ingredient.customAisleName = value.customAisleName
+                ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
+                let line = DishIngredient(
+                    canonicalValue: value.canonicalValue,
+                    dimension: value.dimension,
+                    displayUnit: value.displayUnit,
+                    isApproximate: value.isApproximate,
+                    note: value.note,
+                    rawText: value.rawText,
+                    sortIndex: index
+                )
+                line.dish = dish
+                line.ingredient = ingredient
+                context.insert(line)
+            }
+        } else {
+            for (index, rawLine) in recipe.ingredientLines.enumerated() {
+                let parsed = GermanUnitParser.parse(rawLine)
+                let ingredient = upsertIngredient(named: parsed.name, household: household, context: context)
+                let line = DishIngredient(
+                    canonicalValue: parsed.quantity?.value,
+                    dimension: parsed.quantity?.dimension,
+                    displayUnit: parsed.displayUnit,
+                    isApproximate: parsed.isApproximate,
+                    note: parsed.note,
+                    rawText: parsed.rawText,
+                    sortIndex: index
+                )
+                line.dish = dish
+                line.ingredient = ingredient
+                context.insert(line)
+            }
         }
 
         // After the ingredients exist, so a nondescript name like "Omas

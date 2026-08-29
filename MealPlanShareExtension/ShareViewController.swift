@@ -42,6 +42,10 @@ final class ShareViewController: UIViewController {
                 }
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
                    let url = await loadURL(provider, type: UTType.fileURL.identifier) {
+                    if url.pathExtension.lowercased() == "mealplanrecipes",
+                       let data = try? Data(contentsOf: url) {
+                        return .mealPlan(data)
+                    }
                     if ["paprikarecipes", "paprikarecipe"].contains(url.pathExtension.lowercased()),
                        let data = try? Data(contentsOf: url) {
                         return .paprika(data)
@@ -68,29 +72,24 @@ final class ShareViewController: UIViewController {
 
     private static func loadURL(_ provider: NSItemProvider, type: String) async -> URL? {
         await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: type) { item, _ in
-                if let url = item as? URL { continuation.resume(returning: url) }
-                else if let data = item as? Data, let s = String(data: data, encoding: .utf8) {
-                    continuation.resume(returning: URL(string: s.trimmingCharacters(in: .whitespacesAndNewlines)))
-                } else { continuation.resume(returning: nil) }
+            provider.loadObject(ofClass: NSURL.self) { object, _ in
+                continuation.resume(returning: (object as? NSURL).map { $0 as URL })
             }
         }
     }
 
     private static func loadText(_ provider: NSItemProvider) async -> String? {
         await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.plainText.identifier) { item, _ in
-                continuation.resume(returning: (item as? String) ?? (item as? Data).flatMap { String(data: $0, encoding: .utf8) })
+            provider.loadObject(ofClass: NSString.self) { object, _ in
+                continuation.resume(returning: (object as? NSString).map { $0 as String })
             }
         }
     }
 
     private static func loadFileData(_ provider: NSItemProvider, type: String) async -> Data? {
         await withCheckedContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: type) { item, _ in
-                if let url = item as? URL { continuation.resume(returning: try? Data(contentsOf: url)) }
-                else if let data = item as? Data { continuation.resume(returning: data) }
-                else { continuation.resume(returning: nil) }
+            provider.loadDataRepresentation(forTypeIdentifier: type) { data, _ in
+                continuation.resume(returning: data)
             }
         }
     }
@@ -108,5 +107,6 @@ enum SharePayload {
     case url(URL)
     case text(String)
     case paprika(Data)
+    case mealPlan(Data)
     case empty
 }

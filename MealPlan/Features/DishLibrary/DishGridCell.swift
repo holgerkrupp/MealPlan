@@ -19,6 +19,15 @@ struct DishGridCell: View {
                         .background(.orange, in: Circle())
                         .padding(6)
                 }
+                if dish.isFavorite {
+                    Image(systemName: "heart.fill")
+                        .font(.caption)
+                        .foregroundStyle(.white)
+                        .padding(6)
+                        .background(.pink, in: Circle())
+                        .padding(6)
+                        .offset(x: dish.needsReview ? -34 : 0)
+                }
             }
 
             Text(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
@@ -27,6 +36,11 @@ struct DishGridCell: View {
                 .foregroundStyle(.primary)
 
             HStack(spacing: 6) {
+                if dish.rating > 0 {
+                    Text(String(repeating: "★", count: dish.rating))
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                }
                 ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue }).prefix(3)) { tag in
                     Image(systemName: tag.symbolName)
                         .font(.caption2)

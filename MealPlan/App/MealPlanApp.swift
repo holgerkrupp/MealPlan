@@ -23,7 +23,7 @@ struct MealPlanApp: App {
                     await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
                 }
                 .onOpenURL { url in
-                    appState.handle(url: url)
+                    appState.handle(openedURL: url, context: container.mainContext)
                 }
         }
         .modelContainer(container)

@@ -30,6 +30,10 @@ struct AddDishIntent: AppIntent {
                 recipe = try? await StubRecipeImporter().importRecipe(from: url)
             }
             let resolved = recipe ?? ImportedRecipe(name: url.host() ?? "Recipe", sourceURL: url)
+            let existing = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+            if let duplicate = RecipeDuplicateDetector.match(resolved, in: existing) {
+                return .result(dialog: "“\(duplicate.name)” is already in MealPlan.")
+            }
             dish = DishBuilder.makeDish(from: resolved, household: household, createdByName: member, context: context)
         } else {
             let title = (name ?? "").trimmingCharacters(in: .whitespacesAndNewlines)

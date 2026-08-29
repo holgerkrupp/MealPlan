@@ -6,6 +6,7 @@ struct AggregatedLine: Equatable, Sendable {
     var name: String
     var normalizedName: String
     var category: IngredientCategory
+    var customAisleName: String? = nil
     var quantity: Quantity?
     var displayUnit: String?
     var isApproximate: Bool = false
@@ -31,6 +32,7 @@ enum ShoppingListBuilder {
             let factor = Double(entry.effectiveServings) / Double(base)
 
             for item in dish.sortedIngredients {
+                guard item.ingredient?.isPantryStaple != true else { continue }
                 let displayName = item.ingredient?.name
                     ?? item.rawText
                     ?? String(localized: "Ingredient")
@@ -43,6 +45,7 @@ enum ShoppingListBuilder {
                     name: displayName,
                     normalizedName: normalized,
                     category: category,
+                    customAisleName: item.ingredient?.customAisleName,
                     displayUnit: item.displayUnit
                 )
 
@@ -129,6 +132,8 @@ enum ShoppingListBuilder {
             item.isApproximate = line.isApproximate
             item.displayText = displayText(for: line, system: system)
             item.sourceDishNames = line.sourceDishNames
+            item.ingredient = (household.ingredients ?? []).first { $0.normalizedName == line.normalizedName }
+            item.customAisleName = line.customAisleName
             item.isChecked = checkedByName[line.normalizedName] ?? false
             item.rangeStart = range.start
             item.rangeEnd = range.end
