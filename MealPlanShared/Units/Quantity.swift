@@ -1,0 +1,22 @@
+import Foundation
+
+/// An amount in the canonical unit for its dimension:
+/// mass → grams, volume → millilitres, count → pieces.
+struct Quantity: Equatable, Sendable {
+    var value: Double
+    var dimension: QuantityDimension
+
+    static func grams(_ v: Double) -> Quantity { .init(value: v, dimension: .mass) }
+    static func millilitres(_ v: Double) -> Quantity { .init(value: v, dimension: .volume) }
+    static func pieces(_ v: Double) -> Quantity { .init(value: v, dimension: .count) }
+
+    /// Add two quantities of the same dimension. Returns `nil` for a mismatch.
+    func adding(_ other: Quantity) -> Quantity? {
+        guard other.dimension == dimension else { return nil }
+        return Quantity(value: value + other.value, dimension: dimension)
+    }
+
+    func scaled(by factor: Double) -> Quantity {
+        Quantity(value: value * factor, dimension: dimension)
+    }
+}

@@ -1,0 +1,105 @@
+import SwiftUI
+
+#if canImport(UIKit)
+import UIKit
+typealias PlatformImage = UIImage
+#elseif canImport(AppKit)
+import AppKit
+typealias PlatformImage = NSImage
+#endif
+
+extension Image {
+    /// Build a SwiftUI `Image` from raw photo data, cross-platform.
+    init?(data: Data) {
+        #if canImport(UIKit)
+        guard let ui = UIImage(data: data) else { return nil }
+        self.init(uiImage: ui)
+        #elseif canImport(AppKit)
+        guard let ns = NSImage(data: data) else { return nil }
+        self.init(nsImage: ns)
+        #else
+        return nil
+        #endif
+    }
+}
+
+/// A rounded dish photo. With no photo it falls back to the dish's own
+/// placeholder glyph — an emoji or SF Symbol the user picked — and only then
+/// to the generic fork-and-knife.
+@MainActor
+struct DishThumbnail: View {
+    let data: Data?
+    var glyph: DishGlyph?
+    /// Tints the glyph placeholder; derived from the dish name so each dish
+    /// keeps the same colour everywhere.
+    var tint: Color = .gray
+    var size: CGFloat = 56
+    var cornerRadius: CGFloat = 12
+
+    init(data: Data?, glyph: DishGlyph? = nil, tint: Color = .gray, size: CGFloat = 56, cornerRadius: CGFloat = 12) {
+        self.data = data
+        self.glyph = glyph
+        self.tint = tint
+        self.size = size
+        self.cornerRadius = cornerRadius
+    }
+
+    /// Photo, glyph and tint all taken from the dish.
+    init(dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12) {
+        self.data = dish?.primaryImageData
+        self.glyph = dish?.glyph
+        self.tint = DishGlyph.tint(forName: dish?.name ?? "")
+        self.size = size
+        self.cornerRadius = cornerRadius
+    }
+
+    var body: some View {
+        Group {
+            if let data, let image = Image(data: data) {
+                image
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                placeholder
+            }
+        }
+        .frame(width: size, height: size)
+        .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    @ViewBuilder
+    private var placeholder: some View {
+        switch glyph {
+        case .emoji(let value):
+            ZStack {
+                Rectangle().fill(tint.opacity(0.18))
+                Text(value)
+                    .font(.system(size: size * 0.52))
+                    .minimumScaleFactor(0.5)
+            }
+        case .symbol(let name):
+            ZStack {
+                Rectangle().fill(tint.opacity(0.18))
+                Image(systemName: name)
+                    .font(.system(size: size * 0.42))
+                    .foregroundStyle(tint)
+            }
+        case nil:
+            ZStack {
+                Rectangle().fill(.quaternary)
+                Image(systemName: "fork.knife")
+                    .font(.system(size: size * 0.4))
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+}
+
+#Preview {
+    HStack(spacing: 12) {
+        DishThumbnail(data: nil, size: 72)
+        DishThumbnail(data: nil, glyph: .emoji("🍝"), tint: .orange, size: 72)
+        DishThumbnail(data: nil, glyph: .symbol("carrot.fill"), tint: .green, size: 72)
+    }
+    .padding()
+}

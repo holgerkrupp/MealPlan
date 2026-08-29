@@ -1,0 +1,198 @@
+import SwiftUI
+import SwiftData
+
+@MainActor
+struct ShoppingListView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+    @Query(sort: \ShoppingListItem.sortIndex) private var items: [ShoppingListItem]
+
+    @State private var newItemName = ""
+    @State private var exportMessage: String?
+    @State private var isExporting = false
+
+    private var range: DayRange {
+        appState.shoppingRange.dayRange(
+            customStart: appState.shoppingCustomStart,
+            customEnd: appState.shoppingCustomEnd
+        )
+    }
+
+    private var grouped: [(category: IngredientCategory, items: [ShoppingListItem])] {
+        Dictionary(grouping: items, by: { $0.category })
+            .map { ($0.key, $0.value.sorted { $0.sortIndex < $1.sortIndex }) }
+            .sorted { $0.0.sortOrder < $1.0.sortOrder }
+    }
+
+    var body: some View {
+        @Bindable var appState = appState
+
+        List {
+            Section {
+                Picker(String(localized: "For"), selection: $appState.shoppingRange) {
+                    ForEach(ShoppingRangeOption.allCases) { Text($0.localizedName).tag($0) }
+                }
+                if appState.shoppingRange == .custom {
+                    DatePicker(String(localized: "From"), selection: $appState.shoppingCustomStart, displayedComponents: .date)
+                    DatePicker(String(localized: "To"), selection: $appState.shoppingCustomEnd, displayedComponents: .date)
+                }
+                Button {
+                    regenerate()
+                } label: {
+                    Label(String(localized: "Rebuild from plan"), systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+
+            if items.isEmpty {
+                ContentUnavailableView(
+                    String(localized: "Nothing to buy yet"),
+                    systemImage: "cart",
+                    description: Text("Plan some meals, then rebuild the list — or add items yourself below.")
+                )
+            }
+
+            ForEach(grouped, id: \.category) { group in
+                Section(group.category.localizedName) {
+                    ForEach(group.items) { item in
+                        ShoppingListRow(item: item) { toggle(item) }
+                    }
+                    .onDelete { offsets in delete(offsets, in: group.items) }
+                }
+            }
+
+            Section {
+                HStack {
+                    TextField(String(localized: "Add an item"), text: $newItemName)
+                        .onSubmit(addManualItem)
+                    Button(String(localized: "Add"), action: addManualItem)
+                        .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+            }
+        }
+        .navigationTitle(AppSection.shopping.title)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                ShareLink(item: shareText) {
+                    Label(String(localized: "Share"), systemImage: "square.and.arrow.up")
+                }
+                .disabled(items.isEmpty)
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Menu {
+                    #if os(iOS)
+                    Button {
+                        Task { await exportToReminders() }
+                    } label: {
+                        Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
+                    }
+                    .disabled(isExporting || items.isEmpty)
+                    #endif
+                    Button(String(localized: "Clear ticked items"), role: .destructive) {
+                        clearChecked()
+                    }
+                    .disabled(!items.contains(where: \.isChecked))
+                } label: {
+                    Label(String(localized: "More"), systemImage: "ellipsis.circle")
+                }
+            }
+        }
+        .onAppear { if items.isEmpty { regenerate() } }
+        .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
+        .alert(
+            String(localized: "Reminders"),
+            isPresented: Binding(get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(exportMessage ?? "")
+        }
+    }
+
+    // MARK: - Text for sharing
+
+    private var shareText: String {
+        var lines: [String] = [String(localized: "Shopping list")]
+        for group in grouped {
+            lines.append("")
+            lines.append(group.category.localizedName.uppercased())
+            for item in group.items where !item.isChecked {
+                if let amount = item.displayText, !amount.isEmpty {
+                    lines.append("• \(item.name) — \(amount)")
+                } else {
+                    lines.append("• \(item.name)")
+                }
+            }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Actions
+
+    private func regenerate() {
+        guard let household = appState.currentHousehold else { return }
+        ShoppingListBuilder.regenerate(
+            range: range, household: household, system: appState.unitSystem, context: context
+        )
+    }
+
+    private func toggle(_ item: ShoppingListItem) {
+        item.isChecked.toggle()
+        try? context.save()
+    }
+
+    private func addManualItem() {
+        let name = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty, let household = appState.currentHousehold else { return }
+        let parsed = GermanUnitParser.parse(name)
+        let item = ShoppingListItem(name: parsed.name.isEmpty ? name : parsed.name, isManual: true)
+        item.household = household
+        if let q = parsed.quantity {
+            item.canonicalValue = q.value
+            item.dimension = q.dimension
+            item.isApproximate = parsed.isApproximate
+            item.displayText = ShoppingListBuilder.displayText(
+                for: AggregatedLine(name: parsed.name, normalizedName: item.normalizedName,
+                                    category: .other, quantity: q, displayUnit: parsed.displayUnit,
+                                    isApproximate: parsed.isApproximate),
+                system: appState.unitSystem
+            )
+        }
+        item.sortIndex = IngredientCategory.other.sortOrder * 1000 + 999
+        context.insert(item)
+        try? context.save()
+        newItemName = ""
+    }
+
+    private func delete(_ offsets: IndexSet, in list: [ShoppingListItem]) {
+        for index in offsets where list.indices.contains(index) {
+            context.delete(list[index])
+        }
+        try? context.save()
+    }
+
+    private func clearChecked() {
+        for item in items where item.isChecked {
+            context.delete(item)
+        }
+        try? context.save()
+    }
+
+    #if os(iOS)
+    private func exportToReminders() async {
+        isExporting = true
+        defer { isExporting = false }
+        do {
+            let count = try await RemindersExporter.export(items)
+            exportMessage = String(localized: "Added \(count) items to your “MealPlan” list in Reminders.")
+        } catch {
+            exportMessage = error.localizedDescription
+        }
+    }
+    #endif
+}
+
+#Preview {
+    NavigationStack { ShoppingListView() }
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}

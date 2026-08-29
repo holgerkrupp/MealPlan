@@ -1,0 +1,1446 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "—" : {
+
+    },
+    "(dish removed)" : {
+
+    },
+    "%@" : {
+
+    },
+    "%lld" : {
+
+    },
+    "%lld d" : {
+
+    },
+    "%lld days ago" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "vor %lld Tagen"
+          }
+        }
+      }
+    },
+    "%lld days or more" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Tage oder mehr"
+          }
+        }
+      }
+    },
+    "%lld meals" : {
+
+    },
+    "%lld min" : {
+
+    },
+    "%lld servings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Portionen"
+          }
+        }
+      }
+    },
+    "+ %lld×" : {
+
+    },
+    "≤ %lld min" : {
+
+    },
+    "A–Z" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "A–Z"
+          }
+        }
+      }
+    },
+    "Add" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzufügen"
+          }
+        }
+      }
+    },
+    "Add “%@” as a new dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ als neues Gericht hinzufügen"
+          }
+        }
+      }
+    },
+    "Add ${name} to MealPlan" : {
+
+    },
+    "Add a meal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeit hinzufügen"
+          }
+        }
+      }
+    },
+    "Add a photo of tonight’s result" : {
+
+    },
+    "Add an item" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eintrag hinzufügen"
+          }
+        }
+      }
+    },
+    "Add another" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere hinzufügen"
+          }
+        }
+      }
+    },
+    "Add Dish" : {
+
+    },
+    "Add Dish to MealPlan" : {
+
+    },
+    "Add meal" : {
+
+    },
+    "Add meals in Settings to start planning." : {
+
+    },
+    "Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later." : {
+
+    },
+    "Add to Reminders" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu Erinnerungen hinzufügen"
+          }
+        }
+      }
+    },
+    "Added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hinzugefügt am"
+          }
+        }
+      }
+    },
+    "Added “%@” to MealPlan." : {
+
+    },
+    "Added %lld items to your “MealPlan” list in Reminders." : {
+
+    },
+    "Adds a dish by name, or imports one from a recipe link." : {
+
+    },
+    "All" : {
+
+    },
+    "Any" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle"
+          }
+        }
+      }
+    },
+    "Apply a template…" : {
+
+    },
+    "Apply to week of %@" : {
+
+    },
+    "as needed" : {
+
+    },
+    "At" : {
+
+    },
+    "Autumn" : {
+
+    },
+    "Bakery" : {
+
+    },
+    "Breakfast" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frühstück"
+          }
+        }
+      }
+    },
+    "Calendar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender"
+          }
+        }
+      }
+    },
+    "Can edit" : {
+
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Choose photo" : {
+
+    },
+    "Clear filters" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter zurücksetzen"
+          }
+        }
+      }
+    },
+    "Clear search" : {
+
+    },
+    "Clear ticked items" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erledigte entfernen"
+          }
+        }
+      }
+    },
+    "Cook" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochen"
+          }
+        }
+      }
+    },
+    "Cook time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochzeit"
+          }
+        }
+      }
+    },
+    "Cooked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gekocht"
+          }
+        }
+      }
+    },
+    "Cooked %lld d ago" : {
+
+    },
+    "Cooked most often" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Am häufigsten gekocht"
+          }
+        }
+      }
+    },
+    "Copy from last week" : {
+
+    },
+    "Couldn’t find a list to add the items to." : {
+
+    },
+    "Couldn’t import that link" : {
+
+    },
+    "Couldn’t reach that page." : {
+
+    },
+    "Couldn’t start sharing" : {
+
+    },
+    "Custom range" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eigener Zeitraum"
+          }
+        }
+      }
+    },
+    "Dairy & eggs" : {
+
+    },
+    "Date" : {
+
+    },
+    "Day" : {
+
+    },
+    "Default" : {
+
+    },
+    "Delete" : {
+
+    },
+    "Delete “%@” and its %lld planned meal(s)?" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete “%1$@” and its %2$lld planned meal(s)?"
+          }
+        }
+      }
+    },
+    "Delete “%@”?" : {
+
+    },
+    "Delete meal" : {
+
+    },
+    "Deleted “%@”" : {
+
+    },
+    "Details" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Details"
+          }
+        }
+      }
+    },
+    "Didn’t like it" : {
+
+    },
+    "Diet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ernährung"
+          }
+        }
+      }
+    },
+    "Dinner" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abendessen"
+          }
+        }
+      }
+    },
+    "Dish" : {
+
+    },
+    "Dish name or link" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gericht oder Link"
+          }
+        }
+      }
+    },
+    "Dishes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerichte"
+          }
+        }
+      }
+    },
+    "Don’t forget to prep “%@” for tomorrow." : {
+
+    },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Drinks" : {
+
+    },
+    "e.g. 200 g flour" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "z. B. 200 g Mehl"
+          }
+        }
+      }
+    },
+    "e.g. Spaghetti Bolognese" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "z. B. Spaghetti Bolognese"
+          }
+        }
+      }
+    },
+    "e.g. Standard week" : {
+
+    },
+    "e.g. use up the spinach" : {
+
+    },
+    "Edit" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit / reschedule…" : {
+
+    },
+    "Edit dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gericht bearbeiten"
+          }
+        }
+      }
+    },
+    "Edit meal" : {
+
+    },
+    "Everyone you invite sees the same plan and dishes. You can invite people as editors or view-only guests." : {
+
+    },
+    "Export week as PDF" : {
+
+    },
+    "Family" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Familie"
+          }
+        }
+      }
+    },
+    "Family member" : {
+
+    },
+    "Family name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Name der Familie"
+          }
+        }
+      }
+    },
+    "Favourite" : {
+
+    },
+    "Filter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Filter"
+          }
+        }
+      }
+    },
+    "For" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für"
+          }
+        }
+      }
+    },
+    "For this meal" : {
+
+    },
+    "From" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von"
+          }
+        }
+      }
+    },
+    "From week of" : {
+
+    },
+    "Frozen" : {
+
+    },
+    "Fruit & vegetables" : {
+
+    },
+    "Get This Week’s Meal Plan" : {
+
+    },
+    "Gluten-free" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glutenfrei"
+          }
+        }
+      }
+    },
+    "Go" : {
+
+    },
+    "Grouped by week" : {
+
+    },
+    "Herbs & spices" : {
+
+    },
+    "Here’s this week’s plan." : {
+
+    },
+    "Hide dish list" : {
+
+    },
+    "History" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verlauf"
+          }
+        }
+      }
+    },
+    "Household" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushalt"
+          }
+        }
+      }
+    },
+    "How to make it" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zubereitung"
+          }
+        }
+      }
+    },
+    "https://…" : {
+
+    },
+    "Icon" : {
+
+    },
+    "Imperial (oz, cups, °F)" : {
+
+    },
+    "Import from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von %@ importieren"
+          }
+        }
+      }
+    },
+    "Imported automatically — please check the details." : {
+
+    },
+    "Imported recipe" : {
+
+    },
+    "In season now" : {
+
+    },
+    "Ingredient" : {
+
+    },
+    "Ingredients" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutaten"
+          }
+        }
+      }
+    },
+    "Ingredients for %lld" : {
+
+    },
+    "Jump to date" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu Datum springen"
+          }
+        }
+      }
+    },
+    "Jump to date…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zu Datum springen …"
+          }
+        }
+      }
+    },
+    "Kid-friendly" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kindgerecht"
+          }
+        }
+      }
+    },
+    "Lactose-free" : {
+
+    },
+    "Last cooked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt gekocht"
+          }
+        }
+      }
+    },
+    "Layout" : {
+
+    },
+    "Liked it" : {
+
+    },
+    "Low-carb" : {
+
+    },
+    "Lunch" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittagessen"
+          }
+        }
+      }
+    },
+    "Mark as cooked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als gekocht markieren"
+          }
+        }
+      }
+    },
+    "Max. time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Max. Zeit"
+          }
+        }
+      }
+    },
+    "Me" : {
+
+    },
+    "Meal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeit"
+          }
+        }
+      }
+    },
+    "Meal name" : {
+
+    },
+    "Meal type" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Art der Mahlzeit"
+          }
+        }
+      }
+    },
+    "MealPlan" : {
+
+    },
+    "MealPlan doesn’t have permission to add to Reminders." : {
+
+    },
+    "Meals" : {
+
+    },
+    "Meat & fish" : {
+
+    },
+    "Metric (g, ml, °C)" : {
+
+    },
+    "More" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehr"
+          }
+        }
+      }
+    },
+    "Name" : {
+
+    },
+    "Never" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie"
+          }
+        }
+      }
+    },
+    "Never cooked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nie gekocht"
+          }
+        }
+      }
+    },
+    "New dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neues Gericht"
+          }
+        }
+      }
+    },
+    "New meal" : {
+
+    },
+    "Next 2 weeks" : {
+
+    },
+    "Next 3 days" : {
+
+    },
+    "No dishes match" : {
+
+    },
+    "No dishes yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Gerichte"
+          }
+        }
+      }
+    },
+    "No ingredients added yet." : {
+
+    },
+    "No recipe found on that page." : {
+
+    },
+    "No templates yet" : {
+
+    },
+    "None" : {
+
+    },
+    "Not cooked in" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht gekocht seit"
+          }
+        }
+      }
+    },
+    "Not cooked in a while" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Länger nicht gekocht"
+          }
+        }
+      }
+    },
+    "Note" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notiz"
+          }
+        }
+      }
+    },
+    "Note (optional)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notiz (optional)"
+          }
+        }
+      }
+    },
+    "Nothing is planned for this week yet." : {
+
+    },
+    "Nothing to buy yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch nichts einzukaufen"
+          }
+        }
+      }
+    },
+    "Nut-free" : {
+
+    },
+    "OK" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "OK"
+          }
+        }
+      }
+    },
+    "One day at a time" : {
+
+    },
+    "Other" : {
+
+    },
+    "Owner" : {
+
+    },
+    "Pantry" : {
+
+    },
+    "Photos" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fotos"
+          }
+        }
+      }
+    },
+    "Plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plan"
+          }
+        }
+      }
+    },
+    "Plan ${dish} for ${slot} on ${date}" : {
+
+    },
+    "Plan meal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeit planen"
+          }
+        }
+      }
+    },
+    "Plan Meal" : {
+
+    },
+    "Plan Meal for Date" : {
+
+    },
+    "Plan meal…" : {
+
+    },
+    "Plan some meals, then rebuild the list — or add items yourself below." : {
+
+    },
+    "Planned “%@” for %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Planned “%1$@” for %2$@."
+          }
+        }
+      }
+    },
+    "Planned by %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geplant von %@"
+          }
+        }
+      }
+    },
+    "Planned meal" : {
+
+    },
+    "Prep" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorb."
+          }
+        }
+      }
+    },
+    "Prep reminder" : {
+
+    },
+    "Prep time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorbereitungszeit"
+          }
+        }
+      }
+    },
+    "Preview" : {
+
+    },
+    "Reaction" : {
+
+    },
+    "Rebuild from plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Plan neu erstellen"
+          }
+        }
+      }
+    },
+    "Recently added" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt hinzugefügt"
+          }
+        }
+      }
+    },
+    "Recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept"
+          }
+        }
+      }
+    },
+    "Recipe link" : {
+
+    },
+    "Remind me about tonight’s dinner" : {
+
+    },
+    "Remind me the evening before" : {
+
+    },
+    "Reminders" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erinnerungen"
+          }
+        }
+      }
+    },
+    "Remove" : {
+
+    },
+    "Remove %@" : {
+
+    },
+    "Remove from plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Plan entfernen"
+          }
+        }
+      }
+    },
+    "Removed “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ entfernt"
+          }
+        }
+      }
+    },
+    "Repeat next week" : {
+
+    },
+    "Replace what’s already planned" : {
+
+    },
+    "Resize dish list" : {
+
+    },
+    "Returns the meals planned for the current week." : {
+
+    },
+    "Save" : {
+
+    },
+    "Save a week as a template first." : {
+
+    },
+    "Save as template" : {
+
+    },
+    "Save link only" : {
+
+    },
+    "Save week as template" : {
+
+    },
+    "Schedules a dish on a day and meal." : {
+
+    },
+    "Search dishes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerichte suchen"
+          }
+        }
+      }
+    },
+    "Season" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saison"
+          }
+        }
+      }
+    },
+    "Setting up…" : {
+
+    },
+    "Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen"
+          }
+        }
+      }
+    },
+    "Share" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teilen"
+          }
+        }
+      }
+    },
+    "Share / Print" : {
+
+    },
+    "Share with family" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Familie teilen"
+          }
+        }
+      }
+    },
+    "Shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einkaufsliste"
+          }
+        }
+      }
+    },
+    "Show amounts in" : {
+
+    },
+    "Show details" : {
+
+    },
+    "Show dish list" : {
+
+    },
+    "Snack" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snack"
+          }
+        }
+      }
+    },
+    "Sort by" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortieren nach"
+          }
+        }
+      }
+    },
+    "Source link" : {
+
+    },
+    "Spring" : {
+
+    },
+    "Start typing to search, or paste a recipe link." : {
+
+    },
+    "Steps, notes, anything…" : {
+
+    },
+    "Summer" : {
+
+    },
+    "Template name" : {
+
+    },
+    "That dish isn’t in your library." : {
+
+    },
+    "That file couldn’t be read." : {
+
+    },
+    "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it." : {
+
+    },
+    "This family" : {
+
+    },
+    "This month" : {
+
+    },
+    "This week" : {
+
+    },
+    "This Week’s Plan" : {
+
+    },
+    "Times cooked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie oft gekocht"
+          }
+        }
+      }
+    },
+    "To" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bis"
+          }
+        }
+      }
+    },
+    "Today" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heute"
+          }
+        }
+      }
+    },
+    "Tonight’s dinner" : {
+
+    },
+    "Undo" : {
+
+    },
+    "Units" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einheiten"
+          }
+        }
+      }
+    },
+    "Untitled dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbenanntes Gericht"
+          }
+        }
+      }
+    },
+    "Untitled meal" : {
+
+    },
+    "Use a template" : {
+
+    },
+    "Use as the dish’s photo" : {
+
+    },
+    "Vegan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vegan"
+          }
+        }
+      }
+    },
+    "Vegetarian" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vegetarisch"
+          }
+        }
+      }
+    },
+    "Version" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Version"
+          }
+        }
+      }
+    },
+    "View only" : {
+
+    },
+    "We skipped this" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haben wir ausgelassen"
+          }
+        }
+      }
+    },
+    "Week" : {
+
+    },
+    "Week %lld · %@ – %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "KW %lld · %@ – %@"
+          }
+        }
+      }
+    },
+    "Week PDF" : {
+
+    },
+    "Week template" : {
+
+    },
+    "What should the dish be called?" : {
+
+    },
+    "When" : {
+
+    },
+    "Who’s planning" : {
+
+    },
+    "Winter" : {
+
+    },
+    "You" : {
+
+    },
+    "You joined as a view-only guest." : {
+
+    },
+    "Your dishes" : {
+
+    },
+    "Your family is being created." : {
+
+    },
+    "Your plan and dishes are stored on your device and shared with your family through iCloud." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Plan und deine Gerichte werden auf deinem Gerät gespeichert und über iCloud mit deiner Familie geteilt."
+          }
+        }
+      }
+    },
+    "Your week is ready as a PDF." : {
+
+    }
+  },
+  "version" : "1.0"
+}
