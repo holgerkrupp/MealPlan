@@ -26,6 +26,60 @@ struct UnitConversionTests {
         #expect(d.text.contains("Bund"))
     }
 
+    @Test func eggsAlwaysRoundToWholeCounts() {
+        let up = UnitConversion.string(
+            for: .pieces(2.75), system: .metric,
+            ingredientName: "Eier", locale: Locale(identifier: "en_US")
+        )
+        #expect(up.text == "3 ×")
+        #expect(up.isApproximate)
+
+        let down = UnitConversion.string(
+            for: .pieces(2.25), system: .metric,
+            ingredientName: "eggs", locale: Locale(identifier: "en_US")
+        )
+        #expect(down.text == "2 ×")
+        #expect(down.isApproximate)
+
+        let scaledWayDown = UnitConversion.string(
+            for: .pieces(0.25), system: .metric,
+            ingredientName: "Ei", locale: Locale(identifier: "en_US")
+        )
+        #expect(scaledWayDown.text == "1 ×")
+    }
+
+    @Test func otherSmallCountsRoundToUsefulHalves() {
+        let lemon = UnitConversion.string(
+            for: .pieces(2.25), system: .metric,
+            ingredientName: "Lemons", locale: Locale(identifier: "en_US")
+        )
+        #expect(lemon.text == "2.5 ×")
+        #expect(lemon.isApproximate)
+
+        let large = UnitConversion.string(
+            for: .pieces(12.4), system: .metric,
+            ingredientName: "Tomatoes", locale: Locale(identifier: "en_US")
+        )
+        #expect(large.text == "12 ×")
+    }
+
+    @Test func eggplantIsNotMistakenForEggs() {
+        let display = UnitConversion.string(
+            for: .pieces(2.25), system: .metric,
+            ingredientName: "Eggplant", locale: Locale(identifier: "en_US")
+        )
+        #expect(display.text == "2.5 ×")
+    }
+
+    @Test func exactWholeEggCountIsNotMarkedApproximate() {
+        let display = UnitConversion.string(
+            for: .pieces(3), system: .metric,
+            ingredientName: "Eggs", locale: Locale(identifier: "en_US")
+        )
+        #expect(display.text == "3 ×")
+        #expect(!display.isApproximate)
+    }
+
     @Test func temperatureConversion() {
         #expect(abs(UnitConversion.celsiusToFahrenheit(180) - 356) < 0.001)
         #expect(abs(UnitConversion.fahrenheitToCelsius(356) - 180) < 0.001)

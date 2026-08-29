@@ -23,11 +23,17 @@ enum UnitConversion {
     ) -> Display {
         switch quantity.dimension {
         case .count:
-            let n = format(quantity.value, locale: locale)
+            let practical = practicalCount(
+                quantity.value,
+                ingredientName: ingredientName,
+                preferredUnit: preferredUnit
+            )
+            let n = format(practical.value, locale: locale)
+            let rounded = approximate || practical.wasAdjusted
             if let preferredUnit, !preferredUnit.isEmpty, preferredUnit != "Stück" {
-                return Display(text: "\(n) \(preferredUnit)", isApproximate: approximate)
+                return Display(text: "\(n) \(preferredUnit)", isApproximate: rounded)
             }
-            return Display(text: "\(n) ×", isApproximate: approximate)
+            return Display(text: "\(n) ×", isApproximate: rounded)
 
         case .mass:
             switch system {
@@ -92,6 +98,48 @@ enum UnitConversion {
     }
 
     // MARK: - Formatting
+
+    /// Counts need different display rules from weights. A mathematically
+    /// exact scaled amount such as 2.75 eggs is not actionable in a kitchen.
+    /// Eggs (including yolks/whites) always become whole units. Other small
+    /// countables retain useful halves—half a lemon is reasonable—then switch
+    /// to whole units once the quantity is large.
+    static func practicalCount(
+        _ value: Double,
+        ingredientName: String?,
+        preferredUnit: String? = nil
+    ) -> (value: Double, wasAdjusted: Bool) {
+        guard value.isFinite else { return (0, true) }
+        guard value > 0 else { return (0, value != 0) }
+
+        let step: Double
+        if requiresWholeCount(ingredientName: ingredientName, preferredUnit: preferredUnit) {
+            step = 1
+        } else {
+            step = value < 10 ? 0.5 : 1
+        }
+
+        // A positive ingredient should not disappear when scaling a recipe
+        // down. Use one whole egg, or half of another countable item.
+        let minimum = step
+        let result = max(minimum, (value / step).rounded() * step)
+        return (result, abs(result - value) > 0.000_001)
+    }
+
+    private static func requiresWholeCount(ingredientName: String?, preferredUnit: String?) -> Bool {
+        let raw = [ingredientName, preferredUnit].compactMap { $0 }.joined(separator: " ")
+        let folded = raw.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: Locale(identifier: "en_US_POSIX")
+        )
+        let tokens = folded.components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        let wholeTokens: Set<String> = [
+            "ei", "eier", "egg", "eggs", "eigelb", "eigelbe", "eiweiss",
+            "yolk", "yolks"
+        ]
+        return !wholeTokens.isDisjoint(with: tokens)
+    }
 
     static func format(_ value: Double, locale: Locale) -> String {
         let rounded: Double
