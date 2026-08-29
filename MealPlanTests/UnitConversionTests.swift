@@ -80,11 +80,87 @@ struct UnitConversionTests {
         #expect(!display.isApproximate)
     }
 
+    @Test func exactModePreservesFractionalCounts() {
+        let display = UnitConversion.string(
+            for: .pieces(2.75),
+            system: .metric,
+            ingredientName: "Eggs",
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        )
+        #expect(display.text == "2.75 ×")
+        #expect(!display.isApproximate)
+    }
+
+    @Test func metricConversionsUsePracticalStepsByDefault() {
+        // Canonical values produced by one imperial ounce and fluid ounce.
+        let mass = UnitConversion.string(
+            for: .grams(28.3495),
+            system: .metric,
+            locale: Locale(identifier: "en_US")
+        )
+        let volume = UnitConversion.string(
+            for: .millilitres(29.5735),
+            system: .metric,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(mass.text == "28 g")
+        #expect(mass.isApproximate)
+        #expect(volume.text == "30 ml")
+        #expect(volume.isApproximate)
+    }
+
+    @Test func exactModePreservesConvertedMetricValues() {
+        let mass = UnitConversion.string(
+            for: .grams(28.3495),
+            system: .metric,
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        )
+        let volume = UnitConversion.string(
+            for: .millilitres(29.5735),
+            system: .metric,
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(mass.text == "28.3495 g")
+        #expect(!mass.isApproximate)
+        #expect(volume.text == "29.5735 ml")
+        #expect(!volume.isApproximate)
+    }
+
+    @Test func imperialConversionsCanBeRoundedOrExact() {
+        let rounded = UnitConversion.string(
+            for: .grams(500),
+            system: .imperial,
+            locale: Locale(identifier: "en_US")
+        )
+        let exact = UnitConversion.string(
+            for: .grams(500),
+            system: .imperial,
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(rounded.text == "17.75 oz")
+        #expect(rounded.isApproximate)
+        #expect(exact.text == "17.637 oz")
+        #expect(!exact.isApproximate)
+    }
+
     @Test func temperatureConversion() {
         #expect(abs(UnitConversion.celsiusToFahrenheit(180) - 356) < 0.001)
         #expect(abs(UnitConversion.fahrenheitToCelsius(356) - 180) < 0.001)
         #expect(UnitConversion.ovenTemperature(celsius: 180, system: .metric) == "180 °C")
         #expect(UnitConversion.ovenTemperature(celsius: 180, system: .imperial).contains("°F"))
+        #expect(UnitConversion.ovenTemperature(
+            celsius: 181.25,
+            system: .metric,
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        ) == "181.25 °C")
     }
 
     @Test func volumeToWeightFlagsKnownDensity() {

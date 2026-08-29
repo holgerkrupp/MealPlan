@@ -6,6 +6,7 @@ struct ServingScaler {
     var baseServings: Int
     var targetServings: Int
     var system: UnitSystem
+    var roundsAmounts: Bool = true
     var locale: Locale = .current
 
     var factor: Double {
@@ -25,6 +26,7 @@ struct ServingScaler {
             preferredUnit: line.displayUnit,
             approximate: line.isApproximate,
             ingredientName: line.ingredient?.name,
+            roundsAmounts: roundsAmounts,
             locale: locale
         )
         return (display.isApproximate ? "≈ " : "") + display.text

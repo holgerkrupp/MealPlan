@@ -20,12 +20,20 @@ struct SettingsView: View {
                     TextField(String(localized: "Family name"), text: bindingName(household))
                 }
 
-                Section(String(localized: "Units")) {
+                Section {
                     Picker(String(localized: "Show amounts in"), selection: bindingUnit(household)) {
                         ForEach(UnitSystem.allCases) { system in
                             Text(system.localizedName).tag(system)
                         }
                     }
+                    Toggle(
+                        String(localized: "Round scaled and converted amounts"),
+                        isOn: bindingRoundedAmounts(household)
+                    )
+                } header: {
+                    Text(String(localized: "Units"))
+                } footer: {
+                    Text("Uses practical kitchen increments, including whole eggs. Turn off to show exact values.")
                 }
 
                 Section(String(localized: "Calendar")) {
@@ -98,7 +106,33 @@ struct SettingsView: View {
     }
 
     private func bindingUnit(_ household: Household) -> Binding<UnitSystem> {
-        Binding(get: { household.unitSystem }, set: { household.unitSystem = $0; try? context.save() })
+        Binding(
+            get: { household.unitSystem },
+            set: { value in
+                household.unitSystem = value
+                ShoppingListBuilder.refreshDisplayText(
+                    for: household.shoppingItems ?? [],
+                    system: value,
+                    roundsAmounts: household.roundsDisplayedAmounts
+                )
+                try? context.save()
+            }
+        )
+    }
+
+    private func bindingRoundedAmounts(_ household: Household) -> Binding<Bool> {
+        Binding(
+            get: { household.roundsDisplayedAmounts },
+            set: { value in
+                household.roundsDisplayedAmounts = value
+                ShoppingListBuilder.refreshDisplayText(
+                    for: household.shoppingItems ?? [],
+                    system: household.unitSystem,
+                    roundsAmounts: value
+                )
+                try? context.save()
+            }
+        )
     }
 
     private func bindingCalendar(_ household: Household) -> Binding<CalendarStyle> {

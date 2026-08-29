@@ -19,7 +19,8 @@ struct DishDetailView: View {
         ServingScaler(
             baseServings: dish.servings,
             targetServings: max(1, targetServings),
-            system: appState.unitSystem
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts
         )
     }
 

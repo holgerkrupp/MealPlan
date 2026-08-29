@@ -6,6 +6,7 @@ import SwiftData
 @MainActor
 struct IngredientRowEditor: View {
     @Bindable var line: DishIngredient
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
 
     @State private var text = ""
@@ -55,7 +56,14 @@ struct IngredientRowEditor: View {
 
     private var amountPreview: String? {
         guard let q = line.quantity else { return line.note }
-        let s = UnitConversion.string(for: q, system: .metric, preferredUnit: line.displayUnit, approximate: line.isApproximate)
+        let s = UnitConversion.string(
+            for: q,
+            system: appState.unitSystem,
+            preferredUnit: line.displayUnit,
+            approximate: line.isApproximate,
+            ingredientName: line.ingredient?.name,
+            roundsAmounts: appState.roundsDisplayedAmounts
+        )
         return (s.isApproximate ? "≈ " : "") + s.text
     }
 

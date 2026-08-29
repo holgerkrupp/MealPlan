@@ -42,7 +42,12 @@ struct CookingModeView: View {
 
     private var steps: [CookingStep] { CookingRecipe.steps(from: dish.recipeText) }
     private var scaler: ServingScaler {
-        ServingScaler(baseServings: dish.servings, targetServings: targetServings, system: appState.unitSystem)
+        ServingScaler(
+            baseServings: dish.servings,
+            targetServings: targetServings,
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts
+        )
     }
 
     var body: some View {

@@ -57,6 +57,10 @@ final class AppState {
         currentHousehold?.unitSystem ?? .metric
     }
 
+    var roundsDisplayedAmounts: Bool {
+        currentHousehold?.roundsDisplayedAmounts ?? true
+    }
+
     #if DEBUG
     /// An `AppState` wired to the seeded in-memory store, for previews.
     static var preview: AppState {

@@ -88,7 +88,12 @@ struct PlanDishSheet: View {
     }
 
     private var scaler: ServingScaler {
-        ServingScaler(baseServings: dish.servings, targetServings: max(1, servings), system: appState.unitSystem)
+        ServingScaler(
+            baseServings: dish.servings,
+            targetServings: max(1, servings),
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts
+        )
     }
 
     private func plan() {

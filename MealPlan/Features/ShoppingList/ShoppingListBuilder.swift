@@ -80,12 +80,18 @@ enum ShoppingListBuilder {
         }
     }
 
-    static func displayText(for line: AggregatedLine, system: UnitSystem, locale: Locale = .current) -> String {
+    static func displayText(
+        for line: AggregatedLine,
+        system: UnitSystem,
+        roundsAmounts: Bool = true,
+        locale: Locale = .current
+    ) -> String {
         var pieces: [String] = []
         if let quantity = line.quantity {
             let d = UnitConversion.string(
                 for: quantity, system: system, preferredUnit: line.displayUnit,
-                approximate: line.isApproximate, ingredientName: line.name, locale: locale
+                approximate: line.isApproximate, ingredientName: line.name,
+                roundsAmounts: roundsAmounts, locale: locale
             )
             pieces.append((d.isApproximate ? "≈ " : "") + d.text)
         }
@@ -104,6 +110,7 @@ enum ShoppingListBuilder {
         range: DayRange,
         household: Household,
         system: UnitSystem,
+        roundsAmounts: Bool = true,
         context: ModelContext
     ) {
         let start = range.start
@@ -130,7 +137,12 @@ enum ShoppingListBuilder {
             item.canonicalValue = line.quantity?.value
             item.dimension = line.quantity?.dimension
             item.isApproximate = line.isApproximate
-            item.displayText = displayText(for: line, system: system)
+            item.displayUnit = line.displayUnit
+            item.displayText = displayText(
+                for: line,
+                system: system,
+                roundsAmounts: roundsAmounts
+            )
             item.sourceDishNames = line.sourceDishNames
             item.ingredient = (household.ingredients ?? []).first { $0.normalizedName == line.normalizedName }
             item.customAisleName = line.customAisleName
@@ -142,5 +154,30 @@ enum ShoppingListBuilder {
         }
 
         try? context.save()
+    }
+
+    /// Reformat persisted shopping amounts immediately after a unit or
+    /// rounding preference changes. Canonical quantities remain untouched.
+    static func refreshDisplayText(
+        for items: [ShoppingListItem],
+        system: UnitSystem,
+        roundsAmounts: Bool
+    ) {
+        for item in items {
+            guard let value = item.canonicalValue, let dimension = item.dimension else { continue }
+            let line = AggregatedLine(
+                name: item.name,
+                normalizedName: item.normalizedName,
+                category: item.category,
+                quantity: Quantity(value: value, dimension: dimension),
+                displayUnit: item.displayUnit,
+                isApproximate: item.isApproximate
+            )
+            item.displayText = displayText(
+                for: line,
+                system: system,
+                roundsAmounts: roundsAmounts
+            )
+        }
     }
 }

@@ -9,6 +9,9 @@ final class Household {
     var uuid: UUID = UUID()
     var name: String = ""
     var unitSystemRaw: String = UnitSystem.metric.rawValue
+    /// Whether displayed scaled and converted quantities use kitchen-friendly
+    /// increments. Defaults on for both new and migrated households.
+    var roundsDisplayedAmounts: Bool = true
     var calendarStyleRaw: String = CalendarStyle.week.rawValue
     var localeIdentifier: String = Locale.current.identifier
     var dateCreated: Date = Date.now

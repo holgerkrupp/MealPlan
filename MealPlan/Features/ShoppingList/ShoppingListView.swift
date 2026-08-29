@@ -162,7 +162,11 @@ struct ShoppingListView: View {
     private func regenerate() {
         guard let household = appState.currentHousehold else { return }
         ShoppingListBuilder.regenerate(
-            range: range, household: household, system: appState.unitSystem, context: context
+            range: range,
+            household: household,
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts,
+            context: context
         )
     }
 
@@ -181,11 +185,13 @@ struct ShoppingListView: View {
             item.canonicalValue = q.value
             item.dimension = q.dimension
             item.isApproximate = parsed.isApproximate
+            item.displayUnit = parsed.displayUnit
             item.displayText = ShoppingListBuilder.displayText(
                 for: AggregatedLine(name: parsed.name, normalizedName: item.normalizedName,
                                     category: .other, quantity: q, displayUnit: parsed.displayUnit,
                                     isApproximate: parsed.isApproximate),
-                system: appState.unitSystem
+                system: appState.unitSystem,
+                roundsAmounts: appState.roundsDisplayedAmounts
             )
         }
         item.sortIndex = IngredientCategory.other.sortOrder * 1000 + 999

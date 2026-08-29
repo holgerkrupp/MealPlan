@@ -92,6 +92,28 @@ struct ShoppingListBuilderTests {
         #expect(text.contains("ml"))
     }
 
+    @Test func displayTextHonorsExactAmountPreference() {
+        let line = AggregatedLine(
+            name: "Eggs", normalizedName: "eggs", category: .dairy,
+            quantity: Quantity(value: 2.75, dimension: .count)
+        )
+
+        let rounded = ShoppingListBuilder.displayText(
+            for: line,
+            system: .metric,
+            locale: Locale(identifier: "en_US")
+        )
+        let exact = ShoppingListBuilder.displayText(
+            for: line,
+            system: .metric,
+            roundsAmounts: false,
+            locale: Locale(identifier: "en_US")
+        )
+
+        #expect(rounded == "≈ 3 ×")
+        #expect(exact == "2.75 ×")
+    }
+
     @Test func pantryStaplesAreExcluded() {
         let d = dish("Pasta", servings: 2)
         line(d, "Salt", 2, .mass, category: .spices)

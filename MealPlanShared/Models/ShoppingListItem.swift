@@ -14,6 +14,9 @@ final class ShoppingListItem {
     var canonicalDimensionRaw: String?
     /// Ready-to-read amount, e.g. "500 g" or "3 ×".
     var displayText: String?
+    /// Original unit label, retained so changing display preferences can
+    /// reformat the item without rebuilding it from its source recipe.
+    var displayUnit: String?
     var isChecked: Bool = false
     var isManual: Bool = false
     var isApproximate: Bool = false
