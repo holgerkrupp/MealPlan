@@ -58,7 +58,7 @@ final class MealNotificationScheduler {
             for (day, dayEntries) in byDay {
                 guard let fireDate = calendar.date(bySettingHour: dinnerHour, minute: 0, second: 0, of: day),
                       fireDate > now else { continue }
-                let names = dayEntries.compactMap { $0.dish?.name }.joined(separator: ", ")
+                let names = dayEntries.map(\.displayTitle).joined(separator: ", ")
                 guard !names.isEmpty else { continue }
                 schedule(
                     id: "\(idPrefix)dinner.\(day.dayID)",

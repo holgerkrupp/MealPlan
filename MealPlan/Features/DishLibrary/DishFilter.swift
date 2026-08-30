@@ -35,11 +35,27 @@ struct DishFilter: Equatable {
     var favoritesOnly = false
     var minimumRating: Int?
     var collection: String?
+    /// Free-form tags a dish must carry — all of them, so stacking "vegan"
+    /// and "short prepwork" narrows rather than widens.
+    var tags: Set<String> = []
 
     var isActive: Bool {
         mealType != nil || !dietary.isEmpty || season != nil
             || maxMinutes != nil || notCookedWithinDays != nil
             || favoritesOnly || minimumRating != nil || collection != nil
+            || !tags.isEmpty
+    }
+
+    func isSelected(tag: String) -> Bool {
+        tags.contains { DishTag.areSame($0, tag) }
+    }
+
+    mutating func toggle(tag: String) {
+        if let existing = tags.first(where: { DishTag.areSame($0, tag) }) {
+            tags.remove(existing)
+        } else {
+            tags.insert(DishTag.clean(tag))
+        }
     }
 
     /// Apply the non-sort filters and search ranking to a fetched list.
@@ -61,6 +77,10 @@ struct DishFilter: Equatable {
             if let collection, !dish.collectionNames.contains(where: {
                 $0.localizedCaseInsensitiveCompare(collection) == .orderedSame
             }) { return false }
+            if !tags.isEmpty {
+                let dishTags = Set(dish.tagNames.map(DishTag.normalize))
+                guard tags.allSatisfy({ dishTags.contains(DishTag.normalize($0)) }) else { return false }
+            }
             return true
         }
 

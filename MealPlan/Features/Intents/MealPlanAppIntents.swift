@@ -42,6 +42,7 @@ struct AddDishIntent: AppIntent {
             dish.household = household
             dish.createdByName = member
             context.insert(dish)
+            DishBuilder.addSuggestedTags(to: dish, household: household)
             try? context.save()
         }
         SharedStore.reloadWidgets()

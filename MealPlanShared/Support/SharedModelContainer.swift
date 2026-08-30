@@ -26,6 +26,7 @@ enum SharedStore {
             Ingredient.self,
             DishIngredient.self,
             MealPlanEntry.self,
+            MealRoutine.self,
             CookedLog.self,
             ShoppingListItem.self,
             WeekTemplate.self,

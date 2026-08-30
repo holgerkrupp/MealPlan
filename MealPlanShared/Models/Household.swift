@@ -40,6 +40,9 @@ final class Household {
     @Relationship(deleteRule: .cascade, inverse: \MealType.household)
     var mealTypes: [MealType]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \MealRoutine.household)
+    var mealRoutines: [MealRoutine]? = []
+
     /// Meals in display order, falling back to a seeded default set if this
     /// household has none configured yet.
     var sortedMealTypes: [MealType] {

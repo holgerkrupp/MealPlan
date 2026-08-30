@@ -40,6 +40,15 @@ final class ShareViewController: UIViewController {
                    let data = await loadFileData(provider, type: "com.paprika.recipes") {
                     return .paprika(data)
                 }
+                // Files may vend a .paprikarecipes ZIP as `public.archive`
+                // instead of the app-specific UTI, without a file URL. Accept
+                // it when the bytes can actually be decoded as a Paprika
+                // recipe; this keeps unrelated archives out of the extension.
+                if provider.hasItemConformingToTypeIdentifier(UTType.archive.identifier),
+                   let data = await loadFileData(provider, type: UTType.archive.identifier),
+                   (try? PaprikaArchive.recipes(from: data)) != nil {
+                    return .paprika(data)
+                }
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
                    let url = await loadURL(provider, type: UTType.fileURL.identifier) {
                     if url.pathExtension.lowercased() == "mealplanrecipes",

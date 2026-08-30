@@ -20,6 +20,14 @@ struct DishSidebarView: View {
         appState.planDishFilter.apply(to: allDishes)
     }
 
+    private var tags: [String] {
+        DishTag.vocabulary(from: allDishes)
+    }
+
+    private var popularTags: [String] {
+        DishTag.mostUsed(from: allDishes)
+    }
+
     private var collections: [String] {
         Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
@@ -66,7 +74,11 @@ struct DishSidebarView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
-                DishFilterMenu(filter: filter, availableCollections: collections)
+                DishFilterMenu(
+                    filter: filter,
+                    availableCollections: collections,
+                    availableTags: tags
+                )
                     .labelStyle(.iconOnly)
                     .menuIndicator(.hidden)
                     .fixedSize()
@@ -74,6 +86,7 @@ struct DishSidebarView: View {
 
             searchField(text: filter.searchText)
             mealTypeChips(filter: filter)
+            TagFilterStrip(filter: filter, tags: popularTags, horizontalPadding: 0)
         }
         .padding(10)
     }

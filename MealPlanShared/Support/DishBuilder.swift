@@ -17,6 +17,7 @@ enum DishBuilder {
         dish.household = household
         dish.createdByName = createdByName
         dish.sourceURL = recipe.sourceURL
+        dish.deepLinkURL = recipe.deepLinkURL
         dish.importedSourceApp = recipe.importedSourceApp
         dish.recipeText = recipe.instructions
         dish.servings = recipe.servings ?? 2
@@ -26,6 +27,7 @@ enum DishBuilder {
         dish.isFavorite = recipe.isFavorite
         dish.rating = min(max(recipe.rating, 0), 5)
         dish.collectionNames = recipe.collectionNames
+        dish.tagNames = DishTag.merge(recipe.tagNames)
         dish.mealTypeTags = recipe.mealTypeTags
         dish.dietaryTags = recipe.dietaryTags
         dish.season = recipe.season
@@ -83,6 +85,7 @@ enum DishBuilder {
         // Rezept" can still fall back to what's in it. A photo from the site
         // takes precedence when rendering; the glyph is the fallback.
         dish.refreshAutoGlyph()
+        addSuggestedTags(to: dish, household: household)
 
         try? context.save()
         return dish
@@ -104,6 +107,7 @@ enum DishBuilder {
         context: ModelContext
     ) {
         dish.sourceURL = recipe.sourceURL ?? dish.sourceURL
+        dish.deepLinkURL = recipe.deepLinkURL ?? dish.deepLinkURL
         dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
 
         if (dish.recipeText ?? "").isEmpty {
@@ -143,7 +147,23 @@ enum DishBuilder {
         // Imports are guesswork, so ask the cook to check the result.
         dish.needsReview = recipe.needsReview
         dish.refreshAutoGlyph()
+        dish.tagNames = DishTag.merge(dish.tagNames, adding: recipe.tagNames)
+        addSuggestedTags(to: dish, household: dish.household)
         try? context.save()
+    }
+
+    /// Tops a dish up with automatically derived tags. Additive, and capped so
+    /// an import contributes a handful rather than a wall of labels — the cook
+    /// adds the rest themselves.
+    @MainActor
+    static func addSuggestedTags(to dish: Dish, household: Household?, limit: Int = 6) {
+        let vocabulary = DishTag.vocabulary(from: household?.dishes ?? [dish])
+        let suggested = DishTagSuggester.suggestions(
+            for: dish,
+            existingVocabulary: vocabulary,
+            limit: max(0, limit - dish.tagNames.count)
+        )
+        dish.tagNames = DishTag.merge(dish.tagNames, adding: suggested)
     }
 
     @MainActor

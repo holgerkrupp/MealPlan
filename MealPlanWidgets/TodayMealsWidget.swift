@@ -68,7 +68,7 @@ struct TodayMealsProvider: TimelineProvider {
                 .map {
                     MealLine(
                         slot: label($0),
-                        dishName: $0.dish?.name ?? "—",
+                        dishName: $0.displayTitle,
                         imageData: $0.dish?.primaryImageData,
                         glyphRaw: $0.dish?.glyphRaw
                     )

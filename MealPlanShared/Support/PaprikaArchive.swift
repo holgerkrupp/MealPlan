@@ -56,20 +56,78 @@ enum PaprikaArchive {
         )
         recipe.importedSourceApp = "Paprika"
         recipe.needsReview = false
-        recipe.ingredientLines = (p.ingredients ?? "")
-            .components(separatedBy: .newlines)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
+        recipe.ingredientLines = ingredientLines(from: p.ingredients)
         recipe.instructions = [p.directions, p.notes].compactMap { $0?.nilIfEmpty }.joined(separator: "\n\n").nilIfEmpty
         recipe.servings = p.servings?.firstInteger
         recipe.prepTimeMinutes = durationMinutes(p.prep_time)
         recipe.cookTimeMinutes = durationMinutes(p.cook_time)
         recipe.categories = p.categories ?? []
+        // Paprika's categories are the closest thing it has to tags.
+        recipe.tagNames = recipe.categories
         if let b64 = p.photo_data, let raw = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) {
             recipe.imageData = ImagePreparation.prepared(from: raw)
         }
         if recipe.ingredientLines.isEmpty && recipe.instructions == nil { recipe.needsReview = true }
         return recipe
+    }
+
+    /// Paprika normally exports one ingredient per line. Some import sources
+    /// (including Chefkoch) instead export an amount and its name as two
+    /// consecutive lines. Join only an amount-only line with what follows so
+    /// ordinary lines such as "2 Karotten" remain untouched.
+    static func ingredientLines(from raw: String?) -> [String] {
+        let lines = (raw ?? "")
+            .replacingOccurrences(of: "<br />", with: "\n", options: .caseInsensitive)
+            .replacingOccurrences(of: "<br/>", with: "\n", options: .caseInsensitive)
+            .replacingOccurrences(of: "<br>", with: "\n", options: .caseInsensitive)
+            .components(separatedBy: .newlines)
+            .map { $0.trimmedCollapsed }
+            .filter { !$0.isEmpty }
+
+        var result: [String] = []
+        var pendingAmount: String?
+        for line in lines {
+            if isAmountOnlyLine(line) {
+                // An unpaired amount is still meaningful, so retain it rather
+                // than silently dropping it if a malformed export has two in
+                // a row.
+                if let pendingAmount { result.append(pendingAmount) }
+                pendingAmount = line
+            } else if let amount = pendingAmount {
+                result.append("\(amount) \(line)")
+                pendingAmount = nil
+            } else if isQualifier(line), !result.isEmpty {
+                // Paprika puts recipe-site notes such as "TK", "oder Mehl"
+                // and "je nach Größe" on their own lines. Keep the note with
+                // the ingredient it describes.
+                result[result.count - 1] += " (\(line))"
+            } else {
+                result.append(line)
+            }
+        }
+        if let pendingAmount { result.append(pendingAmount) }
+        return result
+    }
+
+    private static func isAmountOnlyLine(_ line: String) -> Bool {
+        let parsed = GermanUnitParser.parse(line)
+        if parsed.quantity != nil, parsed.name == line { return true }
+
+        // "1 Rolle(n)" is a common Paprika/Chefkoch quantity line. Rolle is
+        // not a canonical unit in the grocery parser, hence the explicit case.
+        return line.range(
+            of: #"^\s*[0-9]+(?:[.,][0-9]+)?\s+rolle(?:\(n\))?\s*$"#,
+            options: [.regularExpression, .caseInsensitive]
+        ) != nil
+    }
+
+    private static func isQualifier(_ line: String) -> Bool {
+        let lowered = line.lowercased()
+        return ["tk", "evtl", "evtl.", "optional", "n. b.", "n.b."].contains(lowered)
+            || lowered.hasPrefix("oder ")
+            || lowered.hasPrefix("je nach ")
+            || lowered.hasPrefix("evtl")
+            || lowered.hasPrefix("optional")
     }
 
     /// "15 min", "1 hr 30 min", "1:30", "45" → minutes.

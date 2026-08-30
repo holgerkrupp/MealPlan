@@ -1,19 +1,38 @@
 import SwiftUI
 import SwiftData
 
-/// The single smart field shown when an empty meal slot is tapped: search
-/// existing dishes, add a brand-new one, or paste a recipe link.
+/// What an empty meal slot offers when tapped: cook something (search the
+/// library, add a new dish, paste a recipe link) — or eat out.
 @MainActor
 struct DishPickerView: View {
     let date: Date
     let mealKey: String
     let mealTitle: String
 
+    /// The two halves of the planning sheet.
+    private enum Tab: String, CaseIterable, Identifiable {
+        case cook, eatOut
+        var id: String { rawValue }
+        var title: String {
+            switch self {
+            case .cook: String(localized: "Cook")
+            case .eatOut: String(localized: "Eat out")
+            }
+        }
+        var symbol: String {
+            switch self {
+            case .cook: "frying.pan"
+            case .eatOut: "storefront"
+            }
+        }
+    }
+
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
+    @State private var tab: Tab = .cook
     @State private var text = ""
     @State private var isImporting = false
     @State private var importError: String?
@@ -49,6 +68,37 @@ struct DishPickerView: View {
     }
 
     var body: some View {
+        Group {
+            switch tab {
+            case .cook: dishList
+            case .eatOut: EatOutPickerView(date: date, mealKey: mealKey) { dismiss() }
+            }
+        }
+        .safeAreaInset(edge: .top) {
+            Picker(String(localized: "How are we eating?"), selection: $tab) {
+                ForEach(Tab.allCases) { tab in
+                    Label(tab.title, systemImage: tab.symbol).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .padding(.horizontal)
+            .padding(.bottom, 8)
+            .background(.bar)
+        }
+        .navigationTitle(pickerTitle)
+        #if os(iOS)
+        .navigationBarTitleDisplayMode(.inline)
+        #endif
+        .toolbar {
+            ToolbarItem(placement: .cancellationAction) {
+                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+            }
+        }
+    }
+
+    /// The "Cook" half: the library search, importer and new-dish shortcut.
+    private var dishList: some View {
         List {
             if let url {
                 Section {
@@ -104,15 +154,6 @@ struct DishPickerView: View {
             }
         }
         .searchable(text: $text, prompt: String(localized: "Dish name or link"))
-        .navigationTitle(pickerTitle)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-            }
-        }
         .alert(
             String(localized: "Couldn’t import that link"),
             isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
@@ -154,6 +195,9 @@ struct DishPickerView: View {
         if let tag = MealTypeTag(rawValue: mealKey) { dish.mealTypeTags = [tag] }
         dish.refreshAutoGlyph()
         context.insert(dish)
+        // Quick-added dishes never pass through the editor, so this is their
+        // only chance at a starting set of tags.
+        DishBuilder.addSuggestedTags(to: dish, household: appState.currentHousehold)
         MealPlanner.plan(
             dish: dish, on: date, mealKey: mealKey,
             household: appState.currentHousehold,

@@ -31,7 +31,11 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+    @AppStorage(OnboardingPreferenceKeys.didCompleteOnboarding) private var didCompleteOnboarding = false
     @State private var selection: AppSection? = .plan
+    @State private var showOnboarding = false
+    @State private var didEvaluateOnboarding = false
 
     var body: some View {
         Group {
@@ -58,6 +62,40 @@ struct RootView: View {
         } message: {
             Text(appState.importNotice ?? "")
         }
+        .sheet(isPresented: $showOnboarding, onDismiss: { didCompleteOnboarding = true }) {
+            OnboardingView()
+                #if os(iOS)
+                .interactiveDismissDisabled()
+                #endif
+        }
+        .task { await evaluateOnboarding() }
+    }
+
+    /// Shows the first-run tour once, and only to someone who really is
+    /// starting empty.
+    private func evaluateOnboarding() async {
+        guard !didEvaluateOnboarding else { return }
+        didEvaluateOnboarding = true
+        guard !didCompleteOnboarding else { return }
+
+        // A device joining an existing household pulls its dishes down from
+        // iCloud a moment after launch, so wait briefly before deciding —
+        // otherwise returning users get the tour on every new device.
+        if await hasDishes(waitingUpTo: .seconds(2)) {
+            didCompleteOnboarding = true
+            return
+        }
+        showOnboarding = true
+    }
+
+    private func hasDishes(waitingUpTo timeout: Duration) async -> Bool {
+        let start = ContinuousClock.now
+        while !Task.isCancelled {
+            if ((try? context.fetchCount(FetchDescriptor<Dish>())) ?? 0) > 0 { return true }
+            if ContinuousClock.now - start > timeout { return false }
+            try? await Task.sleep(for: .milliseconds(200))
+        }
+        return false
     }
 
     private var nonNilSelection: Binding<AppSection> {

@@ -38,7 +38,7 @@ enum WeekExport {
                 let names = entries
                     .filter { $0.date.isSameDay(as: day) && $0.mealKey == meal.key }
                     .sorted { $0.sortIndex < $1.sortIndex }
-                    .compactMap { $0.dish?.name }
+                    .map(\.displayTitle)
                 return WeekExportData.Slot(name: meal.name, dishes: names)
             }
             return WeekExportData.Day(title: df.string(from: day), slots: slots)

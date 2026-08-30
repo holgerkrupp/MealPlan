@@ -11,15 +11,44 @@
 		<key>NSExtensionAttributes</key>
 		<dict>
 			<key>NSExtensionActivationRule</key>
-			<dict>
-				<key>NSExtensionActivationSupportsWebURLWithMaxCount</key>
-				<integer>1</integer>
-				<key>NSExtensionActivationSupportsText</key>
-				<true/>
-				<key>NSExtensionActivationSupportsFileWithMaxCount</key>
-				<integer>1</integer>
-			</dict>
+			<string>
+				SUBQUERY(
+					extensionItems, $item,
+					SUBQUERY(
+						$item.attachments, $attachment,
+						ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "com.paprika.recipes"
+						OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.archive"
+						OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.file-url"
+						OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.url"
+						OR ANY $attachment.registeredTypeIdentifiers UTI-CONFORMS-TO "public.plain-text"
+					).@count &gt; 0
+				).@count &gt; 0
+			</string>
 		</dict>
 	</dict>
+	<!-- The extension is a separate bundle. It must declare the Paprika UTI
+	     itself so Files can match a .paprikarecipe(s) provider to it. -->
+	<key>UTImportedTypeDeclarations</key>
+	<array>
+		<dict>
+			<key>UTTypeIdentifier</key>
+			<string>com.paprika.recipes</string>
+			<key>UTTypeDescription</key>
+			<string>Paprika Recipes</string>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+				<string>public.archive</string>
+			</array>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
+					<string>paprikarecipes</string>
+					<string>paprikarecipe</string>
+				</array>
+			</dict>
+		</dict>
+	</array>
 </dict>
 </plist>

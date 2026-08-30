@@ -21,6 +21,7 @@ struct DishEditorView: View {
     @State private var showingRecipeScanner = false
     @State private var newIngredientText = ""
     @State private var sourceURLText = ""
+    @State private var appLinkURLText = ""
     @State private var collectionsText = ""
     @State private var duplicateDish: Dish?
 
@@ -51,6 +52,7 @@ struct DishEditorView: View {
         }
         .onAppear {
             sourceURLText = dish.sourceURLString ?? ""
+            appLinkURLText = dish.deepLinkURLString ?? ""
             collectionsText = dish.collectionNames.joined(separator: ", ")
         }
         .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
@@ -133,6 +135,14 @@ struct DishEditorView: View {
 
     private var tagsSections: some View {
         Group {
+            Section {
+                DishTagEditor(dish: dish, vocabulary: tagVocabulary, suggestions: suggestedTags)
+            } header: {
+                Text("Tags")
+            } footer: {
+                Text("Type to reuse a tag your household already has, or add a new one. A few are suggested from the name and ingredients.")
+            }
+
             Section(String(localized: "Meal type")) {
                 FlowLayout(spacing: 8) {
                     ForEach(MealTypeTag.allCases) { tag in
@@ -148,6 +158,16 @@ struct DishEditorView: View {
                 }
             }
         }
+    }
+
+    /// Every tag the household already uses, so the editor can autocomplete
+    /// instead of letting near-duplicates pile up.
+    private var tagVocabulary: [String] {
+        DishTag.vocabulary(from: allDishes)
+    }
+
+    private var suggestedTags: [String] {
+        DishTagSuggester.suggestions(for: dish, existingVocabulary: tagVocabulary)
     }
 
     private var ingredientsSection: some View {
@@ -183,6 +203,12 @@ struct DishEditorView: View {
     private var sourceSection: some View {
         Section(String(localized: "Source link")) {
             TextField("https://…", text: $sourceURLText)
+                #if os(iOS)
+                .keyboardType(.URL)
+                .textInputAutocapitalization(.never)
+                #endif
+                .autocorrectionDisabled()
+            TextField(String(localized: "Open in app link (optional)"), text: $appLinkURLText)
                 #if os(iOS)
                 .keyboardType(.URL)
                 .textInputAutocapitalization(.never)
@@ -362,10 +388,20 @@ struct DishEditorView: View {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.sourceURLString = trimmedURL.isEmpty ? nil : trimmedURL
+        let trimmedAppLink = appLinkURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        dish.deepLinkURLString = trimmedAppLink.isEmpty ? nil : trimmedAppLink
         dish.collectionNames = Array(Set(collectionsText.split(separator: ",")
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
             .filter { !$0.isEmpty }))
             .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+        // A new dish nobody tagged still gets the automatic handful, so
+        // filtering by tag is useful from the first recipe on. On an existing
+        // dish an empty list is a decision, and stays empty.
+        if isNew, dish.tagNames.isEmpty {
+            dish.tagNames = DishTag.merge(suggestedTags)
+        } else {
+            dish.tagNames = DishTag.merge(dish.tagNames)
+        }
         if checkDuplicates, let duplicate = RecipeDuplicateDetector.match(
             name: dish.name, sourceURL: dish.sourceURL, in: allDishes, excluding: dish
         ) {

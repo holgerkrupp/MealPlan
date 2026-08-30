@@ -18,6 +18,15 @@ struct DishLibraryView: View {
         appState.dishFilter.apply(to: allDishes)
     }
 
+    private var tags: [String] {
+        DishTag.vocabulary(from: allDishes)
+    }
+
+    /// What the strip under the search bar offers, in usage order.
+    private var popularTags: [String] {
+        DishTag.mostUsed(from: allDishes)
+    }
+
     private var collections: [String] {
         Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
     }
@@ -26,6 +35,9 @@ struct DishLibraryView: View {
         @Bindable var appState = appState
 
         ScrollView {
+            TagFilterStrip(filter: $appState.dishFilter, tags: popularTags)
+                .padding(.top, 8)
+
             SeasonalSuggestionsStrip()
 
             if filteredDishes.isEmpty {
@@ -59,7 +71,11 @@ struct DishLibraryView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                DishFilterMenu(filter: $appState.dishFilter, availableCollections: collections)
+                DishFilterMenu(
+                    filter: $appState.dishFilter,
+                    availableCollections: collections,
+                    availableTags: tags
+                )
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
@@ -118,15 +134,42 @@ struct DishLibraryView: View {
         }
     }
 
+    /// An empty library and an empty result look nothing alike: one wants a
+    /// first recipe, the other wants the filter turned off again.
+    @ViewBuilder
     private var emptyState: some View {
-        ContentUnavailableView {
-            Label(String(localized: "No dishes yet"), systemImage: "fork.knife")
-        } description: {
-            Text("Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later.")
-        } actions: {
-            Button(String(localized: "New dish")) { addDish() }
+        if allDishes.isEmpty {
+            ContentUnavailableView {
+                Label(String(localized: "No dishes yet"), systemImage: "fork.knife")
+            } description: {
+                Text("Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later.")
+            } actions: {
+                Button(String(localized: "New dish")) { addDish() }
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            let hasFilters = appState.dishFilter.isActive
+            ContentUnavailableView {
+                Label(String(localized: "No dishes match"), systemImage: "line.3.horizontal.decrease.circle")
+            } description: {
+                Text(noMatchDescription)
+            } actions: {
+                Button(hasFilters
+                       ? String(localized: "Clear filters")
+                       : String(localized: "Clear search")) {
+                    appState.dishFilter = DishFilter(sort: appState.dishFilter.sort)
+                }
                 .buttonStyle(.borderedProminent)
+            }
         }
+    }
+
+    /// Built with `String(localized:)` rather than two `Text` literals in a
+    /// branch: those don’t make it into the string catalog.
+    private var noMatchDescription: String {
+        appState.dishFilter.isActive
+            ? String(localized: "Nothing in your library fits the tags and filters you picked.")
+            : String(localized: "Nothing in your library matches that search.")
     }
 
     private func addDish() {

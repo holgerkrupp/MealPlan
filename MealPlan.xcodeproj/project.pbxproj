@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		486BA2D2303C141E00B04A4E /* SFSymbolSelector in Frameworks */ = {isa = PBXBuildFile; productRef = 000000000000000200000001 /* SFSymbolSelector */; };
+		489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */ = {isa = PBXBuildFile; productRef = 489FB59E3044985000B8D666 /* ESADesignKit */; };
 		DD000000000000000000000C /* MealPlanWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MealPlanWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EE000000000000000000000C /* MealPlanShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000008 /* MealPlanShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -122,6 +123,7 @@
 			isa = PBXFrameworksBuildPhase;
 			files = (
 				486BA2D2303C141E00B04A4E /* SFSymbolSelector in Frameworks */,
+				489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */,
 			);
 		};
 		DD0000000000000000000003 /* Frameworks */ = {
@@ -190,6 +192,7 @@
 			name = MealPlan;
 			packageProductDependencies = (
 				000000000000000200000001 /* SFSymbolSelector */,
+				489FB59E3044985000B8D666 /* ESADesignKit */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* MealPlan.app */;
@@ -291,6 +294,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				000000000000000200000000 /* XCLocalSwiftPackageReference "../SFSymbolSelector" */,
+				489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -468,6 +472,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -477,7 +482,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -493,7 +500,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2026.1;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -512,6 +519,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -521,7 +529,9 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
+				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
+				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
@@ -537,7 +547,7 @@
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 2026.1;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -776,11 +786,27 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/holgerkrupp/ESADesignKit";
+			requirement = {
+				branch = main;
+				kind = branch;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		000000000000000200000001 /* SFSymbolSelector */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = 000000000000000200000000 /* XCLocalSwiftPackageReference "../SFSymbolSelector" */;
 			productName = SFSymbolSelector;
+		};
+		489FB59E3044985000B8D666 /* ESADesignKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */;
+			productName = ESADesignKit;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

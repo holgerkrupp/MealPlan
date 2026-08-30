@@ -6,6 +6,7 @@ import SwiftUI
 struct DishFilterMenu: View {
     @Binding var filter: DishFilter
     var availableCollections: [String] = []
+    var availableTags: [String] = []
 
     var body: some View {
         Menu {
@@ -29,6 +30,25 @@ struct DishFilterMenu: View {
                     Button(String(localized: "Any")) { filter.collection = nil }
                     ForEach(availableCollections, id: \.self) { name in
                         Button(name) { filter.collection = name }
+                    }
+                }
+            }
+
+            if !availableTags.isEmpty {
+                Menu(String(localized: "Tags")) {
+                    if !filter.tags.isEmpty {
+                        Button(String(localized: "Any tag")) { filter.tags = [] }
+                        Divider()
+                    }
+                    ForEach(availableTags, id: \.self) { tag in
+                        Toggle(isOn: Binding(
+                            get: { filter.isSelected(tag: tag) },
+                            set: { _ in filter.toggle(tag: tag) }
+                        )) {
+                            // Verbatim: a tag is whatever the household typed,
+                            // not a localization key.
+                            Text(verbatim: tag)
+                        }
                     }
                 }
             }

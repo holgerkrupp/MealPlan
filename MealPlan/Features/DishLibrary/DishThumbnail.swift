@@ -35,21 +35,34 @@ struct DishThumbnail: View {
     var tint: Color = .gray
     var size: CGFloat = 56
     var cornerRadius: CGFloat = 12
+    private var width: CGFloat
+    private var height: CGFloat
 
-    init(data: Data?, glyph: DishGlyph? = nil, tint: Color = .gray, size: CGFloat = 56, cornerRadius: CGFloat = 12) {
+    init(
+        data: Data?, glyph: DishGlyph? = nil, tint: Color = .gray,
+        size: CGFloat = 56, cornerRadius: CGFloat = 12,
+        width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
         self.data = data
         self.glyph = glyph
         self.tint = tint
-        self.size = size
+        self.width = width ?? size
+        self.height = height ?? size
+        self.size = max(self.width, self.height)
         self.cornerRadius = cornerRadius
     }
 
     /// Photo, glyph and tint all taken from the dish.
-    init(dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12) {
+    init(
+        dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12,
+        width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
         self.data = dish?.primaryImageData
         self.glyph = dish?.glyph
         self.tint = DishGlyph.tint(forName: dish?.name ?? "")
-        self.size = size
+        self.width = width ?? size
+        self.height = height ?? size
+        self.size = max(self.width, self.height)
         self.cornerRadius = cornerRadius
     }
 
@@ -63,7 +76,7 @@ struct DishThumbnail: View {
                 placeholder
             }
         }
-        .frame(width: size, height: size)
+        .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
     }
 

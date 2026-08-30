@@ -16,6 +16,7 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         var name: String
         var instructions: String?
         var sourceURL: String?
+        var deepLinkURL: String?
         var servings: Int
         var prepTimeMinutes: Int?
         var cookTimeMinutes: Int?
@@ -25,6 +26,9 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         var isFavorite: Bool
         var rating: Int
         var collections: [String]
+        /// Optional so archives written before tags existed still decode, and
+        /// so an older MealPlan can read a newer file and simply ignore them.
+        var tags: [String]?
         var glyph: String?
         var images: [Data]
         var ingredients: [PortableIngredient]
@@ -51,6 +55,7 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                 name: dish.name,
                 instructions: dish.recipeText,
                 sourceURL: dish.sourceURLString,
+                deepLinkURL: dish.deepLinkURLString,
                 servings: dish.servings,
                 prepTimeMinutes: dish.prepTimeMinutes,
                 cookTimeMinutes: dish.cookTimeMinutes,
@@ -60,6 +65,7 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                 isFavorite: dish.isFavorite,
                 rating: dish.rating,
                 collections: dish.collectionNames,
+                tags: dish.tagNames,
                 glyph: dish.glyphRaw,
                 images: dish.sortedImages.compactMap(\.data),
                 ingredients: dish.sortedIngredients.map { line in
@@ -101,6 +107,7 @@ struct MealPlanRecipeArchive: Codable, Sendable {
     static func importedRecipes(from data: Data) throws -> [ImportedRecipe] {
         try decode(data).recipes.map { stored in
             var recipe = ImportedRecipe(name: stored.name, sourceURL: stored.sourceURL.flatMap(URL.init(string:)))
+            recipe.deepLinkURL = stored.deepLinkURL.flatMap(URL.init(string:))
             recipe.instructions = stored.instructions
             recipe.servings = stored.servings
             recipe.prepTimeMinutes = stored.prepTimeMinutes
@@ -109,6 +116,7 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             recipe.isFavorite = stored.isFavorite
             recipe.rating = stored.rating
             recipe.collectionNames = stored.collections
+            recipe.tagNames = stored.tags ?? []
             recipe.mealTypeTags = Set(stored.mealTypes.compactMap(MealTypeTag.init(rawValue:)))
             recipe.dietaryTags = Set(stored.dietaryTags.compactMap(DietaryTag.init(rawValue:)))
             recipe.season = stored.season.flatMap(Season.init(rawValue:))

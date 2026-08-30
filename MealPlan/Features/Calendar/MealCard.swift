@@ -46,76 +46,89 @@ struct MealCard: View {
     /// photo still reads at a glance. Keeps the meal's accent colour so the
     /// card's colour language stays per-meal.
     private var backdropGlyph: DishGlyph? {
-        entries.lazy.compactMap { $0.dish?.glyph }.first
+        if let glyph = entries.lazy.compactMap({ $0.dish?.glyph }).first { return glyph }
+        // A meal that is only "we're eating out" gets the storefront instead of
+        // the meal's own symbol, so the card reads at a glance.
+        if !entries.isEmpty, entries.allSatisfy(\.isEatingOut) { return .symbol("storefront") }
+        return nil
+    }
+
+    /// A card only claims the height it needs: an empty one is just its header
+    /// plus the add button, a planned one keeps enough room for the photo
+    /// backdrop to read. Cards in the same grid row still equalise.
+    private var minCardHeight: CGFloat {
+        entries.isEmpty ? 68 : 108
     }
 
     var body: some View {
-        ZStack(alignment: .topLeading) {
-            cardBackground
+        VStack(alignment: .leading, spacing: 8) {
+            header
 
-            VStack(alignment: .leading, spacing: 8) {
-                header
+            if entries.isEmpty {
+                Spacer(minLength: 0)
+                Button {
+                    showingPicker = true
+                } label: {
+                    Label(String(localized: "Add a meal"), systemImage: "plus")
+                        .font(.subheadline.weight(.medium))
+                        .padding(.vertical, 6)
+                        .padding(.horizontal, 10)
+                        .background(.ultraThinMaterial, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .disabled(appState.isGuest)
+            } else {
+                ForEach(entries) { entry in
+                    HStack(spacing: 4) {
+                        Button {
+                            selectedEntry = entry
+                        } label: {
+                            entryRow(entry)
+                        }
+                        .buttonStyle(.plain)
 
-                if entries.isEmpty {
-                    Spacer(minLength: 0)
+                        if !appState.isGuest {
+                            Button {
+                                remove(entry)
+                            } label: {
+                                Image(systemName: "minus.circle.fill")
+                                    .font(.body)
+                                    .foregroundStyle(onImage ? AnyShapeStyle(.white.opacity(0.9)) : AnyShapeStyle(.secondary))
+                                    .padding(.vertical, 2)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(localized: "Remove \(entry.displayTitle)"))
+                        }
+                    }
+                    .draggable(DishReference(
+                        dishUUID: entry.dish?.uuid ?? UUID(),
+                        name: entry.dish?.name ?? "",
+                        sourceEntryUUID: entry.uuid
+                    ))
+                    .contextMenu { entryMenu(entry) }
+                }
+                if !appState.isGuest {
                     Button {
                         showingPicker = true
                     } label: {
-                        Label(String(localized: "Add a meal"), systemImage: "plus")
-                            .font(.subheadline.weight(.medium))
-                            .padding(.vertical, 6)
-                            .padding(.horizontal, 10)
-                            .background(.ultraThinMaterial, in: Capsule())
+                        Label(String(localized: "Add another"), systemImage: "plus")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(onImage ? .white : Color.primary)
+                            .opacity(0.9)
                     }
                     .buttonStyle(.plain)
-                    .disabled(appState.isGuest)
-                } else {
-                    ForEach(entries) { entry in
-                        HStack(spacing: 4) {
-                            Button {
-                                selectedEntry = entry
-                            } label: {
-                                entryRow(entry)
-                            }
-                            .buttonStyle(.plain)
-
-                            if !appState.isGuest {
-                                Button {
-                                    remove(entry)
-                                } label: {
-                                    Image(systemName: "minus.circle.fill")
-                                        .font(.body)
-                                        .foregroundStyle(onImage ? AnyShapeStyle(.white.opacity(0.9)) : AnyShapeStyle(.secondary))
-                                        .padding(.vertical, 2)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityLabel(String(localized: "Remove \(entry.dish?.name ?? "")"))
-                            }
-                        }
-                        .draggable(DishReference(
-                            dishUUID: entry.dish?.uuid ?? UUID(),
-                            name: entry.dish?.name ?? "",
-                            sourceEntryUUID: entry.uuid
-                        ))
-                        .contextMenu { entryMenu(entry) }
-                    }
-                    if !appState.isGuest {
-                        Button {
-                            showingPicker = true
-                        } label: {
-                            Label(String(localized: "Add another"), systemImage: "plus")
-                                .font(.caption.weight(.medium))
-                                .foregroundStyle(onImage ? .white : Color.primary)
-                                .opacity(0.9)
-                        }
-                        .buttonStyle(.plain)
-                    }
                 }
             }
-            .padding(12)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, minHeight: 132, maxHeight: .infinity, alignment: .topLeading)
+        .padding(10)
+        .frame(
+            minWidth: 0, maxWidth: .infinity,
+            minHeight: minCardHeight,
+            alignment: .topLeading
+        )
+        // Drawn as a background so the oversized backdrop glyph can't set the
+        // card's height — the content alone decides how tall the card is.
+        .background { cardBackground }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
@@ -250,7 +263,7 @@ struct MealCard: View {
     }
 
     private func remove(_ entry: MealPlanEntry) {
-        let name = entry.dish?.name ?? String(localized: "Meal")
+        let name = entry.displayTitle
         context.delete(entry)
         try? context.save()
         SharedStore.reloadWidgets()
@@ -264,9 +277,15 @@ struct MealCard: View {
 
     private func entryRow(_ entry: MealPlanEntry) -> some View {
         let hasOwnImage = entry.dish?.primaryImageData != nil
+        let isEatingOut = entry.dish == nil && entry.isEatingOut
 
         return HStack(spacing: 8) {
-            if !onImage {
+            if isEatingOut {
+                Image(systemName: "storefront")
+                    .font(onImage ? .caption2 : .body)
+                    .foregroundStyle(onImage ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(accent))
+                    .frame(width: onImage ? 18 : 34)
+            } else if !onImage {
                 DishThumbnail(dish: entry.dish, size: 34, cornerRadius: 8)
             } else if !hasOwnImage {
                 switch entry.dish?.glyph {
@@ -286,13 +305,16 @@ struct MealCard: View {
             }
 
             VStack(alignment: .leading, spacing: 2) {
-                Text(entry.dish?.name ?? String(localized: "(dish removed)"))
+                Text(entry.displayTitle)
                     .font(.subheadline.weight(onImage ? .semibold : .regular))
                     .lineLimit(2)
                     .strikethrough(entry.skipped)
                     .foregroundStyle(onImage ? AnyShapeStyle(.white) : AnyShapeStyle(entry.skipped ? Color.secondary : Color.primary))
 
                 HStack(spacing: 6) {
+                    if entry.routineUUID != nil {
+                        Image(systemName: "repeat")
+                    }
                     if entry.servingsOverride != nil {
                         Label(String(localized: "\(entry.effectiveServings)"), systemImage: "person.2")
                             .labelStyle(.titleAndIcon)
@@ -312,6 +334,7 @@ struct MealCard: View {
                 .font(.caption2)
                 .foregroundStyle(onImage ? .white.opacity(0.9) : Color.secondary)
             }
+            .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
         }

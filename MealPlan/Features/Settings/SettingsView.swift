@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import ESADesignKit
 
 @MainActor
 struct SettingsView: View {
@@ -8,6 +9,7 @@ struct SettingsView: View {
 
     @AppStorage("search.engine") private var searchEngineRaw = SearchEngine.fallback.rawValue
 
+    @State private var showingOnboarding = false
     @State private var dinnerReminder = MealNotificationScheduler.shared.dinnerEnabled
     @State private var reminderTime: Date = Calendar.current.date(
         bySettingHour: MealNotificationScheduler.shared.dinnerHour, minute: 0, second: 0, of: .now
@@ -82,13 +84,31 @@ struct SettingsView: View {
             }
 
             Section {
+                Button {
+                    showingOnboarding = true
+                } label: {
+                    Label(String(localized: "Getting started"), systemImage: "sparkles")
+                }
+            } footer: {
+                Text("A short tour of the plan, the dish library, and how to share recipes into MealPlan from other apps.")
+            }
+
+            Section {
                 LabeledContent(String(localized: "Version"), value: appVersion)
             } footer: {
                 Text("Your plan and dishes are stored on your device and shared with your family through iCloud.")
             }
+
+            Section {
+                CreatedByView()
+                    .frame(maxWidth: .infinity)
+            }
         }
         .navigationTitle(AppSection.settings.title)
         .formStyle(.grouped)
+        .sheet(isPresented: $showingOnboarding) {
+            OnboardingView()
+        }
         .onChange(of: dinnerReminder) { _, on in
             let scheduler = MealNotificationScheduler.shared
             scheduler.dinnerEnabled = on

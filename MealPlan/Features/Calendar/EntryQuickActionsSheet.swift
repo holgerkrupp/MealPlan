@@ -40,6 +40,8 @@ struct EntryQuickActionsSheet: View {
                                 }
                             }
                         }
+                    } else if entry.isEatingOut {
+                        eatingOutHeader
                     }
                 }
 
@@ -109,7 +111,7 @@ struct EntryQuickActionsSheet: View {
                     }
                 }
             }
-            .navigationTitle(entry.dish?.name ?? String(localized: "Planned meal"))
+            .navigationTitle(entry.displayTitle)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
@@ -132,6 +134,59 @@ struct EntryQuickActionsSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    /// Header for a meal the family eats out: the place, its address, and a
+    /// way to open it in Maps.
+    @ViewBuilder
+    private var eatingOutHeader: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "storefront")
+                .font(.title2)
+                .foregroundStyle(.tint)
+                .frame(width: 52)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(entry.placeName ?? String(localized: "Eating out")).font(.headline)
+                if let address = entry.placeAddress {
+                    Text(address).font(.caption).foregroundStyle(.secondary)
+                }
+                if let by = entry.plannedByName {
+                    Text(String(localized: "Planned by \(by)"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        TextField(
+            String(localized: "Where are we going?"),
+            text: Binding(
+                get: { entry.placeName ?? "" },
+                set: { entry.placeName = $0.isEmpty ? nil : $0; save() }
+            )
+        )
+
+        if let url = mapsURL {
+            Link(destination: url) {
+                Label(String(localized: "Open in Maps"), systemImage: "map")
+            }
+        }
+    }
+
+    /// A Maps link for the picked place — by coordinate when we have one, by
+    /// name otherwise.
+    private var mapsURL: URL? {
+        var components = URLComponents(string: "https://maps.apple.com/")
+        if let coordinate = entry.placeCoordinate {
+            components?.queryItems = [
+                URLQueryItem(name: "ll", value: "\(coordinate.latitude),\(coordinate.longitude)"),
+                URLQueryItem(name: "q", value: entry.placeName ?? String(localized: "Restaurant")),
+            ]
+        } else if let name = entry.placeName, !name.isEmpty {
+            components?.queryItems = [URLQueryItem(name: "q", value: name)]
+        } else {
+            return nil
+        }
+        return components?.url
     }
 
     private var reactionPicker: some View {
@@ -187,7 +242,7 @@ struct EntryQuickActionsSheet: View {
     }
 
     private func remove() {
-        let name = entry.dish?.name ?? String(localized: "Meal")
+        let name = entry.displayTitle
         context.delete(entry)
         save()
         SharedStore.reloadWidgets()

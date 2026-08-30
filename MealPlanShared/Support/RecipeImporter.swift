@@ -4,6 +4,9 @@ import Foundation
 struct ImportedRecipe: Sendable {
     var name: String
     var sourceURL: URL?
+    /// An optional custom-scheme or universal link that opens the recipe in
+    /// its source app. Kept separate from the browser-friendly source URL.
+    var deepLinkURL: URL?
     var imageData: Data?
     var imageURLString: String?
     var ingredientLines: [String] = []
@@ -15,6 +18,10 @@ struct ImportedRecipe: Sendable {
     var isFavorite: Bool = false
     var rating: Int = 0
     var collectionNames: [String] = []
+    /// Free-form tags carried over from the source (schema.org keywords,
+    /// Paprika categories, a MealPlan archive). Merged with the tags the app
+    /// derives itself in `DishBuilder`.
+    var tagNames: [String] = []
     var mealTypeTags: Set<MealTypeTag> = []
     var dietaryTags: Set<DietaryTag> = []
     var season: Season?

@@ -22,6 +22,19 @@ final class MealPlanEntry {
     var lastEditedByName: String?
     var lastEditedDate: Date?
 
+    /// Set when this meal is eaten out instead of cooked at home. The place is
+    /// optional — "we're eating out" is a plan in itself.
+    var isEatingOut: Bool = false
+    var placeName: String?
+    var placeAddress: String?
+    var placeLatitude: Double?
+    var placeLongitude: Double?
+
+    /// The `MealRoutine` that generated this entry, if any. Kept as a plain
+    /// UUID rather than a relationship so deleting a routine never cascades
+    /// into meals that were already planned and cooked.
+    var routineUUID: UUID?
+
     var dish: Dish?
     var household: Household?
 
@@ -63,6 +76,20 @@ final class MealPlanEntry {
     /// Effective head-count for this occasion.
     var effectiveServings: Int {
         servingsOverride ?? dish?.servings ?? 2
+    }
+
+    /// What to call this meal in lists, widgets and exports: the dish, the
+    /// restaurant, or a plain "eating out".
+    var displayTitle: String {
+        if let dish { return dish.name }
+        if isEatingOut { return placeName ?? String(localized: "Eating out") }
+        return String(localized: "(dish removed)")
+    }
+
+    /// Coordinate of the restaurant, when one was picked from the map.
+    var placeCoordinate: (latitude: Double, longitude: Double)? {
+        guard let placeLatitude, let placeLongitude else { return nil }
+        return (placeLatitude, placeLongitude)
     }
 
     var isInPast: Bool {

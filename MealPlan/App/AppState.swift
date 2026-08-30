@@ -36,6 +36,47 @@ final class AppState {
         var name: String?
     }
 
+    /// Day cards the user collapsed on the plan, stored as `dayID` strings so
+    /// the state survives the calendar's lazy scrolling and app launches.
+    private(set) var collapsedDays: Set<String> = AppState.loadCollapsedDays()
+
+    private static let collapsedDaysKey = "collapsedDayIDs"
+
+    func isDayCollapsed(_ day: Date) -> Bool {
+        collapsedDays.contains(day.dayID)
+    }
+
+    func setDayCollapsed(_ collapsed: Bool, for day: Date) {
+        if collapsed {
+            collapsedDays.insert(day.dayID)
+        } else {
+            collapsedDays.remove(day.dayID)
+        }
+        // Days that scrolled far into the past are never looked at again, so
+        // drop them instead of growing the stored set forever.
+        let cutoff = Date.now.adding(days: -60).dayID
+        collapsedDays = collapsedDays.filter { $0 >= cutoff }
+        UserDefaults.standard.set(Array(collapsedDays), forKey: Self.collapsedDaysKey)
+    }
+
+    private static func loadCollapsedDays() -> Set<String> {
+        Set(UserDefaults.standard.stringArray(forKey: collapsedDaysKey) ?? [])
+    }
+
+    /// Day cards currently on screen in the plan, as `dayID`s. The week strip
+    /// draws its glass pill over exactly these days, so the strip shows where
+    /// in the week the plan is scrolled to.
+    private(set) var visibleDayIDs: Set<String> = []
+
+    func setDayVisible(_ visible: Bool, id: String) {
+        // Only write on a real change: this fires continuously while scrolling.
+        if visible {
+            if !visibleDayIDs.contains(id) { visibleDayIDs.insert(id) }
+        } else if visibleDayIDs.contains(id) {
+            visibleDayIDs.remove(id)
+        }
+    }
+
     /// A transient "undo" offer shown after a forgiving destructive action.
     var undoOffer: UndoOffer?
 
@@ -84,6 +125,11 @@ final class AppState {
         if let household = currentHousehold {
             MealType.ensure(for: household, context: context)
             CookedLogMaintenance.run(for: household, context: context)
+            MealRoutineScheduler.apply(
+                for: household,
+                context: context,
+                memberName: currentMemberName
+            )
         }
         DishGlyphMaintenance.run(context: context)
     }

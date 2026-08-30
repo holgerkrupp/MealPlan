@@ -6,62 +6,89 @@ struct DishGridCell: View {
     let dish: Dish
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            ZStack(alignment: .topTrailing) {
-                DishThumbnail(dish: dish, size: cellImageSize, cornerRadius: 16)
-                    .frame(maxWidth: .infinity)
+        GeometryReader { proxy in
+            ZStack(alignment: .bottomLeading) {
+                DishThumbnail(
+                    dish: dish,
+                    cornerRadius: cardCornerRadius,
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
 
-                if dish.needsReview {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(6)
-                        .background(.orange, in: Circle())
-                        .padding(6)
+                VStack(alignment: .leading, spacing: 7) {
+                    dishName
+
+                    HStack(spacing: 6) {
+                        dishMetadata
+                        stalenessChip
+                    }
                 }
-                if dish.isFavorite {
-                    Image(systemName: "heart.fill")
-                        .font(.caption)
-                        .foregroundStyle(.white)
-                        .padding(6)
-                        .background(.pink, in: Circle())
-                        .padding(6)
-                        .offset(x: dish.needsReview ? -34 : 0)
+                .padding(10)
+
+                HStack(spacing: 6) {
+                    if dish.needsReview {
+                        statusIcon("exclamationmark.triangle.fill", tint: .orange)
+                    }
+                    if dish.isFavorite {
+                        statusIcon("heart.fill", tint: .pink)
+                    }
                 }
+                .padding(10)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
             }
-
-            Text(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
-                .font(.headline)
-                .lineLimit(2)
-                .foregroundStyle(.primary)
-
-            HStack(spacing: 6) {
-                if dish.rating > 0 {
-                    Text(String(repeating: "★", count: dish.rating))
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                }
-                ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue }).prefix(3)) { tag in
-                    Image(systemName: tag.symbolName)
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                }
-                if let minutes = dish.totalTimeMinutes {
-                    Label("\(minutes) min", systemImage: "clock")
-                        .font(.caption2)
-                        .foregroundStyle(.secondary)
-                        .labelStyle(.titleAndIcon)
-                }
-            }
-
-            stalenessChip
         }
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+        .aspectRatio(cardAspectRatio, contentMode: .fit)
+        .clipShape(cellShape)
+        // Without this the lift/drag preview falls back to the rectangular
+        // bounds, so a long press draws sharp white corners around the card.
+        .contentShape(previewShapeKinds, cellShape)
     }
 
-    private var cellImageSize: CGFloat { 150 }
+    // .contextMenuPreview is iOS-only, so macOS gets the drag preview alone.
+    private var previewShapeKinds: ContentShapeKinds {
+        #if os(macOS)
+        return [.dragPreview]
+        #else
+        return [.dragPreview, .contextMenuPreview]
+        #endif
+    }
+
+    private var cellShape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: cardCornerRadius, style: .continuous)
+    }
+
+    private var cardCornerRadius: CGFloat { 24 }
+    private var cardAspectRatio: CGFloat { 0.82 }
+
+    private var dishName: some View {
+        Text(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
+            .font(.headline)
+            .lineLimit(2)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .glassEffect(.regular, in: Capsule())
+    }
+
+    @ViewBuilder
+    private var dishMetadata: some View {
+        HStack(spacing: 6) {
+            if dish.rating > 0 {
+                Text(String(repeating: "★", count: dish.rating))
+                    .foregroundStyle(.yellow)
+            }
+            ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue }).prefix(3)) { tag in
+                Image(systemName: tag.symbolName)
+            }
+            if let minutes = dish.totalTimeMinutes {
+                Label("\(minutes) min", systemImage: "clock")
+                    .labelStyle(.titleAndIcon)
+            }
+        }
+        .font(.caption2.weight(.medium))
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .glassEffect(.regular, in: Capsule())
+    }
 
     @ViewBuilder
     private var stalenessChip: some View {
@@ -77,10 +104,18 @@ struct DishGridCell: View {
     private func chip(_ text: String, system: String, tint: Color) -> some View {
         Label(text, systemImage: system)
             .font(.caption2)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
-            .background(tint.opacity(0.15), in: Capsule())
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
             .foregroundStyle(tint)
+            .glassEffect(.regular.tint(tint.opacity(0.18)), in: Capsule())
+    }
+
+    private func statusIcon(_ systemName: String, tint: Color) -> some View {
+        Image(systemName: systemName)
+            .font(.caption.weight(.bold))
+            .foregroundStyle(tint)
+            .padding(9)
+            .glassEffect(.regular.tint(tint.opacity(0.18)), in: Circle())
     }
 }
 

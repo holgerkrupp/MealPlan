@@ -47,6 +47,29 @@ struct PaprikaArchiveTests {
         #expect(recipes.first?.name == "Linsensuppe")
     }
 
+    @Test func joinsPaprikaQuantityAndIngredientLines() {
+        // This is the shape used by Paprika exports made from Chefkoch: the
+        // site's quantity and ingredient columns become alternating lines.
+        let lines = PaprikaArchive.ingredientLines(from: """
+        500 g
+        Hackfleisch
+        100 g
+        Erbsen
+        TK
+        1 Rolle(n)
+        Blätterteig
+        je nach Größe der Pie-Form
+        Salz und Pfeffer
+        """)
+
+        #expect(lines == [
+            "500 g Hackfleisch",
+            "100 g Erbsen (TK)",
+            "1 Rolle(n) Blätterteig (je nach Größe der Pie-Form)",
+            "Salz und Pfeffer",
+        ])
+    }
+
     @Test func durationParsing() {
         #expect(PaprikaArchive.durationMinutes("15 min") == 15)
         #expect(PaprikaArchive.durationMinutes("1 hr 30 min") == 90)

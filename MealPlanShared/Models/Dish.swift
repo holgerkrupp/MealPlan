@@ -9,6 +9,8 @@ final class Dish {
     var name: String = ""
     var recipeText: String?
     var sourceURLString: String?
+    /// Optional custom-scheme or universal link to the recipe in its source app.
+    var deepLinkURLString: String?
     /// Identifier of the app a recipe was imported from, e.g. "Paprika".
     var importedSourceApp: String?
     /// Lightweight personal organization that stays useful even when a
@@ -18,6 +20,11 @@ final class Dish {
     var rating: Int = 0
     /// User-defined collections such as "Weeknight" or "Christmas".
     var collectionNames: [String] = []
+    /// Free-form labels the household invents as it goes ("vegan", "pork",
+    /// "short prepwork"). A handful is suggested automatically on import and
+    /// for new dishes; see `DishTagSuggester`. Stored as the words that were
+    /// typed and compared through `DishTag`.
+    var tagNames: [String] = []
     var servings: Int = 2
     var prepTimeMinutes: Int?
     var cookTimeMinutes: Int?
@@ -54,6 +61,11 @@ final class Dish {
     @Relationship(deleteRule: .nullify, inverse: \WeekTemplateEntry.dish)
     var templateEntries: [WeekTemplateEntry]? = []
 
+    /// Standing arrangements that repeat this dish (Taco Tuesday and friends).
+    /// Cascaded: a routine without its dish has nothing left to plan.
+    @Relationship(deleteRule: .cascade, inverse: \MealRoutine.dish)
+    var routines: [MealRoutine]? = []
+
     var household: Household?
 
     init(name: String = "") {
@@ -67,6 +79,26 @@ final class Dish {
     var sourceURL: URL? {
         get { sourceURLString.flatMap(URL.init(string:)) }
         set { sourceURLString = newValue?.absoluteString }
+    }
+
+    var deepLinkURL: URL? {
+        get { deepLinkURLString.flatMap(URL.init(string:)) }
+        set { deepLinkURLString = newValue?.absoluteString }
+    }
+
+    /// Tags in display order.
+    var sortedTagNames: [String] { DishTag.sorted(tagNames) }
+
+    func hasTag(_ tag: String) -> Bool { DishTag.contains(tagNames, tag) }
+
+    /// Adds a tag unless the dish already carries it under any spelling.
+    func addTag(_ tag: String) {
+        let merged = DishTag.merge(tagNames, adding: [tag])
+        if merged != tagNames { tagNames = merged }
+    }
+
+    func removeTag(_ tag: String) {
+        tagNames = DishTag.removing(tag, from: tagNames)
     }
 
     var mealTypeTags: Set<MealTypeTag> {
@@ -133,7 +165,8 @@ final class Dish {
     var searchableText: String {
         ([name, recipeText ?? ""]
             + sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
-            + collectionNames)
+            + collectionNames
+            + tagNames)
             .joined(separator: " ")
     }
 

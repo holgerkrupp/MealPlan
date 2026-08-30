@@ -49,6 +49,16 @@ struct HouseholdView: View {
                     }
                 }
 
+                Section {
+                    NavigationLink {
+                        MealRoutinesView()
+                    } label: {
+                        Label(String(localized: "Regular meals"), systemImage: "repeat")
+                    }
+                } footer: {
+                    Text("Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you.")
+                }
+
                 Section(String(localized: "Who’s planning")) {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
                     ForEach(members) { member in

@@ -88,4 +88,113 @@ struct RecipeSchemaParserTests {
         #expect(recipe.imageURLString == "https://x/carb.jpg")
         #expect(recipe.needsReview)
     }
+
+    @Test func resolvesKptnCookSharePageToItsRecipePage() {
+        let shortURL = URL(string: "https://share.kptncook.com/Dh4a/c1qxclti")!
+        let landingPage = "var mac_redirect = 'https://mobile.kptncook.com/recipe/pinterest/Bratnudeln-mit-Teriyaki-H%C3%BChnchen/66de50bf';"
+
+        #expect(
+            RecipeSchemaParser.kptnCookDestination(in: landingPage, from: shortURL)?.absoluteString
+                == "https://mobile.kptncook.com/recipe/pinterest/Bratnudeln-mit-Teriyaki-H%C3%BChnchen/66de50bf"
+        )
+    }
+
+    @Test func parsesKptnCookRecipeContent() {
+        let source = URL(string: "https://mobile.kptncook.com/recipe/pinterest/test/123")!
+        let html = """
+        <body itemscope itemtype="http://schema.org/Recipe">
+          <img itemprop="image" src="https://images.kptncook.com/test.jpg">
+          <div class="kptn-recipetitle">Bratnudeln mit Teriyaki-Hühnchen</div>
+          <span itemprop="totalTime">PT30M</span>
+          <span itemprop="recipeYield">Für 2 Portionen</span>
+          <span itemprop="ingredients">250 g Hühnerbrustfilets</span>
+          <span itemprop="ingredients">160 g Mie-Nudeln</span>
+          <div class="row kptn-step-title"><div><span>1. </span>Alles parat?</div></div>
+          <div class="row kptn-step-title"><div><span>2. </span>Backofen vorheizen.</div></div>
+          <script>navigator.clipboard.writeText("https://mobile.kptncook.com/r/123?lang=de")</script>
+        </body>
+        """
+
+        let recipe = parser.parseKptnCook(html: html, sourceURL: source)
+        #expect(recipe?.name == "Bratnudeln mit Teriyaki-Hühnchen")
+        #expect(recipe?.sourceURL == source)
+        #expect(recipe?.ingredientLines == ["250 g Hühnerbrustfilets", "160 g Mie-Nudeln"])
+        #expect(recipe?.instructions?.contains("Alles parat?") == true)
+        #expect(recipe?.instructions?.contains("Backofen vorheizen.") == true)
+        #expect(recipe?.servings == 2)
+        #expect(recipe?.cookTimeMinutes == 30)
+        #expect(recipe?.deepLinkURL?.absoluteString == "https://mobile.kptncook.com/r/123?lang=de")
+        #expect(recipe?.importedSourceApp == "KptnCook")
+        #expect(recipe?.needsReview == false)
+    }
+
+    @Test func parsesChefkochRenderedRecipeMarkup() {
+        let html = """
+        <html><head><title>Einfache Meat-Pie von KrimsKramsBlog</title></head><body>
+          <div class="ds-quantity-control__label">Für <span class="ds-quantity-control__amount">2</span> Portionen</div>
+          <div class="recipe-meta-property-group__value">20 Min.</div>
+          <div class="recipe-meta-property-group__title">Arbeitszeit</div>
+          <table class="ds-ingredients-table"><tbody>
+            <tr class="ds-ingredients-table__tr"><td><div>500&nbsp;g</div></td><td><span>Hackfleisch</span></td></tr>
+            <tr class="ds-ingredients-table__tr"><td><div>1</div></td><td><span>Zwiebel(n)</span></td></tr>
+          </tbody></table>
+          <span data-testid="recipe-instruction">Hackfleisch anbraten.</span>
+          <span data-testid="recipe-instruction">Zwiebel dazugeben.</span>
+        </body></html>
+        """
+        let recipe = parser.parseChefkoch(html: html, sourceURL: url)
+
+        #expect(recipe?.name == "Einfache Meat-Pie von KrimsKramsBlog")
+        #expect(recipe?.ingredientLines == ["500 g Hackfleisch", "1 Zwiebel(n)"])
+        #expect(recipe?.instructions?.contains("1. Hackfleisch anbraten.") == true)
+        #expect(recipe?.instructions?.contains("2. Zwiebel dazugeben.") == true)
+        #expect(recipe?.servings == 2)
+        #expect(recipe?.prepTimeMinutes == 20)
+        #expect(recipe?.needsReview == false)
+    }
+
+    @Test func genericHTMLFallbackFindsIngredientAndInstructionLists() {
+        let genericURL = URL(string: "https://recipes.example.test/chili")!
+        let html = """
+        <html><head><title>Weeknight Chili</title></head><body>
+          <section class="recipe-ingredients"><ul>
+            <li class="recipe-ingredient">400 g Bohnen</li>
+            <li class="recipe-ingredient">1 Zwiebel</li>
+          </ul></section>
+          <section class="recipe-instructions"><ol>
+            <li class="recipe-instruction">Zwiebel anbraten.</li>
+            <li class="recipe-instruction">Bohnen dazugeben.</li>
+          </ol></section>
+        </body></html>
+        """
+        let recipe = parser.parseGenericHTML(html: html, sourceURL: genericURL)
+
+        #expect(recipe?.name == "Weeknight Chili")
+        #expect(recipe?.ingredientLines == ["400 g Bohnen", "1 Zwiebel"])
+        #expect(recipe?.instructions?.contains("Zwiebel anbraten.") == true)
+        #expect(recipe?.instructions?.contains("Bohnen dazugeben.") == true)
+        #expect(recipe?.needsReview == true)
+    }
+
+    // MARK: - Tags
+
+    @Test func keywordsAndCategoriesBecomeTags() {
+        let tags = RecipeSchemaParser.tagList([
+            "vegan, weeknight , 30 minutes",
+            "Hauptgericht",
+            ["Italian"],
+            "https://schema.org/VegetarianDiet"
+        ])
+        #expect(tags == ["vegan", "weeknight", "30 minutes", "Hauptgericht", "Italian", "Vegetarian"])
+    }
+
+    @Test func tagListDropsNoiseAndStaysShort() {
+        // Duplicates in any spelling, one-character scraps and essay-length
+        // "keywords" are not tags.
+        let tags = RecipeSchemaParser.tagList([
+            "Vegan, vegan, v, \(String(repeating: "long ", count: 10))",
+            "a, b, c, d, e, f, g, h"
+        ])
+        #expect(tags == ["Vegan"])
+    }
 }

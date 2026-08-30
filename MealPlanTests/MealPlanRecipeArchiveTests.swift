@@ -11,6 +11,7 @@ struct MealPlanRecipeArchiveTests {
         dish.isFavorite = true
         dish.rating = 5
         dish.collectionNames = ["Winter"]
+        dish.tagNames = ["Vegan", "Short prepwork"]
         dish.dietaryTags = [.vegan]
         dish.season = .winter
 
@@ -31,11 +32,39 @@ struct MealPlanRecipeArchiveTests {
         #expect(imported.isFavorite)
         #expect(imported.rating == 5)
         #expect(imported.collectionNames == ["Winter"])
+        #expect(imported.tagNames == ["Vegan", "Short prepwork"])
         #expect(imported.dietaryTags == [.vegan])
         #expect(imported.season == .winter)
         #expect(imported.imageData == Data([1, 2, 3]))
         #expect(imported.structuredIngredients?.first?.category == .spices)
         #expect(imported.structuredIngredients?.first?.customAisleName == "Baking shelf")
         #expect(imported.structuredIngredients?.first?.isPantryStaple == true)
+    }
+
+    @Test func archivesWrittenBeforeTagsExistedStillDecode() throws {
+        let json = """
+        {
+          "format": "MealPlan Recipe Archive",
+          "version": 1,
+          "exportedAt": "2026-01-01T12:00:00Z",
+          "recipes": [{
+            "uuid": "\(UUID().uuidString)",
+            "name": "Soup",
+            "servings": 4,
+            "mealTypes": [],
+            "dietaryTags": [],
+            "isFavorite": false,
+            "rating": 0,
+            "collections": [],
+            "images": [],
+            "ingredients": []
+          }]
+        }
+        """
+        let imported = try #require(
+            MealPlanRecipeArchive.importedRecipes(from: Data(json.utf8)).first
+        )
+        #expect(imported.name == "Soup")
+        #expect(imported.tagNames.isEmpty)
     }
 }

@@ -7,11 +7,34 @@
     "—" : {
 
     },
+    "“%@” is already in MealPlan." : {
+
+    },
     "(dish removed)" : {
 
     },
     "%@" : {
 
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@ for %@. %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ for %2$@. %3$@."
+          }
+        }
+      }
     },
     "%lld" : {
 
@@ -61,6 +84,26 @@
     "≤ %lld min" : {
 
     },
+    "A name is enough to add a dish — recipe, photo, and ingredients can follow later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Name reicht für ein neues Gericht – Rezept, Foto und Zutaten kannst du später ergänzen."
+          }
+        }
+      }
+    },
+    "A short tour of the plan, the dish library, and how to share recipes into MealPlan from other apps." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eine kurze Tour durch den Plan, die Gerichtesammlung und das Teilen von Rezepten aus anderen Apps zu MealPlan."
+          }
+        }
+      }
+    },
     "A–Z" : {
       "localizations" : {
         "de" : {
@@ -71,12 +114,25 @@
         }
       }
     },
+    "Active" : {
+
+    },
     "Add" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hinzufügen"
+          }
+        }
+      }
+    },
+    "Add “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "„%@“ hinzufügen"
           }
         }
       }
@@ -94,6 +150,9 @@
     "Add ${name} to MealPlan" : {
 
     },
+    "Add a dish to your library first — a regular meal repeats one of your dishes." : {
+
+    },
     "Add a meal" : {
       "localizations" : {
         "de" : {
@@ -106,6 +165,19 @@
     },
     "Add a photo of tonight’s result" : {
 
+    },
+    "Add a regular meal" : {
+
+    },
+    "Add a tag" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlagwort hinzufügen"
+          }
+        }
+      }
     },
     "Add an item" : {
       "localizations" : {
@@ -171,10 +243,26 @@
     "Adds a dish by name, or imports one from a recipe link." : {
 
     },
+    "Aisle" : {
+
+    },
+    "Aisle name" : {
+
+    },
     "All" : {
 
     },
     "Any" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle"
+          }
+        }
+      }
+    },
+    "Any tag" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -199,8 +287,34 @@
     "Autumn" : {
 
     },
+    "Back" : {
+
+    },
     "Bakery" : {
 
+    },
+    "Baking" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backen"
+          }
+        }
+      }
+    },
+    "Bar" : {
+
+    },
+    "Beef" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rindfleisch"
+          }
+        }
+      }
     },
     "Breakfast" : {
       "localizations" : {
@@ -211,6 +325,22 @@
           }
         }
       }
+    },
+    "Brewery" : {
+
+    },
+    "Bring recipes in" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte hereinholen"
+          }
+        }
+      }
+    },
+    "Café" : {
+
     },
     "Calendar" : {
       "localizations" : {
@@ -235,7 +365,36 @@
         }
       }
     },
+    "Casserole" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auflauf"
+          }
+        }
+      }
+    },
+    "Choose a date range and rebuild the list; the same ingredient from several dishes is added up." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle einen Zeitraum und baue die Liste neu auf; gleiche Zutaten aus mehreren Gerichten werden zusammengezählt."
+          }
+        }
+      }
+    },
+    "Choose a PDF" : {
+
+    },
     "Choose photo" : {
+
+    },
+    "Choose recipe photos" : {
+
+    },
+    "Clear" : {
 
     },
     "Clear filters" : {
@@ -249,7 +408,14 @@
       }
     },
     "Clear search" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche löschen"
+          }
+        }
+      }
     },
     "Clear ticked items" : {
       "localizations" : {
@@ -257,6 +423,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Erledigte entfernen"
+          }
+        }
+      }
+    },
+    "Collapse day" : {
+
+    },
+    "Collapses this day" : {
+
+    },
+    "Collect the dishes your family likes, with recipes, photos, and tags." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sammle die Gerichte, die deine Familie mag, mit Rezept, Foto und Schlagwörtern."
+          }
+        }
+      }
+    },
+    "Collection" : {
+
+    },
+    "Collections, separated by commas" : {
+
+    },
+    "Continue" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weiter"
           }
         }
       }
@@ -277,6 +475,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kochzeit"
+          }
+        }
+      }
+    },
+    "Cook together" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemeinsam kochen"
           }
         }
       }
@@ -304,7 +512,29 @@
         }
       }
     },
+    "Cooking mode" : {
+
+    },
+    "Cooking mode walks you through the steps and scales ingredients to the servings you cook." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Kochmodus führt dich durch die Schritte und rechnet die Zutaten auf die Portionen um, die du kochst."
+          }
+        }
+      }
+    },
+    "Cooking timer finished" : {
+
+    },
     "Copy from last week" : {
+
+    },
+    "Couldn’t export recipe" : {
+
+    },
+    "Couldn’t export recipes" : {
 
     },
     "Couldn’t find a list to add the items to." : {
@@ -313,10 +543,38 @@
     "Couldn’t import that link" : {
 
     },
+    "Couldn’t import that recipe archive: %@" : {
+
+    },
     "Couldn’t reach that page." : {
 
     },
+    "Couldn’t read that page" : {
+
+    },
+    "Couldn’t scan recipe" : {
+
+    },
     "Couldn’t start sharing" : {
+
+    },
+    "Curry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Curry"
+          }
+        }
+      }
+    },
+    "Custom aisle" : {
+
+    },
+    "Custom aisle (optional)" : {
+
+    },
+    "Custom aisle…" : {
 
     },
     "Custom range" : {
@@ -360,8 +618,28 @@
     "Delete meal" : {
 
     },
+    "Delete recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept löschen"
+          }
+        }
+      }
+    },
     "Deleted “%@”" : {
 
+    },
+    "Dessert" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nachtisch"
+          }
+        }
+      }
     },
     "Details" : {
       "localizations" : {
@@ -419,6 +697,16 @@
         }
       }
     },
+    "Dishes are the heart of the app: everything you plan, cook, and shop for comes from your library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerichte sind das Herz der App: Alles, was du planst, kochst und einkaufst, kommt aus deiner Sammlung."
+          }
+        }
+      }
+    },
     "Don’t forget to prep “%@” for tomorrow." : {
 
     },
@@ -461,6 +749,15 @@
     "e.g. use up the spinach" : {
 
     },
+    "Eat out" : {
+
+    },
+    "Eat out — decide the place later" : {
+
+    },
+    "Eating out" : {
+
+    },
     "Edit" : {
       "localizations" : {
         "de" : {
@@ -487,11 +784,70 @@
     "Edit meal" : {
 
     },
+    "Emoji" : {
+
+    },
+    "Every %@" : {
+
+    },
+    "Every %lld weeks on %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Every %1$lld weeks on %2$@"
+          }
+        }
+      }
+    },
+    "Every fourth %@" : {
+
+    },
+    "Every fourth week" : {
+
+    },
+    "Every second %@" : {
+
+    },
+    "Every second week" : {
+
+    },
+    "Every third %@" : {
+
+    },
+    "Every third week" : {
+
+    },
+    "Every week" : {
+
+    },
     "Everyone you invite sees the same plan and dishes. You can invite people as editors or view-only guests." : {
+
+    },
+    "Expand day" : {
+
+    },
+    "Expands this day" : {
+
+    },
+    "Export all recipes" : {
+
+    },
+    "Export recipe" : {
 
     },
     "Export week as PDF" : {
 
+    },
+    "Export your recipes any time to hand them to someone else or keep a backup." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exportiere deine Rezepte jederzeit, um sie weiterzugeben oder zu sichern."
+          }
+        }
+      }
     },
     "Family" : {
       "localizations" : {
@@ -516,6 +872,12 @@
         }
       }
     },
+    "Favorite" : {
+
+    },
+    "Favorites only" : {
+
+    },
     "Favourite" : {
 
     },
@@ -529,6 +891,22 @@
         }
       }
     },
+    "Find a recipe" : {
+
+    },
+    "Fish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fisch"
+          }
+        }
+      }
+    },
+    "Food market" : {
+
+    },
     "For" : {
       "localizations" : {
         "de" : {
@@ -541,6 +919,19 @@
     },
     "For this meal" : {
 
+    },
+    "Forward" : {
+
+    },
+    "Found a recipe on a website, in another recipe app, or in a message? Share it to MealPlan instead of typing it in again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein Rezept auf einer Website, in einer anderen Rezept-App oder in einer Nachricht gefunden? Teile es zu MealPlan, statt es abzutippen."
+          }
+        }
+      }
     },
     "From" : {
       "localizations" : {
@@ -561,8 +952,21 @@
     "Fruit & vegetables" : {
 
     },
+    "Generate an image" : {
+
+    },
     "Get This Week’s Meal Plan" : {
 
+    },
+    "Getting started" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erste Schritte"
+          }
+        }
+      }
     },
     "Gluten-free" : {
       "localizations" : {
@@ -576,6 +980,16 @@
     },
     "Go" : {
 
+    },
+    "Grill" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Grillen"
+          }
+        }
+      }
     },
     "Grouped by week" : {
 
@@ -609,6 +1023,9 @@
         }
       }
     },
+    "How are we eating?" : {
+
+    },
     "How to make it" : {
       "localizations" : {
         "de" : {
@@ -638,11 +1055,31 @@
         }
       }
     },
+    "Imported %lld recipes; skipped %lld duplicates." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Imported %1$lld recipes; skipped %2$lld duplicates."
+          }
+        }
+      }
+    },
     "Imported automatically — please check the details." : {
 
     },
     "Imported recipe" : {
 
+    },
+    "In Safari or any other app, tap Share and choose MealPlan — ingredients, steps, and the photo come along when the page offers them." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe in Safari oder einer anderen App auf „Teilen“ und wähle MealPlan – Zutaten, Zubereitung und Foto kommen mit, wenn die Seite sie hergibt."
+          }
+        }
+      }
     },
     "In season now" : {
 
@@ -662,6 +1099,39 @@
     },
     "Ingredients for %lld" : {
 
+    },
+    "Ingredients, one per line" : {
+
+    },
+    "Invite people as editors, or as view-only guests who can look but not change." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade Leute als Bearbeiter ein oder als Gäste, die nur mitlesen dürfen."
+          }
+        }
+      }
+    },
+    "Invite your family from the Household section — everyone sees the same plan and dishes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade deine Familie im Bereich „Haushalt“ ein – alle sehen denselben Plan und dieselben Gerichte."
+          }
+        }
+      }
+    },
+    "Items are sorted by aisle, and you can rename an aisle so it matches your shop." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Einträge sind nach Abteilung sortiert, und du kannst eine Abteilung passend zu deinem Laden umbenennen."
+          }
+        }
+      }
     },
     "Jump to date" : {
       "localizations" : {
@@ -683,6 +1153,12 @@
         }
       }
     },
+    "Keep editing" : {
+
+    },
+    "Keep looking" : {
+
+    },
     "Kid-friendly" : {
       "localizations" : {
         "de" : {
@@ -695,6 +1171,16 @@
     },
     "Lactose-free" : {
 
+    },
+    "Lamb" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lamm"
+          }
+        }
+      }
     },
     "Last cooked" : {
       "localizations" : {
@@ -731,6 +1217,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als gekocht markieren"
+          }
+        }
+      }
+    },
+    "Mark pantry staples in Settings to keep things you always have at home off the list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Markiere Vorratsartikel in den Einstellungen, damit Dinge, die du immer zu Hause hast, nicht auf der Liste landen."
           }
         }
       }
@@ -777,10 +1273,36 @@
     "MealPlan doesn’t have permission to add to Reminders." : {
 
     },
+    "MealPlan is made for a household, not just one cook. Everything is stored on your device and shared through iCloud." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan ist für einen Haushalt gemacht, nicht nur für eine Person am Herd. Alles liegt auf deinem Gerät und wird über iCloud geteilt."
+          }
+        }
+      }
+    },
+    "MealPlan keeps your family’s week of meals, the dishes you cook, and the shopping that follows in one place." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan bündelt die Essenswoche deiner Familie, die Gerichte, die ihr kocht, und den Einkauf, der daraus folgt."
+          }
+        }
+      }
+    },
     "Meals" : {
 
     },
+    "Meals planned" : {
+
+    },
     "Meat & fish" : {
+
+    },
+    "Method" : {
 
     },
     "Metric (g, ml, °C)" : {
@@ -832,14 +1354,30 @@
     "New meal" : {
 
     },
+    "Next" : {
+
+    },
     "Next 2 weeks" : {
 
     },
     "Next 3 days" : {
 
     },
-    "No dishes match" : {
+    "Next week" : {
 
+    },
+    "No cooking steps added yet." : {
+
+    },
+    "No dishes match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Gerichte gefunden"
+          }
+        }
+      }
     },
     "No dishes yet" : {
       "localizations" : {
@@ -854,8 +1392,36 @@
     "No ingredients added yet." : {
 
     },
+    "No placeholder — shows a generic icon" : {
+
+    },
+    "No places found." : {
+
+    },
+    "No readable text was found." : {
+
+    },
+    "No recipe found on that page" : {
+
+    },
     "No recipe found on that page." : {
 
+    },
+    "No recipe yet. Search the web and save one straight onto this dish." : {
+
+    },
+    "No regular meals yet." : {
+
+    },
+    "No share sheet? Open a dish and use “Find a recipe” to fetch it from a website, or scan a cookbook page or PDF." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Teilen-Menü zur Hand? Öffne ein Gericht und hol das Rezept über die Rezeptsuche von einer Website – oder scanne eine Kochbuchseite oder ein PDF."
+          }
+        }
+      }
     },
     "No templates yet" : {
 
@@ -869,6 +1435,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht gekocht seit"
+          }
+        }
+      }
+    },
+    "Nothing in your library fits the tags and filters you picked." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts in deiner Sammlung passt zu den gewählten Schlagwörtern und Filtern."
+          }
+        }
+      }
+    },
+    "Nothing in your library matches that search." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts in deiner Sammlung passt zu dieser Suche."
           }
         }
       }
@@ -906,6 +1492,9 @@
     "Nothing is planned for this week yet." : {
 
     },
+    "Nothing planned" : {
+
+    },
     "Nothing to buy yet" : {
       "localizations" : {
         "de" : {
@@ -929,7 +1518,78 @@
         }
       }
     },
+    "On iPhone and iPad, share a recipe page from Safari or another app straight to MealPlan — it appears here through iCloud." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teile auf iPhone und iPad eine Rezeptseite aus Safari oder einer anderen App direkt zu MealPlan – über iCloud taucht sie hier auf."
+          }
+        }
+      }
+    },
     "One day at a time" : {
+
+    },
+    "One pot" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eintopf"
+          }
+        }
+      }
+    },
+    "Open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne eine .paprikarecipes- oder .mealplanrecipes-Datei, um gleich eine ganze Rezeptsammlung zu übernehmen."
+          }
+        }
+      }
+    },
+    "Open a dish and use “Find a recipe” to fetch ingredients and steps from a website." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Öffne ein Gericht und hol Zutaten und Zubereitung über die Rezeptsuche von einer Website."
+          }
+        }
+      }
+    },
+    "Open in %@" : {
+
+    },
+    "Open in app" : {
+
+    },
+    "Open in app link (optional)" : {
+
+    },
+    "Open in Maps" : {
+
+    },
+    "Open Settings any time to revisit this guide." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einführung findest du jederzeit wieder in den Einstellungen."
+          }
+        }
+      }
+    },
+    "Open the page with the actual recipe on it, then try again." : {
+
+    },
+    "Or type any emoji" : {
+
+    },
+    "Organization" : {
 
     },
     "Other" : {
@@ -941,6 +1601,28 @@
     "Pantry" : {
 
     },
+    "Pantry staples" : {
+
+    },
+    "Pasta" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nudeln"
+          }
+        }
+      }
+    },
+    "Pause" : {
+
+    },
+    "Paused" : {
+
+    },
+    "Photograph a page" : {
+
+    },
     "Photos" : {
       "localizations" : {
         "de" : {
@@ -950,6 +1632,34 @@
           }
         }
       }
+    },
+    "Pick a dish" : {
+
+    },
+    "Pick a dish to start this routine." : {
+
+    },
+    "Pick an emoji or a symbol to stand in for dishes you don’t have a photo of." : {
+
+    },
+    "Pizza" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pizza"
+          }
+        }
+      }
+    },
+    "Placeholder" : {
+
+    },
+    "Places" : {
+
+    },
+    "Places you’ve been" : {
+
     },
     "Plan" : {
       "localizations" : {
@@ -986,6 +1696,26 @@
     "Plan some meals, then rebuild the list — or add items yourself below." : {
 
     },
+    "Plan the week" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Woche planen"
+          }
+        }
+      }
+    },
+    "Plan the week meal by meal on a calendar the whole family sees." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plane die Woche Mahlzeit für Mahlzeit – in einem Kalender, den die ganze Familie sieht."
+          }
+        }
+      }
+    },
     "Planned “%@” for %@." : {
       "localizations" : {
         "en" : {
@@ -1006,8 +1736,28 @@
         }
       }
     },
-    "Planned meal" : {
+    "Pork" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schweinefleisch"
+          }
+        }
+      }
+    },
+    "Possible duplicate" : {
 
+    },
+    "Poultry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geflügel"
+          }
+        }
+      }
     },
     "Prep" : {
       "localizations" : {
@@ -1035,6 +1785,15 @@
     "Preview" : {
 
     },
+    "Previous" : {
+
+    },
+    "Previous week" : {
+
+    },
+    "Rating" : {
+
+    },
     "Reaction" : {
 
     },
@@ -1058,6 +1817,9 @@
         }
       }
     },
+    "recipe" : {
+
+    },
     "Recipe" : {
       "localizations" : {
         "de" : {
@@ -1068,7 +1830,41 @@
         }
       }
     },
+    "Recipe archive" : {
+
+    },
+    "Recipe import" : {
+
+    },
     "Recipe link" : {
+
+    },
+    "Recipe name" : {
+
+    },
+    "Recipe search" : {
+
+    },
+    "Recipes rarely start in MealPlan. Bring them in from the web, from other recipe apps, and from your iPhone." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte entstehen selten in MealPlan. Hol sie aus dem Web, aus anderen Rezept-Apps und von deinem iPhone."
+          }
+        }
+      }
+    },
+    "Recognizing recipe…" : {
+
+    },
+    "Regular meal" : {
+
+    },
+    "Regular meals" : {
+
+    },
+    "Regular meals are planned %lld weeks ahead, and only into meals that are still empty. Change or remove a single week right in the plan — the routine keeps going." : {
 
     },
     "Remind me about tonight’s dinner" : {
@@ -1103,6 +1899,16 @@
         }
       }
     },
+    "Remove tag %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlagwort %@ entfernen"
+          }
+        }
+      }
+    },
     "Removed “%@”" : {
       "localizations" : {
         "de" : {
@@ -1113,7 +1919,20 @@
         }
       }
     },
+    "Rename, add, or reorder your meals in Settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeiten kannst du in den Einstellungen umbenennen, ergänzen und neu sortieren."
+          }
+        }
+      }
+    },
     "Repeat next week" : {
+
+    },
+    "Repeats" : {
 
     },
     "Replace what’s already planned" : {
@@ -1122,13 +1941,51 @@
     "Resize dish list" : {
 
     },
+    "Restaurant" : {
+
+    },
+    "Restaurant, café, bakery…" : {
+
+    },
+    "Resume" : {
+
+    },
     "Returns the meals planned for the current week." : {
 
+    },
+    "Review" : {
+
+    },
+    "Round scaled and converted amounts" : {
+
+    },
+    "Salad" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salat"
+          }
+        }
+      }
     },
     "Save" : {
 
     },
+    "Save a good week as a template and reuse it when you run out of ideas." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichere eine gelungene Woche als Vorlage und nutze sie wieder, wenn dir die Ideen ausgehen."
+          }
+        }
+      }
+    },
     "Save a week as a template first." : {
+
+    },
+    "Save anyway" : {
 
     },
     "Save as template" : {
@@ -1140,7 +1997,26 @@
     "Save week as template" : {
 
     },
+    "Scan from photo or PDF" : {
+
+    },
+    "Scan recipe" : {
+
+    },
     "Schedules a dish on a day and meal." : {
+
+    },
+    "Seafood" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meeresfrüchte"
+          }
+        }
+      }
+    },
+    "Search again" : {
 
     },
     "Search dishes" : {
@@ -1153,12 +2029,34 @@
         }
       }
     },
+    "Search for a restaurant, café or bakery nearby." : {
+
+    },
+    "Search ingredients" : {
+
+    },
+    "Search with" : {
+
+    },
+    "Searching…" : {
+
+    },
     "Season" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saison"
+          }
+        }
+      }
+    },
+    "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Richte feste Mahlzeiten wie Taco Tuesday ein – sie planen sich Wochen im Voraus von selbst."
           }
         }
       }
@@ -1189,6 +2087,39 @@
     "Share / Print" : {
 
     },
+    "Share / Save" : {
+
+    },
+    "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teile oder öffne eine .paprikarecipes- oder .mealplanrecipes-Datei, um gleich eine ganze Rezeptsammlung zu übernehmen."
+          }
+        }
+      }
+    },
+    "Share recipes into MealPlan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte zu MealPlan teilen"
+          }
+        }
+      }
+    },
+    "Share the list or send it to Reminders." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teile die Liste oder schick sie an die Erinnerungen."
+          }
+        }
+      }
+    },
     "Share with family" : {
       "localizations" : {
         "de" : {
@@ -1199,12 +2130,25 @@
         }
       }
     },
+    "Shopping" : {
+
+    },
     "Shopping list" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Einkaufsliste"
+          }
+        }
+      }
+    },
+    "Short prepwork" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wenig Aufwand"
           }
         }
       }
@@ -1217,6 +2161,16 @@
     },
     "Show dish list" : {
 
+    },
+    "Skip" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Überspringen"
+          }
+        }
+      }
     },
     "Snack" : {
       "localizations" : {
@@ -1238,22 +2192,130 @@
         }
       }
     },
+    "Soup" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suppe"
+          }
+        }
+      }
+    },
     "Source link" : {
 
+    },
+    "Spicy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Scharf"
+          }
+        }
+      }
     },
     "Spring" : {
 
     },
+    "Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you." : {
+
+    },
+    "Staples are omitted when a shopping list is rebuilt. You can still add them manually whenever you run out." : {
+
+    },
+    "Start planning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Los geht’s"
+          }
+        }
+      }
+    },
     "Start typing to search, or paste a recipe link." : {
 
     },
+    "Starting" : {
+
+    },
+    "Step %lld: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Step %1$lld: %2$@"
+          }
+        }
+      }
+    },
     "Steps, notes, anything…" : {
+
+    },
+    "Suggest automatically" : {
+
+    },
+    "Suggested" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschläge"
+          }
+        }
+      }
+    },
+    "Suggested from the dish name" : {
 
     },
     "Summer" : {
 
     },
+    "Tag dishes as vegetarian, quick, or a kids’ favorite, then filter the library by it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Versieh Gerichte mit Schlagwörtern wie vegetarisch, schnell oder Kinderliebling und filtere die Sammlung danach."
+          }
+        }
+      }
+    },
+    "Tags" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schlagwörter"
+          }
+        }
+      }
+    },
+    "Takes a while" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dauert länger"
+          }
+        }
+      }
+    },
+    "Tap a meal to pick a dish, or drag a dish over from the list beside the plan." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe auf eine Mahlzeit, um ein Gericht zu wählen – oder zieh ein Gericht aus der Liste neben dem Plan herüber."
+          }
+        }
+      }
+    },
     "Template name" : {
+
+    },
+    "Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
 
     },
     "That dish isn’t in your library." : {
@@ -1262,7 +2324,33 @@
     "That file couldn’t be read." : {
 
     },
+    "That PDF couldn’t be read." : {
+
+    },
+    "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Plan zeigt pro Tag eine Karte je Mahlzeit. Füll die Karten, die dich interessieren, und lass den Rest leer."
+          }
+        }
+      }
+    },
+    "The shopping list is built from the days you plan to cook, so it matches what is actually on the calendar." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Einkaufsliste entsteht aus den Tagen, an denen du kochen willst – sie passt also zu dem, was wirklich im Kalender steht."
+          }
+        }
+      }
+    },
     "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it." : {
+
+    },
+    "This aisle name will be remembered for the ingredient." : {
 
     },
     "This family" : {
@@ -1275,6 +2363,9 @@
 
     },
     "This Week’s Plan" : {
+
+    },
+    "Timers" : {
 
     },
     "Times cooked" : {
@@ -1310,6 +2401,26 @@
     "Tonight’s dinner" : {
 
     },
+    "Turn the planned week into a shopping list without writing it twice." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mach aus der geplanten Woche eine Einkaufsliste, ohne alles zweimal zu schreiben."
+          }
+        }
+      }
+    },
+    "Type to reuse a tag your household already has, or add a new one. A few are suggested from the name and ingredients." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe, um ein vorhandenes Schlagwort zu übernehmen, oder lege ein neues an. Ein paar werden aus Name und Zutaten vorgeschlagen."
+          }
+        }
+      }
+    },
     "Undo" : {
 
     },
@@ -1340,6 +2451,30 @@
 
     },
     "Use as the dish’s photo" : {
+
+    },
+    "Use scan" : {
+
+    },
+    "Use standard aisle" : {
+
+    },
+    "Use this recipe" : {
+
+    },
+    "Used by “Find a recipe”. iOS doesn’t tell apps which search engine you prefer, so pick one here." : {
+
+    },
+    "Used everywhere this dish has no photo" : {
+
+    },
+    "Uses practical kitchen increments, including whole eggs. Turn off to show exact values." : {
+
+    },
+    "Usually have" : {
+
+    },
+    "Usually have this" : {
 
     },
     "Vegan" : {
@@ -1404,13 +2539,52 @@
     "Week template" : {
 
     },
+    "Welcome to MealPlan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Willkommen bei MealPlan"
+          }
+        }
+      }
+    },
+    "What" : {
+
+    },
     "What should the dish be called?" : {
 
     },
     "When" : {
 
     },
+    "Where are we going?" : {
+
+    },
+    "While sharing you can put the new dish straight onto a day in your plan." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Teilen kannst du das neue Gericht gleich auf einen Tag im Plan legen."
+          }
+        }
+      }
+    },
     "Who’s planning" : {
+
+    },
+    "Widgets and Siri show tonight’s meal without opening the app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Widgets und Siri zeigen das Essen von heute, ohne die App zu öffnen."
+          }
+        }
+      }
+    },
+    "Winery" : {
 
     },
     "Winter" : {
@@ -1423,7 +2597,14 @@
 
     },
     "Your dishes" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Gerichte"
+          }
+        }
+      }
     },
     "Your family is being created." : {
 
@@ -1437,6 +2618,9 @@
           }
         }
       }
+    },
+    "Your portable recipe archive is ready." : {
+
     },
     "Your week is ready as a PDF." : {
 

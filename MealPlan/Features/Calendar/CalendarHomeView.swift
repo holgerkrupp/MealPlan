@@ -16,6 +16,9 @@ struct CalendarHomeView: View {
     @State private var savingTemplateWeek: Date?
     @State private var applyingTemplateWeek: Date?
     @State private var exportedPDF: ExportedPDF?
+    /// First day of the week shown in the strip above the plan. Follows the
+    /// user's locale, unlike the Monday-based week sections below it.
+    @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
 
     private var focusWeek: Date { anchorWeek ?? CalendarPaginator.normalizedWeek(of: .now) }
 
@@ -24,14 +27,48 @@ struct CalendarHomeView: View {
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            WeekStripView(
+                weekStart: $stripWeekStart,
+                selectedDate: appState.selectedDate,
+                visibleDayIDs: appState.visibleDayIDs
+            ) { day in
+                goTo(day)
+            }
+            .id(stripWeekStart)
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+            .background(.bar)
+
+            Divider()
+
+            plan
+        }
+    }
+
+    /// The scrolling list of week sections below the week strip.
+    private var plan: some View {
         ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
                     Color.clear.frame(height: 1)
                         .onAppear {
                             guard didSettle, let top = anchorWeek else { return }
-                            paginator.extendPast()
-                            proxy.scrollTo(top, anchor: .top)
+                            // Prepending weeks changes every existing view's
+                            // vertical position. Wait for that layout update,
+                            // then restore the old first week without an
+                            // animation so the content under the finger stays
+                            // put instead of snapping to a new position.
+                            withTransaction(Transaction(animation: nil)) {
+                                paginator.extendPast()
+                            }
+                            Task { @MainActor in
+                                await Task.yield()
+                                withTransaction(Transaction(animation: nil)) {
+                                    proxy.scrollTo(top, anchor: .top)
+                                }
+                            }
                         }
 
                     ForEach(paginator.weekStarts, id: \.self) { weekStart in
@@ -55,6 +92,12 @@ struct CalendarHomeView: View {
                 guard let target else { return }
                 jumpTarget = nil
                 Task { await scrollToDay(target, proxy: proxy) }
+            }
+            // Keep the strip on the week the user scrolled the plan to.
+            .onChange(of: anchorWeek) { _, week in
+                guard let week else { return }
+                let localeWeek = week.startOfWeek(calendar: .current)
+                if localeWeek != stripWeekStart { stripWeekStart = localeWeek }
             }
         }
         .navigationTitle(appState.currentHousehold?.name ?? "MealPlan")
@@ -136,6 +179,7 @@ struct CalendarHomeView: View {
     private func goTo(_ date: Date) {
         let day = date.startOfDay
         appState.selectedDate = day
+        stripWeekStart = day.startOfWeek(calendar: .current)
         anchorWeek = paginator.ensureLoaded(day)
         jumpTarget = day
     }

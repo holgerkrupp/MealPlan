@@ -1,11 +1,14 @@
 import SwiftUI
 import SwiftData
+import ESADesignKit
 
 @MainActor
 struct DishDetailView: View {
     @Bindable var dish: Dish
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dismiss) private var dismiss
 
     @State private var targetServings: Int = 0
     @State private var showingEditor = false
@@ -14,6 +17,7 @@ struct DishDetailView: View {
     @State private var showingCookingMode = false
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
+    @State private var confirmingDelete = false
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -27,7 +31,9 @@ struct DishDetailView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                imageStrip
+                if !usesCoverHero {
+                    imageStrip
+                }
 
                 if dish.needsReview {
                     Label(String(localized: "Imported automatically — please check the details."),
@@ -54,6 +60,11 @@ struct DishDetailView: View {
                         Label(url.host() ?? url.absoluteString, systemImage: "safari")
                     }
                 }
+                if let deepLink = dish.deepLinkURL {
+                    Link(destination: deepLink) {
+                        Label(appLinkLabel, systemImage: "arrow.up.forward.app")
+                    }
+                }
 
                 statsSection
             }
@@ -61,8 +72,14 @@ struct DishDetailView: View {
         }
         .navigationTitle(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
         #if os(iOS)
-        .navigationBarTitleDisplayMode(.large)
+        .navigationBarTitleDisplayMode(usesCoverHero ? .inline : .large)
         #endif
+        .coverHero(
+            imageData: dish.primaryImageData,
+            title: dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name,
+            enabled: usesCoverHero
+        )
+        .ignoresSafeArea(.all, edges: usesCoverHero ? .top : [])
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 HStack {
@@ -82,6 +99,11 @@ struct DishDetailView: View {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export recipe"), systemImage: "square.and.arrow.up") {
                     exportRecipe()
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Delete recipe"), systemImage: "trash", role: .destructive) {
+                    confirmingDelete = true
                 }
             }
         }
@@ -111,6 +133,29 @@ struct DishDetailView: View {
         } message: {
             Text(exportError ?? "")
         }
+        .confirmationDialog(
+            String(localized: "Delete “\(dish.name)”?"),
+            isPresented: $confirmingDelete,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete recipe"), role: .destructive) {
+                deleteRecipe()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+    }
+
+    private var appLinkLabel: String {
+        guard let app = dish.importedSourceApp?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !app.isEmpty else { return String(localized: "Open in app") }
+        return String(localized: "Open in \(app)")
+    }
+
+    /// Mirrors the compact detail presentation in Game Collector: a recipe's
+    /// primary photo becomes the zooming backdrop, while wider layouts retain
+    /// the existing photo strip.
+    private var usesCoverHero: Bool {
+        dish.primaryImageData != nil && horizontalSizeClass == .compact
     }
 
     /// Shown in place of the recipe when there isn't one yet.
@@ -156,6 +201,9 @@ struct DishDetailView: View {
             }
             ForEach(dish.collectionNames, id: \.self) { collection in
                 badge(collection, system: "folder", tint: .indigo)
+            }
+            ForEach(dish.sortedTagNames, id: \.self) { tag in
+                badge(tag, system: "tag", tint: .teal)
             }
             ForEach(Array(dish.mealTypeTags).sorted(by: { $0.rawValue < $1.rawValue })) { tag in
                 badge(tag.localizedName, system: "circle.fill", tint: .accentColor)
@@ -264,6 +312,13 @@ struct DishDetailView: View {
         } catch {
             exportError = error.localizedDescription
         }
+    }
+
+    private func deleteRecipe() {
+        context.delete(dish)
+        try? context.save()
+        SharedStore.reloadWidgets()
+        dismiss()
     }
 }
 

@@ -13,6 +13,13 @@ struct WeekSectionView: View {
     @Environment(\.modelContext) private var context
 
     private let calendar = Date.mondayCalendar
+    /// Keep meal cards in two equal-width cells. An adaptive column is allowed
+    /// to grow from a card's ideal content width, which lets long dish names
+    /// make one card extend into the next column.
+    private let mealColumns = [
+        GridItem(.flexible(minimum: 0), spacing: 10),
+        GridItem(.flexible(minimum: 0), spacing: 10),
+    ]
 
     init(weekStart: Date, style: CalendarStyle) {
         self.weekStart = weekStart
@@ -50,7 +57,7 @@ struct WeekSectionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             if style == .week {
                 Text(weekHeader)
                     .font(.headline)
@@ -59,7 +66,12 @@ struct WeekSectionView: View {
             }
 
             ForEach(days, id: \.self) { day in
-                DayCard(day: day, onCopyLastWeek: { copyFromLastWeek(to: day) }) {
+                DayCard(
+                    day: day,
+                    isCollapsed: appState.isDayCollapsed(day),
+                    onToggleCollapse: { appState.setDayCollapsed(!appState.isDayCollapsed(day), for: day) },
+                    onCopyLastWeek: { copyFromLastWeek(to: day) }
+                ) {
                     let dayMeals = meals(on: day)
                     if dayMeals.isEmpty {
                         Text(String(localized: "Add meals in Settings to start planning."))
@@ -69,7 +81,7 @@ struct WeekSectionView: View {
                             .padding(.vertical, 8)
                     } else {
                         LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 150), spacing: 10)],
+                            columns: mealColumns,
                             alignment: .leading,
                             spacing: 10
                         ) {
@@ -86,6 +98,13 @@ struct WeekSectionView: View {
                     }
                 }
                 .id(day.dayID)
+                // Feeds the week strip's glass pill. `onDisappear` matters:
+                // the lazy stack can tear a card down without a final
+                // visibility callback.
+                .onScrollVisibilityChange(threshold: 0.05) { visible in
+                    appState.setDayVisible(visible, id: day.dayID)
+                }
+                .onDisappear { appState.setDayVisible(false, id: day.dayID) }
             }
         }
         .padding(.vertical, 8)
@@ -119,9 +138,13 @@ struct DayMeal: Identifiable {
     var id: String { key }
 }
 
-/// A single day's card with a highlighted header for today.
+/// A single day's card with a highlighted header for today. Tapping the date
+/// collapses the day down to just its header, so weeks that are only partly
+/// planned don't have to be scrolled through.
 private struct DayCard<Content: View>: View {
     let day: Date
+    var isCollapsed: Bool
+    var onToggleCollapse: () -> Void
     var onCopyLastWeek: () -> Void
     @ViewBuilder var content: Content
 
@@ -129,13 +152,27 @@ private struct DayCard<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(day.formatted(.dateTime.weekday(.wide)))
-                    .font(.subheadline.weight(.semibold))
-                Text(day.formatted(.dateTime.day().month()))
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                Spacer()
+            HStack(spacing: 8) {
+                Button(action: onToggleCollapse) {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chevron.down")
+                            .font(.caption2.weight(.bold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                        Text(day.formatted(.dateTime.weekday(.wide)))
+                            .font(.subheadline.weight(.semibold))
+                        Text(day.formatted(.dateTime.day().month()))
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                        Spacer(minLength: 0)
+                    }
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityHint(isCollapsed
+                    ? String(localized: "Expands this day")
+                    : String(localized: "Collapses this day"))
+
                 if isToday {
                     Text(String(localized: "Today"))
                         .font(.caption.weight(.bold))
@@ -145,6 +182,12 @@ private struct DayCard<Content: View>: View {
                         .foregroundStyle(.white)
                 }
                 Menu {
+                    Button(
+                        isCollapsed ? String(localized: "Expand day") : String(localized: "Collapse day"),
+                        systemImage: isCollapsed ? "chevron.down" : "chevron.up"
+                    ) {
+                        onToggleCollapse()
+                    }
                     Button(String(localized: "Copy from last week"), systemImage: "arrow.uturn.backward") {
                         onCopyLastWeek()
                     }
@@ -156,11 +199,14 @@ private struct DayCard<Content: View>: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
 
-            Divider()
+            if !isCollapsed {
+                Divider()
 
-            content
-                .padding(12)
+                content
+                    .padding(10)
+            }
         }
+        .animation(.snappy, value: isCollapsed)
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
