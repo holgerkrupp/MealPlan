@@ -11,6 +11,8 @@ struct WeekSectionView: View {
     private var mealTypes: [MealType]
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
+    /// Optional: absent in previews and whenever calendar integration is off.
+    @Environment(CalendarContextStore.self) private var calendarStore: CalendarContextStore?
 
     private let calendar = Date.mondayCalendar
 
@@ -68,19 +70,25 @@ struct WeekSectionView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.vertical, 8)
                     } else {
-                        LazyVGrid(
-                            columns: [GridItem(.adaptive(minimum: 150), spacing: 10)],
-                            alignment: .leading,
-                            spacing: 10
-                        ) {
-                            ForEach(dayMeals) { meal in
-                                MealCard(
-                                    date: day,
-                                    mealKey: meal.key,
-                                    title: meal.name,
-                                    symbolName: meal.symbolName,
-                                    entries: entries(on: day, mealKey: meal.key)
-                                )
+                        VStack(alignment: .leading, spacing: 10) {
+                            // Calendar context sits above the meals and stays
+                            // visually secondary to them.
+                            MealCalendarContextRow(day: day, meals: dayMeals)
+
+                            LazyVGrid(
+                                columns: [GridItem(.adaptive(minimum: 150), spacing: 10)],
+                                alignment: .leading,
+                                spacing: 10
+                            ) {
+                                ForEach(dayMeals) { meal in
+                                    MealCard(
+                                        date: day,
+                                        mealKey: meal.key,
+                                        title: meal.name,
+                                        symbolName: meal.symbolName,
+                                        entries: entries(on: day, mealKey: meal.key)
+                                    )
+                                }
                             }
                         }
                     }
@@ -89,6 +97,11 @@ struct WeekSectionView: View {
             }
         }
         .padding(.vertical, 8)
+        .task {
+            // Tell the calendar layer which week is on screen, so it only ever
+            // queries the days the planner actually shows.
+            calendarStore?.requestWeek(weekStart)
+        }
     }
 
     private func copyFromLastWeek(to day: Date) {

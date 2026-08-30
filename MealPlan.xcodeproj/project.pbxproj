@@ -477,6 +477,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. Your calendar events are not modified.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
@@ -521,6 +522,7 @@
 				ENABLE_USER_SELECTED_FILES = readonly;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. Your calendar events are not modified.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
