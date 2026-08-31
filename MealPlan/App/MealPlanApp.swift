@@ -9,6 +9,11 @@ import CloudKit
 struct MealPlanApp: App {
     let container = SharedStore.make(cloudKit: true)
     @State private var appState = AppState()
+    /// Calendar integration. Creating it touches no calendar data and never
+    /// asks for permission — it only reads the (off by default) preference.
+    @State private var calendarStore = CalendarContextStore()
+
+    @Environment(\.scenePhase) private var scenePhase
 
     #if canImport(UIKit)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
@@ -18,9 +23,16 @@ struct MealPlanApp: App {
         WindowGroup {
             RootView()
                 .environment(appState)
+                .environment(calendarStore)
                 .task {
                     appState.bootstrap(context: container.mainContext)
                     await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
+                    await calendarStore.start()
+                }
+                .onChange(of: scenePhase) { _, phase in
+                    // Calendar access can be revoked while the app is away.
+                    guard phase == .active else { return }
+                    Task { await calendarStore.applicationBecameActive() }
                 }
                 .onOpenURL { url in
                     appState.handle(openedURL: url, context: container.mainContext)
@@ -33,6 +45,7 @@ struct MealPlanApp: App {
                 SettingsView()
             }
             .environment(appState)
+            .environment(calendarStore)
             .modelContainer(container)
             .frame(width: 460, height: 520)
         }

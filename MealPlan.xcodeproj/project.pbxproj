@@ -483,6 +483,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. Your calendar events are not modified.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
@@ -530,6 +531,7 @@
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlan/Info.plist;
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
+				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. Your calendar events are not modified.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";

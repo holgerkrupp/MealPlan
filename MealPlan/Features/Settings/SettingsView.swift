@@ -52,6 +52,8 @@ struct SettingsView: View {
                 }
             }
 
+            CalendarIntegrationSection()
+
             Section {
                 Picker(String(localized: "Search with"), selection: $searchEngineRaw) {
                     ForEach(SearchEngine.allCases) { engine in
