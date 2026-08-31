@@ -84,10 +84,45 @@ struct MealContextDetailLine: Sendable, Equatable, Identifiable, Hashable {
     /// "16:30 – 17:30", or "All day".
     let timeText: String
     let isAllDay: Bool
+    /// Which of the user's calendars this came from — more than one when the
+    /// same appointment sits in several selected calendars. Always safe to
+    /// show: these are names the user picked in Settings, not event content.
+    let calendarNames: [String]
+    /// The colour Calendar uses for the first of `calendarNames`.
+    let calendarColor: MealCalendarColor?
+    /// Whether this event is what makes the meal look busy.
+    let blocksTime: Bool
+
+    init(
+        id: String,
+        title: String?,
+        timeText: String,
+        isAllDay: Bool,
+        calendarNames: [String] = [],
+        calendarColor: MealCalendarColor? = nil,
+        blocksTime: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.timeText = timeText
+        self.isAllDay = isAllDay
+        self.calendarNames = calendarNames
+        self.calendarColor = calendarColor
+        self.blocksTime = blocksTime
+    }
+
+    /// "Family", or "Family, Work" when the same appointment is in both.
+    var calendarText: String? {
+        calendarNames.isEmpty ? nil : calendarNames.joined(separator: ", ")
+    }
 
     /// One string for VoiceOver and for places that show a single line.
     var spokenText: String {
-        if let title, !title.isEmpty { "\(title), \(timeText)" } else { timeText }
+        var parts: [String] = []
+        if let title, !title.isEmpty { parts.append(title) }
+        parts.append(timeText)
+        if let calendarText { parts.append(calendarText) }
+        return parts.joined(separator: ", ")
     }
 }
 
@@ -127,6 +162,42 @@ struct MealPlanningContext: Sendable, Equatable, Identifiable {
     var id: String { "\(date.dayID)#\(mealKey)" }
 
     var isEmpty: Bool { relevantEvents.isEmpty && allDayEvents.isEmpty }
+
+    /// The lines about events happening at a time — the ones that belong to
+    /// this meal specifically.
+    var timedDetailLines: [MealContextDetailLine] {
+        detailLines.filter { !$0.isAllDay }
+    }
+
+    /// All-day events apply to the whole day, not to this meal, so the UI shows
+    /// them once per day rather than repeating them under every meal.
+    var allDayDetailLines: [MealContextDetailLine] {
+        detailLines.filter(\.isAllDay)
+    }
+
+    /// True when the calendar has something to say about *this meal* rather
+    /// than about the whole day. A context carrying nothing but all-day events
+    /// is shown once at day level instead of repeated under every meal.
+    var hasTimedEvents: Bool { !relevantEvents.isEmpty }
+
+    /// True when the summary talks about busy time — the case where naming the
+    /// calendar behind it actually tells the user something.
+    var indicatesBusyTime: Bool {
+        isBusyThroughout || busyness == .busy || busyUntil != nil || busyFrom != nil
+    }
+
+    /// The calendars behind the busy time around this meal, in the order they
+    /// appear. Shown in the detail sheet so "Busy" says *which* calendar.
+    var busyCalendarNames: [String] {
+        var seen = Set<String>()
+        var names: [String] = []
+        for line in timedDetailLines where line.blocksTime {
+            for name in line.calendarNames where seen.insert(name).inserted {
+                names.append(name)
+            }
+        }
+        return names
+    }
 
     /// Free time inside the window, once the busy stretches are taken out of
     /// its edges. `0` when the window is fully taken.

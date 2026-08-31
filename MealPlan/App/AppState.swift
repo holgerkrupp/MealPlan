@@ -160,37 +160,24 @@ final class AppState {
     }
 
     /// Handles recipe archives opened from Files/Finder as well as the app's
-    /// normal deep links. Existing exact-name/source matches are skipped so
-    /// re-opening the same backup is safe.
+    /// normal deep links. Recipes already in the library are skipped, and a
+    /// second take on a dish you already have is imported as a variant rather
+    /// than dropped, so re-opening the same backup is safe either way.
     func handle(openedURL url: URL, context: ModelContext) {
-        let ext = url.pathExtension.lowercased()
-        guard ["mealplanrecipes", "paprikarecipes", "paprikarecipe"].contains(ext) else {
+        guard RecipeFileType.isImportable(url) else {
             handle(url: url)
             return
         }
-
-        let accessing = url.startAccessingSecurityScopedResource()
-        defer { if accessing { url.stopAccessingSecurityScopedResource() } }
         do {
-            let data = try Data(contentsOf: url)
-            let recipes = ext == "mealplanrecipes"
-                ? try MealPlanRecipeArchive.importedRecipes(from: data)
-                : try PaprikaArchive.recipes(from: data)
-            var existing = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
-            var imported = 0
-            for recipe in recipes {
-                guard RecipeDuplicateDetector.match(recipe, in: existing) == nil else { continue }
-                let dish = DishBuilder.makeDish(
-                    from: recipe,
-                    household: currentHousehold,
-                    createdByName: currentMemberName,
-                    context: context
-                )
-                existing.append(dish)
-                imported += 1
-            }
+            let recipes = try RecipeImportCommitter.recipes(fromFileAt: url)
+            let result = RecipeImportCommitter.importAll(
+                recipes,
+                household: currentHousehold,
+                createdByName: currentMemberName,
+                context: context
+            )
             requestedSection = .dishes
-            importNotice = String(localized: "Imported \(imported) recipes; skipped \(recipes.count - imported) duplicates.")
+            importNotice = result.summary
         } catch {
             importNotice = String(localized: "Couldn’t import that recipe archive: \(error.localizedDescription)")
         }

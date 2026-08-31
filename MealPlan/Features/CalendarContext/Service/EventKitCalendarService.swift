@@ -51,7 +51,8 @@ actor EventKitCalendarService: CalendarEventProviding {
                 MealCalendarInfo(
                     id: $0.calendarIdentifier,
                     title: $0.title,
-                    sourceTitle: $0.source?.title ?? ""
+                    sourceTitle: $0.source?.title ?? "",
+                    color: MealCalendarColor($0.cgColor)
                 )
             }
             .sorted { ($0.sourceTitle, $0.title) < ($1.sourceTitle, $1.title) }
@@ -106,7 +107,10 @@ actor EventKitCalendarService: CalendarEventProviding {
             isAllDay: event.isAllDay,
             displayTitle: (title?.isEmpty ?? true) ? nil : title,
             calendarIdentifier: calendarID,
-            availability: MealCalendarAvailability(event.availability)
+            availability: MealCalendarAvailability(event.availability),
+            // Shared by every calendar the same appointment landed in, so the
+            // planner can list it once instead of once per calendar.
+            sharedIdentifier: event.calendarItemExternalIdentifier
         )
     }
 }
@@ -123,6 +127,28 @@ extension CalendarAuthorization {
         case .restricted: self = .restricted
         @unknown default: self = .unknown
         }
+    }
+}
+
+extension MealCalendarColor {
+    /// The calendar's colour, converted into plain sRGB components.
+    ///
+    /// `EKCalendar.cgColor` can be in any colour space (and is a generic grey
+    /// for some accounts), so it is converted rather than read directly.
+    init?(_ cgColor: CGColor?) {
+        guard let cgColor else { return nil }
+        guard
+            let sRGB = CGColorSpace(name: CGColorSpace.sRGB),
+            let converted = cgColor.converted(to: sRGB, intent: .defaultIntent, options: nil),
+            let components = converted.components,
+            components.count >= 3
+        else { return nil }
+        self.init(
+            red: Double(components[0]),
+            green: Double(components[1]),
+            blue: Double(components[2]),
+            alpha: components.count >= 4 ? Double(components[3]) : 1
+        )
     }
 }
 

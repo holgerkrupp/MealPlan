@@ -18,6 +18,12 @@ enum PaprikaArchive {
         var source: String?
         var photo_data: String?     // base64 JPEG
         var categories: [String]?
+        var total_time: String?
+        var rating: Int?
+        var description: String?
+        /// Paprika's own stable identifier, which survives a rename and makes
+        /// re-importing the same export a no-op. See `RecipeDuplicateDetector`.
+        var uid: String?
     }
 
     /// Parse an export into importable recipes.
@@ -55,12 +61,20 @@ enum PaprikaArchive {
             sourceURL: p.source_url.flatMap(URL.init(string:))
         )
         recipe.importedSourceApp = "Paprika"
+        recipe.sourceIdentifier = p.uid?.nilIfEmpty
         recipe.needsReview = false
+        recipe.rating = min(max(p.rating ?? 0, 0), 5)
         recipe.ingredientLines = ingredientLines(from: p.ingredients)
-        recipe.instructions = [p.directions, p.notes].compactMap { $0?.nilIfEmpty }.joined(separator: "\n\n").nilIfEmpty
+        recipe.instructions = [p.description, p.directions, p.notes]
+            .compactMap { $0?.nilIfEmpty }.joined(separator: "\n\n").nilIfEmpty
         recipe.servings = p.servings?.firstInteger
         recipe.prepTimeMinutes = durationMinutes(p.prep_time)
         recipe.cookTimeMinutes = durationMinutes(p.cook_time)
+        // Paprika lets a recipe carry only a total time. Recording it as cook
+        // time keeps `totalTimeMinutes` right rather than leaving it blank.
+        if recipe.prepTimeMinutes == nil, recipe.cookTimeMinutes == nil {
+            recipe.cookTimeMinutes = durationMinutes(p.total_time)
+        }
         recipe.categories = p.categories ?? []
         // Paprika's categories are the closest thing it has to tags.
         recipe.tagNames = recipe.categories

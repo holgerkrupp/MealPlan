@@ -27,6 +27,8 @@ enum MealPlanningContextBuilder {
     ///   - events: events of `date` from the selected calendars only.
     ///   - calendarOwners: calendar identifier → household member name, already
     ///     restricted to selected calendars. Empty when the user mapped nobody.
+    ///   - calendars: calendar identifier → the calendar itself, so the detail
+    ///     lines can name and colour where an event came from.
     static func context(
         date: Date,
         mealKey: String,
@@ -35,6 +37,7 @@ enum MealPlanningContextBuilder {
         events: [MealCalendarEvent],
         privacyMode: CalendarPrivacyMode,
         calendarOwners: [String: String] = [:],
+        calendars: [String: MealCalendarInfo] = [:],
         calendar: Calendar = .current
     ) -> MealPlanningContext? {
         let day = calendar.startOfDay(for: date)
@@ -50,6 +53,9 @@ enum MealPlanningContextBuilder {
         // For per-person availability the calendar matters, so keep one copy
         // per calendar there.
         let perCalendar = deduplicated(sorted, includingCalendar: true)
+        // Every calendar each surviving occurrence came from, so a merged
+        // duplicate can still say it is in both "Family" and "Work".
+        let calendarsPerOccurrence = calendarIdentifiers(byOccurrenceIn: sorted)
 
         let showsTitles = privacyMode == .eventTitles
         func presentable(_ event: MealCalendarEvent) -> MealCalendarEvent {
@@ -131,12 +137,24 @@ enum MealPlanningContextBuilder {
             householdAvailability: people,
             hasStaggeredAvailability: staggered,
             suggestedComplexity: complexity,
-            detailLines: detailLines(timed: timed, allDay: Array(allDay), showsTitles: showsTitles)
+            detailLines: detailLines(
+                timed: timed,
+                allDay: Array(allDay),
+                showsTitles: showsTitles,
+                calendarsPerOccurrence: calendarsPerOccurrence,
+                calendars: calendars
+            )
         )
     }
 
     // MARK: - Pieces
 
+    /// One entry per appointment.
+    ///
+    /// `MealCalendarEvent.occurrenceKey` is deliberately *not* the event id:
+    /// the same appointment shared into two of the user's calendars arrives
+    /// with a different id per copy, and listing it twice is the most visible
+    /// way this feature can look broken.
     private static func deduplicated(
         _ events: [MealCalendarEvent],
         includingCalendar: Bool
@@ -144,13 +162,25 @@ enum MealPlanningContextBuilder {
         var seen = Set<String>()
         var result: [MealCalendarEvent] = []
         for event in events {
-            let key = [
-                includingCalendar ? event.calendarIdentifier : "",
-                event.id,
-                String(event.startDate.timeIntervalSinceReferenceDate),
-                String(event.endDate.timeIntervalSinceReferenceDate),
-            ].joined(separator: "|")
+            let key = includingCalendar
+                ? "\(event.calendarIdentifier)|\(event.occurrenceKey)"
+                : event.occurrenceKey
             if seen.insert(key).inserted { result.append(event) }
+        }
+        return result
+    }
+
+    /// occurrence key → the calendars that copy of the appointment lives in,
+    /// first seen first.
+    private static func calendarIdentifiers(
+        byOccurrenceIn events: [MealCalendarEvent]
+    ) -> [String: [String]] {
+        var result: [String: [String]] = [:]
+        for event in events {
+            var identifiers = result[event.occurrenceKey] ?? []
+            guard !identifiers.contains(event.calendarIdentifier) else { continue }
+            identifiers.append(event.calendarIdentifier)
+            result[event.occurrenceKey] = identifiers
         }
         return result
     }
@@ -226,25 +256,42 @@ enum MealPlanningContextBuilder {
     private static func detailLines(
         timed: [MealCalendarEvent],
         allDay: [MealCalendarEvent],
-        showsTitles: Bool
+        showsTitles: Bool,
+        calendarsPerOccurrence: [String: [String]],
+        calendars: [String: MealCalendarInfo]
     ) -> [MealContextDetailLine] {
+        /// The calendars one occurrence came from, named and coloured the way
+        /// Calendar does. Falls back to the event's own calendar so a missing
+        /// lookup only costs the extra names, never the line itself.
+        func sources(for event: MealCalendarEvent) -> [MealCalendarInfo] {
+            let identifiers = calendarsPerOccurrence[event.occurrenceKey] ?? [event.calendarIdentifier]
+            return identifiers.compactMap { calendars[$0] }
+        }
+
+        func line(_ event: MealCalendarEvent, timeText: String, isAllDay: Bool) -> MealContextDetailLine {
+            let sources = sources(for: event)
+            return MealContextDetailLine(
+                id: event.occurrenceKey,
+                title: showsTitles ? event.displayTitle : nil,
+                timeText: timeText,
+                isAllDay: isAllDay,
+                calendarNames: sources.map(\.title).filter { !$0.isEmpty },
+                calendarColor: sources.first?.color,
+                blocksTime: event.availability.blocksTime
+            )
+        }
+
         var lines: [MealContextDetailLine] = timed.prefix(maxDetailLines).map { event in
             let start = event.startDate.formatted(date: .omitted, time: .shortened)
             let end = event.endDate.formatted(date: .omitted, time: .shortened)
-            return MealContextDetailLine(
-                id: event.id,
-                title: showsTitles ? event.displayTitle : nil,
+            return line(
+                event,
                 timeText: event.startDate == event.endDate ? start : "\(start) – \(end)",
                 isAllDay: false
             )
         }
         lines += allDay.map { event in
-            MealContextDetailLine(
-                id: event.id,
-                title: showsTitles ? event.displayTitle : nil,
-                timeText: String(localized: "All day"),
-                isAllDay: true
-            )
+            line(event, timeText: String(localized: "All day"), isAllDay: true)
         }
         return lines
     }

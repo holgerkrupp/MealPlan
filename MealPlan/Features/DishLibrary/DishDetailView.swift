@@ -9,6 +9,7 @@ struct DishDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
+    @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @State private var targetServings: Int = 0
     @State private var showingEditor = false
@@ -18,6 +19,8 @@ struct DishDetailView: View {
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
     @State private var confirmingDelete = false
+    @State private var showingVariantPicker = false
+    @State private var editingVariant: Dish?
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -66,6 +69,7 @@ struct DishDetailView: View {
                     }
                 }
 
+                variantsSection
                 statsSection
             }
             .padding()
@@ -96,6 +100,18 @@ struct DishDetailView: View {
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Edit"), systemImage: "pencil") { showingEditor = true }
             }
+            if !appState.isGuest {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button(String(localized: "Save as new variant"), systemImage: "square.on.square") {
+                        addVariant()
+                    }
+                }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button(String(localized: "Group with another dish"), systemImage: "link") {
+                        showingVariantPicker = true
+                    }
+                }
+            }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export recipe"), systemImage: "square.and.arrow.up") {
                     exportRecipe()
@@ -125,6 +141,14 @@ struct DishDetailView: View {
                 .environment(appState)
         }
         .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
+        .sheet(isPresented: $showingVariantPicker) {
+            NavigationStack {
+                DishVariantPickerView(dish: dish)
+            }
+        }
+        .sheet(item: $editingVariant) { variant in
+            NavigationStack { DishEditorView(dish: variant, isNew: true) }
+        }
         .alert(
             String(localized: "Couldn’t export recipe"),
             isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
@@ -266,6 +290,46 @@ struct DishDetailView: View {
         }
     }
 
+    /// Other takes on the same dish. Present only once there is a group —
+    /// until then the toolbar's "Save as new variant" is the way in.
+    @ViewBuilder
+    private var variantsSection: some View {
+        let siblings = DishVariants.siblings(of: dish, in: allDishes)
+        if !siblings.isEmpty {
+            section(String(localized: "Other variants of \(dish.variantGroupDisplayName)")) {
+                ForEach(siblings) { sibling in
+                    NavigationLink(value: sibling) {
+                        HStack(spacing: 12) {
+                            DishThumbnail(dish: sibling, size: 44, cornerRadius: 10)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(sibling.name)
+                                if let minutes = sibling.totalTimeMinutes {
+                                    Text(String(localized: "\(minutes) min"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            Spacer()
+                            Image(systemName: "chevron.right")
+                                .font(.caption)
+                                .foregroundStyle(.tertiary)
+                        }
+                    }
+                    .buttonStyle(.plain)
+                    .padding(.vertical, 4)
+                }
+                if !appState.isGuest {
+                    Button(String(localized: "Remove from group"), systemImage: "minus.circle") {
+                        DishVariants.leaveGroup(dish, in: allDishes)
+                        try? context.save()
+                    }
+                    .font(.subheadline)
+                    .padding(.top, 4)
+                }
+            }
+        }
+    }
+
     private var statsSection: some View {
         section(String(localized: "History")) {
             LabeledContent(String(localized: "Times cooked"), value: "\(dish.usageCount)")
@@ -312,6 +376,12 @@ struct DishDetailView: View {
         } catch {
             exportError = error.localizedDescription
         }
+    }
+
+    /// Copies this dish so the cook can change the copy freely. Both end up in
+    /// the same variant group.
+    private func addVariant() {
+        editingVariant = DishBuilder.duplicateAsVariant(of: dish, context: context)
     }
 
     private func deleteRecipe() {

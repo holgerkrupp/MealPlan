@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Compression
+import UniformTypeIdentifiers
 @testable import MealPlan
 
 struct PaprikaArchiveTests {
@@ -76,6 +77,39 @@ struct PaprikaArchiveTests {
         #expect(PaprikaArchive.durationMinutes("1:30") == 90)
         #expect(PaprikaArchive.durationMinutes("45") == 45)
         #expect(PaprikaArchive.durationMinutes("") == nil)
+    }
+
+    @Test func carriesPaprikasOwnIdentifierAndTotalTime() throws {
+        let json = """
+        {"name":"Chili","uid":"00A16B01-4166-4883-BC78-F28F66E78CF6","rating":4,
+         "ingredients":"400 g Bohnen","directions":"Kochen.","total_time":"1 hr 10 min"}
+        """
+        let recipes = try PaprikaArchive.recipes(from: gzip(Data(json.utf8)))
+        #expect(recipes[0].sourceIdentifier == "00A16B01-4166-4883-BC78-F28F66E78CF6")
+        #expect(recipes[0].rating == 4)
+        // Only a total time was exported, so it stands in for the cook time
+        // rather than leaving the dish with no duration at all.
+        #expect(recipes[0].cookTimeMinutes == 70)
+    }
+
+    /// The reason MealPlan never appeared in Paprika's share sheet: the app
+    /// declared an invented `com.paprika.recipes` that no Paprika item ever
+    /// registers. These are the identifiers Paprika actually exports.
+    @Test func declaresTheIdentifiersPaprikaActuallyExports() {
+        #expect(RecipeFileType.paprikaIdentifiers.contains("com.hindsightlabs.paprika.files.recipes"))
+        #expect(RecipeFileType.paprikaIdentifiers.contains("com.hindsightlabs.paprika.files.recipe"))
+
+        // Resolved through the app bundle's own imported declarations.
+        let resolved = UTType(filenameExtension: "paprikarecipes")?.identifier
+        #expect(resolved.map(RecipeFileType.paprikaIdentifiers.contains) == true)
+        #expect(RecipeFileType.importableContentTypes.contains { $0.identifier == RecipeFileType.paprikaMultipleIdentifier })
+    }
+
+    @Test func recognisesTheFilesItCanImport() {
+        #expect(RecipeFileType.isImportable(URL(fileURLWithPath: "/tmp/52 recipes.paprikarecipes")))
+        #expect(RecipeFileType.isImportable(URL(fileURLWithPath: "/tmp/One.PAPRIKARECIPE")))
+        #expect(RecipeFileType.isMealPlanArchive(URL(fileURLWithPath: "/tmp/Backup.mealplanrecipes")))
+        #expect(RecipeFileType.isImportable(URL(fileURLWithPath: "/tmp/holiday.jpg")) == false)
     }
 
     @Test func rawDeflateRoundTrips() {

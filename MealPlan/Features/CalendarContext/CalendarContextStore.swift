@@ -23,6 +23,10 @@ final class CalendarContextStore {
 
     private(set) var authorization: CalendarAuthorization = .notDetermined
     private(set) var availableCalendars: [MealCalendarInfo] = []
+    /// `availableCalendars` keyed by identifier, so building a day's context
+    /// doesn't rebuild the lookup on every redraw. Always written through
+    /// `setAvailableCalendars(_:)`.
+    private var calendarsByIdentifier: [String: MealCalendarInfo] = [:]
     private(set) var isLoadingCalendars = false
     /// Set when a calendar read failed. Purely informational — the planner
     /// keeps working either way.
@@ -91,7 +95,7 @@ final class CalendarContextStore {
             // user's selection so turning access back on just works.
             eventsByDay = [:]
             loadedRange = nil
-            availableCalendars = []
+            setAvailableCalendars([])
         }
     }
 
@@ -134,21 +138,21 @@ final class CalendarContextStore {
         observationTask = nil
         eventsByDay = [:]
         loadedRange = nil
-        availableCalendars = []
+        setAvailableCalendars([])
         requestedWeeks = []
         lastErrorDescription = nil
     }
 
     func loadAvailableCalendars() async {
         guard settings.isEnabled, authorization.canReadEvents else {
-            availableCalendars = []
+            setAvailableCalendars([])
             return
         }
         isLoadingCalendars = true
         defer { isLoadingCalendars = false }
         do {
             let calendars = try await provider.availableCalendars()
-            availableCalendars = calendars
+            setAvailableCalendars(calendars)
             lastErrorDescription = nil
             // Only reconcile against a list we actually read — an empty result
             // from a failing store must not wipe the user's selection.
@@ -156,9 +160,14 @@ final class CalendarContextStore {
                 settings.reconcile(with: calendars)
             }
         } catch {
-            availableCalendars = []
+            setAvailableCalendars([])
             lastErrorDescription = error.localizedDescription
         }
+    }
+
+    private func setAvailableCalendars(_ calendars: [MealCalendarInfo]) {
+        availableCalendars = calendars
+        calendarsByIdentifier = Dictionary(calendars.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
     }
 
     // MARK: - Fetching
@@ -290,6 +299,7 @@ final class CalendarContextStore {
             events: dayEvents,
             privacyMode: settings.privacyMode,
             calendarOwners: settings.activeCalendarOwners,
+            calendars: calendarsByIdentifier,
             calendar: calendar
         )
     }

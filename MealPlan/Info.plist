@@ -13,6 +13,8 @@
 			<string>Alternate</string>
 			<key>LSItemContentTypes</key>
 			<array>
+				<string>com.hindsightlabs.paprika.files.recipes</string>
+				<string>com.hindsightlabs.paprika.files.recipe</string>
 				<string>com.paprika.recipes</string>
 			</array>
 		</dict>
@@ -69,18 +71,41 @@
 			<key>UTTypeConformsTo</key>
 			<array>
 				<string>public.data</string>
-				<string>public.archive</string>
 			</array>
 			<key>UTTypeDescription</key>
-			<string>Paprika Recipes</string>
+			<string>Paprika Recipes File</string>
 			<key>UTTypeIdentifier</key>
-			<string>com.paprika.recipes</string>
+			<string>com.hindsightlabs.paprika.files.recipes</string>
 			<key>UTTypeTagSpecification</key>
 			<dict>
 				<key>public.filename-extension</key>
 				<array>
 					<string>paprikarecipes</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/paprikarecipes</string>
+				</array>
+			</dict>
+		</dict>
+		<dict>
+			<key>UTTypeConformsTo</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>UTTypeDescription</key>
+			<string>Paprika Recipe File</string>
+			<key>UTTypeIdentifier</key>
+			<string>com.hindsightlabs.paprika.files.recipe</string>
+			<key>UTTypeTagSpecification</key>
+			<dict>
+				<key>public.filename-extension</key>
+				<array>
 					<string>paprikarecipe</string>
+				</array>
+				<key>public.mime-type</key>
+				<array>
+					<string>application/paprikarecipe</string>
 				</array>
 			</dict>
 		</dict>

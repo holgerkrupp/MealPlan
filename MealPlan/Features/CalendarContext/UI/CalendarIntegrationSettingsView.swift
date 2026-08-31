@@ -72,12 +72,18 @@ struct CalendarIntegrationSettingsView: View {
             } else {
                 ForEach(store.availableCalendars) { calendar in
                     Toggle(isOn: selectionBinding(store, calendar: calendar)) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(calendar.title)
-                            if !calendar.sourceTitle.isEmpty {
-                                Text(calendar.sourceTitle)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
+                        // The dot repeats Calendar's own colour so a calendar
+                        // is recognised at a glance; the name carries the
+                        // meaning, the colour never does.
+                        HStack(spacing: 8) {
+                            CalendarColorDot(color: calendar.color)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(calendar.title)
+                                if !calendar.sourceTitle.isEmpty {
+                                    Text(calendar.sourceTitle)
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
                             }
                         }
                     }
@@ -166,10 +172,15 @@ struct CalendarIntegrationSettingsView: View {
         if !members.isEmpty && !selected.isEmpty {
             Section {
                 ForEach(selected) { calendar in
-                    Picker(calendar.title, selection: ownerBinding(store, calendarID: calendar.id)) {
+                    Picker(selection: ownerBinding(store, calendarID: calendar.id)) {
                         Text(String(localized: "Nobody")).tag("")
                         ForEach(memberNames, id: \.self) { name in
                             Text(name).tag(name)
+                        }
+                    } label: {
+                        HStack(spacing: 8) {
+                            CalendarColorDot(color: calendar.color)
+                            Text(calendar.title)
                         }
                     }
                 }

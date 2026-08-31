@@ -70,9 +70,13 @@ struct CalendarPrivacyTests {
             calendarIdentifier: "c"
         )
         let fields = Set(Mirror(reflecting: event).children.compactMap(\.label))
+        // `sharedIdentifier` is an opaque EventKit identifier used to recognise
+        // the same appointment in two calendars. Like `id` it says nothing
+        // about what the event is.
         #expect(fields == [
             "id", "startDate", "endDate", "isAllDay",
             "displayTitle", "calendarIdentifier", "availability",
+            "sharedIdentifier",
         ])
     }
 

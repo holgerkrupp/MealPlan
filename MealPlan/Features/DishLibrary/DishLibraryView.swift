@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import UniformTypeIdentifiers
 
 @MainActor
 struct DishLibraryView: View {
@@ -11,11 +12,50 @@ struct DishLibraryView: View {
     @State private var editingNewDish = false
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
+    @State private var showingFilePicker = false
+    @State private var importingFile: ImportableRecipeFile?
+    @State private var importError: String?
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
     private var filteredDishes: [Dish] {
         appState.dishFilter.apply(to: allDishes)
+    }
+
+    /// What the grid actually draws. A variant group collapses into one cell
+    /// so five takes on a burger don't push everything else off the screen;
+    /// the group's own screen lists them.
+    private var libraryItems: [LibraryItem] {
+        let groups = DishVariants.groups(in: filteredDishes)
+        var seenGroups: Set<UUID> = []
+        var items: [LibraryItem] = []
+        for dish in filteredDishes {
+            guard let groupID = dish.variantGroupID, let members = groups[groupID] else {
+                items.append(.dish(dish))
+                continue
+            }
+            guard seenGroups.insert(groupID).inserted else { continue }
+            items.append(.group(
+                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
+                lead: members[0],
+                count: members.count
+            ))
+        }
+        return items
+    }
+
+    /// One cell in the grid: a plain dish, or a group of variants standing in
+    /// for its members.
+    private enum LibraryItem: Identifiable {
+        case dish(Dish)
+        case group(DishVariantGroupRef, lead: Dish, count: Int)
+
+        var id: String {
+            switch self {
+            case .dish(let dish): "dish-\(dish.uuid)"
+            case .group(let ref, _, _): "group-\(ref.id)"
+            }
+        }
     }
 
     private var tags: [String] {
@@ -45,12 +85,20 @@ struct DishLibraryView: View {
                     .frame(maxWidth: .infinity, minHeight: 320)
             } else {
                 LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(filteredDishes) { dish in
-                        NavigationLink(value: dish) {
-                            DishGridCell(dish: dish)
+                    ForEach(libraryItems) { item in
+                        switch item {
+                        case .dish(let dish):
+                            NavigationLink(value: dish) {
+                                DishGridCell(dish: dish)
+                            }
+                            .buttonStyle(.plain)
+                            .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+                        case .group(let ref, let lead, let count):
+                            NavigationLink(value: ref) {
+                                DishGridCell(dish: lead, variantGroupName: ref.name, variantCount: count)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .buttonStyle(.plain)
-                        .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
                     }
                 }
                 .padding()
@@ -58,6 +106,7 @@ struct DishLibraryView: View {
         }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
+        .navigationDestination(for: DishVariantGroupRef.self) { DishVariantGroupView(group: $0) }
         .searchable(
             text: $appState.dishFilter.searchText,
             prompt: String(localized: "Search dishes")
@@ -76,6 +125,13 @@ struct DishLibraryView: View {
                     availableCollections: collections,
                     availableTags: tags
                 )
+            }
+            if !appState.isGuest {
+                ToolbarItem(placement: .secondaryAction) {
+                    Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
+                        showingFilePicker = true
+                    }
+                }
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
@@ -98,6 +154,24 @@ struct DishLibraryView: View {
             }
         }
         .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
+        .sheet(item: $importingFile) { ImportRecipesSheet(fileURL: $0.url) }
+        .fileImporter(
+            isPresented: $showingFilePicker,
+            allowedContentTypes: RecipeFileType.importableContentTypes
+        ) { result in
+            switch result {
+            case .success(let url): importingFile = ImportableRecipeFile(url: url)
+            case .failure(let error): importError = error.localizedDescription
+            }
+        }
+        .alert(
+            String(localized: "Couldn’t import recipes"),
+            isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(importError ?? "")
+        }
         .alert(
             String(localized: "Couldn’t export recipes"),
             isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
@@ -181,6 +255,12 @@ struct DishLibraryView: View {
         newDish = dish
         editingNewDish = true
     }
+}
+
+/// Wraps the picked file so `.sheet(item:)` can drive the review sheet.
+struct ImportableRecipeFile: Identifiable {
+    let id = UUID()
+    let url: URL
 }
 
 #Preview {

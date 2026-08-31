@@ -26,6 +26,16 @@
         }
       }
     },
+    "%@ (variant)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ (Variante)"
+          }
+        }
+      }
+    },
     "%@ for %@. %@." : {
       "localizations" : {
         "en" : {
@@ -36,8 +46,98 @@
         }
       }
     },
+    "%@: busy the whole time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: die ganze Zeit beschäftigt"
+          }
+        }
+      }
+    },
+    "%@: free from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: frei ab %@"
+          }
+        }
+      }
+    },
+    "%@: nothing planned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: nichts geplant"
+          }
+        }
+      }
+    },
+    "%@: partly busy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@: teilweise beschäftigt"
+          }
+        }
+      }
+    },
+    "%1$@: free from %2$@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: frei ab %2$@"
+          }
+        }
+      }
+    },
+    "%1$@: nothing planned" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$@: nichts geplant"
+          }
+        }
+      }
+    },
+    "%1$lld events around %2$@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Termine rund um %2$@"
+          }
+        }
+      }
+    },
     "%lld" : {
 
+    },
+    "%lld all-day events" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld ganztägige Termine"
+          }
+        }
+      }
+    },
+    "%lld calendars" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Kalender"
+          }
+        }
+      }
     },
     "%lld d" : {
 
@@ -62,6 +162,16 @@
         }
       }
     },
+    "%lld events around %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Termine rund um %@"
+          }
+        }
+      }
+    },
     "%lld meals" : {
 
     },
@@ -78,11 +188,54 @@
         }
       }
     },
+    "%lld variants" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Varianten"
+          }
+        }
+      }
+    },
     "+ %lld×" : {
+
+    },
+    "+%lld" : {
 
     },
     "≤ %lld min" : {
 
+    },
+    "1 calendar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Kalender"
+          }
+        }
+      }
+    },
+    "1 event around %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Termin rund um %@"
+          }
+        }
+      }
+    },
+    "A little going on" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwas los"
+          }
+        }
+      }
     },
     "A name is enough to add a dish — recipe, photo, and ingredients can follow later." : {
       "localizations" : {
@@ -199,6 +352,16 @@
         }
       }
     },
+    "Add another recipe first, then group the two as variants." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leg erst ein weiteres Rezept an und gruppiere die beiden dann als Varianten."
+          }
+        }
+      }
+    },
     "Add Dish" : {
 
     },
@@ -252,6 +415,86 @@
     "All" : {
 
     },
+    "All %lld recipes in this group are shown under this name." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle %lld Rezepte dieser Gruppe erscheinen unter diesem Namen."
+          }
+        }
+      }
+    },
+    "All day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganztägig"
+          }
+        }
+      }
+    },
+    "All day: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganztägig: %@"
+          }
+        }
+      }
+    },
+    "All-day event" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganztägiger Termin"
+          }
+        }
+      }
+    },
+    "Allow Calendar access" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff erlauben"
+          }
+        }
+      }
+    },
+    "Already in your library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schon in deiner Sammlung"
+          }
+        }
+      }
+    },
+    "Already saved as “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schon gespeichert als „%@“"
+          }
+        }
+      }
+    },
+    "Also shows the title of an event. Notes, invitees, locations and links are never shown." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt zusätzlich den Titel eines Termins. Notizen, Teilnehmende, Orte und Links werden nie gezeigt."
+          }
+        }
+      }
+    },
     "Any" : {
       "localizations" : {
         "de" : {
@@ -287,6 +530,16 @@
     "Autumn" : {
 
     },
+    "Availability only" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Verfügbarkeit"
+          }
+        }
+      }
+    },
     "Back" : {
 
     },
@@ -316,6 +569,16 @@
         }
       }
     },
+    "Both recipes stay separate — they're only shown together, so you can pick the one you feel like cooking." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beide Rezepte bleiben eigenständig – sie werden nur zusammen angezeigt, damit du dir aussuchen kannst, worauf du Lust hast."
+          }
+        }
+      }
+    },
     "Breakfast" : {
       "localizations" : {
         "de" : {
@@ -339,6 +602,56 @@
         }
       }
     },
+    "Busy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Viel los"
+          }
+        }
+      }
+    },
+    "Busy during %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschäftigt während %@"
+          }
+        }
+      }
+    },
+    "Busy from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschäftigt ab %@"
+          }
+        }
+      }
+    },
+    "Busy time from %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Belegte Zeit aus %@"
+          }
+        }
+      }
+    },
+    "Busy until %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschäftigt bis %@"
+          }
+        }
+      }
+    },
     "Café" : {
 
     },
@@ -348,6 +661,106 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kalender"
+          }
+        }
+      }
+    },
+    "Calendar access" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff"
+          }
+        }
+      }
+    },
+    "Calendar access is turned off for MealPlan. You can allow it in Settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Kalenderzugriff für MealPlan ist ausgeschaltet. Du kannst ihn in den Einstellungen erlauben."
+          }
+        }
+      }
+    },
+    "Calendar access isn’t available on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff ist auf diesem Gerät nicht verfügbar."
+          }
+        }
+      }
+    },
+    "Calendar access isn’t available right now." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff ist gerade nicht verfügbar."
+          }
+        }
+      }
+    },
+    "Calendar context: %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender-Kontext: %@."
+          }
+        }
+      }
+    },
+    "Calendar detail" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender-Details"
+          }
+        }
+      }
+    },
+    "Calendar integration" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender-Integration"
+          }
+        }
+      }
+    },
+    "Calendar integration isn’t available." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender-Integration ist nicht verfügbar."
+          }
+        }
+      }
+    },
+    "Calendar options" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender-Optionen"
+          }
+        }
+      }
+    },
+    "Calendars used for meal planning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender für die Essensplanung"
           }
         }
       }
@@ -387,6 +800,16 @@
     },
     "Choose a PDF" : {
 
+    },
+    "Choose calendars" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender auswählen"
+          }
+        }
+      }
     },
     "Choose photo" : {
 
@@ -540,6 +963,16 @@
     "Couldn’t find a list to add the items to." : {
 
     },
+    "Couldn’t import recipes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte konnten nicht importiert werden"
+          }
+        }
+      }
+    },
     "Couldn’t import that link" : {
 
     },
@@ -548,6 +981,16 @@
     },
     "Couldn’t reach that page." : {
 
+    },
+    "Couldn’t read that file" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Datei konnte nicht gelesen werden"
+          }
+        }
+      }
     },
     "Couldn’t read that page" : {
 
@@ -630,6 +1073,16 @@
     },
     "Deleted “%@”" : {
 
+    },
+    "Deselect all" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auswahl aufheben"
+          }
+        }
+      }
     },
     "Dessert" : {
       "localizations" : {
@@ -787,6 +1240,46 @@
     "Emoji" : {
 
     },
+    "Event notes, invitees, locations and links are never read, shown or stored." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Notizen, Teilnehmende, Orte und Links von Terminen werden nie gelesen, gezeigt oder gespeichert."
+          }
+        }
+      }
+    },
+    "Event titles" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termintitel"
+          }
+        }
+      }
+    },
+    "Events between %@ and %@ count towards this meal." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termine zwischen %@ und %@ zählen zu dieser Mahlzeit."
+          }
+        }
+      }
+    },
+    "Events between %1$@ and %2$@ count towards this meal." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termine zwischen %1$@ und %2$@ zählen zu dieser Mahlzeit."
+          }
+        }
+      }
+    },
     "Every %@" : {
 
     },
@@ -806,6 +1299,16 @@
     "Every fourth week" : {
 
     },
+    "Every recipe in this group has been removed from it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Rezepte wurden aus dieser Gruppe entfernt."
+          }
+        }
+      }
+    },
     "Every second %@" : {
 
     },
@@ -823,6 +1326,16 @@
     },
     "Everyone you invite sees the same plan and dishes. You can invite people as editors or view-only guests." : {
 
+    },
+    "Everything in that file is already in your library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles aus dieser Datei ist schon in deiner Sammlung."
+          }
+        }
+      }
     },
     "Expand day" : {
 
@@ -943,6 +1456,16 @@
         }
       }
     },
+    "From the calendars you chose for meal planning. MealPlan never changes your calendar." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus den Kalendern, die du für die Essensplanung ausgewählt hast. MealPlan ändert deinen Kalender nie."
+          }
+        }
+      }
+    },
     "From week of" : {
 
     },
@@ -987,6 +1510,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Grillen"
+          }
+        }
+      }
+    },
+    "Group as variants" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als Varianten gruppieren"
+          }
+        }
+      }
+    },
+    "Group name" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppenname"
+          }
+        }
+      }
+    },
+    "Group with another dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit einem anderen Gericht gruppieren"
           }
         }
       }
@@ -1045,6 +1598,16 @@
     "Imperial (oz, cups, °F)" : {
 
     },
+    "Import" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Importieren"
+          }
+        }
+      }
+    },
     "Import from %@" : {
       "localizations" : {
         "de" : {
@@ -1055,12 +1618,52 @@
         }
       }
     },
-    "Imported %lld recipes; skipped %lld duplicates." : {
+    "Import recipes" : {
       "localizations" : {
-        "en" : {
+        "de" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Imported %1$lld recipes; skipped %2$lld duplicates."
+            "state" : "translated",
+            "value" : "Rezepte importieren"
+          }
+        }
+      }
+    },
+    "Imported %lld recipes (%lld as variants), skipped %lld duplicates." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Rezepte importiert (%2$lld als Varianten), %3$lld Duplikate übersprungen."
+          }
+        }
+      }
+    },
+    "Imported %lld recipes, %lld of them as variants." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Rezepte importiert, davon %2$lld als Varianten."
+          }
+        }
+      }
+    },
+    "Imported %lld recipes, skipped %lld duplicates." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Rezepte importiert, %2$lld Duplikate übersprungen."
+          }
+        }
+      }
+    },
+    "Imported %lld recipes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Rezepte importiert."
           }
         }
       }
@@ -1070,6 +1673,16 @@
     },
     "Imported recipe" : {
 
+    },
+    "Importing…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird importiert …"
+          }
+        }
+      }
     },
     "In Safari or any other app, tap Share and choose MealPlan — ingredients, steps, and the photo come along when the page offers them." : {
       "localizations" : {
@@ -1083,6 +1696,26 @@
     },
     "In season now" : {
 
+    },
+    "In the “%@” group" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In der Gruppe „%@“"
+          }
+        }
+      }
+    },
+    "In this file" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In dieser Datei"
+          }
+        }
+      }
     },
     "Ingredient" : {
 
@@ -1198,6 +1831,26 @@
     "Liked it" : {
 
     },
+    "Listed twice in this file as “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In dieser Datei doppelt als „%@“"
+          }
+        }
+      }
+    },
+    "Looking for calendars…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Suche nach Kalendern …"
+          }
+        }
+      }
+    },
     "Low-carb" : {
 
     },
@@ -1257,6 +1910,16 @@
     "Meal name" : {
 
     },
+    "Meal times" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essenszeiten"
+          }
+        }
+      }
+    },
     "Meal type" : {
       "localizations" : {
         "de" : {
@@ -1272,6 +1935,16 @@
     },
     "MealPlan doesn’t have permission to add to Reminders." : {
 
+    },
+    "MealPlan hasn’t asked for Calendar access yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan hat noch nicht nach Kalenderzugriff gefragt."
+          }
+        }
+      }
     },
     "MealPlan is made for a household, not just one cook. Everything is stored on your device and shared through iCloud." : {
       "localizations" : {
@@ -1289,6 +1962,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MealPlan bündelt die Essenswoche deiner Familie, die Gerichte, die ihr kocht, und den Einkauf, der daraus folgt."
+          }
+        }
+      }
+    },
+    "MealPlan may only add to your calendar, which isn’t enough to show scheduling context. Allow full Calendar access in Settings to use this feature." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan darf nur zu deinem Kalender hinzufügen. Das reicht nicht, um Termine als Kontext zu zeigen. Erlaube in den Einstellungen den vollen Kalenderzugriff."
+          }
+        }
+      }
+    },
+    "MealPlan needs permission to read your calendars. It shows only whether people are busy around a meal — and never changes, adds or deletes anything in Calendar." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan braucht die Erlaubnis, deine Kalender zu lesen. Es zeigt nur, ob jemand rund um eine Mahlzeit beschäftigt ist – und ändert, ergänzt oder löscht nie etwas im Kalender."
           }
         }
       }
@@ -1341,6 +2034,16 @@
         }
       }
     },
+    "New — %lld ingredients" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu – %lld Zutaten"
+          }
+        }
+      }
+    },
     "New dish" : {
       "localizations" : {
         "de" : {
@@ -1354,6 +2057,16 @@
     "New meal" : {
 
     },
+    "New variants" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neue Varianten"
+          }
+        }
+      }
+    },
     "Next" : {
 
     },
@@ -1365,6 +2078,16 @@
     },
     "Next week" : {
 
+    },
+    "No calendars found." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Kalender gefunden."
+          }
+        }
+      }
     },
     "No cooking steps added yet." : {
 
@@ -1392,6 +2115,16 @@
     "No ingredients added yet." : {
 
     },
+    "No other dishes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine weiteren Gerichte"
+          }
+        }
+      }
+    },
     "No placeholder — shows a generic icon" : {
 
     },
@@ -1410,6 +2143,19 @@
     "No recipe yet. Search the web and save one straight onto this dish." : {
 
     },
+    "No recipes in that file." : {
+
+    },
+    "No recipes to import." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Rezepte zum Importieren."
+          }
+        }
+      }
+    },
     "No regular meals yet." : {
 
     },
@@ -1426,8 +2172,38 @@
     "No templates yet" : {
 
     },
+    "No variants left" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Varianten mehr"
+          }
+        }
+      }
+    },
+    "Nobody" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Niemand"
+          }
+        }
+      }
+    },
     "None" : {
 
+    },
+    "Normal cooking time" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normale Kochzeit"
+          }
+        }
+      }
     },
     "Not cooked in" : {
       "localizations" : {
@@ -1435,26 +2211,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Nicht gekocht seit"
-          }
-        }
-      }
-    },
-    "Nothing in your library fits the tags and filters you picked." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts in deiner Sammlung passt zu den gewählten Schlagwörtern und Filtern."
-          }
-        }
-      }
-    },
-    "Nothing in your library matches that search." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts in deiner Sammlung passt zu dieser Suche."
           }
         }
       }
@@ -1489,8 +2245,38 @@
         }
       }
     },
+    "Nothing in your library fits the tags and filters you picked." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts in deiner Sammlung passt zu den gewählten Schlagwörtern und Filtern."
+          }
+        }
+      }
+    },
+    "Nothing in your library matches that search." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts in deiner Sammlung passt zu dieser Suche."
+          }
+        }
+      }
+    },
     "Nothing is planned for this week yet." : {
 
+    },
+    "Nothing is used until you pick a calendar here. New calendars are never added on their own." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es wird nichts genutzt, bis du hier einen Kalender auswählst. Neue Kalender kommen nie von selbst dazu."
+          }
+        }
+      }
     },
     "Nothing planned" : {
 
@@ -1541,6 +2327,16 @@
         }
       }
     },
+    "Only events near a meal’s time are considered, so a day’s full calendar never lands in your plan." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Es zählen nur Termine rund um die Zeit einer Mahlzeit – nie der ganze Tageskalender."
+          }
+        }
+      }
+    },
     "Open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
       "localizations" : {
         "de" : {
@@ -1573,6 +2369,16 @@
     "Open in Maps" : {
 
     },
+    "Open Settings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einstellungen öffnen"
+          }
+        }
+      }
+    },
     "Open Settings any time to revisit this guide." : {
       "localizations" : {
         "de" : {
@@ -1586,6 +2392,16 @@
     "Open the page with the actual recipe on it, then try again." : {
 
     },
+    "Optional. When you say who a calendar belongs to, the plan can show who is still busy around a meal. MealPlan never guesses this from calendar names." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Wenn du angibst, wem ein Kalender gehört, kann der Plan zeigen, wer rund um eine Mahlzeit noch beschäftigt ist. MealPlan rät das nie anhand von Kalendernamen."
+          }
+        }
+      }
+    },
     "Or type any emoji" : {
 
     },
@@ -1594,6 +2410,16 @@
     },
     "Other" : {
 
+    },
+    "Other variants of %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Varianten von %@"
+          }
+        }
+      }
     },
     "Owner" : {
 
@@ -1619,6 +2445,16 @@
     },
     "Paused" : {
 
+    },
+    "People are free at different times." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Personen sind zu unterschiedlichen Zeiten frei."
+          }
+        }
+      }
     },
     "Photograph a page" : {
 
@@ -1791,11 +2627,31 @@
     "Previous week" : {
 
     },
+    "Privacy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Privatsphäre"
+          }
+        }
+      }
+    },
     "Rating" : {
 
     },
     "Reaction" : {
 
+    },
+    "Reading recipes…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte werden gelesen …"
+          }
+        }
+      }
     },
     "Rebuild from plan" : {
       "localizations" : {
@@ -1845,12 +2701,32 @@
     "Recipe search" : {
 
     },
+    "Recipes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte"
+          }
+        }
+      }
+    },
     "Recipes rarely start in MealPlan. Bring them in from the web, from other recipe apps, and from your iPhone." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rezepte entstehen selten in MealPlan. Hol sie aus dem Web, aus anderen Rezept-Apps und von deinem iPhone."
+          }
+        }
+      }
+    },
+    "Recipes you already have are left out. Another take on a dish you already have comes in as a variant, so several burgers can live side by side." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte, die du schon hast, bleiben außen vor. Eine andere Zubereitung eines Gerichts, das du schon hast, kommt als Variante dazu – so können mehrere Burger nebeneinander bestehen."
           }
         }
       }
@@ -1889,6 +2765,16 @@
     "Remove %@" : {
 
     },
+    "Remove from group" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus der Gruppe entfernen"
+          }
+        }
+      }
+    },
     "Remove from plan" : {
       "localizations" : {
         "de" : {
@@ -1915,6 +2801,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "„%@“ entfernt"
+          }
+        }
+      }
+    },
+    "Rename group" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gruppe umbenennen"
           }
         }
       }
@@ -1988,6 +2884,16 @@
     "Save anyway" : {
 
     },
+    "Save as new variant" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Als neue Variante sichern"
+          }
+        }
+      }
+    },
     "Save as template" : {
 
     },
@@ -2002,6 +2908,16 @@
     },
     "Scan recipe" : {
 
+    },
+    "Schedule is clear" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts geplant"
+          }
+        }
+      }
     },
     "Schedules a dish on a day and meal." : {
 
@@ -2029,9 +2945,6 @@
         }
       }
     },
-    "Search for a restaurant, café or bakery nearby." : {
-
-    },
     "Search ingredients" : {
 
     },
@@ -2047,6 +2960,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saison"
+          }
+        }
+      }
+    },
+    "Select all" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle auswählen"
+          }
+        }
+      }
+    },
+    "Select none" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keinen auswählen"
+          }
+        }
+      }
+    },
+    "Selected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgewählt"
           }
         }
       }
@@ -2162,6 +3105,26 @@
     "Show dish list" : {
 
     },
+    "Shows only when someone is busy, never what they are doing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt nur, wann jemand beschäftigt ist – nie, womit."
+          }
+        }
+      }
+    },
+    "Shows the schedule around each meal." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt den Tagesablauf rund um jede Mahlzeit."
+          }
+        }
+      }
+    },
     "Skip" : {
       "localizations" : {
         "de" : {
@@ -2178,6 +3141,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Snack"
+          }
+        }
+      }
+    },
+    "Something quick" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Etwas Schnelles"
           }
         }
       }
@@ -2350,6 +3323,16 @@
     "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it." : {
 
     },
+    "These choices stay on this device and are never shared with your family or iCloud. MealPlan only reads your calendars — it never adds, changes or deletes events." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einstellungen bleiben auf diesem Gerät und werden weder mit deiner Familie noch über iCloud geteilt. MealPlan liest deine Kalender nur – es fügt nie Termine hinzu, ändert oder löscht sie."
+          }
+        }
+      }
+    },
     "This aisle name will be remembered for the ingredient." : {
 
     },
@@ -2364,6 +3347,16 @@
     },
     "This Week’s Plan" : {
 
+    },
+    "Time to cook" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeit zum Kochen"
+          }
+        }
+      }
     },
     "Timers" : {
 
@@ -2434,6 +3427,16 @@
         }
       }
     },
+    "Until" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bis"
+          }
+        }
+      }
+    },
     "Untitled dish" : {
       "localizations" : {
         "de" : {
@@ -2453,11 +3456,41 @@
     "Use as the dish’s photo" : {
 
     },
+    "Use Calendar for meal planning" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalender für die Essensplanung nutzen"
+          }
+        }
+      }
+    },
+    "Use events from selected calendars to provide helpful context when planning meals." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Termine aus ausgewählten Kalendern geben hilfreichen Kontext bei der Essensplanung."
+          }
+        }
+      }
+    },
     "Use scan" : {
 
     },
     "Use standard aisle" : {
 
+    },
+    "Use the standard times" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standardzeiten verwenden"
+          }
+        }
+      }
     },
     "Use this recipe" : {
 
@@ -2476,6 +3509,16 @@
     },
     "Usually have this" : {
 
+    },
+    "Variant of “%@”" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Variante von „%@“"
+          }
+        }
+      }
     },
     "Vegan" : {
       "localizations" : {
@@ -2574,6 +3617,16 @@
     "Who’s planning" : {
 
     },
+    "Whose calendar is this?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wem gehört dieser Kalender?"
+          }
+        }
+      }
+    },
     "Widgets and Siri show tonight’s meal without opening the app." : {
       "localizations" : {
         "de" : {
@@ -2624,666 +3677,6 @@
     },
     "Your week is ready as a PDF." : {
 
-    },
-    "MealPlan hasn’t asked for Calendar access yet." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MealPlan hat noch nicht nach Kalenderzugriff gefragt."
-          }
-        }
-      }
-    },
-    "MealPlan may only add to your calendar, which isn’t enough to show scheduling context. Allow full Calendar access in Settings to use this feature." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MealPlan darf nur zu deinem Kalender hinzufügen. Das reicht nicht, um Termine als Kontext zu zeigen. Erlaube in den Einstellungen den vollen Kalenderzugriff."
-          }
-        }
-      }
-    },
-    "Calendar access is turned off for MealPlan. You can allow it in Settings." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Kalenderzugriff für MealPlan ist ausgeschaltet. Du kannst ihn in den Einstellungen erlauben."
-          }
-        }
-      }
-    },
-    "Calendar access isn’t available on this device." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalenderzugriff ist auf diesem Gerät nicht verfügbar."
-          }
-        }
-      }
-    },
-    "Calendar access isn’t available right now." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalenderzugriff ist gerade nicht verfügbar."
-          }
-        }
-      }
-    },
-    "Schedule is clear" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nichts geplant"
-          }
-        }
-      }
-    },
-    "A little going on" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Etwas los"
-          }
-        }
-      }
-    },
-    "Busy" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Viel los"
-          }
-        }
-      }
-    },
-    "Time to cook" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeit zum Kochen"
-          }
-        }
-      }
-    },
-    "Normal cooking time" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Normale Kochzeit"
-          }
-        }
-      }
-    },
-    "Something quick" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Etwas Schnelles"
-          }
-        }
-      }
-    },
-    "%1$@: nothing planned" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: nichts geplant"
-          }
-        }
-      }
-    },
-    "%@: nothing planned" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@: nichts geplant"
-          }
-        }
-      }
-    },
-    "%1$@: free from %2$@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: frei ab %2$@"
-          }
-        }
-      }
-    },
-    "%@: partly busy" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@: teilweise beschäftigt"
-          }
-        }
-      }
-    },
-    "%@: busy the whole time" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@: die ganze Zeit beschäftigt"
-          }
-        }
-      }
-    },
-    "Busy during %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschäftigt während %@"
-          }
-        }
-      }
-    },
-    "Busy until %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschäftigt bis %@"
-          }
-        }
-      }
-    },
-    "Busy from %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Beschäftigt ab %@"
-          }
-        }
-      }
-    },
-    "%1$lld events around %2$@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Termine rund um %2$@"
-          }
-        }
-      }
-    },
-    "1 event around %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 Termin rund um %@"
-          }
-        }
-      }
-    },
-    "%lld all-day events" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld ganztägige Termine"
-          }
-        }
-      }
-    },
-    "All day: %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ganztägig: %@"
-          }
-        }
-      }
-    },
-    "All-day event" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ganztägiger Termin"
-          }
-        }
-      }
-    },
-    "All day" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ganztägig"
-          }
-        }
-      }
-    },
-    "Calendar context: %@." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender-Kontext: %@."
-          }
-        }
-      }
-    },
-    "Availability only" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur Verfügbarkeit"
-          }
-        }
-      }
-    },
-    "Event titles" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termintitel"
-          }
-        }
-      }
-    },
-    "Shows only when someone is busy, never what they are doing." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt nur, wann jemand beschäftigt ist – nie, womit."
-          }
-        }
-      }
-    },
-    "Also shows the title of an event. Notes, invitees, locations and links are never shown." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt zusätzlich den Titel eines Termins. Notizen, Teilnehmende, Orte und Links werden nie gezeigt."
-          }
-        }
-      }
-    },
-    "Use Calendar for meal planning" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender für die Essensplanung nutzen"
-          }
-        }
-      }
-    },
-    "Calendar options" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender-Optionen"
-          }
-        }
-      }
-    },
-    "Calendar integration" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender-Integration"
-          }
-        }
-      }
-    },
-    "Use events from selected calendars to provide helpful context when planning meals." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termine aus ausgewählten Kalendern geben hilfreichen Kontext bei der Essensplanung."
-          }
-        }
-      }
-    },
-    "MealPlan needs permission to read your calendars. It shows only whether people are busy around a meal — and never changes, adds or deletes anything in Calendar." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MealPlan braucht die Erlaubnis, deine Kalender zu lesen. Es zeigt nur, ob jemand rund um eine Mahlzeit beschäftigt ist – und ändert, ergänzt oder löscht nie etwas im Kalender."
-          }
-        }
-      }
-    },
-    "Allow Calendar access" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalenderzugriff erlauben"
-          }
-        }
-      }
-    },
-    "Open Settings" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Einstellungen öffnen"
-          }
-        }
-      }
-    },
-    "Choose calendars" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender auswählen"
-          }
-        }
-      }
-    },
-    "1 calendar" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 Kalender"
-          }
-        }
-      }
-    },
-    "%lld calendars" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Kalender"
-          }
-        }
-      }
-    },
-    "Calendar integration isn’t available." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender-Integration ist nicht verfügbar."
-          }
-        }
-      }
-    },
-    "These choices stay on this device and are never shared with your family or iCloud. MealPlan only reads your calendars — it never adds, changes or deletes events." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Einstellungen bleiben auf diesem Gerät und werden weder mit deiner Familie noch über iCloud geteilt. MealPlan liest deine Kalender nur – es fügt nie Termine hinzu, ändert oder löscht sie."
-          }
-        }
-      }
-    },
-    "Calendar access" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalenderzugriff"
-          }
-        }
-      }
-    },
-    "Looking for calendars…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Suche nach Kalendern …"
-          }
-        }
-      }
-    },
-    "No calendars found." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine Kalender gefunden."
-          }
-        }
-      }
-    },
-    "Select all" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alle auswählen"
-          }
-        }
-      }
-    },
-    "Select none" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keinen auswählen"
-          }
-        }
-      }
-    },
-    "Calendars used for meal planning" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender für die Essensplanung"
-          }
-        }
-      }
-    },
-    "Nothing is used until you pick a calendar here. New calendars are never added on their own." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Es wird nichts genutzt, bis du hier einen Kalender auswählst. Neue Kalender kommen nie von selbst dazu."
-          }
-        }
-      }
-    },
-    "Calendar detail" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kalender-Details"
-          }
-        }
-      }
-    },
-    "Privacy" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Privatsphäre"
-          }
-        }
-      }
-    },
-    "Event notes, invitees, locations and links are never read, shown or stored." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Notizen, Teilnehmende, Orte und Links von Terminen werden nie gelesen, gezeigt oder gespeichert."
-          }
-        }
-      }
-    },
-    "Meal times" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Essenszeiten"
-          }
-        }
-      }
-    },
-    "Only events near a meal’s time are considered, so a day’s full calendar never lands in your plan." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Es zählen nur Termine rund um die Zeit einer Mahlzeit – nie der ganze Tageskalender."
-          }
-        }
-      }
-    },
-    "Nobody" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Niemand"
-          }
-        }
-      }
-    },
-    "Whose calendar is this?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wem gehört dieser Kalender?"
-          }
-        }
-      }
-    },
-    "Optional. When you say who a calendar belongs to, the plan can show who is still busy around a meal. MealPlan never guesses this from calendar names." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optional. Wenn du angibst, wem ein Kalender gehört, kann der Plan zeigen, wer rund um eine Mahlzeit noch beschäftigt ist. MealPlan rät das nie anhand von Kalendernamen."
-          }
-        }
-      }
-    },
-    "Until" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bis"
-          }
-        }
-      }
-    },
-    "Use the standard times" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Standardzeiten verwenden"
-          }
-        }
-      }
-    },
-    "Events between %1$@ and %2$@ count towards this meal." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termine zwischen %1$@ und %2$@ zählen zu dieser Mahlzeit."
-          }
-        }
-      }
-    },
-    "Shows the schedule around each meal." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zeigt den Tagesablauf rund um jede Mahlzeit."
-          }
-        }
-      }
-    },
-    "People are free at different times." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Personen sind zu unterschiedlichen Zeiten frei."
-          }
-        }
-      }
-    },
-    "From the calendars you chose for meal planning. MealPlan never changes your calendar." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aus den Kalendern, die du für die Essensplanung ausgewählt hast. MealPlan ändert deinen Kalender nie."
-          }
-        }
-      }
-    },
-    "%@: free from %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@: frei ab %@"
-          }
-        }
-      }
-    },
-    "%lld events around %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Termine rund um %@"
-          }
-        }
-      }
-    },
-    "Events between %@ and %@ count towards this meal." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termine zwischen %@ und %@ zählen zu dieser Mahlzeit."
-          }
-        }
-      }
     }
   },
   "version" : "1.0"

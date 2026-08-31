@@ -19,6 +19,9 @@ enum DishBuilder {
         dish.sourceURL = recipe.sourceURL
         dish.deepLinkURL = recipe.deepLinkURL
         dish.importedSourceApp = recipe.importedSourceApp
+        dish.importedSourceID = recipe.sourceIdentifier
+        dish.variantGroupID = recipe.variantGroupID
+        dish.variantGroupName = recipe.variantGroupName
         dish.recipeText = recipe.instructions
         dish.servings = recipe.servings ?? 2
         dish.prepTimeMinutes = recipe.prepTimeMinutes
@@ -109,6 +112,7 @@ enum DishBuilder {
         dish.sourceURL = recipe.sourceURL ?? dish.sourceURL
         dish.deepLinkURL = recipe.deepLinkURL ?? dish.deepLinkURL
         dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
+        dish.importedSourceID = recipe.sourceIdentifier ?? dish.importedSourceID
 
         if (dish.recipeText ?? "").isEmpty {
             dish.recipeText = recipe.instructions
@@ -150,6 +154,71 @@ enum DishBuilder {
         dish.tagNames = DishTag.merge(dish.tagNames, adding: recipe.tagNames)
         addSuggestedTags(to: dish, household: dish.household)
         try? context.save()
+    }
+
+    /// Copies a dish, ingredients and photos included, and puts the copy in
+    /// the original's variant group. This is how "another take on this" is
+    /// made: the copy is a full dish that can be edited, planned and cooked
+    /// without touching the one it came from.
+    @MainActor
+    @discardableResult
+    static func duplicateAsVariant(
+        of dish: Dish,
+        named newName: String? = nil,
+        context: ModelContext
+    ) -> Dish {
+        let copy = Dish(name: newName?.trimmedCollapsed.nilIfEmpty
+            ?? String(localized: "\(dish.name) (variant)"))
+        copy.household = dish.household
+        copy.createdByName = dish.createdByName
+        copy.sourceURLString = dish.sourceURLString
+        copy.deepLinkURLString = dish.deepLinkURLString
+        copy.importedSourceApp = dish.importedSourceApp
+        // Not the source id: the copy is a new recipe, and inheriting the id
+        // would make a later re-import mistake it for the original.
+        copy.recipeText = dish.recipeText
+        copy.servings = dish.servings
+        copy.prepTimeMinutes = dish.prepTimeMinutes
+        copy.cookTimeMinutes = dish.cookTimeMinutes
+        copy.needsReview = dish.needsReview
+        copy.rating = dish.rating
+        copy.collectionNames = dish.collectionNames
+        copy.tagNames = dish.tagNames
+        copy.mealTypeTagsRaw = dish.mealTypeTagsRaw
+        copy.dietaryTagsRaw = dish.dietaryTagsRaw
+        copy.seasonRaw = dish.seasonRaw
+        copy.glyphRaw = dish.glyphRaw
+        copy.glyphIsAuto = dish.glyphIsAuto
+        context.insert(copy)
+
+        for image in dish.sortedImages.enumerated() {
+            let duplicate = DishImage(
+                data: image.element.data,
+                sortIndex: image.offset,
+                isPrimary: image.offset == 0
+            )
+            duplicate.dish = copy
+            context.insert(duplicate)
+        }
+
+        for line in dish.sortedIngredients {
+            let duplicate = DishIngredient(
+                canonicalValue: line.canonicalValue,
+                dimension: line.dimension,
+                displayUnit: line.displayUnit,
+                isApproximate: line.isApproximate,
+                note: line.note,
+                rawText: line.rawText,
+                sortIndex: line.sortIndex
+            )
+            duplicate.dish = copy
+            duplicate.ingredient = line.ingredient
+            context.insert(duplicate)
+        }
+
+        DishVariants.join(copy, with: dish)
+        try? context.save()
+        return copy
     }
 
     /// Tops a dish up with automatically derived tags. Additive, and capped so

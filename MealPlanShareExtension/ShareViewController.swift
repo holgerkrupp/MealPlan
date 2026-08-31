@@ -36,27 +36,24 @@ final class ShareViewController: UIViewController {
         guard let items = context?.inputItems as? [NSExtensionItem] else { return .empty }
         for item in items {
             for provider in item.attachments ?? [] {
-                if provider.hasItemConformingToTypeIdentifier("com.paprika.recipes"),
-                   let data = await loadFileData(provider, type: "com.paprika.recipes") {
-                    return .paprika(data)
+                // Paprika's own identifiers first — this is what its share
+                // sheet actually registers.
+                for identifier in RecipeFileType.paprikaIdentifiers
+                where provider.hasItemConformingToTypeIdentifier(identifier) {
+                    if let data = await loadFileData(provider, type: identifier) {
+                        return .paprika(data)
+                    }
                 }
-                // Files may vend a .paprikarecipes ZIP as `public.archive`
-                // instead of the app-specific UTI, without a file URL. Accept
-                // it when the bytes can actually be decoded as a Paprika
-                // recipe; this keeps unrelated archives out of the extension.
-                if provider.hasItemConformingToTypeIdentifier(UTType.archive.identifier),
-                   let data = await loadFileData(provider, type: UTType.archive.identifier),
-                   (try? PaprikaArchive.recipes(from: data)) != nil {
-                    return .paprika(data)
+                if provider.hasItemConformingToTypeIdentifier(RecipeFileType.mealPlanIdentifier),
+                   let data = await loadFileData(provider, type: RecipeFileType.mealPlanIdentifier) {
+                    return .mealPlan(data)
                 }
                 if provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier),
                    let url = await loadURL(provider, type: UTType.fileURL.identifier) {
-                    if url.pathExtension.lowercased() == "mealplanrecipes",
-                       let data = try? Data(contentsOf: url) {
+                    if RecipeFileType.isMealPlanArchive(url), let data = try? Data(contentsOf: url) {
                         return .mealPlan(data)
                     }
-                    if ["paprikarecipes", "paprikarecipe"].contains(url.pathExtension.lowercased()),
-                       let data = try? Data(contentsOf: url) {
+                    if RecipeFileType.isImportable(url), let data = try? Data(contentsOf: url) {
                         return .paprika(data)
                     }
                 }
@@ -69,6 +66,19 @@ final class ShareViewController: UIViewController {
                    let text = await loadText(provider) {
                     if let url = firstURL(in: text) { return .url(url) }
                     return .text(text)
+                }
+                // Last resort: an opaque `public.data` attachment with no
+                // recognisable type. Accept it only when the bytes really do
+                // decode as a recipe archive, so the activation rule's wide
+                // `public.data` clause can't drag unrelated files in.
+                if provider.hasItemConformingToTypeIdentifier(UTType.data.identifier),
+                   let data = await loadFileData(provider, type: UTType.data.identifier) {
+                    if (try? MealPlanRecipeArchive.importedRecipes(from: data)) != nil {
+                        return .mealPlan(data)
+                    }
+                    if (try? PaprikaArchive.recipes(from: data)) != nil {
+                        return .paprika(data)
+                    }
                 }
             }
             if let text = item.attributedContentText?.string, !text.isEmpty {

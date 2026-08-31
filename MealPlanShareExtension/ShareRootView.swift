@@ -153,21 +153,17 @@ struct ShareRootView: View {
         let context = container.mainContext
         let household = try? context.fetch(FetchDescriptor<Household>()).first
         let member = DeviceOwnerName.value
-        var existing = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
-        var saved = 0
-
-        for recipe in recipes {
-            guard RecipeDuplicateDetector.match(recipe, in: existing) == nil else { continue }
-            let dish = DishBuilder.makeDish(from: recipe, household: household, createdByName: member, context: context)
-            existing.append(dish)
-            saved += 1
-            if plan {
+        let result = RecipeImportCommitter.importAll(
+            recipes, household: household, createdByName: member, context: context
+        )
+        if plan {
+            for dish in result.dishes {
                 MealPlanner.plan(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context)
             }
         }
-        saveMessage = saved == 0
+        saveMessage = result.isEmpty
             ? String(localized: "Already in MealPlan")
-            : String(localized: "Saved \(saved) recipes to MealPlan")
+            : String(localized: "Saved \(result.imported) recipes to MealPlan")
         phase = .done
     }
 

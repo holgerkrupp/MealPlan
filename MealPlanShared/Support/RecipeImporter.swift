@@ -32,6 +32,13 @@ struct ImportedRecipe: Sendable {
     var additionalImageData: [Data] = []
     /// Identifier of the app the recipe came from, e.g. "Paprika".
     var importedSourceApp: String?
+    /// The source app's own stable identifier for the recipe (Paprika's
+    /// `uid`). Used by the duplicate check, which trusts it over the name.
+    var sourceIdentifier: String?
+    /// Variant grouping carried by MealPlan's own archive format, so a backup
+    /// restores the groups it was exported with.
+    var variantGroupID: UUID?
+    var variantGroupName: String?
     /// True when the data came from HTML guesswork rather than structured markup.
     var needsReview: Bool = true
 
@@ -65,33 +72,6 @@ enum RecipeImportError: LocalizedError {
         case .noRecipeFound: String(localized: "No recipe found on that page.")
         case .unreadableFile: String(localized: "That file couldn’t be read.")
         }
-    }
-}
-
-enum RecipeDuplicateDetector {
-    @MainActor
-    static func match(
-        name: String,
-        sourceURL: URL?,
-        in dishes: [Dish],
-        excluding excluded: Dish? = nil
-    ) -> Dish? {
-        let normalizedName = name.folding(
-            options: [.caseInsensitive, .diacriticInsensitive], locale: .current
-        ).trimmingCharacters(in: .whitespacesAndNewlines)
-        return dishes.first { dish in
-            guard dish !== excluded else { return false }
-            let candidate = dish.name.folding(
-                options: [.caseInsensitive, .diacriticInsensitive], locale: .current
-            ).trimmingCharacters(in: .whitespacesAndNewlines)
-            return candidate == normalizedName
-                || (sourceURL != nil && dish.sourceURL == sourceURL)
-        }
-    }
-
-    @MainActor
-    static func match(_ recipe: ImportedRecipe, in dishes: [Dish]) -> Dish? {
-        match(name: recipe.name, sourceURL: recipe.sourceURL, in: dishes)
     }
 }
 

@@ -13,6 +13,22 @@ final class Dish {
     var deepLinkURLString: String?
     /// Identifier of the app a recipe was imported from, e.g. "Paprika".
     var importedSourceApp: String?
+    /// The source app's own identifier for this recipe (Paprika's `uid`). The
+    /// strongest duplicate signal there is: re-importing the same export twice
+    /// matches on this even when the cook has since renamed the dish.
+    var importedSourceID: String?
+    /// Set on every dish in a variant group, so "Burger" can hold a smashed
+    /// one, a halloumi one and Grandma's one without any of them being a
+    /// duplicate of the others. `nil` for a dish that stands on its own.
+    ///
+    /// Deliberately a plain identifier rather than a relationship: the group
+    /// has no state of its own beyond its name, and a value can't leave
+    /// dangling records behind when a variant is deleted or fails to sync.
+    var variantGroupID: UUID?
+    /// The group's display name ("Burger"), copied onto each member so the
+    /// grid can label a group without loading its siblings. Renaming a group
+    /// rewrites it on every member; see `DishVariants.rename`.
+    var variantGroupName: String?
     /// Lightweight personal organization that stays useful even when a
     /// household does not want to maintain a deep category hierarchy.
     var isFavorite: Bool = false
@@ -168,6 +184,16 @@ final class Dish {
             + collectionNames
             + tagNames)
             .joined(separator: " ")
+    }
+
+    /// True when this dish is one of several takes on the same thing.
+    var isVariant: Bool { variantGroupID != nil }
+
+    /// What to call the group this dish belongs to, falling back to the dish's
+    /// own name for a group whose name was never set.
+    var variantGroupDisplayName: String {
+        let stored = variantGroupName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return stored.isEmpty ? name : stored
     }
 
     /// Whole days since the dish was last cooked, or `nil` if never cooked.

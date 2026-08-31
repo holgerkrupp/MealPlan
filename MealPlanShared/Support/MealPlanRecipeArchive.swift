@@ -29,6 +29,11 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         /// Optional so archives written before tags existed still decode, and
         /// so an older MealPlan can read a newer file and simply ignore them.
         var tags: [String]?
+        /// Variant grouping. Optional so older archives still decode; the
+        /// identifier is reused verbatim on import, so re-importing a backup
+        /// puts the same recipes back in the same group.
+        var variantGroupID: UUID?
+        var variantGroupName: String?
         var glyph: String?
         var images: [Data]
         var ingredients: [PortableIngredient]
@@ -66,6 +71,8 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                 rating: dish.rating,
                 collections: dish.collectionNames,
                 tags: dish.tagNames,
+                variantGroupID: dish.variantGroupID,
+                variantGroupName: dish.variantGroupName,
                 glyph: dish.glyphRaw,
                 images: dish.sortedImages.compactMap(\.data),
                 ingredients: dish.sortedIngredients.map { line in
@@ -117,6 +124,8 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             recipe.rating = stored.rating
             recipe.collectionNames = stored.collections
             recipe.tagNames = stored.tags ?? []
+            recipe.variantGroupID = stored.variantGroupID
+            recipe.variantGroupName = stored.variantGroupName
             recipe.mealTypeTags = Set(stored.mealTypes.compactMap(MealTypeTag.init(rawValue:)))
             recipe.dietaryTags = Set(stored.dietaryTags.compactMap(DietaryTag.init(rawValue:)))
             recipe.season = stored.season.flatMap(Season.init(rawValue:))
@@ -140,6 +149,9 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             }
             recipe.needsReview = false
             recipe.importedSourceApp = "MealPlan"
+            // The exported dish's own id, so re-importing a backup recognises
+            // its recipes even after they were renamed here.
+            recipe.sourceIdentifier = stored.uuid.uuidString
             return recipe
         }
     }

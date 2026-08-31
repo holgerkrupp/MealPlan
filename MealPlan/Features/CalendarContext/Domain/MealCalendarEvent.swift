@@ -30,6 +30,13 @@ struct MealCalendarEvent: Sendable, Identifiable, Equatable, Hashable {
     let displayTitle: String?
     let calendarIdentifier: String
     let availability: MealCalendarAvailability
+    /// The same appointment in two of the user's calendars — a shared family
+    /// event, an invitation that also landed in a work account — has a
+    /// different `id` per copy but the same value here (EventKit's
+    /// `calendarItemExternalIdentifier`). It is what lets the planner list such
+    /// an event once instead of once per calendar. `nil` when EventKit has
+    /// none, in which case `id` is the best available identity.
+    let sharedIdentifier: String?
 
     init(
         id: String,
@@ -38,7 +45,8 @@ struct MealCalendarEvent: Sendable, Identifiable, Equatable, Hashable {
         isAllDay: Bool = false,
         displayTitle: String? = nil,
         calendarIdentifier: String,
-        availability: MealCalendarAvailability = .busy
+        availability: MealCalendarAvailability = .busy,
+        sharedIdentifier: String? = nil
     ) {
         self.id = id
         self.startDate = startDate
@@ -47,6 +55,18 @@ struct MealCalendarEvent: Sendable, Identifiable, Equatable, Hashable {
         self.displayTitle = displayTitle
         self.calendarIdentifier = calendarIdentifier
         self.availability = availability
+        self.sharedIdentifier = sharedIdentifier
+    }
+
+    /// Identity across calendars: two copies of the same appointment share it,
+    /// two genuinely different appointments never do.
+    var occurrenceKey: String {
+        [
+            sharedIdentifier ?? id,
+            String(startDate.timeIntervalSinceReferenceDate),
+            String(endDate.timeIntervalSinceReferenceDate),
+            isAllDay ? "allDay" : "timed",
+        ].joined(separator: "|")
     }
 
     var interval: DateInterval {
@@ -70,7 +90,8 @@ struct MealCalendarEvent: Sendable, Identifiable, Equatable, Hashable {
             isAllDay: isAllDay,
             displayTitle: nil,
             calendarIdentifier: calendarIdentifier,
-            availability: availability
+            availability: availability,
+            sharedIdentifier: sharedIdentifier
         )
     }
 }
@@ -84,4 +105,14 @@ struct MealCalendarInfo: Sendable, Identifiable, Equatable, Hashable {
     /// The account the calendar comes from ("iCloud", "Gmail", …), shown as a
     /// subtitle so two "Family" calendars can be told apart.
     let sourceTitle: String
+    /// The colour Calendar shows this calendar in, so MealPlan can use the one
+    /// the user already recognises. `nil` when the system has none.
+    let color: MealCalendarColor?
+
+    init(id: String, title: String, sourceTitle: String, color: MealCalendarColor? = nil) {
+        self.id = id
+        self.title = title
+        self.sourceTitle = sourceTitle
+        self.color = color
+    }
 }
