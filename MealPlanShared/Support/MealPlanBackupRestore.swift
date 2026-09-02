@@ -176,6 +176,7 @@ enum MealPlanBackupRestore {
                 dish: stored.dishUUID.flatMap { dishes[$0] },
                 servings: stored.servings
             )
+            log.uuid = stored.uuid ?? UUID()
             // `init` snapshots the dish's current name; the backup's own
             // snapshot is the one that survives a since-deleted dish.
             log.dishName = stored.dishName
@@ -191,6 +192,7 @@ enum MealPlanBackupRestore {
                 category: IngredientCategory(rawValue: stored.categoryRaw) ?? .other,
                 isManual: stored.isManual
             )
+            item.uuid = stored.uuid ?? UUID()
             item.normalizedName = stored.normalizedName
             item.customAisleName = stored.customAisleName
             item.canonicalValue = stored.canonicalValue

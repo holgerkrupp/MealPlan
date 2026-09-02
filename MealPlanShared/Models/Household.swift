@@ -15,6 +15,11 @@ final class Household {
     var calendarStyleRaw: String = CalendarStyle.week.rawValue
     var localeIdentifier: String = Locale.current.identifier
     var dateCreated: Date = Date.now
+    /// Base64-encoded locator for this household's CloudKit share (zone,
+    /// share record name, and whether this device is the owner). `nil` until
+    /// the household has been shared or a share has been accepted. See
+    /// `HouseholdCloudSharingService`.
+    var cloudKitShareIdentifier: String?
 
     @Relationship(deleteRule: .cascade, inverse: \Dish.household)
     var dishes: [Dish]? = []

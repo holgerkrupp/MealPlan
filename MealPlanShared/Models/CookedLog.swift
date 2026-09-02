@@ -6,6 +6,10 @@ import SwiftData
 /// marked "skipped", or explicitly when the user taps "Cooked".
 @Model
 final class CookedLog {
+    /// Stable identity across devices, so sharing sync can recognise "the same
+    /// log" instead of duplicating it on every merge. Added after launch, so
+    /// every property carries a default for the lightweight migration.
+    var uuid: UUID = UUID()
     var date: Date = Date.now
     /// Snapshot of the dish name in case the dish is later deleted.
     var dishName: String?

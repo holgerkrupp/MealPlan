@@ -117,14 +117,14 @@ struct MealPlanBackup: Codable, Sendable {
         var ingredients: [PortableDishIngredient]
     }
 
-    struct PortableImage: Codable, Sendable {
+    struct PortableImage: Codable, Sendable, Equatable {
         var data: Data?
         var sortIndex: Int
         var isPrimary: Bool
         var dateAdded: Date
     }
 
-    struct PortableDishIngredient: Codable, Sendable {
+    struct PortableDishIngredient: Codable, Sendable, Equatable {
         /// Key into `ingredients`; `nil` for a line that was never resolved to
         /// a catalogue entry (a free-text "a pinch of something").
         var ingredientKey: String?
@@ -172,6 +172,9 @@ struct MealPlanBackup: Codable, Sendable {
     }
 
     struct PortableCookedLog: Codable, Sendable {
+        /// Optional so backups written before this was tracked still decode;
+        /// falls back to a fresh identity on restore.
+        var uuid: UUID?
         var date: Date
         var dishName: String?
         var servings: Int?
@@ -181,6 +184,9 @@ struct MealPlanBackup: Codable, Sendable {
     }
 
     struct PortableShoppingItem: Codable, Sendable {
+        /// Optional so backups written before this was tracked still decode;
+        /// falls back to a fresh identity on restore.
+        var uuid: UUID?
         var name: String
         var normalizedName: String
         var categoryRaw: String
@@ -208,7 +214,7 @@ struct MealPlanBackup: Codable, Sendable {
         var entries: [PortableWeekTemplateEntry]
     }
 
-    struct PortableWeekTemplateEntry: Codable, Sendable {
+    struct PortableWeekTemplateEntry: Codable, Sendable, Equatable {
         var weekday: Int
         var mealKey: String
         var dishUUID: UUID?
@@ -474,6 +480,7 @@ extension MealPlanBackup {
 
         backup.cookedLogs = rows.cookedLogs.map { log in
             PortableCookedLog(
+                uuid: log.uuid,
                 date: log.date,
                 dishName: log.dishName,
                 servings: log.servings,
@@ -485,6 +492,7 @@ extension MealPlanBackup {
 
         backup.shoppingItems = rows.shoppingItems.map { item in
             PortableShoppingItem(
+                uuid: item.uuid,
                 name: item.name,
                 normalizedName: item.normalizedName,
                 categoryRaw: item.categoryRaw,
