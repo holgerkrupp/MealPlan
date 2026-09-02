@@ -87,8 +87,13 @@ struct DishVariantPickerView: View {
     }
 
     private func group(with other: Dish) {
-        DishVariants.join(dish, with: other)
+        DishVariants.join(dish, with: other, in: allDishes)
         try? context.save()
         dismiss()
     }
+}
+
+#Preview {
+    DishVariantPickerView(dish: PreviewData.richDish)
+        .modelContainer(PreviewData.container)
 }

@@ -15,6 +15,8 @@ struct DishSidebarView: View {
 
     @State private var planningDish: Dish?
     @State private var detailDish: Dish?
+    /// Lets ⌘F from the menu bar land in the sidebar's own search field.
+    @FocusState private var searchFocused: Bool
 
     private var filteredDishes: [Dish] {
         appState.planDishFilter.apply(to: allDishes)
@@ -46,6 +48,11 @@ struct DishSidebarView: View {
             }
         }
         .background(.background.secondary)
+        // The sidebar is the dish list while you're on the plan, so it takes
+        // over the library's menu items — filtering its own `planDishFilter`,
+        // and offering neither import nor export, which belong to the Dishes
+        // section proper.
+        .focusedSceneValue(\.dishLibraryCommands, sidebarCommands)
         .sheet(item: $planningDish) { dish in
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
@@ -61,6 +68,22 @@ struct DishSidebarView: View {
                     }
             }
         }
+    }
+
+    private var sidebarCommands: DishLibraryCommands {
+        let narrowed = appState.planDishFilter.isActive
+            || !appState.planDishFilter.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        var commands = DishLibraryCommands(
+            sort: appState.planDishFilter.sort,
+            search: { searchFocused = true },
+            setSort: { appState.planDishFilter.sort = $0 }
+        )
+        if narrowed {
+            commands.clearFilters = {
+                appState.planDishFilter = DishFilter(sort: appState.planDishFilter.sort)
+            }
+        }
+        return commands
     }
 
     // MARK: - Header
@@ -98,6 +121,7 @@ struct DishSidebarView: View {
                 .foregroundStyle(.secondary)
 
             TextField(String(localized: "Search dishes"), text: text)
+                .focused($searchFocused)
                 .textFieldStyle(.plain)
                 .autocorrectionDisabled()
                 .font(.subheadline)
@@ -149,28 +173,38 @@ struct DishSidebarView: View {
 
     // MARK: - List
 
+    /// What tapping a row does: guests can only look, everyone else plans.
+    private func open(_ dish: Dish) {
+        if appState.isGuest { detailDish = dish } else { planningDish = dish }
+    }
+
     private var dishList: some View {
         List {
             ForEach(filteredDishes) { dish in
-                Button {
-                    if appState.isGuest { detailDish = dish } else { planningDish = dish }
-                } label: {
-                    row(dish)
-                }
-                .buttonStyle(.plain)
-                .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
-                .contextMenu {
-                    if !appState.isGuest {
-                        Button(String(localized: "Plan meal…"), systemImage: "calendar.badge.plus") {
-                            planningDish = dish
+                // Deliberately a tappable row rather than a `Button`: on macOS
+                // a button claims the mouse-down, so `.draggable` never sees
+                // the drag begin and the dish can't be pulled onto a meal
+                // card. (The library grid gets away with `.draggable` because
+                // its rows are `NavigationLink`s.) The accessibility traits
+                // below keep the row a button to VoiceOver and the keyboard.
+                row(dish)
+                    .onTapGesture { open(dish) }
+                    .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityAction { open(dish) }
+                    .contextMenu {
+                        if !appState.isGuest {
+                            Button(String(localized: "Plan meal…"), systemImage: "calendar.badge.plus") {
+                                planningDish = dish
+                            }
+                        }
+                        Button(String(localized: "Show details"), systemImage: "info.circle") {
+                            detailDish = dish
                         }
                     }
-                    Button(String(localized: "Show details"), systemImage: "info.circle") {
-                        detailDish = dish
-                    }
-                }
-                .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
-                .listRowBackground(Color.clear)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+                    .listRowBackground(Color.clear)
             }
         }
         .listStyle(.plain)

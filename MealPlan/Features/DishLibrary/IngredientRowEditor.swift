@@ -121,3 +121,13 @@ struct IngredientRowEditor: View {
         try? context.save()
     }
 }
+
+#Preview {
+    Form {
+        ForEach(PreviewData.richDish.sortedIngredients) { line in
+            IngredientRowEditor(line: line)
+        }
+    }
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
+}

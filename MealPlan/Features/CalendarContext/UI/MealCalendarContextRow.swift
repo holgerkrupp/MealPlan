@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// The one line of calendar context inside a day of the plan.
 ///
@@ -247,4 +248,17 @@ struct MealCalendarContextSheet: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel(line.spokenText)
     }
+}
+
+#Preview("Row") {
+    PreviewCalendarHost {
+        MealCalendarContextRow(day: .now, meals: PreviewData.dayMeals)
+            .padding()
+    }
+    .modelContainer(PreviewData.container)
+}
+
+#Preview("Detail") {
+    MealCalendarContextSheet(day: .now, summary: PreviewCalendar.summary)
+        .modelContainer(PreviewData.container)
 }

@@ -56,4 +56,20 @@ struct DeepLinkTests {
         #expect(DeepLink.parseDate("tomorrow") == Date.now.adding(days: 1).startOfDay)
         #expect(DeepLink.parseDate("01.09.2026") != nil)
     }
+
+    // MARK: - Building links
+
+    /// The widgets build their URLs with `DeepLink.url` and the app parses
+    /// them back with `init?(url:)`; a tap must land on the day it shows.
+    @Test func linksRoundTripThroughTheParser() {
+        let day = DeepLink.parseDate("2026-09-04")!
+        #expect(DeepLink(url: DeepLink.date(day).url) == .date(day))
+        #expect(DeepLink(url: DeepLink.today.url) == .today)
+        #expect(DeepLink(url: DeepLink.shoppingList.url) == .shoppingList)
+    }
+
+    @Test func aDayLinkCarriesTheCalendarDay() {
+        let day = DeepLink.parseDate("2026-01-07")!
+        #expect(DeepLink.date(day).url.absoluteString == "mealplan://date/2026-01-07")
+    }
 }

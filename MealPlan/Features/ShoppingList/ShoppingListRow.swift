@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 @MainActor
 struct ShoppingListRow: View {
@@ -67,4 +68,24 @@ struct ShoppingListRow: View {
             .buttonStyle(.plain)
         }
     }
+}
+
+#Preview {
+    List {
+        ShoppingListRow(
+            item: PreviewData.shoppingItem,
+            onToggle: {},
+            onCategoryChange: { _ in },
+            onCustomAisle: {},
+            onMarkStaple: {}
+        )
+        ShoppingListRow(
+            item: PreviewData.checkedShoppingItem,
+            onToggle: {},
+            onCategoryChange: { _ in },
+            onCustomAisle: {},
+            onMarkStaple: {}
+        )
+    }
+    .modelContainer(PreviewData.container)
 }

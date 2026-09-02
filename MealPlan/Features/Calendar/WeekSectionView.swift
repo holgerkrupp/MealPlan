@@ -43,12 +43,37 @@ struct WeekSectionView: View {
             .sorted { $0.sortIndex < $1.sortIndex }
     }
 
+    /// The queried meals with duplicate `key`s collapsed.
+    ///
+    /// CloudKit has no unique constraint, so a store can hold two "lunch"
+    /// meals — two devices seeding the defaults before their first sync, or a
+    /// duplicated household. `MealType.ensure` collapses them at launch; this
+    /// is the guard for a duplicate that syncs in mid-session, because left in
+    /// they collide on `DayMeal.id`: the grid reserves a row per element while
+    /// `ForEach` draws only one card per id, so the day ends in an empty band
+    /// the height of a meal row. Same survivor rule as `ensure` (smallest uuid
+    /// string), kept at its first position in order.
+    private var uniqueMealTypes: [MealType] {
+        var winners: [String: MealType] = [:]
+        var order: [String] = []
+        for meal in mealTypes {
+            guard let existing = winners[meal.key] else {
+                winners[meal.key] = meal
+                order.append(meal.key)
+                continue
+            }
+            if meal.uuid.uuidString < existing.uuid.uuidString { winners[meal.key] = meal }
+        }
+        return order.compactMap { winners[$0] }
+    }
+
     /// The meals to show for a given day: every configured meal, plus any meal
     /// key that already has an entry on that day but no `MealType` (so nothing
     /// silently disappears when a meal is deleted or synced from an old build).
     private func meals(on day: Date) -> [DayMeal] {
-        var result = mealTypes.map { DayMeal(key: $0.key, name: $0.name, symbolName: $0.symbolName) }
-        let known = Set(mealTypes.map(\.key))
+        let types = uniqueMealTypes
+        var result = types.map { DayMeal(key: $0.key, name: $0.name, symbolName: $0.symbolName) }
+        let known = Set(types.map(\.key))
         let orphans = Set(entries.filter { $0.date.isSameDay(as: day) }.map(\.mealKey))
             .subtracting(known)
             .subtracting([""])
@@ -227,4 +252,27 @@ private struct DayCard<Content: View>: View {
         )
         .padding(.horizontal)
     }
+}
+
+#Preview("Week") {
+    PreviewCalendarHost {
+        ScrollView {
+            WeekSectionView(weekStart: Date.now.startOfWeek(), style: .week)
+                .padding()
+        }
+    }
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
+}
+
+#Preview("Day card") {
+    VStack(spacing: 12) {
+        DayCard(day: .now, isCollapsed: false, onToggleCollapse: {}, onCopyLastWeek: {}) {
+            Text(verbatim: "…").padding()
+        }
+        DayCard(day: Date.now.adding(days: 1), isCollapsed: true, onToggleCollapse: {}, onCopyLastWeek: {}) {
+            Text(verbatim: "…").padding()
+        }
+    }
+    .padding()
 }

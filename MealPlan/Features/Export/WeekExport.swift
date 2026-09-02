@@ -115,3 +115,15 @@ struct WeekPrintView: View {
         .environment(\.colorScheme, .light)
     }
 }
+
+#Preview {
+    WeekPrintView(
+        data: WeekExport.data(
+            forWeekContaining: .now,
+            householdName: PreviewData.household.name,
+            context: PreviewData.container.mainContext
+        )
+    )
+    .padding()
+    .frame(width: 700, height: 320)
+}

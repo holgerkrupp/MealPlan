@@ -59,3 +59,26 @@ enum DeepLink: Equatable, Sendable {
         return nil
     }
 }
+
+// MARK: - Building links
+
+extension DeepLink {
+
+    /// The URL that reopens this destination — the inverse of `init?(url:)`,
+    /// for the cases something outside the app needs to link back in. The
+    /// widgets use these; anything `init?(url:)` can parse round-trips.
+    var url: URL {
+        switch self {
+        case .today:
+            return URL(string: "\(DeepLink.scheme)://today") ?? URL(fileURLWithPath: "/")
+        case .date(let date):
+            return URL(string: "\(DeepLink.scheme)://date/\(date.dayID)") ?? DeepLink.today.url
+        case .shoppingList:
+            return URL(string: "\(DeepLink.scheme)://shopping") ?? DeepLink.today.url
+        case .addDish, .plan:
+            // Both carry free-form text that would need escaping, and nothing
+            // links *into* them from outside yet.
+            return DeepLink.today.url
+        }
+    }
+}

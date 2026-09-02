@@ -39,3 +39,8 @@ struct PantryStaplesView: View {
         .navigationTitle(String(localized: "Pantry staples"))
     }
 }
+
+#Preview {
+    NavigationStack { PantryStaplesView() }
+        .modelContainer(PreviewData.container)
+}

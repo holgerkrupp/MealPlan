@@ -39,15 +39,15 @@ struct MealPlanApp: App {
                 }
         }
         .modelContainer(container)
+        .commands { MealPlanCommands() }
         #if os(macOS)
         Settings {
-            NavigationStack {
-                SettingsView()
-            }
-            .environment(appState)
-            .environment(calendarStore)
-            .modelContainer(container)
-            .frame(width: 460, height: 520)
+            // SettingsView sizes its own window: it is a sidebar of panes, the
+            // shape people expect from a macOS Settings window.
+            SettingsView()
+                .environment(appState)
+                .environment(calendarStore)
+                .modelContainer(container)
         }
         #endif
     }

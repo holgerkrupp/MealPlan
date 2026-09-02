@@ -124,6 +124,9 @@ struct DishDetailView: View {
             }
         }
         .onAppear { if targetServings == 0 { targetServings = max(1, dish.servings) } }
+        // Backs the Dish menu. It is the only publisher of this value, so the
+        // whole menu greys out as soon as no recipe is open.
+        .focusedSceneValue(\.dishCommands, dishCommands)
         .sheet(isPresented: $showingEditor) {
             NavigationStack { DishEditorView(dish: dish, isNew: false) }
         }
@@ -167,6 +170,33 @@ struct DishDetailView: View {
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         }
+    }
+
+    /// What the Dish menu offers for this recipe. The optional actions mirror
+    /// the toolbar's own conditions, so a menu item is grey exactly when the
+    /// matching button is missing.
+    private var dishCommands: DishCommands {
+        var commands = DishCommands(
+            plan: { showingPlanSheet = true },
+            edit: { showingEditor = true },
+            exportRecipe: { exportRecipe() },
+            delete: { confirmingDelete = true }
+        )
+        if !dish.sortedIngredients.isEmpty || !(dish.recipeText ?? "").isEmpty {
+            commands.cook = { showingCookingMode = true }
+        }
+        // "Find a recipe" only makes sense while there isn't one yet, and only
+        // with a name to search for.
+        if !appState.isGuest,
+           (dish.recipeText ?? "").isEmpty,
+           !dish.name.trimmingCharacters(in: .whitespaces).isEmpty {
+            commands.findRecipe = { showingRecipeFinder = true }
+        }
+        if !appState.isGuest {
+            commands.saveAsVariant = { addVariant() }
+            commands.groupWithDish = { showingVariantPicker = true }
+        }
+        return commands
     }
 
     private var appLinkLabel: String {
@@ -445,4 +475,17 @@ struct FlowLayout: Layout {
     }
     .environment(AppState.preview)
     .modelContainer(PreviewData.container)
+}
+
+#Preview("Badge wrap") {
+    WrapHStack {
+        ForEach(DietaryTag.allCases) { tag in
+            Label(tag.localizedName, systemImage: tag.symbolName)
+                .font(.caption)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(.quaternary, in: Capsule())
+        }
+    }
+    .padding()
 }

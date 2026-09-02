@@ -71,3 +71,10 @@ struct MealTimingSettingsView: View {
         return (components.hour ?? 0) * 60 + (components.minute ?? 0)
     }
 }
+
+#Preview {
+    PreviewCalendarHost {
+        NavigationStack { MealTimingSettingsView() }
+    }
+    .modelContainer(PreviewData.container)
+}

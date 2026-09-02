@@ -205,3 +205,10 @@ struct CalendarIntegrationSettingsView: View {
         )
     }
 }
+
+#Preview {
+    PreviewCalendarHost {
+        NavigationStack { CalendarIntegrationSettingsView() }
+    }
+    .modelContainer(PreviewData.container)
+}

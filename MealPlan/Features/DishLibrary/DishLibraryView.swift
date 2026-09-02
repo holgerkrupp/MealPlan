@@ -15,6 +15,8 @@ struct DishLibraryView: View {
     @State private var showingFilePicker = false
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
+    /// Driven by the menu bar's Find command so ⌘F lands in the search field.
+    @State private var isSearchPresented = false
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
@@ -88,16 +90,19 @@ struct DishLibraryView: View {
                     ForEach(libraryItems) { item in
                         switch item {
                         case .dish(let dish):
-                            NavigationLink(value: dish) {
-                                DishGridCell(dish: dish)
-                            }
-                            .buttonStyle(.plain)
-                            .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+                            DishLibraryCell(
+                                dish: dish,
+                                acceptsDrops: !appState.isGuest,
+                                library: allDishes
+                            )
                         case .group(let ref, let lead, let count):
-                            NavigationLink(value: ref) {
-                                DishGridCell(dish: lead, variantGroupName: ref.name, variantCount: count)
-                            }
-                            .buttonStyle(.plain)
+                            DishLibraryCell(
+                                dish: lead,
+                                group: ref,
+                                variantCount: count,
+                                acceptsDrops: !appState.isGuest,
+                                library: allDishes
+                            )
                         }
                     }
                 }
@@ -109,8 +114,10 @@ struct DishLibraryView: View {
         .navigationDestination(for: DishVariantGroupRef.self) { DishVariantGroupView(group: $0) }
         .searchable(
             text: $appState.dishFilter.searchText,
+            isPresented: $isSearchPresented,
             prompt: String(localized: "Search dishes")
         )
+        .focusedSceneValue(\.dishLibraryCommands, libraryCommands)
         .toolbar {
             if !appState.isGuest {
                 ToolbarItem(placement: .primaryAction) {
@@ -135,13 +142,7 @@ struct DishLibraryView: View {
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
-                    do {
-                        exportedArchive = ExportedRecipeArchive(
-                            url: try MealPlanRecipeArchive.temporaryFile(for: allDishes)
-                        )
-                    } catch {
-                        exportError = error.localizedDescription
-                    }
+                    exportAllRecipes()
                 }
                 .disabled(allDishes.isEmpty)
             }
@@ -244,6 +245,39 @@ struct DishLibraryView: View {
         appState.dishFilter.isActive
             ? String(localized: "Nothing in your library fits the tags and filters you picked.")
             : String(localized: "Nothing in your library matches that search.")
+    }
+
+    /// What the menu bar can do to the library right now. Guests get no
+    /// import, an empty library has nothing to export, and "Clear filters" is
+    /// offered only when the grid is actually showing less than everything.
+    private var libraryCommands: DishLibraryCommands {
+        let narrowed = appState.dishFilter.isActive
+            || !appState.dishFilter.searchText.trimmingCharacters(in: .whitespaces).isEmpty
+        var commands = DishLibraryCommands(
+            sort: appState.dishFilter.sort,
+            search: { isSearchPresented = true },
+            setSort: { appState.dishFilter.sort = $0 }
+        )
+        if !appState.isGuest {
+            commands.importRecipes = { showingFilePicker = true }
+        }
+        if !allDishes.isEmpty {
+            commands.exportAll = { exportAllRecipes() }
+        }
+        if narrowed {
+            commands.clearFilters = { appState.dishFilter = DishFilter(sort: appState.dishFilter.sort) }
+        }
+        return commands
+    }
+
+    private func exportAllRecipes() {
+        do {
+            exportedArchive = ExportedRecipeArchive(
+                url: try MealPlanRecipeArchive.temporaryFile(for: allDishes)
+            )
+        } catch {
+            exportError = error.localizedDescription
+        }
     }
 
     private func addDish() {

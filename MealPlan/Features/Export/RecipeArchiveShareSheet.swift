@@ -33,3 +33,9 @@ struct RecipeArchiveShareSheet: View {
         .presentationDetents([.medium])
     }
 }
+
+#Preview {
+    RecipeArchiveShareSheet(
+        archive: ExportedRecipeArchive(url: URL(fileURLWithPath: "/tmp/Rezepte.mealplanrecipes"))
+    )
+}

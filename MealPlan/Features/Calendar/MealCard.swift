@@ -21,6 +21,9 @@ struct MealCard: View {
     @State private var showingPicker = false
     @State private var selectedEntry: MealPlanEntry?
     @State private var isTargeted = false
+    /// Presented here rather than from inside the picker: on macOS the picker
+    /// is a popover, and a sheet put up by a popover goes down with it.
+    @State private var newDishToEdit: Dish?
 
     private static let cornerRadius: CGFloat = 14
     private static let palette: [Color] = [
@@ -80,12 +83,21 @@ struct MealCard: View {
             } else {
                 ForEach(entries) { entry in
                     HStack(spacing: 4) {
-                        Button {
-                            selectedEntry = entry
-                        } label: {
-                            entryRow(entry)
-                        }
-                        .buttonStyle(.plain)
+                        // Tappable row, not a `Button`, so that `.draggable`
+                        // below still gets the mouse-down on macOS — a button
+                        // swallows it and the meal could never be dragged to
+                        // another day. Same reasoning as `DishSidebarView`.
+                        entryRow(entry)
+                            .contentShape(Rectangle())
+                            .onTapGesture { selectedEntry = entry }
+                            .draggable(DishReference(
+                                dishUUID: entry.dish?.uuid ?? UUID(),
+                                name: entry.dish?.name ?? "",
+                                sourceEntryUUID: entry.uuid
+                            ))
+                            .accessibilityElement(children: .combine)
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction { selectedEntry = entry }
 
                         if !appState.isGuest {
                             Button {
@@ -100,11 +112,6 @@ struct MealCard: View {
                             .accessibilityLabel(String(localized: "Remove \(entry.displayTitle)"))
                         }
                     }
-                    .draggable(DishReference(
-                        dishUUID: entry.dish?.uuid ?? UUID(),
-                        name: entry.dish?.name ?? "",
-                        sourceEntryUUID: entry.uuid
-                    ))
                     .contextMenu { entryMenu(entry) }
                 }
                 if !appState.isGuest {
@@ -141,12 +148,29 @@ struct MealCard: View {
         .dropDestination(for: DishReference.self) { refs, _ in
             handleDrop(refs)
         } isTargeted: { isTargeted = $0 }
-        .sheet(isPresented: $showingPicker) {
-            NavigationStack { DishPickerView(date: date, mealKey: mealKey, mealTitle: title) }
-        }
+        // A popover on the Mac, so clicking anywhere outside puts it away —
+        // a modal sheet there would trap the click and beep instead.
+        #if os(macOS)
+        .popover(isPresented: $showingPicker, arrowEdge: .top) { picker }
+        #else
+        .sheet(isPresented: $showingPicker) { picker }
+        #endif
         .sheet(item: $selectedEntry) { entry in
             EntryQuickActionsSheet(entry: entry)
         }
+        .sheet(item: $newDishToEdit) { dish in
+            NavigationStack { DishEditorView(dish: dish, isNew: true) }
+        }
+    }
+
+    private var picker: some View {
+        DishPickerView(
+            date: date,
+            mealKey: mealKey,
+            mealTitle: title,
+            mealSymbol: symbolName,
+            onEditNewDish: { newDishToEdit = $0 }
+        )
     }
 
     // MARK: - Background
@@ -340,4 +364,32 @@ struct MealCard: View {
         }
         .shadow(color: .black.opacity(onImage ? 0.45 : 0), radius: 2, y: 1)
     }
+}
+
+#Preview("Planned") {
+    MealCard(
+        date: .now,
+        mealKey: PreviewData.mealType.key,
+        title: PreviewData.mealType.name,
+        symbolName: PreviewData.mealType.symbolName,
+        entries: PreviewData.entries(on: .now, mealKey: PreviewData.mealType.key)
+    )
+    .frame(width: 220)
+    .padding()
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
+}
+
+#Preview("Empty") {
+    MealCard(
+        date: .now,
+        mealKey: MealSlot.lunch.rawValue,
+        title: MealSlot.lunch.localizedName,
+        symbolName: MealSlot.lunch.symbolName,
+        entries: []
+    )
+    .frame(width: 220)
+    .padding()
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
 }

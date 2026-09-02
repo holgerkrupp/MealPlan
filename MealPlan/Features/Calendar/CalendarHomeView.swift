@@ -45,6 +45,25 @@ struct CalendarHomeView: View {
 
             plan
         }
+        // The Plan menu only works while the calendar is on screen; switching
+        // to another section drops this value and greys the menu out.
+        .focusedSceneValue(\.planCommands, PlanCommands(
+            calendarStyle: calendarStyle,
+            goToToday: { goTo(.now) },
+            jumpToDate: {
+                jumpDate = appState.selectedDate
+                showingDatePicker = true
+            },
+            goToPreviousWeek: { goTo(appState.selectedDate.adding(days: -7)) },
+            goToNextWeek: { goTo(appState.selectedDate.adding(days: 7)) },
+            saveWeekAsTemplate: { savingTemplateWeek = focusWeek },
+            applyTemplate: { applyingTemplateWeek = focusWeek },
+            exportWeekPDF: { exportPDF() },
+            setCalendarStyle: { style in
+                appState.currentHousehold?.calendarStyle = style
+                try? context.save()
+            }
+        ))
     }
 
     /// The scrolling list of week sections below the week strip.
@@ -271,4 +290,13 @@ struct UndoBanner: View {
     NavigationStack { CalendarHomeView() }
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
+}
+
+#Preview("Week PDF") {
+    PDFShareSheet(url: URL(fileURLWithPath: "/tmp/MealPlan-Woche.pdf"))
+}
+
+#Preview("Undo banner") {
+    UndoBanner(offer: AppState.UndoOffer(message: String(localized: "Meal removed"), action: {})) {}
+        .padding()
 }

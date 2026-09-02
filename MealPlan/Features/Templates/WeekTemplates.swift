@@ -204,3 +204,15 @@ struct ApplyTemplateSheet: View {
         .presentationDetents([.medium, .large])
     }
 }
+
+#Preview("Save template") {
+    SaveTemplateSheet(weekStart: Date.now.startOfWeek())
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
+
+#Preview("Apply template") {
+    ApplyTemplateSheet(targetWeekStart: Date.now.startOfWeek())
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}

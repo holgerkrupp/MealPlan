@@ -5,5 +5,7 @@ import SwiftUI
 struct MealPlanWidgetBundle: WidgetBundle {
     var body: some Widget {
         TodayMealsWidget()
+        WeekMealsWidget()
+        UpcomingMealsWidget()
     }
 }

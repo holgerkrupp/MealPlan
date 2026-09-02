@@ -163,3 +163,8 @@ struct RecipeFinderView: View {
         return engines.contains { host.contains($0) }
     }
 }
+
+#Preview {
+    RecipeFinderView(dish: PreviewData.dish)
+        .modelContainer(PreviewData.container)
+}

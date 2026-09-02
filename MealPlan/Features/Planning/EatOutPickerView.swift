@@ -7,6 +7,9 @@ import SwiftData
 struct EatOutPickerView: View {
     let date: Date
     let mealKey: String
+    /// Typed in the planning sheet's own header, so both halves of the sheet
+    /// share one search field.
+    var query: String = ""
     var onPlanned: () -> Void
 
     @Environment(AppState.self) private var appState
@@ -19,7 +22,7 @@ struct EatOutPickerView: View {
     /// The search only runs from two characters on; below that the list keeps
     /// showing the places the family has been to.
     private var isSearchable: Bool {
-        model.query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
+        query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
 
     /// The most recent distinct restaurants from earlier plans.
@@ -104,12 +107,15 @@ struct EatOutPickerView: View {
                 }
             */
         }
-        .searchable(
-            text: $model.query,
-            placement: .automatic,
-            prompt: String(localized: "Restaurant, café, bakery…")
-        )
-        .onChange(of: model.query) { _, _ in model.search() }
+        #if os(macOS)
+        .listStyle(.inset)
+        #else
+        .listStyle(.insetGrouped)
+        #endif
+        .onChange(of: query, initial: true) { _, _ in
+            model.query = query
+            model.search()
+        }
         .task { await model.locate() }
     }
 
@@ -147,4 +153,12 @@ struct EatOutPickerView: View {
         )
         onPlanned()
     }
+}
+
+#Preview {
+    NavigationStack {
+        EatOutPickerView(date: .now, mealKey: PreviewData.mealType.key, query: "", onPlanned: {})
+    }
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
 }

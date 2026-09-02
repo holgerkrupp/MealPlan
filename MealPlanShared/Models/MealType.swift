@@ -47,30 +47,55 @@ extension MealType {
         ]
     }
 
-    /// Reconcile a household's meals on launch:
+    /// Split `meals` into the ones to keep and the duplicate `key`s to drop.
+    ///
+    /// CloudKit has no unique constraint, so duplicates appear whenever two
+    /// devices seed the same default meals before their first sync. The winner
+    /// is the smallest uuid string, so every device converges on the same
+    /// survivor; planned entries key off the string and are unaffected either
+    /// way. Survivors come back in display order.
+    ///
+    /// Pure, so it can be tested without a `ModelContext`.
+    static func deduplicated(_ meals: [MealType]) -> (keep: [MealType], remove: [MealType]) {
+        var winners: [String: MealType] = [:]
+        for meal in meals.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
+            if winners[meal.key] == nil { winners[meal.key] = meal }
+        }
+        // Object identity, not `uuid`: a record that synced twice can carry the
+        // same uuid on both rows, and those must not both count as survivors.
+        let kept = Set(winners.values.map(ObjectIdentifier.init))
+        return (
+            keep: winners.values.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) },
+            remove: meals.filter { !kept.contains(ObjectIdentifier($0)) }
+        )
+    }
+
+    /// Reconcile the meals on launch:
     /// * collapse duplicates that CloudKit produced when two devices seeded the
     ///   same default meals before their first sync;
     /// * insert the default meals if there are none;
     /// * make sure every meal key already used by a plan has a `MealType`
     ///   (so upgrading users don't lose e.g. their "snack" entries).
+    ///
+    /// De-duplication spans the **whole store**, not just `household`. There is
+    /// one household per iCloud account, so a second `Household` record is
+    /// itself a sync duplicate — and its meals show up in the app anyway,
+    /// because every `MealType` query is store-wide. Survivors are re-homed
+    /// onto `household` so `sortedMealTypes` (settings, backup) agrees with
+    /// what the calendar draws, and so a duplicate household being cleaned up
+    /// later can't cascade them away.
     @MainActor
     static func ensure(for household: Household, context: ModelContext) {
-        var meals = household.mealTypes ?? []
-        var changed = false
+        let all = (try? context.fetch(FetchDescriptor<MealType>())) ?? household.mealTypes ?? []
+        let (kept, duplicates) = deduplicated(all)
+        var meals = kept
+        var changed = !duplicates.isEmpty
 
-        // De-duplicate by `key`. Pick a deterministic winner (smallest uuid
-        // string) so every device converges on the same survivor; planned
-        // entries key off the string and are unaffected.
-        var winners: [String: MealType] = [:]
-        for meal in meals.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
-            if winners[meal.key] == nil {
-                winners[meal.key] = meal
-            } else {
-                context.delete(meal)
-                changed = true
-            }
+        for duplicate in duplicates { context.delete(duplicate) }
+        for meal in meals where meal.household !== household {
+            meal.household = household
+            changed = true
         }
-        if changed { meals = Array(winners.values) }
 
         if meals.isEmpty {
             for (index, seed) in defaultSeeds.enumerated() {
@@ -82,8 +107,13 @@ extension MealType {
             changed = true
         }
 
+        // Store-wide for the same reason as the de-duplication above: the
+        // calendar queries entries by date, so a plan hanging off a duplicate
+        // household still needs its meal.
+        let plannedKeys = (try? context.fetch(FetchDescriptor<MealPlanEntry>()))?.map(\.mealSlotRaw)
+            ?? (household.entries ?? []).map(\.mealSlotRaw)
         let knownKeys = Set(meals.map(\.key))
-        let usedKeys = Set((household.entries ?? []).map(\.mealSlotRaw)).subtracting(knownKeys)
+        let usedKeys = Set(plannedKeys).subtracting(knownKeys)
         var nextOrder = (meals.map(\.sortOrder).max() ?? -1) + 1
         for key in usedKeys.sorted() where !key.isEmpty {
             let meal = MealType(

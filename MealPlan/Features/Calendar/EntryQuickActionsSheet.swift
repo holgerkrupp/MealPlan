@@ -262,3 +262,15 @@ struct EntryQuickActionsSheet: View {
 
     private func save() { try? context.save() }
 }
+
+#Preview {
+    EntryQuickActionsSheet(entry: PreviewData.entry)
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
+
+#Preview("Eating out") {
+    EntryQuickActionsSheet(entry: PreviewData.eatingOutEntry)
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}

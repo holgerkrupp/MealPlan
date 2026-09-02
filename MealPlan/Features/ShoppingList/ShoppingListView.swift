@@ -12,6 +12,9 @@ struct ShoppingListView: View {
     @State private var isExporting = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
+    /// Lets the menu bar's "New Shopping Item" drop the caret straight into
+    /// the add field.
+    @FocusState private var addItemFocused: Bool
 
     private struct AisleGroup {
         var name: String
@@ -83,6 +86,7 @@ struct ShoppingListView: View {
             Section {
                 HStack {
                     TextField(String(localized: "Add an item"), text: $newItemName)
+                        .focused($addItemFocused)
                         .onSubmit(addManualItem)
                     Button(String(localized: "Add"), action: addManualItem)
                         .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
@@ -117,6 +121,7 @@ struct ShoppingListView: View {
             }
         }
         .onAppear { if items.isEmpty { regenerate() } }
+        .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
         .alert(
             String(localized: "Reminders"),
@@ -137,6 +142,27 @@ struct ShoppingListView: View {
         } message: {
             Text("This aisle name will be remembered for the ingredient.")
         }
+    }
+
+    /// What the Shopping menu can do right now. Reminders export exists only
+    /// on iOS, and only the two list-emptying actions care whether the list
+    /// has anything in it.
+    private var shoppingCommands: ShoppingCommands {
+        var commands = ShoppingCommands(
+            range: appState.shoppingRange,
+            rebuild: { regenerate() },
+            addItem: { addItemFocused = true },
+            setRange: { appState.shoppingRange = $0 }
+        )
+        #if os(iOS)
+        if !isExporting, !items.isEmpty {
+            commands.addToReminders = { Task { await exportToReminders() } }
+        }
+        #endif
+        if items.contains(where: \.isChecked) {
+            commands.clearTicked = { clearChecked() }
+        }
+        return commands
     }
 
     // MARK: - Text for sharing

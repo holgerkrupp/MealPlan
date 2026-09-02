@@ -2,179 +2,205 @@ import SwiftUI
 import SwiftData
 import ESADesignKit
 
+/// App preferences.
+///
+/// macOS gets the System Settings layout — a sidebar of panes next to a grouped
+/// form — because the Settings window is shared with the rest of the system and
+/// people navigate it by muscle memory. Everywhere else the same sections stack
+/// into one scrolling form.
+///
+/// The sections themselves live in `SettingsSections.swift`; a pane is only a
+/// list of the ones that belong together.
 @MainActor
 struct SettingsView: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
+    /// How the sections are arranged.
+    enum Layout {
+        /// One scrolling form — iOS, and the macOS main window's fallback.
+        case stacked
+        #if os(macOS)
+        /// Sidebar of panes beside a grouped form — the macOS Settings window.
+        case panes
+        #endif
+    }
 
-    @AppStorage("search.engine") private var searchEngineRaw = SearchEngine.fallback.rawValue
+    #if os(macOS)
+    var layout: Layout = .panes
+    #else
+    var layout: Layout = .stacked
+    #endif
 
-    @State private var showingOnboarding = false
-    @State private var dinnerReminder = MealNotificationScheduler.shared.dinnerEnabled
-    @State private var reminderTime: Date = Calendar.current.date(
-        bySettingHour: MealNotificationScheduler.shared.dinnerHour, minute: 0, second: 0, of: .now
-    ) ?? .now
+    #if os(macOS)
+    @State private var pane: SettingsPane = .general
+    #endif
 
     var body: some View {
+        switch layout {
+        case .stacked:
+            stacked
+        #if os(macOS)
+        case .panes:
+            paned
+        #endif
+        }
+    }
+
+    // MARK: - Stacked
+
+    private var stacked: some View {
         Form {
-            if let household = appState.currentHousehold {
-                Section(String(localized: "Family")) {
-                    TextField(String(localized: "Family name"), text: bindingName(household))
-                }
-
-                Section {
-                    Picker(String(localized: "Show amounts in"), selection: bindingUnit(household)) {
-                        ForEach(UnitSystem.allCases) { system in
-                            Text(system.localizedName).tag(system)
-                        }
-                    }
-                    Toggle(
-                        String(localized: "Round scaled and converted amounts"),
-                        isOn: bindingRoundedAmounts(household)
-                    )
-                } header: {
-                    Text(String(localized: "Units"))
-                } footer: {
-                    Text("Uses practical kitchen increments, including whole eggs. Turn off to show exact values.")
-                }
-
-                Section(String(localized: "Calendar")) {
-                    Picker(String(localized: "Layout"), selection: bindingCalendar(household)) {
-                        ForEach(CalendarStyle.allCases) { style in
-                            Text(style.localizedName).tag(style)
-                        }
-                    }
-                    NavigationLink {
-                        MealsSettingsView()
-                    } label: {
-                        LabeledContent(String(localized: "Meals"), value: mealsSummary(household))
-                    }
-                }
-            }
-
+            FamilySettingsSection()
+            UnitsSettingsSection()
+            PlanSettingsSection()
             CalendarIntegrationSection()
-
-            Section {
-                Picker(String(localized: "Search with"), selection: $searchEngineRaw) {
-                    ForEach(SearchEngine.allCases) { engine in
-                        Text(engine.localizedName).tag(engine.rawValue)
-                    }
-                }
-            } header: {
-                Text("Recipe search")
-            } footer: {
-                Text("Used by “Find a recipe”. iOS doesn’t tell apps which search engine you prefer, so pick one here.")
-            }
-
-            Section(String(localized: "Reminders")) {
-                Toggle(String(localized: "Remind me about tonight’s dinner"), isOn: $dinnerReminder)
-                if dinnerReminder {
-                    DatePicker(
-                        String(localized: "At"),
-                        selection: $reminderTime,
-                        displayedComponents: .hourAndMinute
-                    )
-                }
-            }
-
-            Section(String(localized: "Shopping")) {
-                NavigationLink {
-                    PantryStaplesView()
-                } label: {
-                    Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
-                }
-            }
-
-            Section {
-                Button {
-                    showingOnboarding = true
-                } label: {
-                    Label(String(localized: "Getting started"), systemImage: "sparkles")
-                }
-            } footer: {
-                Text("A short tour of the plan, the dish library, and how to share recipes into MealPlan from other apps.")
-            }
-
-            Section {
-                LabeledContent(String(localized: "Version"), value: appVersion)
-            } footer: {
-                Text("Your plan and dishes are stored on your device and shared with your family through iCloud.")
-            }
-
-            Section {
-                CreatedByView()
-                    .frame(maxWidth: .infinity)
-            }
+            RecipeSearchSettingsSection()
+            RemindersSettingsSection()
+            ShoppingSettingsSection()
+            DataSettingsSection()
+            AboutSettingsSection()
         }
         .navigationTitle(AppSection.settings.title)
         .formStyle(.grouped)
-        .sheet(isPresented: $showingOnboarding) {
-            OnboardingView()
-        }
-        .onChange(of: dinnerReminder) { _, on in
-            let scheduler = MealNotificationScheduler.shared
-            scheduler.dinnerEnabled = on
-            scheduler.settingsChanged(context: context)
-        }
-        .onChange(of: reminderTime) { _, time in
-            let scheduler = MealNotificationScheduler.shared
-            scheduler.dinnerHour = Calendar.current.component(.hour, from: time)
-            scheduler.settingsChanged(context: context)
-        }
     }
 
-    private func bindingName(_ household: Household) -> Binding<String> {
-        Binding(get: { household.name }, set: { household.name = $0; try? context.save() })
-    }
+    // MARK: - Panes
 
-    private func bindingUnit(_ household: Household) -> Binding<UnitSystem> {
-        Binding(
-            get: { household.unitSystem },
-            set: { value in
-                household.unitSystem = value
-                ShoppingListBuilder.refreshDisplayText(
-                    for: household.shoppingItems ?? [],
-                    system: value,
-                    roundsAmounts: household.roundsDisplayedAmounts
-                )
-                try? context.save()
+    #if os(macOS)
+    private var paned: some View {
+        NavigationSplitView {
+            List(SettingsPane.allCases, selection: $pane) { pane in
+                Label {
+                    Text(pane.title)
+                } icon: {
+                    SettingsPaneIcon(pane: pane)
+                }
+                .tag(pane)
             }
-        )
-    }
-
-    private func bindingRoundedAmounts(_ household: Household) -> Binding<Bool> {
-        Binding(
-            get: { household.roundsDisplayedAmounts },
-            set: { value in
-                household.roundsDisplayedAmounts = value
-                ShoppingListBuilder.refreshDisplayText(
-                    for: household.shoppingItems ?? [],
-                    system: household.unitSystem,
-                    roundsAmounts: value
-                )
-                try? context.save()
+            .navigationSplitViewColumnWidth(min: 190, ideal: 205, max: 240)
+        } detail: {
+            NavigationStack {
+                detail(pane)
+                    .navigationTitle(pane.title)
             }
-        )
+        }
+        .frame(width: 760, height: 520)
     }
 
-    private func bindingCalendar(_ household: Household) -> Binding<CalendarStyle> {
-        Binding(get: { household.calendarStyle }, set: { household.calendarStyle = $0; try? context.save() })
+    /// Panes that are wholly one existing screen show it directly; the rest are
+    /// a grouped form of sections.
+    @ViewBuilder
+    private func detail(_ pane: SettingsPane) -> some View {
+        switch pane {
+        case .general:
+            paneForm {
+                FamilySettingsSection()
+                UnitsSettingsSection()
+                RecipeSearchSettingsSection()
+            }
+        case .plan:
+            paneForm {
+                PlanSettingsSection(showsMealsLink: false, header: nil)
+                RemindersSettingsSection()
+            }
+        case .meals:
+            MealsSettingsView()
+        case .calendar:
+            paneForm {
+                CalendarIntegrationSection()
+            }
+        case .shopping:
+            PantryStaplesView()
+        case .data:
+            DataTransferView()
+        case .about:
+            paneForm {
+                AboutSettingsSection()
+            }
+        }
     }
 
-    private func mealsSummary(_ household: Household) -> String {
-        let names = household.sortedMealTypes.map(\.name).filter { !$0.isEmpty }
-        return names.isEmpty ? String(localized: "None") : names.joined(separator: ", ")
+    private func paneForm<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        Form(content: content)
+            .formStyle(.grouped)
+    }
+    #endif
+}
+
+#if os(macOS)
+
+/// The panes in the sidebar, in the order they appear.
+enum SettingsPane: String, CaseIterable, Identifiable {
+    case general
+    case plan
+    case meals
+    case calendar
+    case shopping
+    case data
+    case about
+
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .general: String(localized: "General")
+        case .plan: String(localized: "Plan")
+        case .meals: String(localized: "Meals")
+        case .calendar: String(localized: "Calendar")
+        case .shopping: String(localized: "Pantry staples")
+        case .data: String(localized: "Data")
+        case .about: String(localized: "About")
+        }
     }
 
-    private var appVersion: String {
-        let v = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
-        let b = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "1"
-        return "\(v) (\(b))"
+    var symbol: String {
+        switch self {
+        case .general: "gearshape"
+        case .plan: "calendar"
+        case .meals: "fork.knife"
+        case .calendar: "calendar.badge.clock"
+        case .shopping: "cart"
+        case .data: "externaldrive"
+        case .about: "info.circle"
+        }
+    }
+
+    var tint: Color {
+        switch self {
+        case .general: .gray
+        case .plan: .blue
+        case .meals: .orange
+        case .calendar: .red
+        case .shopping: .green
+        case .data: .indigo
+        case .about: .teal
+        }
     }
 }
 
-#Preview {
-    NavigationStack { SettingsView() }
+/// The tinted rounded square System Settings uses for sidebar rows.
+private struct SettingsPaneIcon: View {
+    let pane: SettingsPane
+
+    var body: some View {
+        Image(systemName: pane.symbol)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundStyle(.white)
+            .frame(width: 20, height: 20)
+            .background(pane.tint.gradient, in: .rect(cornerRadius: 5))
+    }
+}
+
+#endif
+
+#Preview("Stacked") {
+    NavigationStack { SettingsView(layout: .stacked) }
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
 }
+
+#if os(macOS)
+#Preview("Settings window") {
+    SettingsView()
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
+#endif

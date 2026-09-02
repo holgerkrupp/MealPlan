@@ -208,3 +208,11 @@ extension Image {
         #endif
     }
 }
+
+#Preview("Shared link") {
+    ShareRootView(payload: .text("https://example.com/rezepte/pfannkuchen"), onComplete: {})
+}
+
+#Preview("Nothing usable") {
+    ShareRootView(payload: .empty, onComplete: {})
+}

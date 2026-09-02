@@ -232,3 +232,21 @@ struct MealRoutineEditor: View {
         dismiss()
     }
 }
+
+#Preview("Routines") {
+    NavigationStack { MealRoutinesView() }
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
+
+#Preview("Routine editor") {
+    NavigationStack {
+        MealRoutineEditor(
+            routine: PreviewData.routine,
+            dishes: PreviewData.dishes,
+            mealTypes: PreviewData.mealTypes
+        )
+    }
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
+}

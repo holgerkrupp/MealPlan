@@ -230,3 +230,9 @@ enum MealTypeStore {
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
 }
+
+#Preview("Meal editor") {
+    NavigationStack { MealTypeEditorView(meal: PreviewData.mealType) }
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}

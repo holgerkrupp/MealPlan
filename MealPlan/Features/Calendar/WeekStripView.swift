@@ -174,3 +174,15 @@ struct WeekStripView: View {
         return AnyShapeStyle(Color.primary)
     }
 }
+
+#Preview {
+    @Previewable @State var weekStart = Date.now.startOfWeek(calendar: .current)
+    WeekStripView(
+        weekStart: $weekStart,
+        selectedDate: .now,
+        visibleDayIDs: [Date.now.dayID],
+        onSelect: { _ in }
+    )
+    .padding(.vertical)
+    .modelContainer(PreviewData.container)
+}

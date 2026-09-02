@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// Adds and removes a dish's free-form tags.
 ///
@@ -137,4 +138,15 @@ struct DishTagEditor: View {
         draft = ""
         fieldIsFocused = true
     }
+}
+
+#Preview {
+    Form {
+        DishTagEditor(
+            dish: PreviewData.richDish,
+            vocabulary: ["vegan", "schnell", "Familienessen", "Ofen", "Pasta"],
+            suggestions: ["Hackfleisch", "Nudeln"]
+        )
+    }
+    .modelContainer(PreviewData.container)
 }

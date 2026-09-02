@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 /// The "Calendar integration" block on the Settings screen: the switch itself,
 /// plus whatever the current permission state needs the user to know.
@@ -112,4 +113,13 @@ struct CalendarIntegrationSection: View {
             : String(localized: "\(count) calendars")
         return "\(calendars) · \(store.settings.privacyMode.localizedName)"
     }
+}
+
+#Preview {
+    PreviewCalendarHost {
+        NavigationStack {
+            Form { CalendarIntegrationSection() }
+        }
+    }
+    .modelContainer(PreviewData.container)
 }

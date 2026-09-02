@@ -28,3 +28,19 @@ struct CalendarColorDot: View {
             .accessibilityHidden(true)
     }
 }
+
+#Preview {
+    VStack(alignment: .leading, spacing: 10) {
+        ForEach(PreviewCalendar.calendars) { calendar in
+            HStack(spacing: 8) {
+                CalendarColorDot(color: calendar.color)
+                Text(calendar.title)
+            }
+        }
+        HStack(spacing: 8) {
+            CalendarColorDot(color: nil, size: 16)
+            Text(verbatim: "No colour")
+        }
+    }
+    .padding()
+}

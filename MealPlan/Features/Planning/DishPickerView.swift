@@ -2,12 +2,22 @@ import SwiftUI
 import SwiftData
 
 /// What an empty meal slot offers when tapped: cook something (search the
-/// library, add a new dish, paste a recipe link) — or eat out.
+/// library by name or by ingredient, add a new dish, paste a recipe link) —
+/// or eat out.
+///
+/// The search field sits in the sheet's own header rather than in
+/// `.searchable`, which on macOS hoists it into the window toolbar, far away
+/// from the results it filters.
 @MainActor
 struct DishPickerView: View {
     let date: Date
     let mealKey: String
     let mealTitle: String
+    var mealSymbol: String = "fork.knife"
+    /// Called after a bare new dish is planned and the cook wants to fill in
+    /// the recipe. The editor belongs to whoever presented this view: on macOS
+    /// this is a popover, and a sheet raised from one dies with it.
+    var onEditNewDish: (Dish) -> Void = { _ in }
 
     /// The two halves of the planning sheet.
     private enum Tab: String, CaseIterable, Identifiable {
@@ -25,6 +35,12 @@ struct DishPickerView: View {
             case .eatOut: "storefront"
             }
         }
+        var prompt: String {
+            switch self {
+            case .cook: String(localized: "Search your dishes, or paste a link")
+            case .eatOut: String(localized: "Restaurant, café, bakery…")
+            }
+        }
     }
 
     @Environment(AppState.self) private var appState
@@ -34,13 +50,19 @@ struct DishPickerView: View {
 
     @State private var tab: Tab = .cook
     @State private var text = ""
+    @State private var placeQuery = ""
     @State private var isImporting = false
     @State private var importError: String?
-    @State private var dishToEdit: Dish?
+    @FocusState private var isSearchFocused: Bool
 
     private let importer: RecipeImporter = RecipeSchemaParser()
 
     private var query: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
+
+    /// Each half searches for something different, so each keeps its own text.
+    private var searchText: Binding<String> {
+        tab == .cook ? $text : $placeQuery
+    }
 
     private var url: URL? {
         guard query.contains("."), !query.contains(" ") else { return nil }
@@ -49,111 +71,45 @@ struct DishPickerView: View {
         return u
     }
 
-    private var matches: [Dish] {
-        guard !query.isEmpty else { return Array(allDishes.prefix(12)) }
-        return allDishes
-            .map { dish in
-                let name = dish.name.fuzzyScore(query: query)
-                let content = dish.searchableText.searchFolded
-                return (dish: dish, score: max(name, content.contains(query.searchFolded) ? 0.7 : 0))
-            }
-            .filter { $0.score > 0 }
-            .sorted { $0.score > $1.score }
-            .prefix(12)
-            .map(\.dish)
+    private var results: [DishSearch.Result] {
+        DishSearch.rank(query.isEmpty ? suggestions : allDishes, query: query)
+    }
+
+    /// What the list shows before anything is typed: dishes tagged for this
+    /// meal first, the longest-neglected at the top — a better opening offer
+    /// than everything beginning with "A".
+    private var suggestions: [Dish] {
+        let tag = MealTypeTag(rawValue: mealKey)
+        return allDishes.sorted { a, b in
+            let aFits = tag.map(a.mealTypeTags.contains) ?? false
+            let bFits = tag.map(b.mealTypeTags.contains) ?? false
+            if aFits != bFits { return aFits }
+            return (a.lastUsedDate ?? .distantPast) < (b.lastUsedDate ?? .distantPast)
+        }
     }
 
     private var hasExactMatch: Bool {
-        allDishes.contains { $0.name.searchFolded == query.searchFolded }
+        DishSearch.hasExactMatch(allDishes, name: query)
     }
 
     var body: some View {
-        Group {
+        VStack(spacing: 0) {
+            header
+            Divider()
             switch tab {
             case .cook: dishList
-            case .eatOut: EatOutPickerView(date: date, mealKey: mealKey) { dismiss() }
+            case .eatOut: EatOutPickerView(
+                date: date, mealKey: mealKey, query: placeQuery
+            ) { dismiss() }
             }
         }
-        .safeAreaInset(edge: .top) {
-            Picker(String(localized: "How are we eating?"), selection: $tab) {
-                ForEach(Tab.allCases) { tab in
-                    Label(tab.title, systemImage: tab.symbol).tag(tab)
-                }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .padding(.horizontal)
-            .padding(.bottom, 8)
-            .background(.bar)
-        }
-        .navigationTitle(pickerTitle)
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
+        #if os(macOS)
+        .frame(minWidth: 480, idealWidth: 540, minHeight: 520, idealHeight: 620)
+        #else
+        .presentationDetents([.large])
+        .presentationDragIndicator(.visible)
         #endif
-        .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-            }
-        }
-    }
-
-    /// The "Cook" half: the library search, importer and new-dish shortcut.
-    private var dishList: some View {
-        List {
-            if let url {
-                Section {
-                    Button {
-                        Task { await importAndPlan(url) }
-                    } label: {
-                        Label {
-                            VStack(alignment: .leading) {
-                                Text(String(localized: "Import from \(url.host() ?? "link")"))
-                                Text(url.absoluteString).font(.caption).foregroundStyle(.secondary).lineLimit(1)
-                            }
-                        } icon: {
-                            if isImporting { ProgressView() } else { Image(systemName: "link") }
-                        }
-                    }
-                    .disabled(isImporting)
-                }
-            }
-
-            if !query.isEmpty, !hasExactMatch, url == nil {
-                Section {
-                    Button {
-                        addNewDishAndPlan(name: query, openEditor: true)
-                    } label: {
-                        Label(String(localized: "Add “\(query)” as a new dish"), systemImage: "plus.circle")
-                    }
-                }
-            }
-
-            Section(matches.isEmpty ? "" : String(localized: "Your dishes")) {
-                ForEach(matches) { dish in
-                    Button {
-                        planExisting(dish)
-                    } label: {
-                        HStack(spacing: 12) {
-                            DishThumbnail(dish: dish, size: 40, cornerRadius: 8)
-                            Text(dish.name)
-                            Spacer()
-                            if let days = dish.daysSinceLastCooked(), days >= 30 {
-                                Text(String(localized: "\(days) d"))
-                                    .font(.caption)
-                                    .foregroundStyle(.orange)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                }
-
-                if matches.isEmpty && query.isEmpty {
-                    Text(String(localized: "Start typing to search, or paste a recipe link."))
-                        .foregroundStyle(.secondary)
-                }
-            }
-        }
-        .searchable(text: $text, prompt: String(localized: "Dish name or link"))
+        .task { isSearchFocused = true }
         .alert(
             String(localized: "Couldn’t import that link"),
             isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
@@ -165,16 +121,249 @@ struct DishPickerView: View {
         } message: {
             Text(importError ?? "")
         }
-        .sheet(item: $dishToEdit) { dish in
-            NavigationStack { DishEditorView(dish: dish, isNew: true) }
-        }
     }
 
-    private var pickerTitle: String {
-        "\(mealTitle) · \(date.formatted(date: .abbreviated, time: .omitted))"
+    // MARK: - Header
+
+    private var header: some View {
+        VStack(spacing: 14) {
+            HStack(spacing: 12) {
+                Image(systemName: mealSymbol)
+                    .font(.system(size: 17, weight: .medium))
+                    .foregroundStyle(.tint)
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(.tint.opacity(0.15)))
+
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(mealTitle)
+                        .font(.headline)
+                    Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer(minLength: 8)
+            }
+
+            Picker(String(localized: "How are we eating?"), selection: $tab) {
+                ForEach(Tab.allCases) { tab in
+                    Label(tab.title, systemImage: tab.symbol).tag(tab)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+
+            searchField
+        }
+        .padding(16)
+        .background(.bar)
+    }
+
+    private var searchField: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(tab.prompt, text: searchText)
+                .textFieldStyle(.plain)
+                .focused($isSearchFocused)
+                .onSubmit { commitTypedName() }
+                #if os(iOS)
+                .autocorrectionDisabled()
+                .textInputAutocapitalization(.words)
+                .submitLabel(.done)
+                #endif
+            if !searchText.wrappedValue.isEmpty {
+                Button {
+                    searchText.wrappedValue = ""
+                    isSearchFocused = true
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "Clear"))
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 9)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(.quaternary)
+        )
+    }
+
+    // MARK: - Cook
+
+    /// The "Cook" half: the library search, the importer and the new-dish
+    /// shortcut.
+    private var dishList: some View {
+        List {
+            if let url {
+                Section {
+                    Button {
+                        Task { await importAndPlan(url) }
+                    } label: {
+                        HStack(spacing: 12) {
+                            leadingBadge(symbol: "link", filled: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "Import from \(url.host() ?? "link")"))
+                                Text(url.absoluteString)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .lineLimit(1)
+                            }
+                            Spacer(minLength: 0)
+                            if isImporting { ProgressView().controlSize(.small) }
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(isImporting)
+                }
+            }
+
+            if !query.isEmpty, !hasExactMatch, url == nil {
+                Section {
+                    Button {
+                        addNewDishAndPlan(name: query, openEditor: false)
+                    } label: {
+                        HStack(spacing: 12) {
+                            leadingBadge(symbol: "plus", filled: true)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "Add “\(query)”"))
+                                Text(String(localized: "A new dish, planned for this meal"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+
+                    Button {
+                        addNewDishAndPlan(name: query, openEditor: true)
+                    } label: {
+                        HStack(spacing: 12) {
+                            leadingBadge(symbol: "square.and.pencil", filled: false)
+                            Text(String(localized: "Add it and fill in the recipe"))
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+
+            if !results.isEmpty {
+                Section(query.isEmpty ? String(localized: "Suggestions") : String(localized: "Your dishes")) {
+                    ForEach(results) { result in
+                        Button {
+                            planExisting(result.dish)
+                        } label: {
+                            dishRow(result)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            } else if query.isEmpty {
+                Section {
+                    emptyLibraryHint
+                }
+            } else if url == nil {
+                Section {
+                    Text(String(localized: "Nothing in your library matches that — yet."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        #if os(macOS)
+        .listStyle(.inset)
+        #else
+        .listStyle(.insetGrouped)
+        #endif
+    }
+
+    private func dishRow(_ result: DishSearch.Result) -> some View {
+        HStack(spacing: 12) {
+            DishThumbnail(dish: result.dish, size: 44, cornerRadius: 10)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(result.dish.name)
+                    .lineLimit(2)
+                if let detail = detail(for: result) {
+                    Text(detail.text)
+                        .font(.caption)
+                        .foregroundStyle(detail.isStale ? Color.orange : Color.secondary)
+                        .lineLimit(1)
+                }
+            }
+            Spacer(minLength: 8)
+            Image(systemName: "plus.circle")
+                .font(.title3)
+                .foregroundStyle(.tint)
+        }
+        .padding(.vertical, 2)
+        .contentShape(Rectangle())
+    }
+
+    /// The caption under a dish: why it surfaced, or — when the name itself
+    /// matched — how long it has been since anyone cooked it.
+    private func detail(for result: DishSearch.Result) -> (text: String, isStale: Bool)? {
+        if let reason = result.reason { return (reason, false) }
+        guard let last = result.dish.lastUsedDate else {
+            return (String(localized: "Never cooked"), false)
+        }
+        let days = result.dish.daysSinceLastCooked() ?? 0
+        return (
+            String(localized: "Cooked \(last.formatted(.relative(presentation: .named)))"),
+            days >= 30
+        )
+    }
+
+    private var emptyLibraryHint: some View {
+        VStack(spacing: 8) {
+            Image(systemName: "text.book.closed")
+                .font(.largeTitle)
+                .foregroundStyle(.secondary)
+            Text(String(localized: "Your library is empty"))
+                .font(.headline)
+            Text(String(localized: "Type a name to add a dish, or paste a recipe link."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 24)
+        .listRowBackground(Color.clear)
+    }
+
+    /// The square icon that opens the import and new-dish rows, sized to match
+    /// a dish thumbnail so the whole list shares one left edge.
+    private func leadingBadge(symbol: String, filled: Bool) -> some View {
+        Image(systemName: symbol)
+            .font(.system(size: 16, weight: .semibold))
+            .foregroundStyle(filled ? AnyShapeStyle(.white) : AnyShapeStyle(.tint))
+            .frame(width: 44, height: 44)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(filled ? AnyShapeStyle(.tint) : AnyShapeStyle(.quaternary))
+            )
     }
 
     // MARK: - Actions
+
+    /// Return in the search field: plan the dish that already carries this
+    /// name, or make one on the spot. Typing the name is the whole gesture —
+    /// nothing should have to be picked out of the list first.
+    private func commitTypedName() {
+        guard tab == .cook, !query.isEmpty, url == nil else { return }
+        if let existing = DishSearch.exactMatch(allDishes, name: query) {
+            planExisting(existing)
+        } else {
+            addNewDishAndPlan(name: query, openEditor: false)
+        }
+    }
 
     private func planExisting(_ dish: Dish) {
         MealPlanner.plan(
@@ -204,11 +393,8 @@ struct DishPickerView: View {
             memberName: appState.currentMemberName,
             context: context
         )
-        if openEditor {
-            dishToEdit = dish
-        } else {
-            dismiss()
-        }
+        if openEditor { onEditNewDish(dish) }
+        dismiss()
     }
 
     private func importAndPlan(_ url: URL) async {
@@ -241,4 +427,15 @@ struct DishPickerView: View {
             importError = error.localizedDescription
         }
     }
+}
+
+#Preview {
+    DishPickerView(
+        date: .now,
+        mealKey: PreviewData.mealType.key,
+        mealTitle: PreviewData.mealType.name,
+        mealSymbol: PreviewData.mealType.symbolName
+    )
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
 }

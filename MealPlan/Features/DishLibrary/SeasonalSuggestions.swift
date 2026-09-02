@@ -61,3 +61,9 @@ struct SeasonalSuggestionsStrip: View {
         }
     }
 }
+
+#Preview {
+    SeasonalSuggestionsStrip()
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}

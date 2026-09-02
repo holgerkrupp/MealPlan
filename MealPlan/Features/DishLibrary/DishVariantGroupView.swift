@@ -61,6 +61,11 @@ struct DishVariantGroupView: View {
             }
         }
         .navigationTitle(title)
+        // Removing the last two members dissolves the group, and there is
+        // nothing left on this screen to look at.
+        .onChange(of: members.isEmpty) { _, isEmpty in
+            if isEmpty { dismiss() }
+        }
         .toolbar {
             if !appState.isGuest {
                 ToolbarItem(placement: .primaryAction) {
@@ -84,4 +89,12 @@ struct DishVariantGroupView: View {
             Text("All \(members.count) recipes in this group are shown under this name.")
         }
     }
+}
+
+#Preview {
+    NavigationStack {
+        DishVariantGroupView(group: PreviewData.variantGroup)
+    }
+    .environment(AppState.preview)
+    .modelContainer(PreviewData.container)
 }

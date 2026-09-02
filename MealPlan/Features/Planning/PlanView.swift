@@ -44,6 +44,17 @@ struct PlanView: View {
                         .transition(.move(edge: .trailing))
                 }
             }
+            // Nil while the window is too narrow to split, so the View menu's
+            // toggle greys out instead of silently doing nothing.
+            .focusedSceneValue(
+                \.planSidebarCommands,
+                fits
+                    ? PlanSidebarCommands(
+                        isShown: showsSidebar,
+                        toggle: { withAnimation(.snappy) { showsSidebar.toggle() } }
+                    )
+                    : nil
+            )
             .toolbar {
                 if fits {
                     ToolbarItem(placement: .primaryAction) {

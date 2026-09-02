@@ -440,3 +440,11 @@ private struct PlaceholderTile: View {
     .environment(AppState.preview)
     .modelContainer(PreviewData.container)
 }
+
+#Preview("Placeholder tiles") {
+    HStack(spacing: 12) {
+        PlaceholderTile(system: "camera")
+        PlaceholderTile(system: "photo.on.rectangle")
+    }
+    .padding()
+}

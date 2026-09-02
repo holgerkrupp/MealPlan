@@ -102,14 +102,14 @@ final class AppState {
         currentHousehold?.roundsDisplayedAmounts ?? true
     }
 
-    #if DEBUG
     /// An `AppState` wired to the seeded in-memory store, for previews.
+    /// Deliberately not `#if DEBUG`: `#Preview` bodies compile in Release too,
+    /// and `PreviewData` — which this is useless without — isn't gated either.
     static var preview: AppState {
         let state = AppState()
         state.bootstrap(context: PreviewData.container.mainContext)
         return state
     }
-    #endif
 
     /// Fetch the single household (creating it on first launch) and run
     /// housekeeping that turns past plans into cooked-history.

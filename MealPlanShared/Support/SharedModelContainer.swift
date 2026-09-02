@@ -16,6 +16,12 @@ enum SharedStore {
 
     static let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "persistence")
 
+    /// Whether the store that was opened is actually mirroring to CloudKit, or
+    /// quietly fell back to the local App-Group file because the container
+    /// couldn't be reached (an unprovisioned entitlement, no iCloud account).
+    /// Written once while the container is built and only read afterwards.
+    nonisolated(unsafe) private(set) static var isMirroringToCloudKit = false
+
     static var models: [any PersistentModel.Type] {
         [
             Household.self,
@@ -51,6 +57,10 @@ enum SharedStore {
     /// Build the container. `cloudKit` is true only for the main app.
     /// Safe to call from any thread — no `mainContext` access here.
     static func container(cloudKit: Bool, inMemory: Bool = false) -> ModelContainer {
+        // Must happen before the store is opened: it replaces the shared
+        // transformer Core Data uses for every `[String]` attribute.
+        LenientSecureUnarchiveTransformer.register()
+
         let schema = makeSchema()
 
         if inMemory {
@@ -64,15 +74,34 @@ enum SharedStore {
                 url: storeURL,
                 cloudKitDatabase: .private(cloudKitContainerID)
             )
-            if let c = try? ModelContainer(for: schema, configurations: [cloud]) { return c }
+            if let c = try? ModelContainer(for: schema, configurations: [cloud]) {
+                isMirroringToCloudKit = true
+                return c
+            }
             logger.error("CloudKit store unavailable, using on-device storage")
         }
 
+        isMirroringToCloudKit = false
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {
             return try ModelContainer(for: schema, configurations: [local])
         } catch {
             fatalError("Could not open the MealPlan store: \(error)")
+        }
+    }
+
+    /// Open the shared store without CloudKit and without trapping. The
+    /// widgets use this: a timeline provider that crashes takes the whole
+    /// widget down on every refresh, where an empty view merely looks empty.
+    static func containerIfAvailable() -> ModelContainer? {
+        LenientSecureUnarchiveTransformer.register()
+        let schema = makeSchema()
+        let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        do {
+            return try ModelContainer(for: schema, configurations: [local])
+        } catch {
+            logger.error("Could not open the MealPlan store: \(error.localizedDescription)")
+            return nil
         }
     }
 

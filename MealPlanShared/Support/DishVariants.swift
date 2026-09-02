@@ -56,20 +56,33 @@ enum DishVariants {
     /// Puts `dish` into `other`'s group, creating one if `other` has none. The
     /// group name defaults to the shared part of the two dish names, so
     /// "Smash Burger" + "Halloumi Burger" becomes a "Burger" group.
+    ///
+    /// Pass `dishes` when `dish` might already belong to a group: moving it out
+    /// can leave a single recipe behind, and a group of one is dissolved rather
+    /// than kept.
     @MainActor
     static func join(_ dish: Dish, with other: Dish, in dishes: [Dish] = []) {
-        guard dish !== other else { return }
+        guard dish !== other, dish.variantGroupID == nil || dish.variantGroupID != other.variantGroupID
+        else { return }
+
+        let abandoned = dish.variantGroupID == nil ? [] : siblings(of: dish, in: dishes)
+
         if let groupID = other.variantGroupID {
             dish.variantGroupID = groupID
             dish.variantGroupName = other.variantGroupName
-            return
+        } else {
+            let groupID = UUID()
+            let name = sharedName(other.name, dish.name)
+            other.variantGroupID = groupID
+            other.variantGroupName = name
+            dish.variantGroupID = groupID
+            dish.variantGroupName = name
         }
-        let groupID = UUID()
-        let name = sharedName(other.name, dish.name)
-        other.variantGroupID = groupID
-        other.variantGroupName = name
-        dish.variantGroupID = groupID
-        dish.variantGroupName = name
+
+        if abandoned.count == 1 {
+            abandoned[0].variantGroupID = nil
+            abandoned[0].variantGroupName = nil
+        }
     }
 
     /// Takes a dish out of its group. When that would leave a single dish

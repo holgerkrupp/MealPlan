@@ -225,3 +225,16 @@ private struct OnboardingPageView: View {
 #Preview {
     OnboardingView()
 }
+
+#Preview("One page") {
+    OnboardingPageView(page: OnboardingPage(
+        title: String(localized: "Plan the week"),
+        summary: String(localized: "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty."),
+        systemImage: "calendar",
+        tint: .blue,
+        bullets: [
+            String(localized: "Drag a dish from the library onto any card."),
+            String(localized: "Rename, add, or reorder your meals in Settings.")
+        ]
+    ))
+}

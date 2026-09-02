@@ -57,3 +57,15 @@ struct TagFilterStrip: View {
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }
 }
+
+#Preview {
+    @Previewable @State var filter = DishFilter()
+    VStack(alignment: .leading) {
+        TagFilterStrip(filter: $filter, tags: ["vegan", "schnell", "Ofen", "Familienessen", "Pasta"])
+        Text(verbatim: DishTag.sorted(Array(filter.tags)).joined(separator: " · "))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 16)
+    }
+    .padding(.vertical)
+}

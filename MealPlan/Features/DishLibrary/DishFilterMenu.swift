@@ -111,3 +111,20 @@ struct DishFilterMenu: View {
         }
     }
 }
+
+#Preview {
+    @Previewable @State var filter = DishFilter()
+    NavigationStack {
+        List {
+            LabeledContent(String(localized: "Sort by"), value: filter.sort.localizedName)
+            LabeledContent(String(localized: "Tags"), value: DishTag.sorted(Array(filter.tags)).joined(separator: ", "))
+        }
+        .toolbar {
+            DishFilterMenu(
+                filter: $filter,
+                availableCollections: ["Weeknight", "Weihnachten"],
+                availableTags: ["vegan", "schnell", "Ofen"]
+            )
+        }
+    }
+}

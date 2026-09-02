@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 import SFSymbolSelector
 
 /// Symbol lists for dish placeholders. Food symbols come first, then the
@@ -150,4 +151,11 @@ struct DishGlyphPicker: View {
             .padding(.vertical, 6)
         }
     }
+}
+
+#Preview {
+    Form {
+        DishGlyphPicker(dish: PreviewData.dish, tint: DishGlyph.tint(forName: PreviewData.dish.name))
+    }
+    .modelContainer(PreviewData.container)
 }

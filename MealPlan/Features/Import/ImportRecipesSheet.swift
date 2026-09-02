@@ -183,3 +183,11 @@ struct ImportRecipesSheet: View {
         dismiss()
     }
 }
+
+/// Points at a file that isn't there, which is exactly the failure path worth
+/// looking at — the happy path needs a real export to read.
+#Preview("Unreadable file") {
+    ImportRecipesSheet(fileURL: URL(fileURLWithPath: "/tmp/Paprika-Export.paprikarecipes"))
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
