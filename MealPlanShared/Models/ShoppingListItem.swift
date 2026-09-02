@@ -5,6 +5,10 @@ import SwiftData
 /// each time the list is regenerated; manual lines are kept untouched.
 @Model
 final class ShoppingListItem {
+    /// Stable identity across devices, so sharing sync can recognise "the same
+    /// line" instead of duplicating it on every merge. Added after launch, so
+    /// every property carries a default for the lightweight migration.
+    var uuid: UUID = UUID()
     var name: String = ""
     var normalizedName: String = ""
     var categoryRaw: String = IngredientCategory.other.rawValue

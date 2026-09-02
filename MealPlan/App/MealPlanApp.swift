@@ -1,8 +1,10 @@
 import SwiftUI
 import SwiftData
+import CloudKit
 #if canImport(UIKit)
 import UIKit
-import CloudKit
+#elseif os(macOS)
+import AppKit
 #endif
 
 @main
@@ -17,6 +19,8 @@ struct MealPlanApp: App {
 
     #if canImport(UIKit)
     @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+    #elseif os(macOS)
+    @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
 
     var body: some Scene {
@@ -55,17 +59,24 @@ struct MealPlanApp: App {
 
 #if canImport(UIKit)
 /// Handles CloudKit share acceptance (opening a "join our household" link).
+///
+/// Only queues the invitation — actually accepting it needs a `ModelContext`
+/// to merge the shared household into, and that only exists once SwiftUI has
+/// built the view hierarchy. See `HouseholdShareInvitationInbox` and
+/// `RootView`'s drain of it.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
-        container.accept(cloudKitShareMetadata) { _, error in
-            if let error {
-                NSLog("Failed to accept household share: \(error.localizedDescription)")
-            }
-        }
+        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
+    }
+}
+#elseif os(macOS)
+/// macOS equivalent of the iOS `AppDelegate` hook above.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
+        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 }
 #endif

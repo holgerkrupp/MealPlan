@@ -1,8 +1,5 @@
 import SwiftUI
 import SwiftData
-#if canImport(UIKit)
-import CloudKit
-#endif
 
 @MainActor
 struct HouseholdView: View {
@@ -10,10 +7,16 @@ struct HouseholdView: View {
     @Environment(\.modelContext) private var context
 
     @State private var showingShareSheet = false
-    @State private var shareError: String?
 
     private var members: [HouseholdMember] {
         (appState.currentHousehold?.members ?? []).sorted { $0.dateAdded < $1.dateAdded }
+    }
+
+    /// Only the owner can invite further participants: a household that's
+    /// already shared and whose share this device didn't create is one this
+    /// device joined as an editor, not the owner.
+    private func canInvite(_ household: Household) -> Bool {
+        HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) ?? true
     }
 
     var body: some View {
@@ -37,7 +40,7 @@ struct HouseholdView: View {
                     }
                 }
 
-                if !appState.isGuest {
+                if !appState.isGuest, canInvite(household) {
                     Section {
                         Button {
                             showingShareSheet = true
@@ -75,49 +78,12 @@ struct HouseholdView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(AppSection.household.title)
-        #if canImport(UIKit)
         .sheet(isPresented: $showingShareSheet) {
             if let household = appState.currentHousehold {
-                CloudSharingView(
-                    householdName: household.name,
-                    householdUUID: household.uuid,
-                    onError: { shareError = $0.localizedDescription },
-                    onShareSaved: { participants in
-                        syncMembers(participants, into: household)
-                    }
-                )
-                .ignoresSafeArea()
+                HouseholdSharingView(household: household)
             }
         }
-        #endif
-        .alert(
-            String(localized: "Couldn’t start sharing"),
-            isPresented: Binding(get: { shareError != nil }, set: { if !$0 { shareError = nil } })
-        ) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: {
-            Text(shareError ?? "")
-        }
     }
-
-    #if canImport(UIKit)
-    private func syncMembers(_ participants: [CKShare.Participant], into household: Household) {
-        for existing in household.members ?? [] { context.delete(existing) }
-        for participant in participants {
-            let name = participant.userIdentity.nameComponents
-                .map { PersonNameComponentsFormatter().string(from: $0) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? String(localized: "Family member")
-            let role: MemberRole = participant.role == .owner
-                ? .owner
-                : (participant.permission == .readOnly ? .guest : .editor)
-            let member = HouseholdMember(name: name, role: role, isCurrentUser: participant.role == .owner)
-            member.household = household
-            context.insert(member)
-        }
-        try? context.save()
-    }
-    #endif
 }
 
 #Preview {

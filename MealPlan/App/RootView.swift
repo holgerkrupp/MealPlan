@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import CloudKit
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case plan, dishes, shopping, household, settings
@@ -47,6 +48,7 @@ struct RootView: View {
     @State private var showOnboarding = false
     @State private var didEvaluateOnboarding = false
     @State private var rootSheet: RootSheet?
+    @State private var sharingErrorMessage: String?
 
     var body: some View {
         Group {
@@ -93,6 +95,21 @@ struct RootView: View {
             #endif
         }
         .task { await evaluateOnboarding() }
+        .task { await acceptPendingCloudShares() }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
+            Task { await acceptPendingCloudShares() }
+        }
+        .task(id: appState.currentHousehold?.cloudKitShareIdentifier) {
+            await synchronizeSharedHouseholdRegularly()
+        }
+        .alert(
+            String(localized: "iCloud sharing needs attention"),
+            isPresented: Binding(get: { sharingErrorMessage != nil }, set: { if !$0 { sharingErrorMessage = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(sharingErrorMessage ?? "")
+        }
         // Everything the menu bar can reach from any section. Published here
         // rather than read from `AppState` directly so the menu items update —
         // and grey out — with the view hierarchy that owns them.
@@ -134,6 +151,45 @@ struct RootView: View {
             return
         }
         showOnboarding = true
+    }
+
+    /// Accepts any CloudKit share invitations that arrived while the app had
+    /// no `ModelContext` to accept them into yet (see `AppDelegate`), merging
+    /// each into the store and switching to it.
+    private func acceptPendingCloudShares() async {
+        for metadata in HouseholdShareInvitationInbox.shared.drain() {
+            do {
+                let (household, isGuest) = try await HouseholdCloudSharingService.accept(metadata, context: context)
+                appState.currentHousehold = household
+                appState.isGuest = isGuest
+                // Mirrors the household-specific half of `AppState.bootstrap`
+                // rather than calling it outright: bootstrap re-fetches
+                // "the first household", which could pick a different local
+                // one if this device had already seeded its own.
+                MealType.ensure(for: household, context: context)
+                CookedLogMaintenance.run(for: household, context: context)
+                MealRoutineScheduler.apply(for: household, context: context, memberName: appState.currentMemberName)
+            } catch {
+                sharingErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Keeps a shared household's data in sync with iCloud while the app is
+    /// open. Cancelled and restarted automatically whenever the current
+    /// household's share identifier changes (joining, leaving, or switching).
+    private func synchronizeSharedHouseholdRegularly() async {
+        guard let household = appState.currentHousehold, household.cloudKitShareIdentifier != nil else { return }
+        while !Task.isCancelled {
+            do {
+                try await HouseholdCloudSharingService.synchronize(household, context: context)
+            } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
+                // Offline editing remains available; the next pass retries.
+            } catch {
+                sharingErrorMessage = error.localizedDescription
+            }
+            try? await Task.sleep(for: .seconds(8))
+        }
     }
 
     private func hasDishes(waitingUpTo timeout: Duration) async -> Bool {
