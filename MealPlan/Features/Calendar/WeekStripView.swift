@@ -2,9 +2,10 @@ import SwiftUI
 import SwiftData
 
 /// The compact week picker above the plan: one button per day of the visible
-/// week, with arrows to step a week back or forward. A day whose number is bold
-/// (and carries a dot) already has meals planned, so a glance shows how full
-/// the week is.
+/// week, with arrows to step a week back or forward. A progress ring around each
+/// day number fills as that day's meals get planned — a complete ring (and a
+/// bold number) means every meal is covered — so a glance shows how full the
+/// week is.
 ///
 /// The plan's own sections are always Monday-based (that is what "week 36"
 /// means), but this strip follows the user's locale, so it starts on Sunday
@@ -19,6 +20,8 @@ struct WeekStripView: View {
     var onSelect: (Date) -> Void
 
     @Query private var entries: [MealPlanEntry]
+    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
+    private var mealTypes: [MealType]
 
     /// Space between two day cells; the pill's geometry is derived from it.
     private static let cellSpacing: CGFloat = 4
@@ -45,9 +48,18 @@ struct WeekStripView: View {
         (0..<7).map { weekStart.adding(days: $0) }
     }
 
-    /// The days of this week that already have at least one dish planned.
-    private var plannedDayIDs: Set<String> {
-        Set(entries.map(\.date.dayID))
+    /// How much of `day` is planned, 0…1 — the share of the household's meals
+    /// that have at least one un-skipped entry. Drives the ring around the
+    /// day number.
+    private func mealFraction(on day: Date) -> Double {
+        guard !mealTypes.isEmpty else { return 0 }
+        let planned = Set(
+            entries
+                .filter { $0.date.isSameDay(as: day) && !$0.skipped }
+                .map(\.mealKey)
+        )
+        let covered = mealTypes.filter { planned.contains($0.key) }.count
+        return Double(covered) / Double(mealTypes.count)
     }
 
     /// Month (and year, when the week straddles two) for the shown week.
@@ -127,44 +139,61 @@ struct WeekStripView: View {
     private func dayCell(_ day: Date) -> some View {
         let isSelected = day.isSameDay(as: selectedDate)
         let isToday = day.isSameDay(as: .now)
-        let hasMeals = plannedDayIDs.contains(day.dayID)
+        let fraction = mealFraction(on: day)
+        let fullyPlanned = fraction >= 1
 
         return Button {
             onSelect(day)
         } label: {
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 Text(day.formatted(.dateTime.weekday(.narrow)))
                     .font(.caption2)
                     .foregroundStyle(.secondary)
 
-                Text(day.formatted(.dateTime.day()))
-                    .font(.subheadline.weight(hasMeals ? .bold : .regular))
-                    .monospacedDigit()
-                    .foregroundStyle(numberStyle(isSelected: isSelected, isToday: isToday))
-                    .frame(width: 32, height: 32)
-                    .background {
-                        if isSelected { Circle().fill(.tint) }
-                    }
-                    // Today is a ring, so it still reads as today when another
-                    // day carries the filled selection.
-                    .overlay {
-                        if isToday {
-                            Circle()
-                                .strokeBorder(Color.accentColor, lineWidth: 2)
-                                .padding(-2)
-                        }
-                    }
+                ZStack {
+                    // Selection fill sits inside the ring so both stay legible.
+                    if isSelected { Circle().fill(.tint).padding(2) }
 
-                Circle()
-                    .fill(hasMeals ? AnyShapeStyle(.tint) : AnyShapeStyle(.clear))
-                    .frame(width: 4, height: 4)
+                    Circle()
+                        .stroke(
+                            isSelected ? AnyShapeStyle(.white.opacity(0.3)) : AnyShapeStyle(.quaternary),
+                            lineWidth: 3
+                        )
+                    Circle()
+                        .trim(from: 0, to: fraction)
+                        .stroke(
+                            isSelected ? Color.white : Color.accentColor,
+                            style: StrokeStyle(lineWidth: 3, lineCap: .round)
+                        )
+                        .rotationEffect(.degrees(-90))
+                        .animation(.snappy, value: fraction)
+
+                    Text(day.formatted(.dateTime.day()))
+                        .font(.subheadline.weight(fullyPlanned ? .bold : .regular))
+                        .monospacedDigit()
+                        .foregroundStyle(numberStyle(isSelected: isSelected, isToday: isToday))
+                }
+                .frame(width: 32, height: 32)
+                // Today is an outer ring, so it still reads as today when
+                // another day carries the filled selection.
+                .overlay {
+                    if isToday && !isSelected {
+                        Circle()
+                            .strokeBorder(Color.accentColor, lineWidth: 2)
+                            .padding(-2)
+                    }
+                }
             }
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .accessibilityLabel(day.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-        .accessibilityValue(hasMeals ? String(localized: "Meals planned") : String(localized: "Nothing planned"))
+        .accessibilityValue(
+            fullyPlanned
+                ? String(localized: "All meals planned")
+                : (fraction > 0 ? String(localized: "Partly planned") : String(localized: "Nothing planned"))
+        )
         .accessibilityAddTraits(isSelected ? [.isSelected] : [])
     }
 

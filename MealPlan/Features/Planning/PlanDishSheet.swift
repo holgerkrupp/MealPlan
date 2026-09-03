@@ -29,12 +29,19 @@ struct PlanDishSheet: View {
             }
 
             Section {
-                DatePicker(String(localized: "Day"), selection: $date, displayedComponents: .date)
-                Picker(String(localized: "Meal"), selection: $mealKey) {
-                    ForEach(mealTypes) { meal in
-                        Label(meal.name, systemImage: meal.symbolName).tag(meal.key)
-                    }
-                }
+                MealPlannerStrip(
+                    planningDish: dish,
+                    planServings: servings,
+                    planNote: note.isEmpty ? nil : note,
+                    selectedDate: $date,
+                    selectedMealKey: $mealKey
+                )
+                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+            } header: {
+                Text(String(localized: "Tap a slot to plan it"))
+            }
+
+            Section {
                 Stepper(value: $servings, in: 1...50) {
                     Text(String(localized: "\(servings) servings"))
                 }
@@ -64,11 +71,8 @@ struct PlanDishSheet: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem(placement: .cancellationAction) {
-                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
-            }
             ToolbarItem(placement: .confirmationAction) {
-                Button(String(localized: "Plan"), action: plan)
+                Button(String(localized: "Done")) { dismiss() }
             }
         }
         .onAppear {
@@ -94,20 +98,6 @@ struct PlanDishSheet: View {
             system: appState.unitSystem,
             roundsAmounts: appState.roundsDisplayedAmounts
         )
-    }
-
-    private func plan() {
-        guard !mealKey.isEmpty else { return }
-        let entry = MealPlanEntry(date: date, mealKey: mealKey, dish: dish)
-        entry.household = appState.currentHousehold
-        entry.servingsOverride = servings == dish.servings ? nil : servings
-        entry.note = note.isEmpty ? nil : note
-        entry.plannedByName = appState.currentMemberName
-        entry.sortIndex = MealPlanner.nextSortIndex(for: date, mealKey: mealKey, context: context)
-        context.insert(entry)
-        try? context.save()
-        SharedStore.reloadWidgets()
-        dismiss()
     }
 }
 

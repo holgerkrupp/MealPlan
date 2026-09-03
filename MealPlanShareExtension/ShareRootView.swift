@@ -14,6 +14,9 @@ struct ShareRootView: View {
     @State private var date = Date.now
     @State private var mealKey = ""
     @State private var meals: [(key: String, name: String, symbol: String)] = []
+    /// Meal keys already planned (un-skipped) per day, keyed by `dayID` — feeds
+    /// the plan stripe's ring / filled-square state.
+    @State private var plannedByDay: [String: Set<String>] = [:]
     @State private var saveMessage = String(localized: "Saved to MealPlan")
 
     private let container = SharedStore.container(cloudKit: false)
@@ -83,14 +86,24 @@ struct ShareRootView: View {
             }
 
             Section {
-                Toggle(String(localized: "Also plan it"), isOn: $plan)
+                Toggle(String(localized: "Also plan it"), isOn: $plan.animation(.snappy))
                 if plan {
-                    DatePicker(String(localized: "Day"), selection: $date, displayedComponents: .date)
-                    Picker(String(localized: "Meal"), selection: $mealKey) {
-                        ForEach(meals, id: \.key) { meal in
-                            Label(meal.name, systemImage: meal.symbol).tag(meal.key)
-                        }
-                    }
+                    MealPlannerStripCore(
+                        slots: meals.map { MealStripSlot(key: $0.key, name: $0.name, symbolName: $0.symbol) },
+                        plannedKeys: { plannedByDay[$0.dayID] ?? [] },
+                        selectedDate: $date,
+                        selectedMealKey: $mealKey,
+                        onSelect: { day, key in
+                            date = day.startOfDay
+                            mealKey = key
+                        },
+                        selectHint: String(localized: "Plans it here")
+                    )
+                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                }
+            } footer: {
+                if plan {
+                    Text(String(localized: "Tap a slot to choose the day and meal."))
                 }
             }
         }
@@ -101,6 +114,7 @@ struct ShareRootView: View {
     @MainActor
     private func load() async {
         loadMeals()
+        loadPlannedDays()
         switch payload {
         case .empty:
             phase = .failed(String(localized: "Nothing to import here."))
@@ -145,6 +159,22 @@ struct ShareRootView: View {
         if mealKey.isEmpty || !meals.contains(where: { $0.key == mealKey }) {
             mealKey = meals.first(where: { $0.key == "dinner" })?.key ?? meals.first?.key ?? "dinner"
         }
+    }
+
+    /// Read the existing plan so the stripe can show which days are already
+    /// full. A fortnight back is plenty of context for choosing a slot.
+    @MainActor
+    private func loadPlannedDays() {
+        let context = container.mainContext
+        let floor = Date.now.startOfDay.adding(days: -14)
+        let fetched = (try? context.fetch(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.date >= floor }
+        ))) ?? []
+        var map: [String: Set<String>] = [:]
+        for entry in fetched where !entry.skipped {
+            map[entry.date.dayID, default: []].insert(entry.mealKey)
+        }
+        plannedByDay = map
     }
 
     @MainActor

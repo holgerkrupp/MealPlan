@@ -11,8 +11,6 @@ struct EntryQuickActionsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
 
     @State private var date: Date = .now
     @State private var mealKey: String = ""
@@ -45,16 +43,17 @@ struct EntryQuickActionsSheet: View {
                     }
                 }
 
-                Section(String(localized: "When")) {
-                    DatePicker(String(localized: "Day"), selection: $date, displayedComponents: .date)
-                    Picker(String(localized: "Meal"), selection: $mealKey) {
-                        if !mealTypes.contains(where: { $0.key == mealKey }) {
-                            Text(MealType.legacyName(for: mealKey)).tag(mealKey)
-                        }
-                        ForEach(mealTypes) { meal in
-                            Label(meal.name, systemImage: meal.symbolName).tag(meal.key)
-                        }
-                    }
+                Section {
+                    MealPlannerStrip(
+                        reschedulingEntry: entry,
+                        selectedDate: $date,
+                        selectedMealKey: $mealKey
+                    )
+                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                } header: {
+                    Text(String(localized: "When"))
+                } footer: {
+                    Text(String(localized: "Tap a slot to move this meal."))
                 }
 
                 Section(String(localized: "For this meal")) {

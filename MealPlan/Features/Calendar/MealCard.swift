@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 
 /// One meal (Breakfast, Lunch, …) on one day, shown as its own card in the
 /// day's row. Each meal gets a stable accent colour; an empty card shows the
@@ -88,6 +89,10 @@ struct MealCard: View {
                         // swallows it and the meal could never be dragged to
                         // another day. Same reasoning as `DishSidebarView`.
                         entryRow(entry)
+                            .appEntityIdentifier(EntityIdentifier(
+                                for: MealPlanEntryEntity.self,
+                                identifier: entry.uuid
+                            ))
                             .contentShape(Rectangle())
                             .onTapGesture { selectedEntry = entry }
                             .draggable(DishReference(

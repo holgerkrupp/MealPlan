@@ -68,7 +68,9 @@ final class HouseholdShareInvitationInbox {
 @MainActor
 enum HouseholdCloudSharingService {
     private static let rootRecordType = "SharedHousehold"
-    private static let rootRecordName = "Household"
+    // Referenced from the nonisolated `ShareLocator` computed properties, so it
+    // must not pick up the enum's `@MainActor` isolation.
+    private nonisolated static let rootRecordName = "Household"
     private static let payloadKey = "backup"
     private static let householdIDKey = "householdID"
     private static let modifiedAtKey = "modifiedAt"

@@ -46,6 +46,16 @@
         }
       }
     },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
     "%@, %lld variants" : {
       "localizations" : {
         "en" : {
@@ -197,6 +207,9 @@
     "%lld min" : {
 
     },
+    "%lld people currently have access." : {
+
+    },
     "%lld photos" : {
 
     },
@@ -258,6 +271,9 @@
         }
       }
     },
+    "1 person currently has access." : {
+
+    },
     "A little going on" : {
       "localizations" : {
         "de" : {
@@ -309,6 +325,9 @@
       }
     },
     "About" : {
+
+    },
+    "Access" : {
 
     },
     "Active" : {
@@ -499,6 +518,9 @@
           }
         }
       }
+    },
+    "All meals planned" : {
+
     },
     "All-day event" : {
       "localizations" : {
@@ -1050,6 +1072,9 @@
     "Copy from last week" : {
 
     },
+    "Copy Invitation Link" : {
+
+    },
     "Couldn’t export recipe" : {
 
     },
@@ -1098,9 +1123,6 @@
 
     },
     "Couldn’t scan recipe" : {
-
-    },
-    "Couldn’t start sharing" : {
 
     },
     "Create a backup…" : {
@@ -1355,6 +1377,9 @@
     "Emoji" : {
 
     },
+    "Empty" : {
+
+    },
     "Event notes, invitees, locations and links are never read, shown or stored." : {
       "localizations" : {
         "de" : {
@@ -1438,6 +1463,9 @@
 
     },
     "Every week" : {
+
+    },
+    "Everyone who accepts sees the same dishes and plan." : {
 
     },
     "Everyone you invite sees the same plan and dishes. You can invite people as editors or view-only guests." : {
@@ -1726,7 +1754,19 @@
     "iCloud" : {
 
     },
+    "iCloud did not create an invitation link. Please try again." : {
+
+    },
+    "iCloud did not return the saved collaboration record." : {
+
+    },
     "iCloud environment" : {
+
+    },
+    "iCloud sharing is unavailable on this device." : {
+
+    },
+    "iCloud sharing needs attention" : {
 
     },
     "Icon" : {
@@ -1876,6 +1916,9 @@
     "Ingredients, one per line" : {
 
     },
+    "Invitation Copied" : {
+
+    },
     "Invite people as editors, or as view-only guests who can look but not change." : {
       "localizations" : {
         "de" : {
@@ -1885,6 +1928,9 @@
           }
         }
       }
+    },
+    "Invite someone to plan with you" : {
+
     },
     "Invite your family from the Household section — everyone sees the same plan and dishes." : {
       "localizations" : {
@@ -1908,6 +1954,9 @@
           }
         }
       }
+    },
+    "Join %@ in MealPlan" : {
+
     },
     "Jump to date" : {
       "localizations" : {
@@ -2163,6 +2212,9 @@
           }
         }
       }
+    },
+    "Moves this meal here" : {
+
     },
     "Name" : {
 
@@ -2515,6 +2567,9 @@
         }
       }
     },
+    "Only the household owner can invite people." : {
+
+    },
     "Open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
       "localizations" : {
         "de" : {
@@ -2567,7 +2622,13 @@
         }
       }
     },
+    "Open the Camera app on the other phone and point it at this code." : {
+
+    },
     "Open the page with the actual recipe on it, then try again." : {
+
+    },
+    "Open this invitation to plan meals together in MealPlan." : {
 
     },
     "Optional. When you say who a calendar belongs to, the plan can show who is still busy around a meal. MealPlan never guesses this from calendar names." : {
@@ -2579,6 +2640,9 @@
           }
         }
       }
+    },
+    "Or scan nearby" : {
+
     },
     "Or type any emoji" : {
 
@@ -2606,6 +2670,9 @@
 
     },
     "Pantry staples" : {
+
+    },
+    "Partly planned" : {
 
     },
     "Pasta" : {
@@ -2733,6 +2800,12 @@
     "Plan this dish…" : {
 
     },
+    "Planned" : {
+
+    },
+    "Planned “%@” for %@" : {
+
+    },
     "Planned “%@” for %@." : {
       "localizations" : {
         "en" : {
@@ -2754,6 +2827,9 @@
       }
     },
     "Planned meals" : {
+
+    },
+    "Plans this dish here" : {
 
     },
     "Pork" : {
@@ -2802,6 +2878,9 @@
         }
       }
     },
+    "Preparing a secure iCloud invitation…" : {
+
+    },
     "Preview" : {
 
     },
@@ -2822,6 +2901,9 @@
       }
     },
     "Production" : {
+
+    },
+    "QR code for the household invitation" : {
 
     },
     "Rating" : {
@@ -3231,6 +3313,9 @@
         }
       }
     },
+    "Send Invitation" : {
+
+    },
     "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead." : {
       "localizations" : {
         "de" : {
@@ -3273,6 +3358,9 @@
     "Share / Save" : {
 
     },
+    "Share %@" : {
+
+    },
     "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
       "localizations" : {
         "de" : {
@@ -3293,6 +3381,9 @@
         }
       }
     },
+    "Share the invitation" : {
+
+    },
     "Share the list or send it to Reminders." : {
       "localizations" : {
         "de" : {
@@ -3312,6 +3403,9 @@
           }
         }
       }
+    },
+    "Sharing unavailable" : {
+
     },
     "Shop for" : {
 
@@ -3544,6 +3638,12 @@
         }
       }
     },
+    "Tap a slot to move this meal." : {
+
+    },
+    "Tap a slot to plan it" : {
+
+    },
     "Template name" : {
 
     },
@@ -3562,6 +3662,12 @@
     "That PDF couldn’t be read." : {
 
     },
+    "The household stays in iCloud." : {
+
+    },
+    "The invitation could not be prepared." : {
+
+    },
     "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty." : {
       "localizations" : {
         "de" : {
@@ -3571,6 +3677,12 @@
           }
         }
       }
+    },
+    "The shared household could not be found." : {
+
+    },
+    "The shared household did not contain downloadable data." : {
+
     },
     "The shopping list is built from the days you plan to cook, so it matches what is actually on the calendar." : {
       "localizations" : {
@@ -3607,7 +3719,19 @@
     "This file" : {
 
     },
+    "This household was shared by a newer version of MealPlan." : {
+
+    },
+    "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app." : {
+
+    },
     "This month" : {
+
+    },
+    "This one-time invitation grants edit access, so only send it to someone you trust." : {
+
+    },
+    "This one-time invitation grants view-only access." : {
 
     },
     "This store holds %lld family records — two devices each created one before they first synced. Restoring a backup folds them back into a single family." : {
@@ -3988,6 +4112,24 @@
 
     },
     "Your week is ready as a PDF." : {
+
+    },
+    "Scan a recipe" : {
+
+    },
+    "Scan with camera" : {
+
+    },
+    "Choose photos or screenshots" : {
+
+    },
+    "Point the camera at a recipe book, or pick screenshots. Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
+
+    },
+    "No readable text was found. Try again with more light or a straighter angle." : {
+
+    },
+    "Check the split is right, then save. The dish opens for editing and is marked to review." : {
 
     }
   },

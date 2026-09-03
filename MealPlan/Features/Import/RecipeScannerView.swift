@@ -11,7 +11,7 @@ struct RecipeScannerView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var photoItems: [PhotosPickerItem] = []
-    @State private var showingCamera = false
+    @State private var showingDocumentScanner = false
     @State private var showingPDFPicker = false
     @State private var isScanning = false
     @State private var name = ""
@@ -26,8 +26,8 @@ struct RecipeScannerView: View {
                     Label(String(localized: "Choose recipe photos"), systemImage: "photo.on.rectangle")
                 }
                 #if os(iOS)
-                Button { showingCamera = true } label: {
-                    Label(String(localized: "Photograph a page"), systemImage: "camera")
+                Button { showingDocumentScanner = true } label: {
+                    Label(String(localized: "Scan with camera"), systemImage: "camera.viewfinder")
                 }
                 #endif
                 Button { showingPDFPicker = true } label: {
@@ -68,8 +68,8 @@ struct RecipeScannerView: View {
             Task { await scanPhotos(items) }
         }
         #if os(iOS)
-        .sheet(isPresented: $showingCamera) {
-            CameraPicker { data in Task { await scan([data]) } }
+        .fullScreenCover(isPresented: $showingDocumentScanner) {
+            DocumentScanner { pages in Task { await scan(pages) } }
                 .ignoresSafeArea()
         }
         #endif
@@ -116,7 +116,7 @@ struct RecipeScannerView: View {
                 errorMessage = String(localized: "No readable text was found.")
                 return
             }
-            let draft = ScannedRecipeParser.parse(pages.joined(separator: "\n\n"))
+            let draft = await RecipeExtractor.extract(from: pages.joined(separator: "\n\n"))
             if name.isEmpty { name = draft.name }
             ingredients = [ingredients, draft.ingredientLines.joined(separator: "\n")]
                 .filter { !$0.isEmpty }.joined(separator: "\n")

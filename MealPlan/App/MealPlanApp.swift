@@ -30,12 +30,17 @@ struct MealPlanApp: App {
                 .environment(calendarStore)
                 .task {
                     appState.bootstrap(context: container.mainContext)
+                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                     await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
                     await calendarStore.start()
+                }
+                .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                 }
                 .onChange(of: scenePhase) { _, phase in
                     // Calendar access can be revoked while the app is away.
                     guard phase == .active else { return }
+                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                     Task { await calendarStore.applicationBecameActive() }
                 }
                 .onOpenURL { url in

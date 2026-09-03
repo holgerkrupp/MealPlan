@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import AppIntents
 import ESADesignKit
 
 @MainActor
@@ -75,6 +76,7 @@ struct DishDetailView: View {
             .padding()
         }
         .navigationTitle(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
+        .appEntityIdentifier(EntityIdentifier(for: DishEntity.self, identifier: dish.uuid))
         #if os(iOS)
         .navigationBarTitleDisplayMode(usesCoverHero ? .inline : .large)
         #endif

@@ -120,5 +120,12 @@ enum SharedStore {
         #if canImport(WidgetKit)
         WidgetCenter.shared.reloadAllTimelines()
         #endif
+        NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
     }
+}
+
+extension Notification.Name {
+    /// Posted after app data that can appear in widgets, Spotlight, or Siri
+    /// changes. The main app debounces it before refreshing its semantic index.
+    static let mealPlanDataDidChange = Notification.Name("de.holgerkrupp.mealplan.dataDidChange")
 }

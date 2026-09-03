@@ -13,6 +13,7 @@ struct DishLibraryView: View {
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
     @State private var showingFilePicker = false
+    @State private var showingScanner = false
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
     /// Driven by the menu bar's Find command so ⌘F lands in the search field.
@@ -135,6 +136,11 @@ struct DishLibraryView: View {
             }
             if !appState.isGuest {
                 ToolbarItem(placement: .secondaryAction) {
+                    Button(String(localized: "Scan a recipe"), systemImage: "camera.viewfinder") {
+                        showingScanner = true
+                    }
+                }
+                ToolbarItem(placement: .secondaryAction) {
                     Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
                         showingFilePicker = true
                     }
@@ -156,6 +162,12 @@ struct DishLibraryView: View {
         }
         .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
         .sheet(item: $importingFile) { ImportRecipesSheet(fileURL: $0.url) }
+        .sheet(isPresented: $showingScanner) {
+            ScanRecipeSheet { dish in
+                newDish = dish
+                editingNewDish = true
+            }
+        }
         .fileImporter(
             isPresented: $showingFilePicker,
             allowedContentTypes: RecipeFileType.importableContentTypes
