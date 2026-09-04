@@ -73,9 +73,15 @@ final class MealPlanEntry {
         set { reactionRaw = newValue?.rawValue }
     }
 
-    /// Effective head-count for this occasion.
+    /// Effective head-count for this occasion: an override set for this one
+    /// meal, otherwise the household's standard number of portions, which
+    /// scales every dish to the family's size on its own. Only where no
+    /// household is attached — transient entries in tests and previews — does
+    /// the dish's own recipe yield stand in.
     var effectiveServings: Int {
-        servingsOverride ?? dish?.servings ?? 2
+        if let servingsOverride { return max(1, servingsOverride) }
+        if let household { return household.scalingServings }
+        return max(1, dish?.servings ?? Household.defaultStandardServings)
     }
 
     /// What to call this meal in lists, widgets and exports: the dish, the

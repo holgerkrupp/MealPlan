@@ -23,7 +23,10 @@ enum MealPlanner {
     ) -> MealPlanEntry {
         let entry = MealPlanEntry(date: date, mealKey: mealKey, dish: dish)
         entry.household = household
-        entry.servingsOverride = (servings != nil && servings != dish.servings) ? servings : nil
+        // An override is only worth storing when it differs from the standard
+        // the household already scales everything to.
+        let standard = household?.scalingServings ?? dish.servings
+        entry.servingsOverride = (servings != nil && servings != standard) ? servings : nil
         entry.note = note
         entry.plannedByName = memberName
         entry.sortIndex = nextSortIndex(for: date, mealKey: mealKey, context: context)
