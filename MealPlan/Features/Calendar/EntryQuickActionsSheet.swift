@@ -125,7 +125,7 @@ struct EntryQuickActionsSheet: View {
                 servings = entry.effectiveServings
             }
             .onChange(of: servings) { _, newValue in
-                entry.servingsOverride = (newValue == entry.dish?.servings) ? nil : newValue
+                entry.servingsOverride = (newValue == appState.standardServings) ? nil : newValue
                 touch()
             }
             .onChange(of: photoItem) { _, item in

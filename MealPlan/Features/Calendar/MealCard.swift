@@ -22,6 +22,8 @@ struct MealCard: View {
     @State private var showingPicker = false
     @State private var selectedEntry: MealPlanEntry?
     @State private var isTargeted = false
+    /// Bumped by every drop this card accepts, to drive the haptic.
+    @State private var acceptedDrops = 0
     /// Presented here rather than from inside the picker: on macOS the picker
     /// is a popover, and a sheet put up by a popover goes down with it.
     @State private var newDishToEdit: Dish?
@@ -88,6 +90,13 @@ struct MealCard: View {
                         // below still gets the mouse-down on macOS — a button
                         // swallows it and the meal could never be dragged to
                         // another day. Same reasoning as `DishSidebarView`.
+                        //
+                        // The context menu has to sit on that very same view:
+                        // on iPhone menu and drag both begin with a long press,
+                        // and only when they share a view does the system hand
+                        // the press to the menu and a drag out of it to the
+                        // meal. Attached one level up, as it used to be, the
+                        // menu won every press and nothing could be dragged.
                         entryRow(entry)
                             .appEntityIdentifier(EntityIdentifier(
                                 for: MealPlanEntryEntity.self,
@@ -95,14 +104,17 @@ struct MealCard: View {
                             ))
                             .contentShape(Rectangle())
                             .onTapGesture { selectedEntry = entry }
-                            .draggable(DishReference(
-                                dishUUID: entry.dish?.uuid ?? UUID(),
-                                name: entry.dish?.name ?? "",
-                                sourceEntryUUID: entry.uuid
-                            ))
+                            .draggable(dragPayload(entry)) { dragPreview(entry) }
+                            .contextMenu { entryMenu(entry) }
                             .accessibilityElement(children: .combine)
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAction { selectedEntry = entry }
+                            // Dragging needs an equivalent for VoiceOver and
+                            // the keyboard: the quick actions sheet moves the
+                            // same meal without a pointer.
+                            .accessibilityAction(named: String(localized: "Move to another day or meal…")) {
+                                selectedEntry = entry
+                            }
 
                         if !appState.isGuest {
                             Button {
@@ -117,7 +129,6 @@ struct MealCard: View {
                             .accessibilityLabel(String(localized: "Remove \(entry.displayTitle)"))
                         }
                     }
-                    .contextMenu { entryMenu(entry) }
                 }
                 if !appState.isGuest {
                     Button {
@@ -153,6 +164,11 @@ struct MealCard: View {
         .dropDestination(for: DishReference.self) { refs, _ in
             handleDrop(refs)
         } isTargeted: { isTargeted = $0 }
+        #if os(iOS)
+        // The card a meal came from is often off screen by the time it lands,
+        // so the drop is confirmed by feel as well as by the plan changing.
+        .sensoryFeedback(.success, trigger: acceptedDrops)
+        #endif
         // A popover on the Mac, so clicking anywhere outside puts it away —
         // a modal sheet there would trap the click and beep instead.
         #if os(macOS)
@@ -240,34 +256,53 @@ struct MealCard: View {
         .shadow(color: .black.opacity(onImage ? 0.5 : 0), radius: 2, y: 1)
     }
 
-    // MARK: - Drop
+    // MARK: - Drag and drop
+
+    /// The payload for dragging a planned meal. It carries the entry, so
+    /// dropping it elsewhere on the plan moves this meal rather than planning a
+    /// second helping of the same dish. `name` doubles as the plain-text
+    /// representation when the drag ends up in another app.
+    private func dragPayload(_ entry: MealPlanEntry) -> DishReference {
+        DishReference(
+            dishUUID: entry.dish?.uuid ?? UUID(),
+            name: entry.displayTitle,
+            sourceEntryUUID: entry.uuid
+        )
+    }
+
+    /// What travels under the finger or pointer. Worth spelling out: the
+    /// automatic preview snapshots the row as it sits on the card, which on a
+    /// photo card is white text over nothing.
+    private func dragPreview(_ entry: MealPlanEntry) -> some View {
+        HStack(spacing: 8) {
+            if entry.dish != nil {
+                DishThumbnail(dish: entry.dish, size: 28, cornerRadius: 6)
+            } else {
+                Image(systemName: "storefront")
+                    .font(.subheadline)
+                    .foregroundStyle(accent)
+            }
+            Text(entry.displayTitle)
+                .font(.subheadline.weight(.medium))
+                .lineLimit(1)
+                .foregroundStyle(Color.primary)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 6)
+        .background(.background, in: Capsule())
+        .overlay(Capsule().strokeBorder(accent.opacity(0.6), lineWidth: 1))
+    }
 
     private func handleDrop(_ refs: [DishReference]) -> Bool {
         guard !appState.isGuest, let ref = refs.first else { return false }
-
-        if let sourceUUID = ref.sourceEntryUUID,
-           let entry = fetchEntry(uuid: sourceUUID) {
-            MealPlanner.move(entry, to: date, mealKey: mealKey, memberName: appState.currentMemberName, context: context)
-            return true
-        }
-        if let dish = fetchDish(uuid: ref.dishUUID) {
-            MealPlanner.plan(
-                dish: dish, on: date, mealKey: mealKey,
-                household: appState.currentHousehold,
-                memberName: appState.currentMemberName,
-                context: context
-            )
-            return true
-        }
-        return false
-    }
-
-    private func fetchDish(uuid: UUID) -> Dish? {
-        try? context.fetch(FetchDescriptor<Dish>(predicate: #Predicate { $0.uuid == uuid })).first
-    }
-
-    private func fetchEntry(uuid: UUID) -> MealPlanEntry? {
-        try? context.fetch(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { $0.uuid == uuid })).first
+        let accepted = MealPlanner.drop(
+            ref, onto: date, mealKey: mealKey,
+            household: appState.currentHousehold,
+            memberName: appState.currentMemberName,
+            context: context
+        )
+        if accepted { acceptedDrops += 1 }
+        return accepted
     }
 
     // MARK: - Context menu

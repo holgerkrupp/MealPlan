@@ -61,6 +61,9 @@ struct MealPlanBackup: Codable, Sendable {
         var calendarStyleRaw: String
         var localeIdentifier: String
         var dateCreated: Date
+        /// Optional so backups written before the household had a standard
+        /// portion count still decode; `nil` reads back as the default 2.
+        var standardServings: Int? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -352,7 +355,8 @@ extension MealPlanBackup {
                 roundsDisplayedAmounts: primary?.roundsDisplayedAmounts ?? true,
                 calendarStyleRaw: primary?.calendarStyleRaw ?? CalendarStyle.week.rawValue,
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
-                dateCreated: primary?.dateCreated ?? .now
+                dateCreated: primary?.dateCreated ?? .now,
+                standardServings: primary?.scalingServings ?? Household.defaultStandardServings
             )
         )
         backup.includesPhotos = includePhotos

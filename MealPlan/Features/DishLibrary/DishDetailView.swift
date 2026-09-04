@@ -125,7 +125,7 @@ struct DishDetailView: View {
                 }
             }
         }
-        .onAppear { if targetServings == 0 { targetServings = max(1, dish.servings) } }
+        .onAppear { if targetServings == 0 { targetServings = appState.standardServings } }
         // Backs the Dish menu. It is the only publisher of this value, so the
         // whole menu greys out as soon as no recipe is open.
         .focusedSceneValue(\.dishCommands, dishCommands)
@@ -282,7 +282,7 @@ struct DishDetailView: View {
             if let cook = dish.cookTimeMinutes {
                 metric(String(localized: "Cook"), "\(cook) min")
             }
-            metric(String(localized: "Default"), String(localized: "\(dish.servings) servings"))
+            metric(String(localized: "Recipe"), String(localized: "\(dish.servings) servings"))
         }
     }
 

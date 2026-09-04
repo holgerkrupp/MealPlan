@@ -78,7 +78,7 @@ struct PlanDishSheet: View {
         .onAppear {
             date = defaultDate
             mealKey = resolvedMealKey
-            servings = max(1, dish.servings)
+            servings = appState.standardServings
         }
     }
 

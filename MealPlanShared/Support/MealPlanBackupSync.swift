@@ -33,6 +33,7 @@ enum MealPlanBackupSync {
         household.unitSystemRaw = backup.household.unitSystemRaw
         household.roundsDisplayedAmounts = backup.household.roundsDisplayedAmounts
         household.calendarStyleRaw = backup.household.calendarStyleRaw
+        household.standardServings = backup.household.standardServings ?? Household.defaultStandardServings
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         household.cloudKitShareIdentifier = shareIdentifier

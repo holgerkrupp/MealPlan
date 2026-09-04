@@ -1738,6 +1738,16 @@
     "How are we eating?" : {
 
     },
+    "How much you cook" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wie viel ihr kocht"
+          }
+        }
+      }
+    },
     "How to make it" : {
       "localizations" : {
         "de" : {
@@ -2202,6 +2212,16 @@
     },
     "Metric (g, ml, °C)" : {
 
+    },
+    "Move to another day or meal…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf anderen Tag oder andere Mahlzeit verschieben …"
+          }
+        }
+      }
     },
     "More" : {
       "localizations" : {
@@ -2970,12 +2990,42 @@
     "Recipe search" : {
 
     },
+    "Recipe yield" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezeptmenge"
+          }
+        }
+      }
+    },
     "Recipes" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rezepte"
+          }
+        }
+      }
+    },
+    "Recipes are scaled to this many portions automatically, whatever yield they were written for. You can still change the portions of a single meal when you plan it. This is shared with everyone in the family." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte werden automatisch auf diese Portionszahl umgerechnet, egal für wie viele sie geschrieben wurden. Für ein einzelnes Essen kannst du die Portionen beim Planen weiterhin ändern. Diese Einstellung teilt die ganze Familie."
+          }
+        }
+      }
+    },
+    "Recipes are scaled to your standard portions automatically. Everyone in the family shares this setting." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte werden automatisch auf eure Standard-Portionen umgerechnet. Diese Einstellung teilt die ganze Familie."
           }
         }
       }
@@ -3533,6 +3583,16 @@
     },
     "Spring" : {
 
+    },
+    "Standard portions" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standard-Portionen"
+          }
+        }
+      }
     },
     "Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you." : {
 

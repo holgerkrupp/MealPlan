@@ -31,7 +31,8 @@ struct CalendarHomeView: View {
             WeekStripView(
                 weekStart: $stripWeekStart,
                 selectedDate: appState.selectedDate,
-                visibleDayIDs: appState.visibleDayIDs
+                visibleDayIDs: appState.visibleDayIDs,
+                onDropDish: { references, day in drop(references, on: day) }
             ) { day in
                 goTo(day)
             }
@@ -193,6 +194,22 @@ struct CalendarHomeView: View {
             }
         }
         .animation(.snappy, value: appState.undoOffer?.id)
+    }
+
+    /// A meal dragged onto the week strip moves to that day and keeps the meal
+    /// it was planned in; the plan then scrolls there so the move is visible.
+    /// This is how a meal reaches a week that isn't on screen — the plan only
+    /// scrolls under a drag on iOS, and not at all on the Mac.
+    private func drop(_ references: [DishReference], on day: Date) -> Bool {
+        guard !appState.isGuest, let reference = references.first else { return false }
+        let accepted = MealPlanner.drop(
+            reference, onto: day, mealKey: nil,
+            household: appState.currentHousehold,
+            memberName: appState.currentMemberName,
+            context: context
+        )
+        if accepted { goTo(day) }
+        return accepted
     }
 
     private func goTo(_ date: Date) {
