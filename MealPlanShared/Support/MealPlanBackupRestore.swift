@@ -45,6 +45,9 @@ enum MealPlanBackupRestore {
     /// reach an object that is already gone.
     @MainActor
     static func deleteEverything(in context: ModelContext) throws {
+        try deleteAll(RecipeFeedItem.self, in: context)
+        try deleteAll(RecipeFeed.self, in: context)
+        try deleteAll(RecipeBookmark.self, in: context)
         try deleteAll(WeekTemplateEntry.self, in: context)
         try deleteAll(WeekTemplate.self, in: context)
         try deleteAll(ShoppingListItem.self, in: context)
@@ -245,6 +248,44 @@ enum MealPlanBackupRestore {
                 entry.template = template
                 context.insert(entry)
             }
+        }
+
+        for stored in backup.recipeFeeds ?? [] {
+            guard let siteURL = URL(string: stored.siteURLString),
+                  let feedURL = URL(string: stored.feedURLString) else { continue }
+            let feed = RecipeFeed(title: stored.title, siteURL: siteURL, feedURL: feedURL)
+            feed.uuid = stored.uuid
+            feed.etag = stored.etag
+            feed.lastModified = stored.lastModified
+            feed.lastFetchedAt = stored.lastFetchedAt
+            feed.firstFailureAt = stored.firstFailureAt
+            feed.consecutiveFailures = stored.consecutiveFailures
+            feed.nextRetryAt = stored.nextRetryAt
+            feed.lastHTTPStatus = stored.lastHTTPStatus
+            feed.lastErrorMessage = stored.lastErrorMessage
+            feed.dateAdded = stored.dateAdded
+            feed.household = household
+            context.insert(feed)
+            for storedItem in stored.items {
+                guard let url = URL(string: storedItem.urlString) else { continue }
+                let item = RecipeFeedItem(stableID: storedItem.stableID, title: storedItem.title, url: url)
+                item.uuid = storedItem.uuid
+                item.author = storedItem.author
+                item.summary = storedItem.summary
+                item.publishedAt = storedItem.publishedAt
+                item.fetchedAt = storedItem.fetchedAt
+                item.feed = feed
+                context.insert(item)
+            }
+        }
+
+        for stored in backup.recipeBookmarks ?? [] {
+            guard let url = URL(string: stored.urlString) else { continue }
+            let bookmark = RecipeBookmark(title: stored.title, url: url)
+            bookmark.uuid = stored.uuid
+            bookmark.dateAdded = stored.dateAdded
+            bookmark.household = household
+            context.insert(bookmark)
         }
     }
 

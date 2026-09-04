@@ -37,6 +37,9 @@ enum SharedStore {
             ShoppingListItem.self,
             WeekTemplate.self,
             WeekTemplateEntry.self,
+            RecipeFeed.self,
+            RecipeFeedItem.self,
+            RecipeBookmark.self,
         ]
     }
 

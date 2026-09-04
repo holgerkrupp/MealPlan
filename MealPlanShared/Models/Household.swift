@@ -85,6 +85,12 @@ final class Household {
     @Relationship(deleteRule: .cascade, inverse: \MealRoutine.household)
     var mealRoutines: [MealRoutine]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \RecipeFeed.household)
+    var recipeFeeds: [RecipeFeed]? = []
+
+    @Relationship(deleteRule: .cascade, inverse: \RecipeBookmark.household)
+    var recipeBookmarks: [RecipeBookmark]? = []
+
     /// The portions a household cooks by default, before anyone changes it.
     static let defaultStandardServings = 2
 

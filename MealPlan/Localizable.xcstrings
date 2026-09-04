@@ -4,6 +4,150 @@
     "" : {
 
     },
+    "Add recipe site" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptseite hinzufügen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add recipe site" } }
+      }
+    },
+    "Couldn’t subscribe" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonnieren nicht möglich" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t subscribe" } }
+      }
+    },
+    "Discover recipes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezepte entdecken" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Discover recipes" } }
+      }
+    },
+    "Delete feed" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Feed löschen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete feed" } }
+      }
+    },
+    "Enter a valid website address." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gib eine gültige Website-Adresse ein." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a valid website address." } }
+      }
+    },
+    "Find something good" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Finde etwas Gutes" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Find something good" } }
+      }
+    },
+    "MealPlan finds the site’s RSS, Atom or JSON feed automatically." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "MealPlan findet den RSS-, Atom- oder JSON-Feed der Website automatisch." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "MealPlan finds the site’s RSS, Atom or JSON feed automatically." } }
+      }
+    },
+    "No posts yet." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch keine Beiträge." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No posts yet." } }
+      }
+    },
+    "No recipe feed was advertised by this site." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Website weist keinen Rezept-Feed aus." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recipe feed was advertised by this site." } }
+      }
+    },
+    "No recipe found" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Rezept gefunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recipe found" } }
+      }
+    },
+    "Recipe article" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptbeitrag" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recipe article" } }
+      }
+    },
+    "Recipe sites" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptseiten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recipe sites" } }
+      }
+    },
+    "Refresh will retry later." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Aktualisierung wird später erneut versucht." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh will retry later." } }
+      }
+    },
+    "Save recipe" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezept speichern" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save recipe" } }
+      }
+    },
+    "Saved %@ to your dishes." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wurde zu deinen Gerichten hinzugefügt." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved %@ to your dishes." } }
+      }
+    },
+    "Subscribe" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonnieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe" } }
+      }
+    },
+    "Subscribe to a recipe blog or bookmark a site your household likes." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonniere einen Rezeptblog oder merke eine Website, die dein Haushalt mag." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe to a recipe blog or bookmark a site your household likes." } }
+      }
+    },
+    "Subscribe to a site" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Website abonnieren" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe to a site" } }
+      }
+    },
+    "The site returned HTTP status %lld." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Website meldete HTTP-Status %lld." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "The site returned HTTP status %lld." } }
+      }
+    },
+    "This feed has been unavailable for two weeks." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Feed ist seit zwei Wochen nicht erreichbar." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This feed has been unavailable for two weeks." } }
+      }
+    },
+    "This site did not return an RSS, Atom or JSON feed." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Website hat keinen RSS-, Atom- oder JSON-Feed geliefert." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "This site did not return an RSS, Atom or JSON feed." } }
+      }
+    },
+    "Untitled recipe" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezept ohne Titel" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Untitled recipe" } }
+      }
+    },
+    "Updated %@" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktualisiert %@" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updated %@" } }
+      }
+    },
+    "Website address" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Website-Adresse" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Website address" } }
+      }
+    },
     "%lld minutes" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Minuten" } },

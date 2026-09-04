@@ -42,6 +42,10 @@ struct MealPlanBackup: Codable, Sendable {
     var cookedLogs: [PortableCookedLog] = []
     var shoppingItems: [PortableShoppingItem] = []
     var weekTemplates: [PortableWeekTemplate] = []
+    /// Optional so backups from before recipe discovery still decode. Article
+    /// bodies never appear here; only the synced feed metadata does.
+    var recipeFeeds: [PortableRecipeFeed]? = nil
+    var recipeBookmarks: [PortableRecipeBookmark]? = nil
 
     // MARK: - Portable shapes
 
@@ -253,6 +257,41 @@ struct MealPlanBackup: Codable, Sendable {
         var sortIndex: Int
     }
 
+    struct PortableRecipeFeed: Codable, Sendable {
+        var uuid: UUID
+        var title: String
+        var siteURLString: String
+        var feedURLString: String
+        var etag: String?
+        var lastModified: String?
+        var lastFetchedAt: Date?
+        var firstFailureAt: Date?
+        var consecutiveFailures: Int
+        var nextRetryAt: Date?
+        var lastHTTPStatus: Int?
+        var lastErrorMessage: String?
+        var dateAdded: Date
+        var items: [PortableRecipeFeedItem]
+    }
+
+    struct PortableRecipeFeedItem: Codable, Sendable {
+        var uuid: UUID
+        var stableID: String
+        var title: String
+        var urlString: String
+        var author: String?
+        var summary: String?
+        var publishedAt: Date?
+        var fetchedAt: Date
+    }
+
+    struct PortableRecipeBookmark: Codable, Sendable {
+        var uuid: UUID
+        var title: String
+        var urlString: String
+        var dateAdded: Date
+    }
+
     /// What a backup holds, for the "this is what you're about to write /
     /// restore" summary. Counting is cheap and needs no store access.
     struct Contents: Sendable, Equatable {
@@ -304,6 +343,8 @@ extension MealPlanBackup {
         var cookedLogs: [CookedLog] = []
         var shoppingItems: [ShoppingListItem] = []
         var weekTemplates: [WeekTemplate] = []
+        var recipeFeeds: [RecipeFeed] = []
+        var recipeBookmarks: [RecipeBookmark] = []
 
         init() {}
 
@@ -329,6 +370,8 @@ extension MealPlanBackup {
             cookedLogs = try context.fetch(FetchDescriptor<CookedLog>())
             shoppingItems = try context.fetch(FetchDescriptor<ShoppingListItem>())
             weekTemplates = try context.fetch(FetchDescriptor<WeekTemplate>())
+            recipeFeeds = try context.fetch(FetchDescriptor<RecipeFeed>())
+            recipeBookmarks = try context.fetch(FetchDescriptor<RecipeBookmark>())
         }
     }
 
@@ -575,6 +618,44 @@ extension MealPlanBackup {
                         sortIndex: $0.sortIndex
                     )
                 }
+            )
+        }
+
+        backup.recipeFeeds = rows.recipeFeeds.map { feed in
+            PortableRecipeFeed(
+                uuid: feed.uuid,
+                title: feed.title,
+                siteURLString: feed.siteURLString,
+                feedURLString: feed.feedURLString,
+                etag: feed.etag,
+                lastModified: feed.lastModified,
+                lastFetchedAt: feed.lastFetchedAt,
+                firstFailureAt: feed.firstFailureAt,
+                consecutiveFailures: feed.consecutiveFailures,
+                nextRetryAt: feed.nextRetryAt,
+                lastHTTPStatus: feed.lastHTTPStatus,
+                lastErrorMessage: feed.lastErrorMessage,
+                dateAdded: feed.dateAdded,
+                items: feed.sortedItems.map {
+                    PortableRecipeFeedItem(
+                        uuid: $0.uuid,
+                        stableID: $0.stableID,
+                        title: $0.title,
+                        urlString: $0.urlString,
+                        author: $0.author,
+                        summary: $0.summary,
+                        publishedAt: $0.publishedAt,
+                        fetchedAt: $0.fetchedAt
+                    )
+                }
+            )
+        }
+        backup.recipeBookmarks = rows.recipeBookmarks.map {
+            PortableRecipeBookmark(
+                uuid: $0.uuid,
+                title: $0.title,
+                urlString: $0.urlString,
+                dateAdded: $0.dateAdded
             )
         }
 

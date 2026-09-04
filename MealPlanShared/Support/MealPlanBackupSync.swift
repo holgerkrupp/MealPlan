@@ -216,6 +216,64 @@ enum MealPlanBackupSync {
         }
         deleteMissing(templates, keeping: backup.weekTemplates.map(\.uuid), context: context)
 
+        // MARK: Recipe discovery
+
+        var feeds = partition(household.recipeFeeds ?? [], by: \.uuid)
+        for stored in backup.recipeFeeds ?? [] {
+            guard let siteURL = URL(string: stored.siteURLString),
+                  let feedURL = URL(string: stored.feedURLString) else { continue }
+            let model = feeds.map[stored.uuid] ?? insert(
+                RecipeFeed(title: stored.title, siteURL: siteURL, feedURL: feedURL),
+                uuid: stored.uuid, into: context, map: &feeds.map
+            )
+            model.title = stored.title
+            model.siteURLString = stored.siteURLString
+            model.feedURLString = stored.feedURLString
+            model.etag = stored.etag
+            model.lastModified = stored.lastModified
+            model.lastFetchedAt = stored.lastFetchedAt
+            model.firstFailureAt = stored.firstFailureAt
+            model.consecutiveFailures = stored.consecutiveFailures
+            model.nextRetryAt = stored.nextRetryAt
+            model.lastHTTPStatus = stored.lastHTTPStatus
+            model.lastErrorMessage = stored.lastErrorMessage
+            model.dateAdded = stored.dateAdded
+            model.household = household
+
+            var items = partition(model.items ?? [], by: \.uuid)
+            for storedItem in stored.items {
+                guard let url = URL(string: storedItem.urlString) else { continue }
+                let item = items.map[storedItem.uuid] ?? insert(
+                    RecipeFeedItem(stableID: storedItem.stableID, title: storedItem.title, url: url),
+                    uuid: storedItem.uuid, into: context, map: &items.map
+                )
+                item.stableID = storedItem.stableID
+                item.title = storedItem.title
+                item.urlString = storedItem.urlString
+                item.author = storedItem.author
+                item.summary = storedItem.summary
+                item.publishedAt = storedItem.publishedAt
+                item.fetchedAt = storedItem.fetchedAt
+                item.feed = model
+            }
+            deleteMissing(items, keeping: stored.items.map(\.uuid), context: context)
+        }
+        deleteMissing(feeds, keeping: (backup.recipeFeeds ?? []).map(\.uuid), context: context)
+
+        var bookmarks = partition(household.recipeBookmarks ?? [], by: \.uuid)
+        for stored in backup.recipeBookmarks ?? [] {
+            guard let url = URL(string: stored.urlString) else { continue }
+            let model = bookmarks.map[stored.uuid] ?? insert(
+                RecipeBookmark(title: stored.title, url: url),
+                uuid: stored.uuid, into: context, map: &bookmarks.map
+            )
+            model.title = stored.title
+            model.urlString = stored.urlString
+            model.dateAdded = stored.dateAdded
+            model.household = household
+        }
+        deleteMissing(bookmarks, keeping: (backup.recipeBookmarks ?? []).map(\.uuid), context: context)
+
         try context.save()
         return household
     }
@@ -327,6 +385,8 @@ enum MealPlanBackupSync {
         merged.cookedLogs = union(base.cookedLogs, other.cookedLogs, baseIsNewer: baseIsNewer, id: { $0.uuid?.uuidString ?? "\($0.date.timeIntervalSince1970)-\($0.dishUUID?.uuidString ?? "")" })
         merged.shoppingItems = union(base.shoppingItems, other.shoppingItems, baseIsNewer: baseIsNewer, id: { $0.uuid?.uuidString ?? $0.normalizedName })
         merged.weekTemplates = union(base.weekTemplates, other.weekTemplates, baseIsNewer: baseIsNewer, id: \.uuid)
+        merged.recipeFeeds = union(base.recipeFeeds ?? [], other.recipeFeeds ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
+        merged.recipeBookmarks = union(base.recipeBookmarks ?? [], other.recipeBookmarks ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
         return merged
     }
 
@@ -376,6 +436,9 @@ enum MealPlanBackupSync {
         case let m as CookedLog: m.uuid = uuid
         case let m as ShoppingListItem: m.uuid = uuid
         case let m as WeekTemplate: m.uuid = uuid
+        case let m as RecipeFeed: m.uuid = uuid
+        case let m as RecipeFeedItem: m.uuid = uuid
+        case let m as RecipeBookmark: m.uuid = uuid
         default: break
         }
     }

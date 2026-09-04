@@ -10,6 +10,8 @@ import WebKit
 @MainActor
 struct RecipeFinderView: View {
     @Bindable var dish: Dish
+    let initialURL: URL?
+    let createsDish: Bool
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
@@ -21,6 +23,12 @@ struct RecipeFinderView: View {
     @State private var noRecipeFound = false
 
     private var engine: SearchEngine { SearchEngine.resolved(from: searchEngineRaw) }
+
+    init(dish: Dish, initialURL: URL? = nil, createsDish: Bool = false) {
+        self.dish = dish
+        self.initialURL = initialURL
+        self.createsDish = createsDish
+    }
 
     /// Only a real web page can be imported — not the search results
     /// themselves, and not an about:blank while the first load is in flight.
@@ -41,7 +49,7 @@ struct RecipeFinderView: View {
             #endif
             .toolbar { toolbarContent }
             .task {
-                guard let url = RecipeSearch.url(for: dish.name, engine: engine) else { return }
+                guard let url = initialURL ?? RecipeSearch.url(for: dish.name, engine: engine) else { return }
                 _ = page.load(url)
             }
             .alert(
@@ -134,6 +142,7 @@ struct RecipeFinderView: View {
                 noRecipeFound = true
                 return
             }
+            if createsDish { context.insert(dish) }
             DishBuilder.apply(recipe, to: dish, context: context)
             dismiss()
         } catch {
@@ -150,6 +159,7 @@ struct RecipeFinderView: View {
 
     private func saveLinkOnly() {
         guard let url = importableURL else { return }
+        if createsDish { context.insert(dish) }
         dish.sourceURL = url
         dish.needsReview = true
         try? context.save()

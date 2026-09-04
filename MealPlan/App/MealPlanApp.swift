@@ -47,7 +47,12 @@ struct MealPlanApp: App {
                     // Calendar access can be revoked while the app is away.
                     guard phase == .active else { return }
                     MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
-                    Task { await calendarStore.applicationBecameActive() }
+                    Task {
+                        await calendarStore.applicationBecameActive()
+                        if !appState.isGuest {
+                            await RecipeFeedService.refreshAll(context: container.mainContext)
+                        }
+                    }
                 }
                 .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
                     guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }

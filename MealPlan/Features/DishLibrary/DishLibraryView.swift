@@ -120,6 +120,13 @@ struct DishLibraryView: View {
         )
         .focusedSceneValue(\.dishLibraryCommands, libraryCommands)
         .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                NavigationLink {
+                    RecipeDiscoveryView()
+                } label: {
+                    Label(String(localized: "Discover recipes"), systemImage: "newspaper")
+                }
+            }
             if !appState.isGuest {
                 ToolbarItem(placement: .primaryAction) {
                     Button(String(localized: "New dish"), systemImage: "plus") {
