@@ -11,6 +11,9 @@ struct ShoppingListView: View {
     @State private var newItemName = ""
     @State private var exportMessage: String?
     @State private var isExporting = false
+    @State private var bringMessage: String?
+    @State private var showingBringSetup = false
+    @State private var confirmingClearAll = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
@@ -28,6 +31,14 @@ struct ShoppingListView: View {
             customStart: appState.shoppingCustomStart,
             customEnd: appState.shoppingCustomEnd
         )
+    }
+
+    private var bringService: BringSyncService { .shared }
+
+    /// Whether this family has a Bring! list to send to at all. The account
+    /// itself is per device, so both have to be there.
+    private var isConnectedToBring: Bool {
+        appState.currentHousehold?.isConnectedToBring == true && bringService.hasAccount
     }
 
     /// The household's pantry staples that aren't on the list already. These
@@ -137,14 +148,79 @@ struct ShoppingListView: View {
                         clearChecked()
                     }
                     .disabled(!items.contains(where: \.isChecked))
+                    Button(String(localized: "Clear the whole list"), role: .destructive) {
+                        confirmingClearAll = true
+                    }
+                    .disabled(items.isEmpty)
+
+                    Divider()
+
+                    if isConnectedToBring {
+                        Button {
+                            Task { await sendToBring() }
+                        } label: {
+                            Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+                        }
+                        .disabled(items.isEmpty || bringService.isSyncing)
+                        Button {
+                            Task { await syncWithBring() }
+                        } label: {
+                            Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(bringService.isSyncing)
+                    }
+                    Button {
+                        showingBringSetup = true
+                    } label: {
+                        Label(
+                            isConnectedToBring
+                                ? String(localized: "Bring! settings…")
+                                : String(localized: "Connect to Bring!…"),
+                            systemImage: "cart.badge.plus"
+                        )
+                    }
                 } label: {
                     Label(String(localized: "More"), systemImage: "ellipsis.circle")
                 }
             }
         }
         .onAppear { if items.isEmpty { regenerate() } }
+        .task { await autoSyncWithBring() }
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
+        .sheet(isPresented: $showingBringSetup) {
+            NavigationStack {
+                BringSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { showingBringSetup = false }
+                        }
+                    }
+            }
+            #if os(macOS)
+            .frame(minWidth: 520, minHeight: 460)
+            #endif
+        }
+        .confirmationDialog(
+            String(localized: "Clear the whole list?"),
+            isPresented: $confirmingClearAll,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Clear everything"), role: .destructive) { clearAll() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(isConnectedToBring
+                 ? String(localized: "Every line goes, ticked or not, here and — at the next sync — in Bring! too. Rebuild from the plan to get the planned ones back.")
+                 : String(localized: "Every line goes, ticked or not. Rebuild from the plan to get the planned ones back."))
+        }
+        .alert(
+            String(localized: "Bring!"),
+            isPresented: Binding(get: { bringMessage != nil }, set: { if !$0 { bringMessage = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(bringMessage ?? "")
+        }
         .alert(
             String(localized: "Reminders"),
             isPresented: Binding(get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } })
@@ -184,6 +260,13 @@ struct ShoppingListView: View {
         if items.contains(where: \.isChecked) {
             commands.clearTicked = { clearChecked() }
         }
+        if !items.isEmpty {
+            commands.clearAll = { confirmingClearAll = true }
+        }
+        if isConnectedToBring, !bringService.isSyncing {
+            commands.sendToBring = { Task { await sendToBring() } }
+            commands.syncWithBring = { Task { await syncWithBring() } }
+        }
         return commands
     }
 
@@ -216,6 +299,7 @@ struct ShoppingListView: View {
             roundsAmounts: appState.roundsDisplayedAmounts,
             context: context
         )
+        Task { await autoSyncWithBring() }
     }
 
     private func toggle(_ item: ShoppingListItem) {
@@ -253,6 +337,48 @@ struct ShoppingListView: View {
             context.delete(item)
         }
         try? context.save()
+        Task { await autoSyncWithBring() }
+    }
+
+    /// Empty the list outright — the "we've been shopping, start again" button.
+    /// Generated lines come back with the next rebuild; manual ones don't, so
+    /// this asks first.
+    private func clearAll() {
+        for item in items {
+            context.delete(item)
+        }
+        try? context.save()
+        Task { await autoSyncWithBring() }
+    }
+
+    // MARK: - Bring!
+
+    private func sendToBring() async {
+        guard let household = appState.currentHousehold else { return }
+        do {
+            let outcome = try await bringService.push(household: household, context: context)
+            bringMessage = outcome.summary
+        } catch {
+            bringMessage = error.localizedDescription
+        }
+    }
+
+    private func syncWithBring() async {
+        guard let household = appState.currentHousehold else { return }
+        do {
+            let outcome = try await bringService.sync(household: household, context: context)
+            bringMessage = outcome.summary
+        } catch {
+            bringMessage = error.localizedDescription
+        }
+    }
+
+    /// The sync nobody asked for: on opening the list, and after it changes.
+    /// Says nothing either way — a Bring! that can't be reached is not a
+    /// reason to interrupt someone reading their shopping list.
+    private func autoSyncWithBring() async {
+        guard let household = appState.currentHousehold else { return }
+        await bringService.syncQuietly(household: household, context: context)
     }
 
     private func changeCategory(_ item: ShoppingListItem, to category: IngredientCategory) {

@@ -373,6 +373,29 @@ struct MealPlanCommands: Commands {
             }
             .disabled(shopping?.clearTicked == nil)
 
+            Button(role: .destructive) {
+                shopping?.clearAll?()
+            } label: {
+                Label(String(localized: "Clear the whole list"), systemImage: "trash")
+            }
+            .disabled(shopping?.clearAll == nil)
+
+            Divider()
+
+            Button {
+                shopping?.sendToBring?()
+            } label: {
+                Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+            }
+            .disabled(shopping?.sendToBring == nil)
+
+            Button {
+                shopping?.syncWithBring?()
+            } label: {
+                Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+            }
+            .disabled(shopping?.syncWithBring == nil)
+
             Divider()
 
             Button {
@@ -471,6 +494,11 @@ struct ShoppingCommands {
     var addToReminders: (@MainActor () -> Void)?
     /// Nil when nothing is ticked.
     var clearTicked: (@MainActor () -> Void)?
+    /// Nil while the list is empty.
+    var clearAll: (@MainActor () -> Void)?
+    /// Nil unless this device is connected to a Bring! list.
+    var sendToBring: (@MainActor () -> Void)?
+    var syncWithBring: (@MainActor () -> Void)?
 }
 
 private struct AppNavigationCommandsKey: FocusedValueKey { typealias Value = AppNavigationCommands }
