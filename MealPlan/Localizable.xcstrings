@@ -4,6 +4,138 @@
     "" : {
 
     },
+    "%lld minutes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Minuten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld minutes" } }
+      }
+    },
+    "Add a dish" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gericht hinzufügen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add a dish" } }
+      }
+    },
+    "Add dish" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gericht hinzufügen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add dish" } }
+      }
+    },
+    "Add timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer hinzufügen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add timer" } }
+      }
+    },
+    "Close" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schließen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close" } }
+      }
+    },
+    "Cooking session" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cooking session" } }
+      }
+    },
+    "Cooking timers" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochtimer" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cooking timers" } }
+      }
+    },
+    "Default text size" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Standardtextgröße" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default text size" } }
+      }
+    },
+    "Dish library" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gerichtesammlung" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dish library" } }
+      }
+    },
+    "Finish session" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession beenden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Finish session" } }
+      }
+    },
+    "Larger text" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Größerer Text" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Larger text" } }
+      }
+    },
+    "Manual timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Manueller Timer" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manual timer" } }
+      }
+    },
+    "Planned for this meal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Für diese Mahlzeit geplant" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Planned for this meal" } }
+      }
+    },
+    "Resume cooking session?" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession fortsetzen?" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resume cooking session?" } }
+      }
+    },
+    "Smaller text" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kleinerer Text" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smaller text" } }
+      }
+    },
+    "Start new" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neu beginnen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start new" } }
+      }
+    },
+    "Start timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer starten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start timer" } }
+      }
+    },
+    "Step %lld" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schritt %lld" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Step %lld" } }
+      }
+    },
+    "Text size" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Textgröße" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text size" } }
+      }
+    },
+    "Timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } }
+      }
+    },
+    "Timer label" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timerbezeichnung" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timer label" } }
+      }
+    },
+    "Your dishes, steps, ingredients and timers are still here." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Deine Gerichte, Schritte, Zutaten und Timer sind noch da." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your dishes, steps, ingredients and timers are still here." } }
+      }
+    },
     "—" : {
 
     },

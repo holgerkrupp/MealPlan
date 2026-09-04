@@ -7,5 +7,8 @@ struct MealPlanWidgetBundle: WidgetBundle {
         TodayMealsWidget()
         WeekMealsWidget()
         UpcomingMealsWidget()
+        #if os(iOS)
+        CookingTimerLiveActivity()
+        #endif
     }
 }

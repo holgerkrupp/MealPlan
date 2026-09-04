@@ -11,6 +11,7 @@ import UIKit
 @Observable
 @MainActor
 final class AppState {
+    let cookingSession = CookingSessionStore()
     var currentHousehold: Household?
     var selectedDate: Date = Date.now.startOfDay
     var dishFilter = DishFilter()
