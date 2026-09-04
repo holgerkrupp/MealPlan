@@ -65,6 +65,9 @@ struct MealPlanBackup: Codable, Sendable {
         /// staples. Optional so files written before staples became a
         /// household setting still decode.
         var didSeedPantryStaples: Bool? = nil
+        /// Optional so backups written before the household had a standard
+        /// portion count still decode; `nil` reads back as the default 2.
+        var standardServings: Int? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -363,6 +366,7 @@ extension MealPlanBackup {
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
                 dateCreated: primary?.dateCreated ?? .now,
                 didSeedPantryStaples: primary?.didSeedPantryStaples
+                standardServings: primary?.scalingServings ?? Household.defaultStandardServings
             )
         )
         backup.includesPhotos = includePhotos

@@ -102,6 +102,12 @@ final class AppState {
         currentHousehold?.roundsDisplayedAmounts ?? true
     }
 
+    /// The portions this family cooks by default. Dish amounts are shown
+    /// scaled to it unless the cook picks another head-count.
+    var standardServings: Int {
+        currentHousehold?.scalingServings ?? Household.defaultStandardServings
+    }
+
     /// An `AppState` wired to the seeded in-memory store, for previews.
     /// Deliberately not `#if DEBUG`: `#Preview` bodies compile in Release too,
     /// and `PreviewData` — which this is useless without — isn't gated either.

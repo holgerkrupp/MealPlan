@@ -104,8 +104,13 @@ struct DishEditorView: View {
 
     private var detailsSection: some View {
         Section(String(localized: "Details")) {
+            // The yield the recipe itself was written for; the household's
+            // standard portions are scaled from it.
             Stepper(value: $dish.servings, in: 1...50) {
-                Text(String(localized: "\(dish.servings) servings"))
+                LabeledContent(
+                    String(localized: "Recipe yield"),
+                    value: String(localized: "\(dish.servings) servings")
+                )
             }
             minutePicker(String(localized: "Prep time"), value: $dish.prepTimeMinutes)
             minutePicker(String(localized: "Cook time"), value: $dish.cookTimeMinutes)

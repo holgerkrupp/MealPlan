@@ -19,6 +19,7 @@ struct MealPlanBackupTests {
         household.unitSystem = .metric
         household.roundsDisplayedAmounts = false
         household.calendarStyle = .day
+        household.standardServings = 6
         household.dateCreated = created
         return household
     }
@@ -79,7 +80,25 @@ struct MealPlanBackupTests {
         #expect(restored.household.unitSystemRaw == UnitSystem.metric.rawValue)
         #expect(restored.household.calendarStyleRaw == CalendarStyle.day.rawValue)
         #expect(restored.household.roundsDisplayedAmounts == false)
+        #expect(restored.household.standardServings == 6)
         #expect(restored.householdCount == 1)
+    }
+
+    /// Backups written before the household had a standard portion count
+    /// still decode; the missing field reads back as the default of 2.
+    @Test func aBackupWithoutStandardPortionsDecodesToTheDefault() throws {
+        let household = makeHousehold()
+        var rows = MealPlanBackup.StoreRows()
+        rows.households = [household]
+
+        var backup = MealPlanBackup.make(from: rows)
+        backup.household.standardServings = nil
+        let data = try MealPlanBackup.encode(backup)
+        #expect(String(data: data, encoding: .utf8)?.contains("standardServings") == false)
+
+        let restored = try MealPlanBackup.decode(data)
+        #expect(restored.household.standardServings == nil)
+        #expect((restored.household.standardServings ?? Household.defaultStandardServings) == 2)
     }
 
     /// The bug that shipped in the first cut: the backup walked

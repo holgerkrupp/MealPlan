@@ -13,6 +13,12 @@ final class Household {
     /// increments. Defaults on for both new and migrated households.
     var roundsDisplayedAmounts: Bool = true
     var calendarStyleRaw: String = CalendarStyle.week.rawValue
+    /// How many portions this family normally cooks. Dishes are scaled from
+    /// their own recipe yield to this number automatically, so a recipe
+    /// written for four feeds a household of two without anyone doing the
+    /// arithmetic. A planned meal can still override it for one occasion.
+    /// Defaults to 2 for both new and migrated households.
+    var standardServings: Int = Household.defaultStandardServings
     var localeIdentifier: String = Locale.current.identifier
     var dateCreated: Date = Date.now
     /// Base64-encoded locator for this household's CloudKit share (zone,
@@ -68,6 +74,13 @@ final class Household {
 
     @Relationship(deleteRule: .cascade, inverse: \MealRoutine.household)
     var mealRoutines: [MealRoutine]? = []
+
+    /// The portions a household cooks by default, before anyone changes it.
+    static let defaultStandardServings = 2
+
+    /// `standardServings`, guarded against a zero or negative value arriving
+    /// from a corrupted record or an older peer.
+    var scalingServings: Int { max(1, standardServings) }
 
     /// Meals in display order, falling back to a seeded default set if this
     /// household has none configured yet.

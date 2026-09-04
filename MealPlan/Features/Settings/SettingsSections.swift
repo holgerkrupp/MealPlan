@@ -16,14 +16,31 @@ struct FamilySettingsSection: View {
 
     var body: some View {
         if let household = appState.currentHousehold {
-            Section(String(localized: "Family")) {
+            Section {
                 TextField(String(localized: "Family name"), text: name(household))
+                Stepper(value: standardServings(household), in: 1...50) {
+                    LabeledContent(
+                        String(localized: "Standard portions"),
+                        value: String(localized: "\(household.scalingServings) servings")
+                    )
+                }
+            } header: {
+                Text(String(localized: "Family"))
+            } footer: {
+                Text("Recipes are scaled to your standard portions automatically. Everyone in the family shares this setting.")
             }
         }
     }
 
     private func name(_ household: Household) -> Binding<String> {
         Binding(get: { household.name }, set: { household.name = $0; try? context.save() })
+    }
+
+    private func standardServings(_ household: Household) -> Binding<Int> {
+        Binding(
+            get: { household.scalingServings },
+            set: { household.standardServings = max(1, $0); try? context.save() }
+        )
     }
 }
 

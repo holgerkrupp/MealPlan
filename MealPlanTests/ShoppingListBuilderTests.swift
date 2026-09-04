@@ -52,6 +52,16 @@ struct ShoppingListBuilderTests {
         #expect(ShoppingListBuilder.aggregate([entry])[0].quantity == Quantity(value: 750, dimension: .mass))
     }
 
+    @Test func scalesToTheHouseholdStandardWithoutAnOverride() {
+        let household = Household(name: "Krupp")
+        household.standardServings = 6
+        let d = dish("Bolognese", servings: 4)
+        line(d, "Hackfleisch", 500, .mass)
+        let entry = MealPlanEntry(date: .now, slot: .dinner, dish: d)
+        entry.household = household
+        #expect(ShoppingListBuilder.aggregate([entry])[0].quantity == Quantity(value: 750, dimension: .mass))
+    }
+
     @Test func skippedEntriesAreIgnored() {
         let d = dish("Suppe", servings: 2)
         line(d, "Kürbis", 800, .mass)
