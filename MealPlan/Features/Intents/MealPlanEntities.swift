@@ -91,7 +91,9 @@ struct MealTypeEntityQuery: EnumerableEntityQuery, EntityStringQuery {
 
 // MARK: - Calendar App Schema entities (iOS 27)
 
-#if compiler(>=6.4)
+// These schema macros are compile-time unavailable when the deployment target
+// is below 27. Enable this condition only in configurations that target OS 27+.
+#if MEALPLAN_ENABLE_OS27_APP_INTENTS
 /// The household's meal plan is exposed as one calendar to Siri.
 @AppEntity(schema: .calendar.calendar)
 struct MealPlanCalendarEntity: IndexedEntity {
@@ -446,7 +448,7 @@ enum MealPlanSpotlightIndexer {
             try await deleteAll()
             try await indexEntities(dishes)
             try await indexEntities(entries)
-#if compiler(>=6.4)
+#if MEALPLAN_ENABLE_OS27_APP_INTENTS
             let calendars = try context.fetch(FetchDescriptor<Household>())
                 .map(MealPlanCalendarEntity.init)
             try await indexEntities(calendars)

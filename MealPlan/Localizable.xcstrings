@@ -3395,6 +3395,9 @@
     "Planned Meal" : {
 
     },
+    "Planned meal unavailable" : {
+
+    },
     "Planned meals" : {
 
     },
@@ -3546,6 +3549,9 @@
 
     },
     "Recipe search" : {
+
+    },
+    "Recipe unavailable" : {
 
     },
     "Recipe yield" : {
@@ -4498,6 +4504,12 @@
 
     },
     "This one-time invitation grants view-only access." : {
+
+    },
+    "This planned meal may have been removed." : {
+
+    },
+    "This recipe may have been deleted." : {
 
     },
     "This store holds %lld family records — two devices each created one before they first synced. Restoring a backup folds them back into a single family." : {

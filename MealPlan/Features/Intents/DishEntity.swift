@@ -80,7 +80,7 @@ struct DishEntityQuery: EnumerableEntityQuery, EntityStringQuery {
     }
 }
 
-#if compiler(>=6.4)
+#if MEALPLAN_ENABLE_OS27_APP_INTENTS
 extension DishEntityQuery: IndexedEntityQuery {
     func reindexEntities(
         for identifiers: [DishEntity.ID],

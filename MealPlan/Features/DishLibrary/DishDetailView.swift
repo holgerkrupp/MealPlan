@@ -85,7 +85,7 @@ struct DishDetailView: View {
     private var configuredDetail: some View {
         detailContent
         .navigationTitle(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
-        #if compiler(>=6.4)
+        #if MEALPLAN_ENABLE_OS27_APP_INTENTS
         .appEntityIdentifier(EntityIdentifier(for: DishEntity.self, identifier: dish.uuid))
         #endif
         #if os(iOS)
