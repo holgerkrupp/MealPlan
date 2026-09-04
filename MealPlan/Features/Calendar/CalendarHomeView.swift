@@ -8,6 +8,8 @@ struct CalendarHomeView: View {
     @Environment(AppState.self) private var appState
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
+    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
+    private var mealTypes: [MealType]
     @State private var paginator = CalendarPaginator()
     @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
     @State private var didSettle = false
@@ -110,6 +112,7 @@ struct CalendarHomeView: View {
                         WeekSectionView(
                             weekStart: weekStart,
                             style: .week,
+                            mealTypes: mealTypes,
                             onDayVisibilityChange: { visible, dayID in
                                 visibilityTracker.setDayVisible(visible, id: dayID)
                             }

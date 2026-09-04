@@ -1,10 +1,45 @@
 import CloudKit
 import Foundation
+import SwiftData
 import Testing
 @testable import MealPlan
 
 @MainActor
 struct HouseholdRecordSyncTests {
+    @Test func photoLoaderDistinguishesLegacyDuplicateUUIDs() async throws {
+        // A separate ModelActor needs a real SQLite connection. SwiftData's
+        // in-memory configuration has no eligible background connection on
+        // macOS, so mirror the production topology in a disposable store.
+        let storeDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-photo-loader-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+
+        let schema = SharedStore.makeSchema()
+        let configuration = ModelConfiguration(
+            schema: schema,
+            url: storeDirectory.appending(path: "test.sqlite"),
+            cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+        let duplicateUUID = UUID()
+        let first = DishImage(data: Data([1, 2, 3]))
+        let second = DishImage(data: Data([7, 8, 9]))
+        first.uuid = duplicateUUID
+        second.uuid = duplicateUUID
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        let firstID = first.persistentModelID
+        let secondID = second.persistentModelID
+        let loader = DishPhotoDataActor(modelContainer: container)
+
+        #expect(await loader.data(for: firstID) == Data([1, 2, 3]))
+        #expect(await loader.data(for: secondID) == Data([7, 8, 9]))
+    }
+
     @Test func stableIdentityRoundTripsFromCloudKitName() throws {
         let uuid = UUID()
         let identity = HouseholdRecordIdentity(type: .dish, uuid: uuid)

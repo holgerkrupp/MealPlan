@@ -93,7 +93,7 @@ struct DishThumbnail: View {
             if let imageRecord {
                 CachedDishPhoto(
                     image: imageRecord,
-                    cacheKey: "\(imageRecord.uuid.uuidString)-\(imageRecord.modifiedAt.timeIntervalSinceReferenceDate)",
+                    cacheKey: "\(imageRecord.persistentModelID.hashValue)-\(imageRecord.modifiedAt.timeIntervalSinceReferenceDate)",
                     maxPixelSize: size * displayScale
                 )
             } else if let rawData {
@@ -182,7 +182,7 @@ private actor DishPhotoCache {
 }
 
 struct CachedDishPhoto: View {
-    private let imageID: UUID?
+    private let imageID: PersistentIdentifier?
     private let rawData: Data?
     let cacheKey: String
     let maxPixelSize: CGFloat
@@ -195,7 +195,7 @@ struct CachedDishPhoto: View {
     }
 
     init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
-        self.imageID = image.uuid
+        self.imageID = image.persistentModelID
         self.rawData = nil
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
@@ -227,7 +227,7 @@ struct CachedDishPhoto: View {
             let sourceData: Data?
             if let imageID {
                 let loader = DishPhotoDataActor(modelContainer: modelContext.container)
-                sourceData = try? await loader.data(for: imageID)
+                sourceData = await loader.data(for: imageID)
             } else {
                 sourceData = rawData
             }
@@ -247,13 +247,9 @@ struct CachedDishPhoto: View {
 /// photo bytes on a SwiftData executor rather than inside the scrolling view's
 /// main-actor task.
 @ModelActor
-private actor DishPhotoDataActor {
-    func data(for imageID: UUID) throws -> Data? {
-        var descriptor = FetchDescriptor<DishImage>(
-            predicate: #Predicate<DishImage> { $0.uuid == imageID }
-        )
-        descriptor.fetchLimit = 1
-        return try modelContext.fetch(descriptor).first?.data
+actor DishPhotoDataActor {
+    func data(for imageID: PersistentIdentifier) -> Data? {
+        (modelContext.model(for: imageID) as? DishImage)?.data
     }
 }
 

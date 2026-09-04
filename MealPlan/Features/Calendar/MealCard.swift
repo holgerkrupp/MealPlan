@@ -231,7 +231,7 @@ struct MealCard: View {
         if let backdropImage {
             CachedDishPhoto(
                 image: backdropImage,
-                cacheKey: "\(backdropImage.uuid.uuidString)-\(backdropImage.modifiedAt.timeIntervalSinceReferenceDate)",
+                cacheKey: "\(backdropImage.persistentModelID.hashValue)-\(backdropImage.modifiedAt.timeIntervalSinceReferenceDate)",
                 maxPixelSize: 900
             )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)

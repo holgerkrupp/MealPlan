@@ -5,11 +5,10 @@ import SwiftData
 struct WeekSectionView: View {
     let weekStart: Date
     let style: CalendarStyle
+    let mealTypes: [MealType]
     var onDayVisibilityChange: (Bool, String) -> Void
 
     @Query private var entries: [MealPlanEntry]
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
     @Environment(AppState.self) private var appState
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
@@ -30,10 +29,12 @@ struct WeekSectionView: View {
     init(
         weekStart: Date,
         style: CalendarStyle,
+        mealTypes: [MealType] = [],
         onDayVisibilityChange: @escaping (Bool, String) -> Void = { _, _ in }
     ) {
         self.weekStart = weekStart
         self.style = style
+        self.mealTypes = mealTypes
         self.onDayVisibilityChange = onDayVisibilityChange
         let end = weekStart.adding(weeks: 1)
         _entries = Query(
@@ -189,7 +190,7 @@ struct WeekSectionView: View {
             // Let scrolling settle before doing recipe math. SwiftUI cancels
             // this task when a week leaves the lazy stack, so fast scrolling
             // does not spend time calculating summaries nobody will see.
-            try? await Task.sleep(for: .milliseconds(150))
+            try? await Task.sleep(for: .milliseconds(750))
             guard !Task.isCancelled else { return }
             nutritionSummary = WeekNutritionSummary(entries: entries)
         }

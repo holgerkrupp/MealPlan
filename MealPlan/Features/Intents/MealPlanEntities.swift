@@ -360,6 +360,14 @@ struct MealPlanEntryEntity: IndexedEntity {
         servings = entry.effectiveServings
     }
 
+    init(snapshot: SpotlightEntrySnapshot) {
+        id = snapshot.id
+        startDate = snapshot.startDate
+        title = snapshot.title
+        mealName = snapshot.mealName
+        servings = snapshot.servings
+    }
+
     var displayRepresentation: DisplayRepresentation {
         DisplayRepresentation(
             title: "\(title)",
@@ -437,6 +445,7 @@ enum MealPlanSpotlightIndexer {
 
     static func reindexAll(context: ModelContext) async {
         do {
+            #if MEALPLAN_ENABLE_OS27_APP_INTENTS
             let dishes = try context.fetch(FetchDescriptor<Dish>(sortBy: [SortDescriptor(\.name)]))
                 .map(DishEntity.init)
             let mealTypes = try context.fetch(FetchDescriptor<MealType>())
@@ -445,6 +454,14 @@ enum MealPlanSpotlightIndexer {
                 predicate: #Predicate { $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
             )).map { MealPlanEntryEntity(entry: $0, meal: mealsByKey[$0.mealKey]) }
+            #else
+            let snapshotActor = SpotlightSnapshotActor(modelContainer: context.container)
+            let snapshot = try await snapshotActor.snapshot()
+            let dishes = snapshot.dishes.map {
+                DishEntity(id: $0.id, name: $0.name, details: $0.details)
+            }
+            let entries = snapshot.entries.map(MealPlanEntryEntity.init(snapshot:))
+            #endif
             try await deleteAll()
             try await indexEntities(dishes)
             try await indexEntities(entries)
@@ -458,3 +475,71 @@ enum MealPlanSpotlightIndexer {
         }
     }
 }
+
+#if !MEALPLAN_ENABLE_OS27_APP_INTENTS
+struct SpotlightEntrySnapshot: Sendable {
+    var id: UUID
+    var title: String
+    var mealName: String
+    var servings: Int
+    var startDate: Date
+}
+
+private struct SpotlightDishSnapshot: Sendable {
+    var id: UUID
+    var name: String
+    var details: String
+}
+
+private struct SpotlightSnapshot: Sendable {
+    var dishes: [SpotlightDishSnapshot]
+    var entries: [SpotlightEntrySnapshot]
+}
+
+@ModelActor
+private actor SpotlightSnapshotActor {
+    func snapshot() throws -> SpotlightSnapshot {
+        let dishes = try modelContext.fetch(
+            FetchDescriptor<Dish>(sortBy: [SortDescriptor(\.name)])
+        ).map { dish in
+            SpotlightDishSnapshot(
+                id: dish.uuid,
+                name: dish.name,
+                details: ([dish.recipeText ?? ""]
+                    + dish.sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
+                    + dish.tagNames)
+                    .filter { !$0.isEmpty }
+                    .joined(separator: ", ")
+            )
+        }
+
+        let mealTypes = try modelContext.fetch(FetchDescriptor<MealType>())
+        let mealsByKey = Dictionary(uniqueKeysWithValues: mealTypes.map { ($0.key, $0) })
+        let entries = try modelContext.fetch(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.skipped == false },
+            sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
+        )).map { entry in
+            let meal = mealsByKey[entry.mealKey]
+            return SpotlightEntrySnapshot(
+                id: entry.uuid,
+                title: entry.displayTitle,
+                mealName: meal?.name ?? MealType.legacyName(for: entry.mealKey),
+                servings: entry.effectiveServings,
+                startDate: Self.date(for: entry.date, mealKey: entry.mealKey, sortOrder: meal?.sortOrder)
+            )
+        }
+        return SpotlightSnapshot(dishes: dishes, entries: entries)
+    }
+
+    private static func date(for day: Date, mealKey: String, sortOrder: Int?) -> Date {
+        let hour: Int = switch mealKey {
+        case "breakfast": 8
+        case "lunch": 12
+        case "snack": 15
+        case "dinner": 18
+        default: min(21, 8 + max(0, sortOrder ?? 2) * 3)
+        }
+        return Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+    }
+}
+#endif
