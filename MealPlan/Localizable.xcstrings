@@ -3392,6 +3392,9 @@
         }
       }
     },
+    "Planned Meal" : {
+
+    },
     "Planned meals" : {
 
     },
@@ -4531,6 +4534,9 @@
           }
         }
       }
+    },
+    "Title" : {
+
     },
     "To" : {
       "localizations" : {

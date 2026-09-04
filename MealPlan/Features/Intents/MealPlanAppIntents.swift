@@ -333,6 +333,7 @@ struct ThisWeekPlanIntent: AppIntent {
 
 // MARK: - iOS 27 natural-language Calendar schemas
 
+#if compiler(>=6.4)
 /// Siri understands planned meals as calendar events. This schema intent maps
 /// natural requests such as “Schedule ramen for dinner Friday in MealPlan”
 /// back into the app's dish/day/meal model.
@@ -508,6 +509,7 @@ struct DeletePlannedMealIntent {
         return .result()
     }
 }
+#endif
 
 // MARK: - App Shortcuts and classic Siri phrases
 

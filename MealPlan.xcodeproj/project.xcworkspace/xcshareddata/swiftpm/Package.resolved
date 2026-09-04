@@ -1,5 +1,5 @@
 {
-  "originHash" : "9d9a49cf9dedc8f20f2fe1d121e02e03aef4fa9503ca67f47ebf3c0524860d52",
+  "originHash" : "8364909009c6548a46fd09894e1c742c32832c51d92354010288ecc8b6554bb3",
   "pins" : [
     {
       "identity" : "esadesignkit",
@@ -8,6 +8,15 @@
       "state" : {
         "branch" : "main",
         "revision" : "f380a13ab41e02805eb185c097454f4853a944eb"
+      }
+    },
+    {
+      "identity" : "sfsymbolselector",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/holgerkrupp/SFSymbolSelector",
+      "state" : {
+        "branch" : "main",
+        "revision" : "0fef5bcc711913a3bc597bf4b5605184e2d70af5"
       }
     },
     {

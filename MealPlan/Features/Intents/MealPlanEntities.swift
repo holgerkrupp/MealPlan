@@ -91,6 +91,7 @@ struct MealTypeEntityQuery: EnumerableEntityQuery, EntityStringQuery {
 
 // MARK: - Calendar App Schema entities (iOS 27)
 
+#if compiler(>=6.4)
 /// The household's meal plan is exposed as one calendar to Siri.
 @AppEntity(schema: .calendar.calendar)
 struct MealPlanCalendarEntity: IndexedEntity {
@@ -333,6 +334,78 @@ struct MealPlanEntryEntity: IndexedEntity {
         }
     }
 }
+#else
+/// One planned meal exposed to Shortcuts and Spotlight on iOS 26.
+struct MealPlanEntryEntity: IndexedEntity {
+    static var typeDisplayRepresentation: TypeDisplayRepresentation { "Planned Meal" }
+    static let defaultQuery = EntryQuery()
+
+    var id: UUID
+
+    @Property(title: "Title", indexingKey: \.displayName)
+    var title: String
+
+    @Property(title: "Meal") var mealName: String
+    @Property(title: "Servings") var servings: Int
+    var startDate: Date
+
+    @MainActor
+    init(entry: MealPlanEntry, meal: MealType?) {
+        id = entry.uuid
+        startDate = Self.date(for: entry.date, mealKey: entry.mealKey, sortOrder: meal?.sortOrder)
+        title = entry.displayTitle
+        mealName = meal?.name ?? MealType.legacyName(for: entry.mealKey)
+        servings = entry.effectiveServings
+    }
+
+    var displayRepresentation: DisplayRepresentation {
+        DisplayRepresentation(
+            title: "\(title)",
+            subtitle: "\(mealName) · \(startDate.formatted(date: .abbreviated, time: .omitted))",
+            image: .init(systemName: "fork.knife.circle")
+        )
+    }
+
+    private static func date(for day: Date, mealKey: String, sortOrder: Int?) -> Date {
+        let hour: Int = switch mealKey {
+        case "breakfast": 8
+        case "lunch": 12
+        case "snack": 15
+        case "dinner": 18
+        default: min(21, 8 + max(0, sortOrder ?? 2) * 3)
+        }
+        return Calendar.current.date(bySettingHour: hour, minute: 0, second: 0, of: day) ?? day
+    }
+
+    @MainActor
+    struct EntryQuery: EnumerableEntityQuery, EntityStringQuery {
+        func allEntities() async throws -> [MealPlanEntryEntity] {
+            let entries = try MealPlanIntentStore.context.fetch(FetchDescriptor<MealPlanEntry>(
+                predicate: #Predicate { $0.skipped == false },
+                sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
+            ))
+            let meals = Dictionary(uniqueKeysWithValues: MealPlanIntentStore.mealTypes().map { ($0.key, $0) })
+            return entries.map { MealPlanEntryEntity(entry: $0, meal: meals[$0.mealKey]) }
+        }
+
+        func entities(for identifiers: [UUID]) async throws -> [MealPlanEntryEntity] {
+            try await allEntities().filter { identifiers.contains($0.id) }
+        }
+
+        func suggestedEntities() async throws -> [MealPlanEntryEntity] {
+            let today = Date.now.startOfDay
+            return try await allEntities().filter { $0.startDate >= today }.prefix(20).map { $0 }
+        }
+
+        func entities(matching string: String) async throws -> [MealPlanEntryEntity] {
+            try await allEntities().filter {
+                $0.title.localizedCaseInsensitiveContains(string)
+                    || $0.mealName.localizedCaseInsensitiveContains(string)
+            }
+        }
+    }
+}
+#endif
 
 // MARK: - Spotlight donation
 
@@ -370,13 +443,14 @@ enum MealPlanSpotlightIndexer {
                 predicate: #Predicate { $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
             )).map { MealPlanEntryEntity(entry: $0, meal: mealsByKey[$0.mealKey]) }
-            let calendars = try context.fetch(FetchDescriptor<Household>())
-                .map(MealPlanCalendarEntity.init)
-
             try await deleteAll()
             try await indexEntities(dishes)
             try await indexEntities(entries)
+#if compiler(>=6.4)
+            let calendars = try context.fetch(FetchDescriptor<Household>())
+                .map(MealPlanCalendarEntity.init)
             try await indexEntities(calendars)
+#endif
         } catch {
             SharedStore.logger.error("Could not update the App Intents search index: \(error.localizedDescription)")
         }

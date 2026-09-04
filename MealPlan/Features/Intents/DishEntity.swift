@@ -41,7 +41,7 @@ struct DishEntity: IndexedEntity {
     }
 }
 
-struct DishEntityQuery: EnumerableEntityQuery, EntityStringQuery, IndexedEntityQuery {
+struct DishEntityQuery: EnumerableEntityQuery, EntityStringQuery {
     @MainActor
     func allEntities() async throws -> [DishEntity] {
         try dishes().map(DishEntity.init)
@@ -72,6 +72,16 @@ struct DishEntityQuery: EnumerableEntityQuery, EntityStringQuery, IndexedEntityQ
             .map { DishEntity(dish: $0.0) }
     }
 
+    @MainActor
+    private func dishes() throws -> [Dish] {
+        try MealPlanIntentStore.context.fetch(
+            FetchDescriptor<Dish>(sortBy: [SortDescriptor(\.name)])
+        )
+    }
+}
+
+#if compiler(>=6.4)
+extension DishEntityQuery: IndexedEntityQuery {
     func reindexEntities(
         for identifiers: [DishEntity.ID],
         indexDescription: CSSearchableIndexDescription
@@ -84,11 +94,5 @@ struct DishEntityQuery: EnumerableEntityQuery, EntityStringQuery, IndexedEntityQ
         let entities = try await allEntities()
         try await MealPlanSpotlightIndexer.indexEntities(entities)
     }
-
-    @MainActor
-    private func dishes() throws -> [Dish] {
-        try MealPlanIntentStore.context.fetch(
-            FetchDescriptor<Dish>(sortBy: [SortDescriptor(\.name)])
-        )
-    }
 }
+#endif

@@ -34,6 +34,10 @@ struct DishDetailView: View {
     }
 
     var body: some View {
+        detailWithDialogs
+    }
+
+    private var detailContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 if !usesCoverHero {
@@ -76,8 +80,14 @@ struct DishDetailView: View {
             }
             .padding()
         }
+    }
+
+    private var configuredDetail: some View {
+        detailContent
         .navigationTitle(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
+        #if compiler(>=6.4)
         .appEntityIdentifier(EntityIdentifier(for: DishEntity.self, identifier: dish.uuid))
+        #endif
         #if os(iOS)
         .navigationBarTitleDisplayMode(usesCoverHero ? .inline : .large)
         #endif
@@ -130,6 +140,10 @@ struct DishDetailView: View {
         // Backs the Dish menu. It is the only publisher of this value, so the
         // whole menu greys out as soon as no recipe is open.
         .focusedSceneValue(\.dishCommands, dishCommands)
+    }
+
+    private var detailWithSheets: some View {
+        configuredDetail
         .sheet(isPresented: $showingEditor) {
             NavigationStack { DishEditorView(dish: dish, isNew: false) }
                 .dismissesOnOutsideClick()
@@ -161,6 +175,10 @@ struct DishDetailView: View {
             NavigationStack { DishEditorView(dish: variant, isNew: true) }
                 .dismissesOnOutsideClick()
         }
+    }
+
+    private var detailWithDialogs: some View {
+        detailWithSheets
         .alert(
             String(localized: "Couldn’t export recipe"),
             isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
@@ -174,10 +192,12 @@ struct DishDetailView: View {
             isPresented: $confirmingDelete,
             titleVisibility: .visible
         ) {
-            Button(String(localized: "Delete recipe"), role: .destructive) {
-                deleteRecipe()
+            Button(role: .destructive, action: deleteRecipe) {
+                Text("Delete recipe")
             }
-            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(role: .cancel, action: {}) {
+                Text("Cancel")
+            }
         }
     }
 

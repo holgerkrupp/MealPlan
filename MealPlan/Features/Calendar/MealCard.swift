@@ -108,10 +108,12 @@ struct MealCard: View {
                         // meal. Attached one level up, as it used to be, the
                         // menu won every press and nothing could be dragged.
                         entryRow(entry)
+                            #if compiler(>=6.4)
                             .appEntityIdentifier(EntityIdentifier(
                                 for: MealPlanEntryEntity.self,
                                 identifier: entry.uuid
                             ))
+                            #endif
                             .contentShape(Rectangle())
                             .onTapGesture { showDetails(for: entry) }
                             .draggable(dragPayload(entry)) { dragPreview(entry) }
