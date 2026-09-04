@@ -209,8 +209,15 @@ struct ShoppingListView: View {
                 }
             }
         }
-        .onAppear { if items.isEmpty { regenerate() } }
-        .task(priority: .utility) { await autoSyncWithBring() }
+        // An empty list is a valid result. Rebuilding it synchronously every
+        // time this tab appears can walk a large plan and block the tab
+        // transition; the explicit Rebuild button remains directly above.
+        .task(priority: .utility) {
+            // Let the tab transition finish before optional network work.
+            try? await Task.sleep(for: .seconds(1))
+            guard !Task.isCancelled else { return }
+            await autoSyncWithBring()
+        }
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
         .sheet(isPresented: $showingBringSetup) {

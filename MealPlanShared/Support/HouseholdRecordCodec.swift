@@ -195,7 +195,6 @@ struct LocalHouseholdRecord: Sendable {
     }
 }
 
-@MainActor
 enum HouseholdRecordCodec {
     static let payloadKey = "payload"
     static let householdIDKey = "householdID"
@@ -439,6 +438,18 @@ enum HouseholdRecordCodec {
             ingredientKey: item.ingredient?.normalizedName, additionalAmountsRaw: item.additionalAmountsRaw,
             unmeasuredCount: item.unmeasuredCount
         )
+    }
+}
+
+/// Reads and serializes the shared store on a dedicated SwiftData executor.
+/// The resulting snapshots are value types, so CloudKit can compare and hash
+/// a large household without monopolizing the app's main actor.
+@ModelActor
+actor HouseholdSnapshotActor {
+    func records(for householdID: UUID) throws -> [LocalHouseholdRecord] {
+        let households = try modelContext.fetch(FetchDescriptor<Household>())
+        guard let household = households.first(where: { $0.uuid == householdID }) else { return [] }
+        return try HouseholdRecordCodec.records(for: household, context: modelContext)
     }
 }
 

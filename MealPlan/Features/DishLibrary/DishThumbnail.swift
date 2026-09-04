@@ -1,5 +1,6 @@
 import SwiftUI
 import ImageIO
+import SwiftData
 
 #if canImport(UIKit)
 import UIKit
@@ -181,26 +182,27 @@ private actor DishPhotoCache {
 }
 
 struct CachedDishPhoto: View {
-    private let imageRecord: DishImage?
+    private let imageID: UUID?
     private let rawData: Data?
     let cacheKey: String
     let maxPixelSize: CGFloat
 
     @State private var decoded: CGImage?
+    @Environment(\.modelContext) private var modelContext
 
     private var sizedKey: String {
         "\(cacheKey)-\(Int(maxPixelSize.rounded(.up)))"
     }
 
     init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
-        self.imageRecord = image
+        self.imageID = image.uuid
         self.rawData = nil
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
     }
 
     init(data: Data, cacheKey: String, maxPixelSize: CGFloat) {
-        self.imageRecord = nil
+        self.imageID = nil
         self.rawData = data
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
@@ -222,9 +224,14 @@ struct CachedDishPhoto: View {
                 decoded = cached
                 return
             }
-            guard !Task.isCancelled,
-                  let sourceData = imageRecord?.data ?? rawData
-            else { return }
+            let sourceData: Data?
+            if let imageID {
+                let loader = DishPhotoDataActor(modelContainer: modelContext.container)
+                sourceData = try? await loader.data(for: imageID)
+            } else {
+                sourceData = rawData
+            }
+            guard !Task.isCancelled, let sourceData else { return }
             let image = await DishPhotoCache.shared.image(
                 data: sourceData,
                 key: sizedKey,
@@ -233,6 +240,20 @@ struct CachedDishPhoto: View {
             guard !Task.isCancelled, let image else { return }
             decoded = image
         }
+    }
+}
+
+/// External-storage faults can involve disk I/O and decompression. Resolve the
+/// photo bytes on a SwiftData executor rather than inside the scrolling view's
+/// main-actor task.
+@ModelActor
+private actor DishPhotoDataActor {
+    func data(for imageID: UUID) throws -> Data? {
+        var descriptor = FetchDescriptor<DishImage>(
+            predicate: #Predicate<DishImage> { $0.uuid == imageID }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first?.data
     }
 }
 

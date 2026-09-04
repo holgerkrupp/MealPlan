@@ -63,6 +63,7 @@ final class HouseholdRecordSyncService {
     private var engine: CKSyncEngine?
     private var household: Household?
     private var context: ModelContext?
+    private var modelContainer: ModelContainer?
     private var locator: HouseholdShareLocator?
     private var metadata = HouseholdSyncMetadata()
     private var saveObserver: NSObjectProtocol?
@@ -106,18 +107,19 @@ final class HouseholdRecordSyncService {
         engine = nil
         household = nil
         context = nil
+        modelContainer = nil
         locator = nil
         pendingSnapshots.removeAll(keepingCapacity: false)
         needsLocalScan = true
     }
 
-    func record(for id: CKRecord.ID) throws -> CKRecord? {
+    func record(for id: CKRecord.ID) async throws -> CKRecord? {
         guard id.zoneID == locator?.zoneID else { return nil }
         let snapshot: LocalHouseholdRecord?
         if let pending = pendingSnapshots[id.recordName] {
             snapshot = pending
         } else {
-            snapshot = try snapshotsByName()[id.recordName]
+            snapshot = try await snapshotsByName()[id.recordName]
         }
         guard let snapshot else { return nil }
         let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
@@ -130,9 +132,9 @@ final class HouseholdRecordSyncService {
             case .stateUpdate(let update):
                 try storeState(update.stateSerialization)
             case .fetchedRecordZoneChanges(let changes):
-                try applyFetchedChanges(changes)
+                try await applyFetchedChanges(changes)
             case .sentRecordZoneChanges(let changes):
-                try handleSentChanges(changes, engine: syncEngine)
+                try await handleSentChanges(changes, engine: syncEngine)
             case .sentDatabaseChanges(let changes):
                 if let failure = changes.failedZoneSaves.first { lastError = failure.error }
             case .accountChange:
@@ -173,6 +175,7 @@ final class HouseholdRecordSyncService {
         scheduledScan?.cancel()
         self.household = household
         self.context = context
+        modelContainer = context.container
         locator = nextLocator
         metadata = loadMetadata(for: nextLocator)
         pendingSnapshots.removeAll(keepingCapacity: false)
@@ -217,7 +220,7 @@ final class HouseholdRecordSyncService {
 
     private func scanLocalChanges() async throws {
         guard let household, let context, let engine, let locator, !locator.isReadOnly else { return }
-        var snapshots = try HouseholdRecordCodec.records(for: household, context: context)
+        var snapshots = try await snapshotRecords(for: household.uuid)
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
         let initialSnapshots = snapshots
@@ -238,7 +241,7 @@ final class HouseholdRecordSyncService {
             isApplyingRemoteChanges = true
             try context.save()
             isApplyingRemoteChanges = false
-            snapshots = try HouseholdRecordCodec.records(for: household, context: context)
+            snapshots = try await snapshotRecords(for: household.uuid)
             let touchedSnapshots = snapshots
             evaluated = await Task.detached(priority: .utility) {
                 touchedSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
@@ -312,12 +315,12 @@ final class HouseholdRecordSyncService {
 
     // MARK: - Remote change application
 
-    private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) throws {
+    private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) async throws {
         guard let household, let context, let locator else { return }
         isApplyingRemoteChanges = true
         defer { isApplyingRemoteChanges = false }
 
-        var local = keyedSnapshots(try HouseholdRecordCodec.records(for: household, context: context))
+        var local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
         for modification in changes.modifications.sorted(by: { priority($0.record) < priority($1.record) }) {
             let record = modification.record
             guard record.recordID.zoneID == locator.zoneID,
@@ -356,7 +359,7 @@ final class HouseholdRecordSyncService {
             }
         }
         try context.save()
-        local = keyedSnapshots(try HouseholdRecordCodec.records(for: household, context: context))
+        local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
         for snapshot in local.values {
             metadata.fingerprints[snapshot.identity.recordName] = snapshot.fingerprint
             metadata.groupFingerprints[snapshot.identity.recordName] = snapshot.groupFingerprints
@@ -366,7 +369,7 @@ final class HouseholdRecordSyncService {
         NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
     }
 
-    private func handleSentChanges(_ changes: CKSyncEngine.Event.SentRecordZoneChanges, engine: CKSyncEngine) throws {
+    private func handleSentChanges(_ changes: CKSyncEngine.Event.SentRecordZoneChanges, engine: CKSyncEngine) async throws {
         var didFail = false
         for record in changes.savedRecords {
             metadata.systemFields[record.recordID.recordName] = encodeSystemFields(record)
@@ -374,7 +377,7 @@ final class HouseholdRecordSyncService {
         }
         for failure in changes.failedRecordSaves {
             if failure.error.code == .serverRecordChanged, let server = failure.error.serverRecord {
-                try applyServerConflict(server, engine: engine)
+                try await applyServerConflict(server, engine: engine)
             } else {
                 didFail = true
                 lastError = failure.error
@@ -388,10 +391,15 @@ final class HouseholdRecordSyncService {
         persistMetadata()
     }
 
-    private func applyServerConflict(_ server: CKRecord, engine: CKSyncEngine) throws {
+    private func applyServerConflict(_ server: CKRecord, engine: CKSyncEngine) async throws {
         guard let household, let context,
               let identity = HouseholdRecordIdentity(recordType: server.recordType, recordName: server.recordID.recordName) else { return }
-        let local = try HouseholdRecordCodec.records(for: household, context: context).first { $0.identity == identity }
+        let local: LocalHouseholdRecord?
+        if let pending = pendingSnapshots[identity.recordName] {
+            local = pending
+        } else {
+            local = try await snapshotRecords(for: household.uuid).first { $0.identity == identity }
+        }
         let resolution = try HouseholdRecordConflictResolver.resolve(local: local, server: server)
         let assetData = (server[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
         try HouseholdRecordApplier.apply(payloadData: resolution.payloadData, identity: identity, modifiedAt: resolution.modifiedAt, assetData: assetData, household: household, context: context)
@@ -402,9 +410,15 @@ final class HouseholdRecordSyncService {
 
     // MARK: - Persistence and snapshots
 
-    private func snapshotsByName() throws -> [String: LocalHouseholdRecord] {
-        guard let household, let context else { return [:] }
-        var records = try HouseholdRecordCodec.records(for: household, context: context)
+    private func snapshotRecords(for householdID: UUID) async throws -> [LocalHouseholdRecord] {
+        guard let modelContainer else { return [] }
+        let snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        return try await snapshotActor.records(for: householdID)
+    }
+
+    private func snapshotsByName() async throws -> [String: LocalHouseholdRecord] {
+        guard let household else { return [:] }
+        var records = try await snapshotRecords(for: household.uuid)
         for tombstone in metadata.tombstones {
             let identity = HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID)
             let payload = HouseholdRecordPayload.deletionMarker(.init(
