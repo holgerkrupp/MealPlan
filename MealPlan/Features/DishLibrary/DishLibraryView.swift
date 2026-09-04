@@ -70,10 +70,6 @@ struct DishLibraryView: View {
         DishTag.mostUsed(from: allDishes)
     }
 
-    private var collections: [String] {
-        Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
     var body: some View {
         @Bindable var appState = appState
 
@@ -137,7 +133,6 @@ struct DishLibraryView: View {
             ToolbarItem(placement: .secondaryAction) {
                 DishFilterMenu(
                     filter: $appState.dishFilter,
-                    availableCollections: collections,
                     availableTags: tags
                 )
             }

@@ -4,6 +4,162 @@
     "" : {
 
     },
+    "Bake the potatoes until tender and serve with your favorite toppings." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Backe die Kartoffeln weich und serviere sie mit deinen Lieblingsbelägen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bake the potatoes until tender and serve with your favorite toppings." } }
+      }
+    },
+    "Baked potatoes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ofenkartoffeln" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Baked potatoes" } }
+      }
+    },
+    "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schneide das Gemüse, brate es bissfest an, würze es und serviere es mit Reis." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." } }
+      }
+    },
+    "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle Gerichte, die du bereits kochst. Es sind ganz normale Gerichte, die du jederzeit bearbeiten oder löschen kannst." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." } }
+      }
+    },
+    "Configure meals…" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mahlzeiten konfigurieren …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Configure meals…" } }
+      }
+    },
+    "Connected" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbunden" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } }
+      }
+    },
+    "Connections" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connections" } }
+      }
+    },
+    "Cook the pasta. Warm the tomato sauce, combine, and season to taste." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Koche die Nudeln. Erwärme die Tomatensoße, vermische alles und schmecke es ab." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cook the pasta. Warm the tomato sauce, combine, and season to taste." } }
+      }
+    },
+    "Easy" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Einfach" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Easy" } }
+      }
+    },
+    "Family favorite" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Familienliebling" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Family favorite" } }
+      }
+    },
+    "Free planning through %@. Unlock for later dates." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kostenlos planen bis %@. Schalte spätere Termine frei." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Free planning through %@. Unlock for later dates." } }
+      }
+    },
+    "Household standard" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Haushaltsstandard" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Household standard" } }
+      }
+    },
+    "Mix a smooth batter and cook small portions in a lightly greased pan until golden." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rühre einen glatten Teig und backe kleine Portionen in einer leicht gefetteten Pfanne goldbraun." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mix a smooth batter and cook small portions in a lightly greased pan until golden." } }
+      }
+    },
+    "Needs attention" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktion erforderlich" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs attention" } }
+      }
+    },
+    "Off" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aus" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } }
+      }
+    },
+    "Pantry staples…" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vorräte …" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pantry staples…" } }
+      }
+    },
+    "Pick any familiar dishes you want in your library on day one." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle bekannte Gerichte für deine Bibliothek am ersten Tag." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick any familiar dishes you want in your library on day one." } }
+      }
+    },
+    "Quick" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schnell" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick" } }
+      }
+    },
+    "See what is connected, then open only the service you want to change." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sieh sofort, was verbunden ist, und öffne nur den Dienst, den du ändern möchtest." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "See what is connected, then open only the service you want to change." } }
+      }
+    },
+    "Skip them all if you prefer an empty library." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle keines, wenn du lieber mit einer leeren Bibliothek beginnst." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Skip them all if you prefer an empty library." } }
+      }
+    },
+    "Start with a few dishes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Starte mit ein paar Gerichten" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start with a few dishes" } }
+      }
+    },
+    "Tomato pasta" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nudeln mit Tomatensoße" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tomato pasta" } }
+      }
+    },
+    "Unlimited planning starts here" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hier beginnt unbegrenztes Planen" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlimited planning starts here" } }
+      }
+    },
+    "Unlock to plan this day and later dates." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schalte die App frei, um diesen und spätere Tage zu planen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock to plan this day and later dates." } }
+      }
+    },
+    "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nutze Tags für Ernährungsweisen, Anlässe, Sammlungen und alles, was du wiederfinden möchtest. Einige werden aus Name und Zutaten vorgeschlagen." } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." } }
+      }
+    },
+    "Vegetable stir-fry" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gebratenes Gemüse" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Vegetable stir-fry" } }
+      }
+    },
     "Add recipe site" : {
       "localizations" : {
         "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptseite hinzufügen" } },
@@ -3170,7 +3326,8 @@
             "state" : "translated",
             "value" : "Nicht verbunden"
           }
-        }
+        },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not connected" } }
       }
     },
     "Not cooked in" : {
@@ -3292,7 +3449,10 @@
       }
     },
     "On" : {
-
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "An" } },
+        "en" : { "stringUnit" : { "state" : "translated", "value" : "On" } }
+      }
     },
     "On iPhone and iPad, share a recipe page from Safari or another app straight to MealPlan — it appears here through iCloud." : {
       "localizations" : {

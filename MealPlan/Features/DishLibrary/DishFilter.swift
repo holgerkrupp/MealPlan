@@ -26,7 +26,6 @@ struct DishFilter: Equatable {
     var sort: Sort = .alphabetical
     var searchText: String = ""
     var mealType: MealTypeTag?
-    var dietary: Set<DietaryTag> = []
     var season: Season?
     /// Only dishes whose total time is at or below this many minutes.
     var maxMinutes: Int?
@@ -34,15 +33,14 @@ struct DishFilter: Equatable {
     var notCookedWithinDays: Int?
     var favoritesOnly = false
     var minimumRating: Int?
-    var collection: String?
     /// Free-form tags a dish must carry — all of them, so stacking "vegan"
     /// and "short prepwork" narrows rather than widens.
     var tags: Set<String> = []
 
     var isActive: Bool {
-        mealType != nil || !dietary.isEmpty || season != nil
+        mealType != nil || season != nil
             || maxMinutes != nil || notCookedWithinDays != nil
-            || favoritesOnly || minimumRating != nil || collection != nil
+            || favoritesOnly || minimumRating != nil
             || !tags.isEmpty
     }
 
@@ -62,7 +60,6 @@ struct DishFilter: Equatable {
     func apply(to dishes: [Dish], now: Date = .now) -> [Dish] {
         var result = dishes.filter { dish in
             if let mealType, !dish.mealTypeTags.contains(mealType) { return false }
-            if !dietary.isEmpty, !dietary.isSubset(of: dish.dietaryTags) { return false }
             if let season, dish.season != season { return false }
             if let maxMinutes {
                 guard let total = dish.totalTimeMinutes, total <= maxMinutes else { return false }
@@ -74,9 +71,6 @@ struct DishFilter: Equatable {
             }
             if favoritesOnly, !dish.isFavorite { return false }
             if let minimumRating, dish.rating < minimumRating { return false }
-            if let collection, !dish.collectionNames.contains(where: {
-                $0.localizedCaseInsensitiveCompare(collection) == .orderedSame
-            }) { return false }
             if !tags.isEmpty {
                 let dishTags = Set(dish.tagNames.map(DishTag.normalize))
                 guard tags.allSatisfy({ dishTags.contains(DishTag.normalize($0)) }) else { return false }

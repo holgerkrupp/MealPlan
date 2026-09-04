@@ -216,6 +216,73 @@ struct RecipeSearchSettingsSection: View {
 
 // MARK: - Reminders
 
+/// External services and system hand-offs live in one predictable place. Each
+/// row shows its state before opening the detailed controls.
+@MainActor
+struct ConnectionsSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @Environment(CalendarContextStore.self) private var calendarStore
+
+    var body: some View {
+        Section {
+            NavigationLink {
+                Form { CalendarIntegrationSection() }
+                    .formStyle(.grouped)
+                    .navigationTitle(String(localized: "Calendar"))
+            } label: {
+                LabeledContent {
+                    Text(calendarStatus)
+                } label: {
+                    Label(String(localized: "Calendar"), systemImage: "calendar.badge.clock")
+                }
+            }
+
+            NavigationLink {
+                Form { RemindersSettingsSection() }
+                    .formStyle(.grouped)
+                    .navigationTitle(String(localized: "Reminders"))
+            } label: {
+                LabeledContent {
+                    Text(MealNotificationScheduler.shared.dinnerEnabled
+                         ? String(localized: "On") : String(localized: "Off"))
+                } label: {
+                    Label(String(localized: "Reminders"), systemImage: "bell")
+                }
+            }
+
+            NavigationLink {
+                BringSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(bringStatus)
+                } label: {
+                    Label(String(localized: "Bring!"), systemImage: "cart")
+                }
+            }
+        } header: {
+            Text(String(localized: "Connections"))
+        } footer: {
+            Text(String(localized: "See what is connected, then open only the service you want to change."))
+        }
+    }
+
+    private var calendarStatus: String {
+        if calendarStore.isActive { return String(localized: "Connected") }
+        if calendarStore.settings.isEnabled { return String(localized: "Needs attention") }
+        return String(localized: "Not connected")
+    }
+
+    private var bringStatus: String {
+        guard BringSyncService.shared.hasAccount,
+              let name = appState.currentHousehold?.bringListName,
+              appState.currentHousehold?.isConnectedToBring == true
+        else { return String(localized: "Not connected") }
+        return name
+    }
+}
+
+// MARK: - Reminders
+
 @MainActor
 struct RemindersSettingsSection: View {
     @Environment(\.modelContext) private var context

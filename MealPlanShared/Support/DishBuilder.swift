@@ -29,10 +29,12 @@ enum DishBuilder {
         dish.needsReview = recipe.needsReview
         dish.isFavorite = recipe.isFavorite
         dish.rating = min(max(recipe.rating, 0), 5)
-        dish.collectionNames = recipe.collectionNames
-        dish.tagNames = DishTag.merge(recipe.tagNames)
+        dish.tagNames = DishLabelConsolidation.tags(
+            existing: recipe.tagNames,
+            collections: recipe.collectionNames,
+            dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
+        )
         dish.mealTypeTags = recipe.mealTypeTags
-        dish.dietaryTags = recipe.dietaryTags
         dish.season = recipe.season
         dish.setStatedNutritionPerServing(recipe.nutritionPerServing)
         if let glyph = recipe.glyph {
@@ -158,7 +160,11 @@ enum DishBuilder {
         // Imports are guesswork, so ask the cook to check the result.
         dish.needsReview = recipe.needsReview
         dish.refreshAutoGlyph()
-        dish.tagNames = DishTag.merge(dish.tagNames, adding: recipe.tagNames)
+        dish.tagNames = DishLabelConsolidation.tags(
+            existing: dish.tagNames,
+            collections: recipe.collectionNames + recipe.tagNames,
+            dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
+        )
         addSuggestedTags(to: dish, household: dish.household)
         try? context.save()
     }
@@ -189,10 +195,8 @@ enum DishBuilder {
         copy.cookTimeMinutes = dish.cookTimeMinutes
         copy.needsReview = dish.needsReview
         copy.rating = dish.rating
-        copy.collectionNames = dish.collectionNames
         copy.tagNames = dish.tagNames
         copy.mealTypeTagsRaw = dish.mealTypeTagsRaw
-        copy.dietaryTagsRaw = dish.dietaryTagsRaw
         copy.seasonRaw = dish.seasonRaw
         copy.glyphRaw = dish.glyphRaw
         copy.glyphIsAuto = dish.glyphIsAuto

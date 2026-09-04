@@ -204,7 +204,6 @@ final class HouseholdRecordSyncService {
     private func scanLocalChanges() throws {
         guard let household, let context, let engine, let locator, !locator.isReadOnly else { return }
         var snapshots = try HouseholdRecordCodec.records(for: household, context: context)
-        let firstSnapshotByName = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.identity.recordName, $0) })
         var didTouch = false
 
         for snapshot in snapshots where metadata.fingerprints[snapshot.identity.recordName] != nil && metadata.fingerprints[snapshot.identity.recordName] != snapshot.fingerprint {
@@ -220,7 +219,7 @@ final class HouseholdRecordSyncService {
             snapshots = try HouseholdRecordCodec.records(for: household, context: context)
         }
 
-        let byName = Dictionary(uniqueKeysWithValues: snapshots.map { ($0.identity.recordName, $0) })
+        let byName = keyedSnapshots(snapshots)
         for snapshot in snapshots where metadata.fingerprints[snapshot.identity.recordName] != snapshot.fingerprint {
             let id = CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: locator.zoneID)
             engine.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
@@ -242,9 +241,6 @@ final class HouseholdRecordSyncService {
             ])
         }
 
-        // Silence an unused-value warning while retaining the pre-touch map;
-        // it deliberately freezes what the save observer saw.
-        _ = firstSnapshotByName
         persistMetadata()
     }
 
@@ -255,7 +251,7 @@ final class HouseholdRecordSyncService {
         isApplyingRemoteChanges = true
         defer { isApplyingRemoteChanges = false }
 
-        var local = Dictionary(uniqueKeysWithValues: try HouseholdRecordCodec.records(for: household, context: context).map { ($0.identity.recordName, $0) })
+        var local = keyedSnapshots(try HouseholdRecordCodec.records(for: household, context: context))
         for modification in changes.modifications.sorted(by: { priority($0.record) < priority($1.record) }) {
             let record = modification.record
             guard record.recordID.zoneID == locator.zoneID,
@@ -294,7 +290,7 @@ final class HouseholdRecordSyncService {
             }
         }
         try context.save()
-        local = Dictionary(uniqueKeysWithValues: try HouseholdRecordCodec.records(for: household, context: context).map { ($0.identity.recordName, $0) })
+        local = keyedSnapshots(try HouseholdRecordCodec.records(for: household, context: context))
         for snapshot in local.values {
             metadata.fingerprints[snapshot.identity.recordName] = snapshot.fingerprint
             metadata.groupFingerprints[snapshot.identity.recordName] = snapshot.groupFingerprints
@@ -351,7 +347,26 @@ final class HouseholdRecordSyncService {
             ))
             records.append(.init(identity: identity, householdID: household.uuid, modifiedAt: tombstone.deletedAt, payloadData: try HouseholdRecordCodec.encode(payload)))
         }
-        return Dictionary(uniqueKeysWithValues: records.map { ($0.identity.recordName, $0) })
+        return keyedSnapshots(records)
+    }
+
+    /// An old development store can contain duplicate UUID defaults from a
+    /// lightweight schema update. The app has no shipped legacy population,
+    /// but sync must still degrade safely instead of crashing while the local
+    /// developer store is being replaced. Prefer the newest snapshot and use
+    /// its stable fingerprint as a deterministic tie-breaker.
+    private func keyedSnapshots(_ records: [LocalHouseholdRecord]) -> [String: LocalHouseholdRecord] {
+        records.reduce(into: [:]) { result, record in
+            let name = record.identity.recordName
+            guard let existing = result[name] else {
+                result[name] = record
+                return
+            }
+            if record.modifiedAt > existing.modifiedAt
+                || (record.modifiedAt == existing.modifiedAt && record.fingerprint > existing.fingerprint) {
+                result[name] = record
+            }
+        }
     }
 
     private func identity(fromRecordName name: String) -> HouseholdRecordIdentity? {

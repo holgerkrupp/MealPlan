@@ -29,7 +29,7 @@ struct HouseholdRecordSyncTests {
     @Test func planMoveAndContentEditMergeIndependently() {
         let earlier = Date(timeIntervalSince1970: 100)
         let later = Date(timeIntervalSince1970: 200)
-        var localValue = planValue(date: earlier, meal: "lunch", note: "local note")
+        let localValue = planValue(date: earlier, meal: "lunch", note: "local note")
         var serverValue = localValue
         serverValue.date = later
         serverValue.mealKey = "dinner"
@@ -50,7 +50,7 @@ struct HouseholdRecordSyncTests {
     @Test func shoppingCheckAndQuantityEditMergeIndependently() {
         let earlier = Date(timeIntervalSince1970: 100)
         let later = Date(timeIntervalSince1970: 200)
-        var content = shoppingValue(amount: 2, checked: false)
+        let content = shoppingValue(amount: 2, checked: false)
         var checked = content
         checked.canonicalValue = 1
         checked.isChecked = true

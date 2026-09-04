@@ -35,7 +35,8 @@ final class Dish {
     var isFavorite: Bool = false
     /// Zero means unrated; 1...5 is the cook's personal rating.
     var rating: Int = 0
-    /// User-defined collections such as "Weeknight" or "Christmas".
+    /// Legacy storage for older recipe archives. New records keep this empty;
+    /// collections are represented by free-form tags.
     var collectionNames: [String] = []
     /// Free-form labels the household invents as it goes ("vegan", "pork",
     /// "short prepwork"). A handful is suggested automatically on import and
@@ -46,6 +47,8 @@ final class Dish {
     var prepTimeMinutes: Int?
     var cookTimeMinutes: Int?
     var mealTypeTagsRaw: [String] = []
+    /// Legacy storage for older recipe archives. New records keep this empty;
+    /// dietary labels are represented by free-form tags.
     var dietaryTagsRaw: [String] = []
     var seasonRaw: String?
     var createdByName: String?
@@ -212,7 +215,6 @@ final class Dish {
     var searchableText: String {
         ([name, recipeText ?? ""]
             + sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
-            + collectionNames
             + tagNames)
             .joined(separator: " ")
     }

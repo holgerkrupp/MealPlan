@@ -69,7 +69,7 @@ enum DishSearch {
             }
         }
 
-        for label in dish.tagNames + dish.collectionNames {
+        for label in dish.tagNames {
             let score = label.fuzzyScore(query: query) * labelWeight
             if score > best {
                 best = score

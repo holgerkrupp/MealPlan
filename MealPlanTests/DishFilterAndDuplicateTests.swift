@@ -4,10 +4,10 @@ import Foundation
 
 @MainActor
 struct DishFilterAndDuplicateTests {
-    @Test func searchesIngredientsMethodAndCollections() {
+    @Test func searchesIngredientsMethodAndTags() {
         let dish = Dish(name: "Family dinner")
         dish.recipeText = "Slowly caramelize everything"
-        dish.collectionNames = ["Weeknight"]
+        dish.tagNames = ["Weeknight"]
         let ingredient = Ingredient(name: "Red onion")
         let line = DishIngredient(rawText: "1 red onion")
         line.ingredient = ingredient
@@ -23,15 +23,15 @@ struct DishFilterAndDuplicateTests {
         #expect(filter.apply(to: [dish]) == [dish])
     }
 
-    @Test func favoriteRatingAndCollectionFiltersCombine() {
+    @Test func favoriteRatingAndTagFiltersCombine() {
         let dish = Dish(name: "Soup")
         dish.isFavorite = true
         dish.rating = 4
-        dish.collectionNames = ["Winter"]
+        dish.tagNames = ["Winter"]
         var filter = DishFilter()
         filter.favoritesOnly = true
         filter.minimumRating = 4
-        filter.collection = "winter"
+        filter.tags = ["winter"]
         #expect(filter.apply(to: [dish]) == [dish])
         filter.minimumRating = 5
         #expect(filter.apply(to: [dish]).isEmpty)

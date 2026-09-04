@@ -53,10 +53,8 @@ struct SettingsView: View {
             UnitsSettingsSection()
             NutritionSettingsSection()
             PlanSettingsSection()
-            CalendarIntegrationSection()
             RecipeSearchSettingsSection()
-            RemindersSettingsSection()
-            BringSettingsSection()
+            ConnectionsSettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
         }
@@ -103,17 +101,10 @@ struct SettingsView: View {
             HouseholdSettingsView()
         case .plan:
             paneForm {
-                PlanSettingsSection(showsMealsLink: false, header: nil)
-                RemindersSettingsSection()
+                PlanSettingsSection(showsMealsLink: true, header: nil)
             }
-        case .meals:
-            MealsSettingsView()
-        case .calendar:
-            paneForm {
-                CalendarIntegrationSection()
-            }
-        case .shopping:
-            BringSettingsView()
+        case .connections:
+            paneForm { ConnectionsSettingsSection() }
         case .data:
             DataTransferView()
         case .about:
@@ -137,9 +128,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     case general
     case household
     case plan
-    case meals
-    case calendar
-    case shopping
+    case connections
     case data
     case about
 
@@ -150,9 +139,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: String(localized: "General")
         case .household: String(localized: "Household")
         case .plan: String(localized: "Plan")
-        case .meals: String(localized: "Meals")
-        case .calendar: String(localized: "Calendar")
-        case .shopping: String(localized: "Shopping")
+        case .connections: String(localized: "Connections")
         case .data: String(localized: "Data")
         case .about: String(localized: "About")
         }
@@ -163,9 +150,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: "gearshape"
         case .household: "person.2"
         case .plan: "calendar"
-        case .meals: "fork.knife"
-        case .calendar: "calendar.badge.clock"
-        case .shopping: "cart"
+        case .connections: "link"
         case .data: "externaldrive"
         case .about: "info.circle"
         }
@@ -176,9 +161,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .general: .gray
         case .household: .purple
         case .plan: .blue
-        case .meals: .orange
-        case .calendar: .red
-        case .shopping: .green
+        case .connections: .green
         case .data: .indigo
         case .about: .teal
         }

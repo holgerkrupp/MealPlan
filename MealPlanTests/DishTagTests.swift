@@ -2,6 +2,44 @@ import Testing
 import Foundation
 @testable import MealPlan
 
+struct DishLabelConsolidationTests {
+    @Test func legacyLabelsBecomeOneDeduplicatedTagVocabulary() {
+        let tags = DishLabelConsolidation.tags(
+            existing: ["Vegan", "Quick"],
+            collections: ["Weeknight", "vegan"],
+            dietaryRawValues: [DietaryTag.vegan.rawValue, DietaryTag.glutenFree.rawValue]
+        )
+        #expect(tags.contains("Vegan"))
+        #expect(tags.contains("Weeknight"))
+        #expect(tags.contains(String(localized: "Gluten-free")))
+        #expect(tags.filter { DishTag.areSame($0, "vegan") }.count == 1)
+    }
+
+    @Test @MainActor func applyingTheConversionIsLosslessAndIdempotent() {
+        let dish = Dish(name: "Soup")
+        dish.tagNames = ["Vegan"]
+        dish.collectionNames = ["Winter"]
+        dish.dietaryTagsRaw = [DietaryTag.vegan.rawValue]
+
+        DishLabelConsolidation.apply(to: dish)
+        let once = dish.tagNames
+        DishLabelConsolidation.apply(to: dish)
+
+        #expect(dish.collectionNames.isEmpty)
+        #expect(dish.dietaryTagsRaw.isEmpty)
+        #expect(dish.tagNames == once)
+        #expect(dish.tagNames.filter { DishTag.areSame($0, "vegan") }.count == 1)
+        #expect(dish.tagNames.contains("Winter"))
+    }
+
+    @Test func starterDishesAreSmallUniqueAndImmediatelyPlannable() {
+        let starters = StarterDishLibrary.all
+        #expect((3...6).contains(starters.count))
+        #expect(Set(starters.map(\.id)).count == starters.count)
+        #expect(starters.allSatisfy { !$0.name.isEmpty && !$0.mealTypes.isEmpty })
+    }
+}
+
 // MARK: - Vocabulary and normalization
 
 @MainActor

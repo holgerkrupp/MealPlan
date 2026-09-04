@@ -1,4 +1,5 @@
 import SwiftUI
+import SwiftData
 
 enum OnboardingPreferenceKeys {
     static let didCompleteOnboarding = "didCompleteOnboarding"
@@ -9,7 +10,11 @@ enum OnboardingPreferenceKeys {
 /// Safari, other recipe apps, and recipe files.
 struct OnboardingView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
     @State private var selectedPage = 0
+    @State private var selectedStarterIDs: Set<String> = []
+    @State private var configuredStarterDefaults = false
 
     private var pages: [OnboardingPage] {
         [
@@ -46,6 +51,14 @@ struct OnboardingView: View {
                     String(localized: "Tag dishes as vegetarian, quick, or a kids’ favorite, then filter the library by it."),
                     String(localized: "Cooking mode walks you through the steps and scales ingredients to the servings you cook.")
                 ]
+            ),
+            OnboardingPage(
+                title: String(localized: "Start with a few dishes"),
+                summary: String(localized: "Pick any familiar dishes you want in your library on day one."),
+                systemImage: "sparkles",
+                tint: .mint,
+                bullets: [],
+                isStarterPicker: true
             ),
             sharingPage,
             OnboardingPage(
@@ -112,8 +125,14 @@ struct OnboardingView: View {
         NavigationStack {
             TabView(selection: $selectedPage) {
                 ForEach(Array(pages.enumerated()), id: \.element.id) { index, page in
-                    OnboardingPageView(page: page)
-                        .tag(index)
+                    Group {
+                        if page.isStarterPicker {
+                            StarterDishesOnboardingPage(selectedIDs: $selectedStarterIDs)
+                        } else {
+                            OnboardingPageView(page: page)
+                        }
+                    }
+                    .tag(index)
                 }
             }
             #if os(iOS)
@@ -127,6 +146,7 @@ struct OnboardingView: View {
                     if selectedPage < pages.count - 1 {
                         withAnimation { selectedPage += 1 }
                     } else {
+                        addStarterDishes()
                         dismiss()
                     }
                 } label: {
@@ -148,7 +168,20 @@ struct OnboardingView: View {
             }
             .frame(minWidth: 460, minHeight: 560)
             #endif
+            .onChange(of: selectedPage, initial: true) { _, page in
+                guard !configuredStarterDefaults,
+                      pages.indices.contains(page), pages[page].isStarterPicker else { return }
+                configuredStarterDefaults = true
+                if (appState.currentHousehold?.dishes ?? []).isEmpty {
+                    selectedStarterIDs = Set(StarterDishLibrary.all.map(\.id))
+                }
+            }
         }
+    }
+
+    private func addStarterDishes() {
+        guard let household = appState.currentHousehold, !appState.isGuest else { return }
+        StarterDishLibrary.seed(selectedIDs: selectedStarterIDs, household: household, context: context)
     }
 
     private var primaryButtonTitle: String {
@@ -169,6 +202,59 @@ private struct OnboardingPage: Identifiable {
     let systemImage: String
     let tint: Color
     let bullets: [String]
+    var isStarterPicker = false
+}
+
+private struct StarterDishesOnboardingPage: View {
+    @Binding var selectedIDs: Set<String>
+
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 22) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 70, weight: .semibold))
+                    .foregroundStyle(.mint)
+                    .padding(.top, 30)
+
+                VStack(spacing: 8) {
+                    Text(String(localized: "Start with a few dishes"))
+                        .font(.largeTitle.bold())
+                    Text(String(localized: "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime."))
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+
+                VStack(spacing: 0) {
+                    ForEach(StarterDishLibrary.all) { dish in
+                        Toggle(isOn: selection(for: dish.id)) {
+                            Label(dish.name, systemImage: "fork.knife")
+                        }
+                        .padding()
+                        if dish.id != StarterDishLibrary.all.last?.id { Divider() }
+                    }
+                }
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+
+                Text(String(localized: "Skip them all if you prefer an empty library."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+
+                Spacer(minLength: 100)
+            }
+            .frame(maxWidth: 640)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 24)
+        }
+    }
+
+    private func selection(for id: String) -> Binding<Bool> {
+        Binding(
+            get: { selectedIDs.contains(id) },
+            set: { selected in
+                if selected { selectedIDs.insert(id) } else { selectedIDs.remove(id) }
+            }
+        )
+    }
 }
 
 private struct OnboardingPageView: View {
@@ -224,6 +310,8 @@ private struct OnboardingPageView: View {
 
 #Preview {
     OnboardingView()
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
 }
 
 #Preview("One page") {

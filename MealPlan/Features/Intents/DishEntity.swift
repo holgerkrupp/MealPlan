@@ -26,7 +26,6 @@ struct DishEntity: IndexedEntity {
         name = dish.name
         details = ([dish.recipeText ?? ""]
             + dish.sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
-            + dish.collectionNames
             + dish.tagNames)
             .filter { !$0.isEmpty }
             .joined(separator: ", ")

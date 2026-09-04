@@ -342,6 +342,7 @@ enum HouseholdRecordApplier {
         dish.cookTimeMinutes = value.cookTimeMinutes
         dish.mealTypeTagsRaw = value.mealTypeTagsRaw
         dish.dietaryTagsRaw = value.dietaryTagsRaw
+        DishLabelConsolidation.apply(to: dish)
         dish.seasonRaw = value.seasonRaw
         dish.createdByName = value.createdByName
         dish.dateCreated = value.dateCreated

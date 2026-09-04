@@ -5,7 +5,6 @@ import SwiftUI
 @MainActor
 struct DishFilterMenu: View {
     @Binding var filter: DishFilter
-    var availableCollections: [String] = []
     var availableTags: [String] = []
 
     var body: some View {
@@ -22,15 +21,6 @@ struct DishFilterMenu: View {
                 Button(String(localized: "Any")) { filter.minimumRating = nil }
                 ForEach(1...5, id: \.self) { rating in
                     Button(String(repeating: "★", count: rating)) { filter.minimumRating = rating }
-                }
-            }
-
-            if !availableCollections.isEmpty {
-                Menu(String(localized: "Collection")) {
-                    Button(String(localized: "Any")) { filter.collection = nil }
-                    ForEach(availableCollections, id: \.self) { name in
-                        Button(name) { filter.collection = name }
-                    }
                 }
             }
 
@@ -59,18 +49,6 @@ struct DishFilterMenu: View {
                     Toggle(tag.localizedName, isOn: Binding(
                         get: { filter.mealType == tag },
                         set: { filter.mealType = $0 ? tag : nil }
-                    ))
-                }
-            }
-
-            Menu(String(localized: "Diet")) {
-                ForEach(DietaryTag.allCases) { tag in
-                    Toggle(tag.localizedName, isOn: Binding(
-                        get: { filter.dietary.contains(tag) },
-                        set: { isOn in
-                            if isOn { filter.dietary.insert(tag) }
-                            else { filter.dietary.remove(tag) }
-                        }
                     ))
                 }
             }
@@ -122,7 +100,6 @@ struct DishFilterMenu: View {
         .toolbar {
             DishFilterMenu(
                 filter: $filter,
-                availableCollections: ["Weeknight", "Weihnachten"],
                 availableTags: ["vegan", "schnell", "Ofen"]
             )
         }

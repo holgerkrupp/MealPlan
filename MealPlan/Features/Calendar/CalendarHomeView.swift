@@ -18,6 +18,7 @@ struct CalendarHomeView: View {
     @State private var applyingTemplateWeek: Date?
     @State private var exportedPDF: ExportedPDF?
     @State private var showingPaywall = false
+    @State private var showingMealsSettings = false
     /// First day of the week shown in the strip above the plan. Follows the
     /// user's locale, unlike the Monday-based week sections below it.
     @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
@@ -41,6 +42,23 @@ struct CalendarHomeView: View {
             .background(.bar)
 
             Divider()
+
+            if let latestFreeDate = purchaseManager.latestPlanningDate() {
+                Button { showingPaywall = true } label: {
+                    Label {
+                        Text(String(localized: "Free planning through \(latestFreeDate.formatted(date: .abbreviated, time: .omitted)). Unlock for later dates."))
+                    } icon: {
+                        Image(systemName: "lock.open")
+                    }
+                    .font(.caption)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .background(.bar)
+            }
 
             plan
         }
@@ -128,6 +146,11 @@ struct CalendarHomeView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
+                    showingMealsSettings = true
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
                 Menu(String(localized: "This week"), systemImage: "square.on.square") {
                     Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
                         savingTemplateWeek = focusWeek
@@ -158,6 +181,17 @@ struct CalendarHomeView: View {
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
                 .dismissesOnOutsideClick()
+        }
+        .sheet(isPresented: $showingMealsSettings) {
+            NavigationStack {
+                MealsSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { showingMealsSettings = false }
+                        }
+                    }
+            }
+            .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingDatePicker) {
             NavigationStack {

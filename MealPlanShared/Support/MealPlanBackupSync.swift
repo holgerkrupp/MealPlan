@@ -303,6 +303,7 @@ enum MealPlanBackupSync {
         dish.cookTimeMinutes = stored.cookTimeMinutes
         dish.mealTypeTagsRaw = stored.mealTypeTagsRaw
         dish.dietaryTagsRaw = stored.dietaryTagsRaw
+        DishLabelConsolidation.apply(to: dish)
         dish.seasonRaw = stored.seasonRaw
         dish.createdByName = stored.createdByName
         dish.dateCreated = stored.dateCreated

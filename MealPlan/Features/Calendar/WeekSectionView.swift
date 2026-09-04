@@ -101,6 +101,21 @@ struct WeekSectionView: View {
             }
 
             ForEach(days, id: \.self) { day in
+                if !purchaseManager.isUnlocked,
+                   day.isSameDay(as: PlanningAccess.latestFreeDate().adding(days: 1)) {
+                    Button { showingPaywall = true } label: {
+                        Label(
+                            String(localized: "Unlimited planning starts here"),
+                            systemImage: "lock.fill"
+                        )
+                        .font(.subheadline.weight(.semibold))
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 9)
+                    }
+                    .buttonStyle(.bordered)
+                    .padding(.horizontal)
+                    .accessibilityHint(String(localized: "Unlock to plan this day and later dates."))
+                }
                 DayCard(
                     day: day,
                     isCollapsed: appState.isDayCollapsed(day),

@@ -157,6 +157,9 @@ final class AppState {
                 through: latestPlanningDate,
                 memberName: currentMemberName
             )
+            // Collections and dietary flags used to duplicate the tag system.
+            // This is lossless, backed up first, and guarded per household.
+            try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
         DishGlyphMaintenance.run(context: context)
     }

@@ -33,10 +33,6 @@ struct DishSidebarView: View {
         DishTag.mostUsed(from: allDishes)
     }
 
-    private var collections: [String] {
-        Array(Set(allDishes.flatMap(\.collectionNames))).sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
-    }
-
     var body: some View {
         @Bindable var appState = appState
 
@@ -106,7 +102,6 @@ struct DishSidebarView: View {
                 Spacer(minLength: 0)
                 DishFilterMenu(
                     filter: filter,
-                    availableCollections: collections,
                     availableTags: tags
                 )
                     .labelStyle(.iconOnly)
@@ -237,8 +232,8 @@ struct DishSidebarView: View {
                     .foregroundStyle(.primary)
 
                 HStack(spacing: 6) {
-                    ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue }).prefix(3)) { tag in
-                        Image(systemName: tag.symbolName)
+                    if let tag = dish.sortedTagNames.first {
+                        Text(verbatim: tag)
                     }
                     if let minutes = dish.totalTimeMinutes {
                         Label("\(minutes) min", systemImage: "clock")

@@ -105,8 +105,8 @@ struct DishGridCell: View {
                     Text(String(repeating: "★", count: dish.rating))
                         .foregroundStyle(.yellow)
                 }
-                ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue }).prefix(3)) { tag in
-                    Image(systemName: tag.symbolName)
+                if let tag = dish.sortedTagNames.first {
+                    Text(verbatim: tag)
                 }
                 if let minutes = dish.totalTimeMinutes {
                     Label("\(minutes) min", systemImage: "clock")

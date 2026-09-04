@@ -13,6 +13,7 @@ struct ShoppingListView: View {
     @State private var isExporting = false
     @State private var bringMessage: String?
     @State private var showingBringSetup = false
+    @State private var showingPantryStaples = false
     @State private var confirmingClearAll = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
@@ -147,6 +148,12 @@ struct ShoppingListView: View {
             }
             ToolbarItem(placement: .secondaryAction) {
                 Menu {
+                    Button {
+                        showingPantryStaples = true
+                    } label: {
+                        Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
+                    }
+                    Divider()
                     #if os(iOS)
                     Button {
                         Task { await exportToReminders() }
@@ -215,6 +222,17 @@ struct ShoppingListView: View {
             #if os(macOS)
             .frame(minWidth: 520, minHeight: 460)
             #endif
+        }
+        .sheet(isPresented: $showingPantryStaples) {
+            NavigationStack {
+                PantryStaplesView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { showingPantryStaples = false }
+                        }
+                    }
+            }
+            .dismissesOnOutsideClick()
         }
         .confirmationDialog(
             String(localized: "Clear the whole list?"),

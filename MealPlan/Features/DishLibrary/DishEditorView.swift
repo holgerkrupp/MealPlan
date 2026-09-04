@@ -22,7 +22,6 @@ struct DishEditorView: View {
     @State private var newIngredientText = ""
     @State private var sourceURLText = ""
     @State private var appLinkURLText = ""
-    @State private var collectionsText = ""
     @State private var duplicateDish: Dish?
 
     var body: some View {
@@ -56,7 +55,6 @@ struct DishEditorView: View {
         .onAppear {
             sourceURLText = dish.sourceURLString ?? ""
             appLinkURLText = dish.deepLinkURLString ?? ""
-            collectionsText = dish.collectionNames.joined(separator: ", ")
         }
         .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
         // While the placeholder is still the app's suggestion it follows what
@@ -116,6 +114,14 @@ struct DishEditorView: View {
                     value: String(localized: "\(dish.servings) servings")
                 )
             }
+            if let household = appState.currentHousehold {
+                Stepper(value: standardServings(household), in: 1...50) {
+                    LabeledContent(
+                        String(localized: "Household standard"),
+                        value: String(localized: "\(household.scalingServings) servings")
+                    )
+                }
+            }
             minutePicker(String(localized: "Prep time"), value: $dish.prepTimeMinutes)
             minutePicker(String(localized: "Cook time"), value: $dish.cookTimeMinutes)
             Picker(String(localized: "Season"), selection: Binding(
@@ -138,7 +144,6 @@ struct DishEditorView: View {
                     Text(verbatim: ratingLabel(value)).tag(value)
                 }
             }
-            TextField(String(localized: "Collections, separated by commas"), text: $collectionsText)
         }
     }
 
@@ -149,20 +154,13 @@ struct DishEditorView: View {
             } header: {
                 Text("Tags")
             } footer: {
-                Text("Type to reuse a tag your household already has, or add a new one. A few are suggested from the name and ingredients.")
+                Text(String(localized: "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients."))
             }
 
             Section(String(localized: "Meal type")) {
                 FlowLayout(spacing: 8) {
                     ForEach(MealTypeTag.allCases) { tag in
                         chip(tag.localizedName, on: dish.mealTypeTags.contains(tag)) { toggleMealType(tag) }
-                    }
-                }
-            }
-            Section(String(localized: "Diet")) {
-                FlowLayout(spacing: 8) {
-                    ForEach(DietaryTag.allCases) { tag in
-                        chip(tag.localizedName, on: dish.dietaryTags.contains(tag)) { toggleDietary(tag) }
                     }
                 }
             }
@@ -347,12 +345,6 @@ struct DishEditorView: View {
         dish.mealTypeTags = set
     }
 
-    private func toggleDietary(_ tag: DietaryTag) {
-        var set = dish.dietaryTags
-        if set.contains(tag) { set.remove(tag) } else { set.insert(tag) }
-        dish.dietaryTags = set
-    }
-
     // MARK: - Ingredients
 
     private func addIngredient() {
@@ -405,16 +397,19 @@ struct DishEditorView: View {
         }
     }
 
+    private func standardServings(_ household: Household) -> Binding<Int> {
+        Binding(
+            get: { household.scalingServings },
+            set: { household.standardServings = $0; try? context.save() }
+        )
+    }
+
     private func save(checkDuplicates: Bool = true) {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.sourceURLString = trimmedURL.isEmpty ? nil : trimmedURL
         let trimmedAppLink = appLinkURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.deepLinkURLString = trimmedAppLink.isEmpty ? nil : trimmedAppLink
-        dish.collectionNames = Array(Set(collectionsText.split(separator: ",")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }))
-            .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
         // A new dish nobody tagged still gets the automatic handful, so
         // filtering by tag is useful from the first recipe on. On an existing
         // dish an empty list is a decision, and stays empty.

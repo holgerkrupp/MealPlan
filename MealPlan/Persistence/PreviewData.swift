@@ -54,7 +54,7 @@ enum PreviewData {
         pancakes.prepTimeMinutes = 10
         pancakes.cookTimeMinutes = 20
         pancakes.mealTypeTags = [.breakfast]
-        pancakes.dietaryTags = [.vegetarian, .kidFriendly]
+        pancakes.tagNames = [String(localized: "Vegetarian"), String(localized: "Kid-friendly")]
         pancakes.recipeText = "Alles verrühren, ausbacken."
         pancakes.lastUsedDate = Date.now.adding(days: -75)
         pancakes.usageCount = 6
@@ -70,7 +70,7 @@ enum PreviewData {
         bolognese.prepTimeMinutes = 15
         bolognese.cookTimeMinutes = 40
         bolognese.mealTypeTags = [.lunch, .dinner]
-        bolognese.dietaryTags = [.kidFriendly]
+        bolognese.tagNames = [String(localized: "Kid-friendly")]
         bolognese.lastUsedDate = Date.now.adding(days: -12)
         bolognese.usageCount = 14
         context.insert(bolognese)
@@ -83,7 +83,7 @@ enum PreviewData {
         soup.household = household
         soup.servings = 4
         soup.mealTypeTags = [.dinner]
-        soup.dietaryTags = [.vegetarian, .vegan]
+        soup.tagNames = [String(localized: "Vegetarian"), String(localized: "Vegan")]
         soup.season = .autumn
         context.insert(soup)
 

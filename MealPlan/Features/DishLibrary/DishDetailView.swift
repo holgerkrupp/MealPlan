@@ -292,17 +292,11 @@ struct DishDetailView: View {
             if dish.rating > 0 {
                 badge(String(repeating: "★", count: dish.rating), system: "star.fill", tint: .yellow)
             }
-            ForEach(dish.collectionNames, id: \.self) { collection in
-                badge(collection, system: "folder", tint: .indigo)
-            }
             ForEach(dish.sortedTagNames, id: \.self) { tag in
                 badge(tag, system: "tag", tint: .teal)
             }
             ForEach(Array(dish.mealTypeTags).sorted(by: { $0.rawValue < $1.rawValue })) { tag in
                 badge(tag.localizedName, system: "circle.fill", tint: .accentColor)
-            }
-            ForEach(Array(dish.dietaryTags).sorted(by: { $0.rawValue < $1.rawValue })) { tag in
-                badge(tag.localizedName, system: tag.symbolName, tint: .green)
             }
             if let season = dish.season {
                 badge(season.localizedName, system: "leaf", tint: .brown)
