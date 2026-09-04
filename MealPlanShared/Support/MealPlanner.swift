@@ -163,3 +163,110 @@ enum MealPlanner {
         nextSortIndex(for: date, mealKey: slot.rawValue, context: context)
     }
 }
+
+// MARK: - Drag and drop
+
+extension MealPlanner {
+
+    /// Where a dragged meal came from, when it was already on the plan.
+    struct DropOrigin: Equatable, Sendable {
+        var date: Date
+        var mealKey: String
+    }
+
+    /// What a drop onto the plan should do. Decided separately from carrying
+    /// it out so the rules can be tested without a `ModelContext`.
+    enum DropPlan: Equatable, Sendable {
+        /// Move the meal that was dragged onto this day and meal.
+        case move(date: Date, mealKey: String)
+        /// Plan the dish that was dragged onto this day and meal.
+        case add(date: Date, mealKey: String)
+        /// Dropped back where it started — accept it, but change nothing.
+        case unchanged
+        /// Nowhere to put it: a day-level drop on a household with no meals.
+        case rejected
+    }
+
+    /// Resolve a drop onto `date`.
+    ///
+    /// `mealKey` is the meal that was dropped on, or nil for a drop on a day as
+    /// a whole (the week strip, a day's header). A day-level drop keeps an
+    /// already-planned meal in the meal it was in, so dragging Tuesday's dinner
+    /// onto Friday stays dinner; a dish coming from the library has no meal of
+    /// its own and falls back to `defaultMealKey`.
+    ///
+    /// Pure, so it can be tested without a `ModelContext`.
+    static func dropPlan(
+        from origin: DropOrigin?,
+        onto date: Date,
+        mealKey: String?,
+        defaultMealKey: String? = nil
+    ) -> DropPlan {
+        let day = date.startOfDay
+        if let origin {
+            let target = mealKey ?? origin.mealKey
+            if origin.date.isSameDay(as: day) && origin.mealKey == target { return .unchanged }
+            return .move(date: day, mealKey: target)
+        }
+        guard let target = mealKey ?? defaultMealKey else { return .rejected }
+        return .add(date: day, mealKey: target)
+    }
+
+    /// Apply a dropped `DishReference` to one day, and one meal when the drop
+    /// landed on a meal card. Returns false when nothing in the payload
+    /// resolved, so the drop is refused and the drag animates back.
+    @MainActor
+    @discardableResult
+    static func drop(
+        _ reference: DishReference,
+        onto date: Date,
+        mealKey: String?,
+        household: Household?,
+        memberName: String,
+        context: ModelContext
+    ) -> Bool {
+        // A meal dragged off the plan is identified by its entry; the dish it
+        // points at may well be planned on other days too.
+        let entry = reference.sourceEntryUUID.flatMap { self.entry(uuid: $0, context: context) }
+        let origin = entry.map { DropOrigin(date: $0.date, mealKey: $0.mealKey) }
+        let dish: Dish? = origin == nil ? self.dish(uuid: reference.dishUUID, context: context) : nil
+        guard origin != nil || dish != nil else { return false }
+
+        let fallback: String? = mealKey == nil ? defaultMealKey(context: context) : nil
+        switch dropPlan(from: origin, onto: date, mealKey: mealKey, defaultMealKey: fallback) {
+        case .move(let day, let key):
+            guard let entry else { return false }
+            move(entry, to: day, mealKey: key, memberName: memberName, context: context)
+            return true
+        case .add(let day, let key):
+            guard let dish else { return false }
+            plan(dish: dish, on: day, mealKey: key,
+                 household: household, memberName: memberName, context: context)
+            return true
+        case .unchanged:
+            return true
+        case .rejected:
+            return false
+        }
+    }
+
+    @MainActor
+    static func entry(uuid: UUID, context: ModelContext) -> MealPlanEntry? {
+        try? context.fetch(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { $0.uuid == uuid })).first
+    }
+
+    @MainActor
+    static func dish(uuid: UUID, context: ModelContext) -> Dish? {
+        try? context.fetch(FetchDescriptor<Dish>(predicate: #Predicate { $0.uuid == uuid })).first
+    }
+
+    /// The meal a day-level drop falls back to: the household's first one.
+    @MainActor
+    private static func defaultMealKey(context: ModelContext) -> String? {
+        var descriptor = FetchDescriptor<MealType>(
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        )
+        descriptor.fetchLimit = 1
+        return (try? context.fetch(descriptor))?.first?.key
+    }
+}

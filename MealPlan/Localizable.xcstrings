@@ -2164,6 +2164,16 @@
     "Metric (g, ml, °C)" : {
 
     },
+    "Move to another day or meal…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf anderen Tag oder andere Mahlzeit verschieben …"
+          }
+        }
+      }
+    },
     "More" : {
       "localizations" : {
         "de" : {
