@@ -61,6 +61,10 @@ struct MealPlanBackup: Codable, Sendable {
         var calendarStyleRaw: String
         var localeIdentifier: String
         var dateCreated: Date
+        /// Whether this household had already been given the default pantry
+        /// staples. Optional so files written before staples became a
+        /// household setting still decode.
+        var didSeedPantryStaples: Bool? = nil
         /// Optional so backups written before the household had a standard
         /// portion count still decode; `nil` reads back as the default 2.
         var standardServings: Int? = nil
@@ -207,6 +211,11 @@ struct MealPlanBackup: Codable, Sendable {
         var sourceDishNames: [String]
         var dateCreated: Date
         var ingredientKey: String?
+        /// The merged line's other amounts and how many of its recipe lines
+        /// gave none. Optional so files written before shopping lines were
+        /// merged still decode.
+        var additionalAmountsRaw: [String]? = nil
+        var unmeasuredCount: Int? = nil
     }
 
     struct PortableWeekTemplate: Codable, Sendable {
@@ -356,6 +365,7 @@ extension MealPlanBackup {
                 calendarStyleRaw: primary?.calendarStyleRaw ?? CalendarStyle.week.rawValue,
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
                 dateCreated: primary?.dateCreated ?? .now,
+                didSeedPantryStaples: primary?.didSeedPantryStaples
                 standardServings: primary?.scalingServings ?? Household.defaultStandardServings
             )
         )
@@ -513,7 +523,9 @@ extension MealPlanBackup {
                 rangeEnd: item.rangeEnd,
                 sourceDishNames: item.sourceDishNames,
                 dateCreated: item.dateCreated,
-                ingredientKey: key(for: item.ingredient)
+                ingredientKey: key(for: item.ingredient),
+                additionalAmountsRaw: item.additionalAmountsRaw,
+                unmeasuredCount: item.unmeasuredCount
             )
         }
 

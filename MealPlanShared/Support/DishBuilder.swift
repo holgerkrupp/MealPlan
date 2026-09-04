@@ -238,8 +238,11 @@ enum DishBuilder {
     @MainActor
     static func upsertIngredient(named rawName: String, household: Household?, context: ModelContext) -> Ingredient {
         let normalized = Ingredient.normalize(rawName)
+        // Near matches count: an import that spells it "Salz*" should reuse the
+        // household's "Salz" rather than leave two of them in the catalogue and
+        // two rows on the shopping list.
         if !normalized.isEmpty,
-           let existing = (household?.ingredients ?? []).first(where: { $0.normalizedName == normalized }) {
+           let existing = IngredientMatching.match(rawName, in: household?.ingredients ?? []) {
             return existing
         }
         let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)

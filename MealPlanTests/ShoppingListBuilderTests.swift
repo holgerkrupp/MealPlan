@@ -124,6 +124,69 @@ struct ShoppingListBuilderTests {
         #expect(exact == "2.75 ×")
     }
 
+    // MARK: - Merging
+
+    /// Two recipes, one ingredient, two spellings: one row, both amounts.
+    @Test func mergesSpellingsOfOneIngredient() {
+        let a = dish("Müsli", servings: 2)
+        line(a, "Joghurt", 200, .mass, category: .dairy)
+        let b = dish("Tzatziki", servings: 2)
+        line(b, "Jogurt*", 300, .mass, category: .dairy)
+
+        let lines = ShoppingListBuilder.aggregate([
+            MealPlanEntry(date: .now, slot: .breakfast, dish: a),
+            MealPlanEntry(date: .now, slot: .dinner, dish: b),
+        ])
+        #expect(lines.count == 1)
+        #expect(lines[0].quantity == Quantity(value: 500, dimension: .mass))
+        #expect(lines[0].sourceDishNames.count == 2)
+    }
+
+    /// Grams and pots can't be added up, but they're still one thing to buy.
+    @Test func keepsAmountsThatCantBeAddedOnOneLine() {
+        let a = dish("Müsli", servings: 2)
+        line(a, "Joghurt", 500, .mass, category: .dairy)
+        let b = dish("Dip", servings: 2)
+        line(b, "Joghurt", 2, .count, category: .dairy)
+
+        let lines = ShoppingListBuilder.aggregate([
+            MealPlanEntry(date: .now, slot: .breakfast, dish: a),
+            MealPlanEntry(date: .now, slot: .dinner, dish: b),
+        ])
+        #expect(lines.count == 1)
+        #expect(lines[0].quantity == Quantity(value: 500, dimension: .mass))
+        #expect(lines[0].additionalQuantities == [Quantity(value: 2, dimension: .count)])
+
+        let text = ShoppingListBuilder.displayText(
+            for: lines[0], system: .metric, locale: Locale(identifier: "de_DE")
+        )
+        #expect(text.contains("500"))
+        #expect(text.contains("+"))
+    }
+
+    @Test func splitsCompoundLinesThatCarryNoAmount() {
+        let d = dish("Steak", servings: 2)
+        let compound = Ingredient(name: "Salz und Pfeffer", category: .spices)
+        let li = DishIngredient(rawText: "Salz und Pfeffer")
+        li.ingredient = compound
+        li.dish = d
+        d.ingredients = [li]
+
+        let lines = ShoppingListBuilder.aggregate([MealPlanEntry(date: .now, slot: .dinner, dish: d)])
+        #expect(lines.map(\.name).sorted() == ["Pfeffer", "Salz"])
+        #expect(lines.allSatisfy { $0.unmeasuredCount == 1 })
+    }
+
+    @Test func staplesAreMatchedByNameNotOnlyByFlag() {
+        let d = dish("Pasta", servings: 2)
+        line(d, "Salz*", 2, .mass, category: .spices)
+        let entry = MealPlanEntry(date: .now, slot: .dinner, dish: d)
+
+        #expect(ShoppingListBuilder.aggregate([entry]).count == 1)
+        let staples: Set<String> = [IngredientMatching.key(for: "Salz")]
+        #expect(ShoppingListBuilder.aggregate([entry], stapleKeys: staples).isEmpty)
+    }
+
     @Test func pantryStaplesAreExcluded() {
         let d = dish("Pasta", servings: 2)
         line(d, "Salt", 2, .mass, category: .spices)

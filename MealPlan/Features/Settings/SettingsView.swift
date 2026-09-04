@@ -54,7 +54,7 @@ struct SettingsView: View {
             CalendarIntegrationSection()
             RecipeSearchSettingsSection()
             RemindersSettingsSection()
-            ShoppingSettingsSection()
+            BringSettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
         }
@@ -108,7 +108,7 @@ struct SettingsView: View {
                 CalendarIntegrationSection()
             }
         case .shopping:
-            PantryStaplesView()
+            BringSettingsView()
         case .data:
             DataTransferView()
         case .about:
@@ -145,7 +145,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .plan: String(localized: "Plan")
         case .meals: String(localized: "Meals")
         case .calendar: String(localized: "Calendar")
-        case .shopping: String(localized: "Pantry staples")
+        case .shopping: String(localized: "Shopping")
         case .data: String(localized: "Data")
         case .about: String(localized: "About")
         }

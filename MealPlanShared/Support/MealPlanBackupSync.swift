@@ -36,6 +36,7 @@ enum MealPlanBackupSync {
         household.standardServings = backup.household.standardServings ?? Household.defaultStandardServings
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
+        household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? household.didSeedPantryStaples
         household.cloudKitShareIdentifier = shareIdentifier
 
         // MARK: Meal types
@@ -170,6 +171,8 @@ enum MealPlanBackupSync {
             model.customAisleName = stored.customAisleName
             model.canonicalValue = stored.canonicalValue
             model.canonicalDimensionRaw = stored.canonicalDimensionRaw
+            model.additionalAmountsRaw = stored.additionalAmountsRaw ?? []
+            model.unmeasuredCount = stored.unmeasuredCount ?? 0
             model.displayText = stored.displayText
             model.displayUnit = stored.displayUnit
             model.isChecked = stored.isChecked

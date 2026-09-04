@@ -41,6 +41,12 @@ enum PreviewData {
         let tomaten = ingredient("Gehackte Tomaten", .pantry)
         let spaghetti = ingredient("Spaghetti", .pantry)
         let salz = ingredient("Salz", .spices)
+        // A seeded household is past its first launch, so it carries the
+        // default pantry staples the real one gets.
+        household.didSeedPantryStaples = true
+        salz.isPantryStaple = true
+        let pfeffer = ingredient("Pfeffer", .spices)
+        pfeffer.isPantryStaple = true
 
         let pancakes = Dish(name: "Pfannkuchen")
         pancakes.household = household

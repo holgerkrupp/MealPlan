@@ -6,10 +6,14 @@ struct ShoppingListView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Query(sort: \ShoppingListItem.sortIndex) private var items: [ShoppingListItem]
+    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
 
     @State private var newItemName = ""
     @State private var exportMessage: String?
     @State private var isExporting = false
+    @State private var bringMessage: String?
+    @State private var showingBringSetup = false
+    @State private var confirmingClearAll = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
@@ -27,6 +31,24 @@ struct ShoppingListView: View {
             customStart: appState.shoppingCustomStart,
             customEnd: appState.shoppingCustomEnd
         )
+    }
+
+    private var bringService: BringSyncService { .shared }
+
+    /// Whether this family has a Bring! list to send to at all. The account
+    /// itself is per device, so both have to be there.
+    private var isConnectedToBring: Bool {
+        appState.currentHousehold?.isConnectedToBring == true && bringService.hasAccount
+    }
+
+    /// The household's pantry staples that aren't on the list already. These
+    /// are never planned onto it — see `PantryStaples` — so this menu is how
+    /// one gets there on the day the family runs out.
+    private var stapleSuggestions: [Ingredient] {
+        let onList = Set(items.map { IngredientMatching.key(for: $0.name) })
+        return ingredients.filter {
+            $0.isPantryStaple && !onList.contains(IngredientMatching.key(for: $0.name))
+        }
     }
 
     private var grouped: [AisleGroup] {
@@ -76,7 +98,7 @@ struct ShoppingListView: View {
                             onToggle: { toggle(item) },
                             onCategoryChange: { changeCategory(item, to: $0) },
                             onCustomAisle: { beginCustomAisle(for: item) },
-                            onMarkStaple: { markAsStaple(item) }
+                            onSetStaple: { setStaple(item, $0) }
                         )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
@@ -91,6 +113,17 @@ struct ShoppingListView: View {
                     Button(String(localized: "Add"), action: addManualItem)
                         .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                if !stapleSuggestions.isEmpty {
+                    Menu {
+                        ForEach(stapleSuggestions) { ingredient in
+                            Button(ingredient.name) { addStaple(ingredient) }
+                        }
+                    } label: {
+                        Label(String(localized: "Add a staple"), systemImage: "shippingbox")
+                    }
+                }
+            } footer: {
+                Text("Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt.")
             }
         }
         .navigationTitle(AppSection.shopping.title)
@@ -115,14 +148,79 @@ struct ShoppingListView: View {
                         clearChecked()
                     }
                     .disabled(!items.contains(where: \.isChecked))
+                    Button(String(localized: "Clear the whole list"), role: .destructive) {
+                        confirmingClearAll = true
+                    }
+                    .disabled(items.isEmpty)
+
+                    Divider()
+
+                    if isConnectedToBring {
+                        Button {
+                            Task { await sendToBring() }
+                        } label: {
+                            Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+                        }
+                        .disabled(items.isEmpty || bringService.isSyncing)
+                        Button {
+                            Task { await syncWithBring() }
+                        } label: {
+                            Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(bringService.isSyncing)
+                    }
+                    Button {
+                        showingBringSetup = true
+                    } label: {
+                        Label(
+                            isConnectedToBring
+                                ? String(localized: "Bring! settings…")
+                                : String(localized: "Connect to Bring!…"),
+                            systemImage: "cart.badge.plus"
+                        )
+                    }
                 } label: {
                     Label(String(localized: "More"), systemImage: "ellipsis.circle")
                 }
             }
         }
         .onAppear { if items.isEmpty { regenerate() } }
+        .task { await autoSyncWithBring() }
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
+        .sheet(isPresented: $showingBringSetup) {
+            NavigationStack {
+                BringSettingsView()
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { showingBringSetup = false }
+                        }
+                    }
+            }
+            #if os(macOS)
+            .frame(minWidth: 520, minHeight: 460)
+            #endif
+        }
+        .confirmationDialog(
+            String(localized: "Clear the whole list?"),
+            isPresented: $confirmingClearAll,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Clear everything"), role: .destructive) { clearAll() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(isConnectedToBring
+                 ? String(localized: "Every line goes, ticked or not, here and — at the next sync — in Bring! too. Rebuild from the plan to get the planned ones back.")
+                 : String(localized: "Every line goes, ticked or not. Rebuild from the plan to get the planned ones back."))
+        }
+        .alert(
+            String(localized: "Bring!"),
+            isPresented: Binding(get: { bringMessage != nil }, set: { if !$0 { bringMessage = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(bringMessage ?? "")
+        }
         .alert(
             String(localized: "Reminders"),
             isPresented: Binding(get: { exportMessage != nil }, set: { if !$0 { exportMessage = nil } })
@@ -162,6 +260,13 @@ struct ShoppingListView: View {
         if items.contains(where: \.isChecked) {
             commands.clearTicked = { clearChecked() }
         }
+        if !items.isEmpty {
+            commands.clearAll = { confirmingClearAll = true }
+        }
+        if isConnectedToBring, !bringService.isSyncing {
+            commands.sendToBring = { Task { await sendToBring() } }
+            commands.syncWithBring = { Task { await syncWithBring() } }
+        }
         return commands
     }
 
@@ -194,6 +299,7 @@ struct ShoppingListView: View {
             roundsAmounts: appState.roundsDisplayedAmounts,
             context: context
         )
+        Task { await autoSyncWithBring() }
     }
 
     private func toggle(_ item: ShoppingListItem) {
@@ -202,28 +308,21 @@ struct ShoppingListView: View {
     }
 
     private func addManualItem() {
-        let name = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let household = appState.currentHousehold else { return }
-        let parsed = GermanUnitParser.parse(name)
-        let item = ShoppingListItem(name: parsed.name.isEmpty ? name : parsed.name, isManual: true)
-        item.household = household
-        if let q = parsed.quantity {
-            item.canonicalValue = q.value
-            item.dimension = q.dimension
-            item.isApproximate = parsed.isApproximate
-            item.displayUnit = parsed.displayUnit
-            item.displayText = ShoppingListBuilder.displayText(
-                for: AggregatedLine(name: parsed.name, normalizedName: item.normalizedName,
-                                    category: .other, quantity: q, displayUnit: parsed.displayUnit,
-                                    isApproximate: parsed.isApproximate),
-                system: appState.unitSystem,
-                roundsAmounts: appState.roundsDisplayedAmounts
-            )
-        }
-        item.sortIndex = IngredientCategory.other.sortOrder * 1000 + 999
-        context.insert(item)
-        try? context.save()
+        guard let household = appState.currentHousehold else { return }
+        ShoppingListBuilder.addManualItem(
+            named: newItemName,
+            household: household,
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts,
+            context: context
+        )
         newItemName = ""
+    }
+
+    /// Put a staple on the list by hand — "we've run out of salt".
+    private func addStaple(_ ingredient: Ingredient) {
+        guard let household = appState.currentHousehold else { return }
+        ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
     }
 
     private func delete(_ offsets: IndexSet, in list: [ShoppingListItem]) {
@@ -238,6 +337,48 @@ struct ShoppingListView: View {
             context.delete(item)
         }
         try? context.save()
+        Task { await autoSyncWithBring() }
+    }
+
+    /// Empty the list outright — the "we've been shopping, start again" button.
+    /// Generated lines come back with the next rebuild; manual ones don't, so
+    /// this asks first.
+    private func clearAll() {
+        for item in items {
+            context.delete(item)
+        }
+        try? context.save()
+        Task { await autoSyncWithBring() }
+    }
+
+    // MARK: - Bring!
+
+    private func sendToBring() async {
+        guard let household = appState.currentHousehold else { return }
+        do {
+            let outcome = try await bringService.push(household: household, context: context)
+            bringMessage = outcome.summary
+        } catch {
+            bringMessage = error.localizedDescription
+        }
+    }
+
+    private func syncWithBring() async {
+        guard let household = appState.currentHousehold else { return }
+        do {
+            let outcome = try await bringService.sync(household: household, context: context)
+            bringMessage = outcome.summary
+        } catch {
+            bringMessage = error.localizedDescription
+        }
+    }
+
+    /// The sync nobody asked for: on opening the list, and after it changes.
+    /// Says nothing either way — a Bring! that can't be reached is not a
+    /// reason to interrupt someone reading their shopping list.
+    private func autoSyncWithBring() async {
+        guard let household = appState.currentHousehold else { return }
+        await bringService.syncQuietly(household: household, context: context)
     }
 
     private func changeCategory(_ item: ShoppingListItem, to category: IngredientCategory) {
@@ -271,9 +412,25 @@ struct ShoppingListView: View {
         customAisleItem = nil
     }
 
-    private func markAsStaple(_ item: ShoppingListItem) {
-        item.ingredient?.isPantryStaple = true
-        context.delete(item)
+    /// Promote a line to a household staple (or take it back off the list of
+    /// them). A line that was planned onto the list is dropped along the way —
+    /// the point of a staple is that it isn't bought week by week — while a
+    /// line the family added by hand stays, because they asked for it.
+    private func setStaple(_ item: ShoppingListItem, _ isStaple: Bool) {
+        guard let household = appState.currentHousehold else { return }
+        if let ingredient = item.ingredient {
+            ingredient.isPantryStaple = isStaple
+        } else if isStaple {
+            item.ingredient = PantryStaples.add(
+                named: item.name,
+                category: item.category,
+                to: household,
+                context: context
+            )
+        }
+        if isStaple, !item.isManual {
+            context.delete(item)
+        }
         try? context.save()
     }
 
