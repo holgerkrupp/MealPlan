@@ -6,6 +6,15 @@ import Testing
 
 @MainActor
 struct HouseholdRecordSyncTests {
+    @Test func unsavedPhotoStaysInItsOwningContext() {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let image = DishImage(data: Data([1, 2, 3]))
+        container.mainContext.insert(image)
+
+        #expect(image.persistentModelID.storeIdentifier == nil)
+        #expect(DishPhotoLoading.persistentID(for: image) == nil)
+    }
+
     @Test func fingerprintUsesStableLowercaseHex() {
         let record = LocalHouseholdRecord(
             identity: .init(type: .dish, uuid: UUID()),

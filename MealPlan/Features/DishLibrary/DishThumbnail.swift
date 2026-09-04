@@ -202,8 +202,16 @@ struct CachedDishPhoto: View {
     }
 
     init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
-        self.imageID = image.persistentModelID
-        self.rawData = nil
+        if let persistentID = DishPhotoLoading.persistentID(for: image) {
+            self.imageID = persistentID
+            self.rawData = nil
+        } else {
+            // Image Playground and PhotosPicker insert a temporary model that
+            // is not visible to another ModelContext until the editor saves.
+            // Its bytes are already in memory and must stay in this context.
+            self.imageID = nil
+            self.rawData = image.data
+        }
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
     }
@@ -252,6 +260,15 @@ struct CachedDishPhoto: View {
             decoded = image
             decodedKey = sizedKey
         }
+    }
+}
+
+enum DishPhotoLoading {
+    static func persistentID(for image: DishImage) -> PersistentIdentifier? {
+        let id = image.persistentModelID
+        // `isTemporary` was added in OS 27, while `storeIdentifier` exposes
+        // the same distinction back to the app's deployment target.
+        return id.storeIdentifier == nil ? nil : id
     }
 }
 
