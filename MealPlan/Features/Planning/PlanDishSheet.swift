@@ -74,7 +74,7 @@ struct PlanDishSheet: View {
         .onAppear {
             date = defaultDate
             mealKey = resolvedMealKey
-            servings = max(1, dish.servings)
+            servings = appState.standardServings
         }
     }
 
@@ -100,7 +100,7 @@ struct PlanDishSheet: View {
         guard !mealKey.isEmpty else { return }
         let entry = MealPlanEntry(date: date, mealKey: mealKey, dish: dish)
         entry.household = appState.currentHousehold
-        entry.servingsOverride = servings == dish.servings ? nil : servings
+        entry.servingsOverride = servings == appState.standardServings ? nil : servings
         entry.note = note.isEmpty ? nil : note
         entry.plannedByName = appState.currentMemberName
         entry.sortIndex = MealPlanner.nextSortIndex(for: date, mealKey: mealKey, context: context)

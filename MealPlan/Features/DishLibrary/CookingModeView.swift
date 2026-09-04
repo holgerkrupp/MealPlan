@@ -27,7 +27,9 @@ struct CookingModeView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @State private var targetServings: Int
+    /// Starts at 0 and is filled from the household's standard portions on
+    /// appear: the environment isn't available yet in `init`.
+    @State private var targetServings = 0
     @State private var checkedIngredients: Set<Int> = []
     @State private var currentStep = 0
     @State private var timers: [ActiveCookingTimer] = []
@@ -35,16 +37,11 @@ struct CookingModeView: View {
     @State private var sleepActivity: NSObjectProtocol?
     #endif
 
-    init(dish: Dish) {
-        self.dish = dish
-        _targetServings = State(initialValue: max(1, dish.servings))
-    }
-
     private var steps: [CookingStep] { CookingRecipe.steps(from: dish.recipeText) }
     private var scaler: ServingScaler {
         ServingScaler(
             baseServings: dish.servings,
-            targetServings: targetServings,
+            targetServings: max(1, targetServings),
             system: appState.unitSystem,
             roundsAmounts: appState.roundsDisplayedAmounts
         )
@@ -71,6 +68,9 @@ struct CookingModeView: View {
                 Button(String(localized: "Done")) { dismiss() }
             }
         }
+        .onAppear {
+            if targetServings == 0 { targetServings = appState.standardServings }
+        }
         .onAppear(perform: keepScreenAwake)
         .onDisappear(perform: releaseScreen)
     }
@@ -81,7 +81,7 @@ struct CookingModeView: View {
                 .font(.title2.bold())
             Spacer()
             Stepper(value: $targetServings, in: 1...50) {
-                Text(String(localized: "\(targetServings) servings"))
+                Text(String(localized: "\(max(1, targetServings)) servings"))
                     .monospacedDigit()
             }
             .fixedSize()

@@ -19,6 +19,15 @@ struct HouseholdView: View {
         HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) ?? true
     }
 
+    /// Writes straight through to the household so the new standard reaches
+    /// the rest of the family with the next iCloud sync.
+    private func standardServings(_ household: Household) -> Binding<Int> {
+        Binding(
+            get: { household.scalingServings },
+            set: { household.standardServings = max(1, $0); try? context.save() }
+        )
+    }
+
     var body: some View {
         Form {
             if let household = appState.currentHousehold {
@@ -38,6 +47,20 @@ struct HouseholdView: View {
                     if appState.isGuest {
                         Label(String(localized: "You joined as a view-only guest."), systemImage: "eye")
                     }
+                }
+
+                Section {
+                    Stepper(value: standardServings(household), in: 1...50) {
+                        LabeledContent(
+                            String(localized: "Standard portions"),
+                            value: String(localized: "\(household.scalingServings) servings")
+                        )
+                    }
+                    .disabled(appState.isGuest)
+                } header: {
+                    Text("How much you cook")
+                } footer: {
+                    Text("Recipes are scaled to this many portions automatically, whatever yield they were written for. You can still change the portions of a single meal when you plan it. This is shared with everyone in the family.")
                 }
 
                 if !appState.isGuest, canInvite(household) {
