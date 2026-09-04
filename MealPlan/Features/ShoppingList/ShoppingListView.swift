@@ -34,8 +34,10 @@ struct ShoppingListView: View {
     /// are never planned onto it — see `PantryStaples` — so this menu is how
     /// one gets there on the day the family runs out.
     private var stapleSuggestions: [Ingredient] {
-        let onList = Set(items.map(\.normalizedName))
-        return ingredients.filter { $0.isPantryStaple && !onList.contains($0.normalizedName) }
+        let onList = Set(items.map { IngredientMatching.key(for: $0.name) })
+        return ingredients.filter {
+            $0.isPantryStaple && !onList.contains(IngredientMatching.key(for: $0.name))
+        }
     }
 
     private var grouped: [AisleGroup] {

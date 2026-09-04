@@ -170,6 +170,8 @@ enum MealPlanBackupSync {
             model.customAisleName = stored.customAisleName
             model.canonicalValue = stored.canonicalValue
             model.canonicalDimensionRaw = stored.canonicalDimensionRaw
+            model.additionalAmountsRaw = stored.additionalAmountsRaw ?? []
+            model.unmeasuredCount = stored.unmeasuredCount ?? 0
             model.displayText = stored.displayText
             model.displayUnit = stored.displayUnit
             model.isChecked = stored.isChecked

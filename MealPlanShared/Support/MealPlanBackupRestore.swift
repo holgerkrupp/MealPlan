@@ -201,6 +201,8 @@ enum MealPlanBackupRestore {
             item.customAisleName = stored.customAisleName
             item.canonicalValue = stored.canonicalValue
             item.canonicalDimensionRaw = stored.canonicalDimensionRaw
+            item.additionalAmountsRaw = stored.additionalAmountsRaw ?? []
+            item.unmeasuredCount = stored.unmeasuredCount ?? 0
             item.displayText = stored.displayText
             item.displayUnit = stored.displayUnit
             item.isChecked = stored.isChecked

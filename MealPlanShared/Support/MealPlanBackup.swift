@@ -208,6 +208,11 @@ struct MealPlanBackup: Codable, Sendable {
         var sourceDishNames: [String]
         var dateCreated: Date
         var ingredientKey: String?
+        /// The merged line's other amounts and how many of its recipe lines
+        /// gave none. Optional so files written before shopping lines were
+        /// merged still decode.
+        var additionalAmountsRaw: [String]? = nil
+        var unmeasuredCount: Int? = nil
     }
 
     struct PortableWeekTemplate: Codable, Sendable {
@@ -514,7 +519,9 @@ extension MealPlanBackup {
                 rangeEnd: item.rangeEnd,
                 sourceDishNames: item.sourceDishNames,
                 dateCreated: item.dateCreated,
-                ingredientKey: key(for: item.ingredient)
+                ingredientKey: key(for: item.ingredient),
+                additionalAmountsRaw: item.additionalAmountsRaw,
+                unmeasuredCount: item.unmeasuredCount
             )
         }
 

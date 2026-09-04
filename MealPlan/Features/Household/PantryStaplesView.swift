@@ -44,8 +44,7 @@ struct PantryStaplesView: View {
     private var newStapleName: String? {
         let name = trimmedSearch
         guard !name.isEmpty else { return nil }
-        let normalized = Ingredient.normalize(name)
-        guard !ingredients.contains(where: { $0.normalizedName == normalized }) else { return nil }
+        guard IngredientMatching.match(name, in: ingredients) == nil else { return nil }
         return name
     }
 
@@ -181,7 +180,8 @@ struct PantryStaplesView: View {
     // MARK: - Actions
 
     private func isOnShoppingList(_ ingredient: Ingredient) -> Bool {
-        shoppingItems.contains { $0.normalizedName == ingredient.normalizedName }
+        let key = IngredientMatching.key(for: ingredient.name)
+        return shoppingItems.contains { IngredientMatching.key(for: $0.name) == key }
     }
 
     private func mark(_ ingredient: Ingredient, isStaple: Bool) {

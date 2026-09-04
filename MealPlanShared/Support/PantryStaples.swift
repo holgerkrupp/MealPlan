@@ -47,22 +47,18 @@ enum PantryStaples {
     }
 
     /// Work out which seeds are already in `existing` — matched the way the
-    /// rest of the app matches ingredients, on `normalizedName`, so "Öl" and
-    /// "öl" aren't two different things — and which have to be created.
+    /// rest of the app matches ingredients, through `IngredientMatching`, so a
+    /// catalogue that already knows "Salz*" isn't given a second salt — and
+    /// which have to be created.
     ///
     /// Pure, so it can be tested without a `ModelContext`.
     static func plan(_ seeds: [Seed] = PantryStaples.defaultSeeds, existing: [Ingredient]) -> SeedPlan {
-        var byName: [String: Ingredient] = [:]
-        for ingredient in existing where byName[ingredient.normalizedName] == nil {
-            byName[ingredient.normalizedName] = ingredient
-        }
-
         var result = SeedPlan()
         var claimed: Set<String> = []
         for seed in seeds {
             let normalized = Ingredient.normalize(seed.name)
             guard !normalized.isEmpty, claimed.insert(normalized).inserted else { continue }
-            if let known = byName[normalized] {
+            if let known = IngredientMatching.match(seed.name, in: existing) {
                 result.mark.append(known)
             } else {
                 result.create.append(seed)
@@ -112,11 +108,11 @@ enum PantryStaples {
         return insert(Seed(name: trimmed, category: category), into: household, context: context)
     }
 
-    /// The household's catalogue entry for `name`, if it has one.
+    /// The household's catalogue entry for `name`, if it has one — including
+    /// one spelled a little differently, so marking "Salz" a staple picks up
+    /// the "Salz*" a recipe left behind rather than adding a second row.
     static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
-        let normalized = Ingredient.normalize(name)
-        guard !normalized.isEmpty else { return nil }
-        return ingredients.first { $0.normalizedName == normalized }
+        IngredientMatching.match(name, in: ingredients)
     }
 
     @MainActor

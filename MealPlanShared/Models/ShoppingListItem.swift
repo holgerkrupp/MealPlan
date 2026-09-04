@@ -16,6 +16,15 @@ final class ShoppingListItem {
     /// Aggregated amount in canonical units, when known.
     var canonicalValue: Double?
     var canonicalDimensionRaw: String?
+    /// Amounts the merged line couldn't add to `canonicalValue` because they
+    /// are measured in another dimension — a yoghurt one recipe asks for as
+    /// "500 g" and another as "2 Becher". Encoded, so the model stays a plain
+    /// array; read them through `additionalQuantities`.
+    var additionalAmountsRaw: [String] = []
+    /// How many of the merged recipe lines gave no measurable amount at all
+    /// ("Salz nach Geschmack"). Kept so the amount can be written out again
+    /// after a unit or rounding change.
+    var unmeasuredCount: Int = 0
     /// Ready-to-read amount, e.g. "500 g" or "3 ×".
     var displayText: String?
     /// Original unit label, retained so changing display preferences can
@@ -55,6 +64,13 @@ final class ShoppingListItem {
     var dimension: QuantityDimension? {
         get { canonicalDimensionRaw.flatMap(QuantityDimension.init(rawValue:)) }
         set { canonicalDimensionRaw = newValue?.rawValue }
+    }
+
+    /// The merged amounts that aren't in `dimension`, in the order they were
+    /// aggregated.
+    var additionalQuantities: [Quantity] {
+        get { additionalAmountsRaw.compactMap(Quantity.init(encoded:)) }
+        set { additionalAmountsRaw = newValue.map(\.encoded) }
     }
 
     var aisleName: String {

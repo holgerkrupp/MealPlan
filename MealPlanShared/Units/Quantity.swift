@@ -19,4 +19,19 @@ struct Quantity: Equatable, Sendable {
     func scaled(by factor: Double) -> Quantity {
         Quantity(value: value * factor, dimension: dimension)
     }
+
+    /// Round-trippable "<dimension>:<value>", so a handful of quantities can be
+    /// kept in a plain `[String]` on a SwiftData model.
+    var encoded: String {
+        "\(dimension.rawValue):\(value)"
+    }
+
+    init?(encoded: String) {
+        let parts = encoded.split(separator: ":", maxSplits: 1)
+        guard parts.count == 2,
+              let dimension = QuantityDimension(rawValue: String(parts[0])),
+              let value = Double(parts[1])
+        else { return nil }
+        self.init(value: value, dimension: dimension)
+    }
 }
