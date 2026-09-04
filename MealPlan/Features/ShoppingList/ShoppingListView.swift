@@ -6,7 +6,10 @@ struct ShoppingListView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Query(sort: \ShoppingListItem.sortIndex) private var items: [ShoppingListItem]
-    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
+    @Query(
+        filter: #Predicate<Ingredient> { $0.isPantryStaple },
+        sort: \Ingredient.name
+    ) private var pantryIngredients: [Ingredient]
 
     @State private var newItemName = ""
     @State private var exportMessage: String?
@@ -52,8 +55,8 @@ struct ShoppingListView: View {
     /// one gets there on the day the family runs out.
     private var stapleSuggestions: [Ingredient] {
         let onList = Set(items.map { IngredientMatching.key(for: $0.name) })
-        return ingredients.filter {
-            $0.isPantryStaple && !onList.contains(IngredientMatching.key(for: $0.name))
+        return pantryIngredients.filter {
+            !onList.contains(IngredientMatching.key(for: $0.name))
         }
     }
 
@@ -207,7 +210,7 @@ struct ShoppingListView: View {
             }
         }
         .onAppear { if items.isEmpty { regenerate() } }
-        .task { await autoSyncWithBring() }
+        .task(priority: .utility) { await autoSyncWithBring() }
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
         .sheet(isPresented: $showingBringSetup) {

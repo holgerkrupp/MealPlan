@@ -67,6 +67,10 @@ final class HouseholdRecordSyncService {
     private var metadata = HouseholdSyncMetadata()
     private var saveObserver: NSObjectProtocol?
     private var scheduledScan: Task<Void, Never>?
+    /// CKSyncEngine traps when explicit fetch/send operations overlap. Keep a
+    /// single ordered chain for launch sync, save-driven sends, and pushes.
+    private var cloudOperationTask: Task<Void, Never>?
+    private var needsLocalScan = true
     private var isApplyingRemoteChanges = false
     private(set) var lastError: Error?
 
@@ -76,30 +80,22 @@ final class HouseholdRecordSyncService {
 
     func synchronize(household: Household, context: ModelContext) async throws {
         try activateIfNeeded(household: household, context: context)
-        guard let engine, let locator else { return }
-        if !locator.isReadOnly { try scanLocalChanges() }
-        var fetchOptions = CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([locator.zoneID]))
-        fetchOptions.prioritizedZoneIDs = [locator.zoneID]
-        try await engine.fetchChanges(fetchOptions)
-        if !locator.isReadOnly {
-            try await engine.sendChanges(.init(scope: .zoneIDs([locator.zoneID])))
-        }
+        guard let locator else { return }
+        if !locator.isReadOnly, needsLocalScan { try scanLocalChanges() }
+        await performCloudOperation(fetch: true, send: !locator.isReadOnly)
         if let lastError { throw lastError }
     }
 
     func fetchChanges() async {
-        guard let engine, let locator else { return }
-        do {
-            try await engine.fetchChanges(.init(scope: .zoneIDs([locator.zoneID])))
-            lastError = nil
-        } catch {
-            lastError = error
-        }
+        guard locator != nil else { return }
+        await performCloudOperation(fetch: true, send: false)
     }
 
     func stop() async {
         scheduledScan?.cancel()
         scheduledScan = nil
+        cloudOperationTask?.cancel()
+        cloudOperationTask = nil
         if let saveObserver { NotificationCenter.default.removeObserver(saveObserver) }
         saveObserver = nil
         await engine?.cancelOperations()
@@ -107,6 +103,7 @@ final class HouseholdRecordSyncService {
         household = nil
         context = nil
         locator = nil
+        needsLocalScan = true
     }
 
     func record(for id: CKRecord.ID) throws -> CKRecord? {
@@ -167,11 +164,15 @@ final class HouseholdRecordSyncService {
         self.context = context
         locator = nextLocator
         metadata = loadMetadata(for: nextLocator)
+        needsLocalScan = true
 
         let database = nextLocator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
         let state = loadState(for: nextLocator)
         var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: state, delegate: delegate)
-        configuration.automaticallySync = true
+        // We explicitly serialize operations below. Automatic operations can
+        // otherwise race a save-driven `sendChanges` and trip CloudKit's
+        // internal overlap assertion.
+        configuration.automaticallySync = false
         configuration.subscriptionID = "MealPlan-\(nextLocator.isOwner ? "private" : "shared")"
         let engine = CKSyncEngine(configuration)
         self.engine = engine
@@ -180,7 +181,10 @@ final class HouseholdRecordSyncService {
         }
 
         saveObserver = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: context, queue: .main) { [weak self] _ in
-            Task { @MainActor in self?.scheduleScan() }
+            Task { @MainActor in
+                self?.needsLocalScan = true
+                self?.scheduleScan()
+            }
         }
     }
 
@@ -188,13 +192,11 @@ final class HouseholdRecordSyncService {
         guard !isApplyingRemoteChanges, locator?.isReadOnly != true else { return }
         scheduledScan?.cancel()
         scheduledScan = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(600))
+            try? await Task.sleep(for: .milliseconds(1200))
             guard !Task.isCancelled, let self else { return }
             do {
                 try self.scanLocalChanges()
-                if let engine = self.engine, let zoneID = self.locator?.zoneID {
-                    try await engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
-                }
+                await self.performCloudOperation(fetch: false, send: true)
             } catch {
                 self.lastError = error
             }
@@ -242,6 +244,43 @@ final class HouseholdRecordSyncService {
         }
 
         persistMetadata()
+        needsLocalScan = false
+    }
+
+    /// Runs every explicit engine operation behind the previous one. A task
+    /// chain is enough here: the service is MainActor-isolated and completed
+    /// tasks release their captured predecessor, so the chain stays bounded.
+    private func performCloudOperation(fetch: Bool, send: Bool) async {
+        let previous = cloudOperationTask
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard !Task.isCancelled, let self, let engine = self.engine, let locator = self.locator else { return }
+            var operationError: Error?
+
+            if fetch {
+                do {
+                    var options = CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([locator.zoneID]))
+                    options.prioritizedZoneIDs = [locator.zoneID]
+                    try await engine.fetchChanges(options)
+                } catch {
+                    operationError = error
+                }
+            }
+
+            // A first-time owner may not have a server zone to fetch yet. Still
+            // run the send so pending zone creation can establish it.
+            if send, !locator.isReadOnly {
+                do {
+                    try await engine.sendChanges(.init(scope: .zoneIDs([locator.zoneID])))
+                } catch {
+                    operationError = error
+                }
+            }
+
+            self.lastError = operationError
+        }
+        cloudOperationTask = task
+        await task.value
     }
 
     // MARK: - Remote change application

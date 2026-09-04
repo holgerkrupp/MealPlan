@@ -115,6 +115,10 @@ final class BringSyncService {
     /// unreachable Bring! must not interrupt someone reading their list.
     func syncQuietly(household: Household, context: ModelContext) async {
         guard household.bringAutoSync, household.isConnectedToBring, hasAccount else { return }
+        // Entering the Shopping tab repeatedly should be instant. Explicit
+        // sync remains available at all times; automatic refresh is capped so
+        // tab changes do not repeatedly fetch, rewrite, and save the list.
+        if let last = household.bringLastSyncedAt, Date.now.timeIntervalSince(last) < 300 { return }
         _ = try? await sync(household: household, context: context)
     }
 

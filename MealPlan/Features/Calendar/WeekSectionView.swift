@@ -15,6 +15,7 @@ struct WeekSectionView: View {
     /// Optional: absent in previews and whenever calendar integration is off.
     @Environment(CalendarContextStore.self) private var calendarStore: CalendarContextStore?
     @State private var showingPaywall = false
+    @State private var nutritionSummary: WeekNutritionSummary?
 
     private let calendar = Date.mondayCalendar
     /// Keep meal cards in two equal-width cells. An adaptive column is allowed
@@ -88,9 +89,7 @@ struct WeekSectionView: View {
     var body: some View {
         // Built once per redraw rather than per day: a day's standing is
         // relative to the whole week, so every card needs the same summary.
-        let nutrition = appState.showsNutritionEstimates
-            ? WeekNutritionSummary(entries: entries)
-            : nil
+        let nutrition = nutritionSummary
 
         return VStack(alignment: .leading, spacing: 10) {
             if style == .week {
@@ -175,10 +174,76 @@ struct WeekSectionView: View {
             // queries the days the planner actually shows.
             calendarStore?.requestWeek(weekStart)
         }
+        .task(id: nutritionCacheKey) {
+            guard appState.showsNutritionEstimates else {
+                nutritionSummary = nil
+                return
+            }
+            // Let scrolling settle before doing recipe math. SwiftUI cancels
+            // this task when a week leaves the lazy stack, so fast scrolling
+            // does not spend time calculating summaries nobody will see.
+            try? await Task.sleep(for: .milliseconds(150))
+            guard !Task.isCancelled else { return }
+            nutritionSummary = WeekNutritionSummary(entries: entries)
+        }
         .sheet(isPresented: $showingPaywall) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
+    }
+
+    /// Cheap revision key for the expensive ingredient-based calculation.
+    /// Scroll visibility changes do not alter it, so they no longer rebuild
+    /// nutrition for every week on screen.
+    private var nutritionCacheKey: Int {
+        guard appState.showsNutritionEstimates else { return 0 }
+        var combinedEntries = 0
+        for entry in entries {
+            combinedEntries ^= nutritionSignature(for: entry)
+        }
+        var hasher = Hasher()
+        hasher.combine(entries.count)
+        hasher.combine(combinedEntries)
+        return hasher.finalize()
+    }
+
+    private func nutritionSignature(for entry: MealPlanEntry) -> Int {
+        let dish = entry.dish
+        let lines = dish?.ingredients ?? []
+        var combinedLines = 0
+        for line in lines {
+            combinedLines ^= ingredientNutritionSignature(line)
+        }
+        var hasher = Hasher()
+        hasher.combine(entry.uuid)
+        hasher.combine(entry.skipped)
+        hasher.combine(dish?.uuid)
+        hasher.combine(dish?.servings)
+        hasher.combine(dish?.statedEnergyKcalPerServing)
+        hasher.combine(dish?.statedProteinGramsPerServing)
+        hasher.combine(dish?.statedCarbGramsPerServing)
+        hasher.combine(dish?.statedFatGramsPerServing)
+        hasher.combine(lines.count)
+        hasher.combine(combinedLines)
+        return hasher.finalize()
+    }
+
+    private func ingredientNutritionSignature(_ line: DishIngredient) -> Int {
+        let ingredient = line.ingredient
+        var hasher = Hasher()
+        hasher.combine(line.uuid)
+        hasher.combine(line.canonicalValue)
+        hasher.combine(line.canonicalDimensionRaw)
+        hasher.combine(line.displayUnit)
+        hasher.combine(line.isApproximate)
+        hasher.combine(line.rawText)
+        hasher.combine(ingredient?.name)
+        hasher.combine(ingredient?.nutritionEnergyKcal)
+        hasher.combine(ingredient?.nutritionProteinGrams)
+        hasher.combine(ingredient?.nutritionCarbGrams)
+        hasher.combine(ingredient?.nutritionFatGrams)
+        hasher.combine(ingredient?.nutritionReferenceRaw)
+        return hasher.finalize()
     }
 
     /// A drop on the day's header, rather than on one of its meal cards: the

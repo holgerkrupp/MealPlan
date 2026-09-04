@@ -148,30 +148,47 @@ enum PieceWeightTable {
         if !genericUnits.contains(unit) {
             // Rules naming both the unit and the ingredient, then the unit's
             // own fallback.
-            for rule in unitRules where matches(rule.unit, unit) && !rule.names.isEmpty {
+            for rule in normalizedUnitRules where rule.unit == unit && !rule.names.isEmpty {
                 if matches(rule.names, name) { return rule.grams }
             }
-            for rule in unitRules where matches(rule.unit, unit) && rule.names.isEmpty {
+            for rule in normalizedUnitRules where rule.unit == unit && rule.names.isEmpty {
                 return rule.grams
             }
         }
 
         guard !name.isEmpty else { return nil }
         // Longest name first: "knoblauchzehe" must win over "knoblauch".
-        for rule in sortedPieceWeights where matches(rule.names, name) {
+        for rule in normalizedPieceWeights where matches(rule.names, name) {
             return rule.grams
         }
         return nil
     }
 
-    private static let sortedPieceWeights: [Rule] = pieceWeights.sorted {
-        ($0.names.map(\.count).max() ?? 0) > ($1.names.map(\.count).max() ?? 0)
+    private struct NormalizedRule {
+        var names: [String]
+        var unit: String
+        var grams: Double
     }
 
-    private static func matches(_ ruleUnit: String?, _ unit: String) -> Bool {
-        guard let ruleUnit else { return true }
-        return Ingredient.normalize(ruleUnit) == unit
+    private static let normalizedUnitRules: [NormalizedRule] = unitRules.map {
+        NormalizedRule(
+            names: $0.names.map(Ingredient.normalize),
+            unit: Ingredient.normalize($0.unit ?? ""),
+            grams: $0.grams
+        )
     }
+
+    private static let normalizedPieceWeights: [NormalizedRule] = pieceWeights
+        .map {
+            NormalizedRule(
+                names: $0.names.map(Ingredient.normalize),
+                unit: "",
+                grams: $0.grams
+            )
+        }
+        .sorted {
+            ($0.names.map(\.count).max() ?? 0) > ($1.names.map(\.count).max() ?? 0)
+        }
 
     /// Same short-name caution as `NutritionTable`: an alias under four
     /// characters ("Ei") has to be a whole word, or "Reis" becomes eggs.
@@ -182,8 +199,7 @@ enum PieceWeightTable {
                 .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
                 .map(String.init)
         )
-        for raw in names {
-            let key = Ingredient.normalize(raw)
+        for key in names {
             guard !key.isEmpty else { continue }
             if normalizedName == key { return true }
             if key.contains(" ") {

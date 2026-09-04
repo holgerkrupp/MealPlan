@@ -193,7 +193,10 @@ struct RootView: View {
             } catch {
                 sharingErrorMessage = error.localizedDescription
             }
-            try? await Task.sleep(for: .seconds(8))
+            // CKSyncEngine push notifications handle remote edits promptly.
+            // This is only a safety-net reconciliation and roster refresh, so
+            // it must not keep rescanning the household while someone scrolls.
+            try? await Task.sleep(for: .seconds(60))
         }
     }
 
