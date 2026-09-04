@@ -79,6 +79,10 @@ enum MealPlanBackupRestore {
         household.standardServings = backup.household.standardServings ?? Household.defaultStandardServings
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
+        // A restored library brings its own staples with it; an older file
+        // that already has an ingredient catalogue counts as set up too, so the
+        // defaults aren't seeded over the top of it.
+        household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? !backup.ingredients.isEmpty
         context.insert(household)
 
         for stored in backup.mealTypes {
@@ -198,6 +202,8 @@ enum MealPlanBackupRestore {
             item.customAisleName = stored.customAisleName
             item.canonicalValue = stored.canonicalValue
             item.canonicalDimensionRaw = stored.canonicalDimensionRaw
+            item.additionalAmountsRaw = stored.additionalAmountsRaw ?? []
+            item.unmeasuredCount = stored.unmeasuredCount ?? 0
             item.displayText = stored.displayText
             item.displayUnit = stored.displayUnit
             item.isChecked = stored.isChecked

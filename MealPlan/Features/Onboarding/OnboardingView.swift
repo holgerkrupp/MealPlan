@@ -56,7 +56,7 @@ struct OnboardingView: View {
                 bullets: [
                     String(localized: "Choose a date range and rebuild the list; the same ingredient from several dishes is added up."),
                     String(localized: "Items are sorted by aisle, and you can rename an aisle so it matches your shop."),
-                    String(localized: "Mark pantry staples in Settings to keep things you always have at home off the list."),
+                    String(localized: "Salt, pepper, oil — your household’s pantry staples stay off the list. Manage them under Household, and add one back by hand when you run out."),
                     String(localized: "Share the list or send it to Reminders.")
                 ]
             ),

@@ -209,6 +209,40 @@ struct RemindersSettingsSection: View {
     }
 }
 
+// MARK: - Bring!
+
+/// Only used where Bring! isn't a pane of its own.
+@MainActor
+struct BringSettingsSection: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        Section {
+            NavigationLink {
+                BringSettingsView()
+            } label: {
+                LabeledContent {
+                    Text(status)
+                } label: {
+                    Label(String(localized: "Bring!"), systemImage: "cart")
+                }
+            }
+        } header: {
+            Text("Shopping")
+        } footer: {
+            Text("Send your shopping list to Bring!, or keep the two in step so ticking something off in either app ticks it off in the other.")
+        }
+    }
+
+    private var status: String {
+        guard BringSyncService.shared.hasAccount,
+              let name = appState.currentHousehold?.bringListName,
+              appState.currentHousehold?.isConnectedToBring == true
+        else { return String(localized: "Not connected") }
+        return name
+    }
+}
+
 // MARK: - Data
 
 /// Only used where backup and restore aren't a pane of their own.

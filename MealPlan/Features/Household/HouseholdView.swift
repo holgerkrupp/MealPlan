@@ -12,6 +12,13 @@ struct HouseholdSettingsView: View {
         (appState.currentHousehold?.members ?? []).sorted { $0.dateAdded < $1.dateAdded }
     }
 
+    /// How many things the family counts as always in stock, for the row that
+    /// leads to them.
+    private func staplesSummary(_ household: Household) -> String {
+        let count = household.pantryStaples.count
+        return count == 0 ? String(localized: "None") : "\(count)"
+    }
+
     /// Only the owner can invite further participants: a household that's
     /// already shared and whose share this device didn't create is one this
     /// device joined as an editor, not the owner.
@@ -89,10 +96,14 @@ struct HouseholdSettingsView: View {
                     NavigationLink {
                         PantryStaplesView()
                     } label: {
-                        Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
+                        LabeledContent {
+                            Text(staplesSummary(household))
+                        } label: {
+                            Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
+                        }
                     }
                 } footer: {
-                    Text("Choose ingredients that should be omitted when a shopping list is rebuilt.")
+                    Text("Salt, pepper, oil — what your family always has at home. Staples stay off the shopping list when it's rebuilt, and you can put one on it yourself when you run out.")
                 }
 
                 Section(String(localized: "Who’s planning")) {

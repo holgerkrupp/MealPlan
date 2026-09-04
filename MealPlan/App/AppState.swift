@@ -117,9 +117,11 @@ final class AppState {
         return state
     }
 
-    /// Fetch the single household (creating it on first launch) and run
-    /// housekeeping that turns past plans into cooked-history.
+    /// Fetch the single household (creating it on first launch, with the
+    /// default pantry staples) and run housekeeping that turns past plans into
+    /// cooked-history.
     func bootstrap(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) {
+        var isNewHousehold = false
         if let existing = try? context.fetch(FetchDescriptor<Household>()).first {
             currentHousehold = existing
         } else {
@@ -127,8 +129,15 @@ final class AppState {
             context.insert(household)
             try? context.save()
             currentHousehold = household
+            isNewHousehold = true
         }
         if let household = currentHousehold {
+            // Only a household this device just created: a family that has been
+            // planning for a while must not have ingredients disappear off its
+            // shopping list because of an update.
+            if isNewHousehold {
+                PantryStaples.seedDefaults(for: household, context: context)
+            }
             MealType.ensure(for: household, context: context)
             CookedLogMaintenance.run(for: household, context: context)
             MealRoutineScheduler.apply(

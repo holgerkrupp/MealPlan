@@ -142,6 +142,16 @@
     "%lld" : {
 
     },
+    "%lld added here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hier hinzugefügt"
+          }
+        }
+      }
+    },
     "%lld all-day events" : {
       "localizations" : {
         "de" : {
@@ -219,12 +229,42 @@
     "%lld routines" : {
 
     },
+    "%lld sent to Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld an Bring! gesendet"
+          }
+        }
+      }
+    },
     "%lld servings" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld Portionen"
+          }
+        }
+      }
+    },
+    "%lld taken off Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld von Bring! entfernt"
+          }
+        }
+      }
+    },
+    "%lld ticked off here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld hier abgehakt"
           }
         }
       }
@@ -367,6 +407,16 @@
         }
       }
     },
+    "Add %@ to the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zur Einkaufsliste hinzufügen"
+          }
+        }
+      }
+    },
     "Add ${name} to MealPlan" : {
 
     },
@@ -388,6 +438,16 @@
     },
     "Add a regular meal" : {
 
+    },
+    "Add a staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel hinzufügen"
+          }
+        }
+      }
     },
     "Add a tag" : {
       "localizations" : {
@@ -460,6 +520,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zu Erinnerungen hinzufügen"
+          }
+        }
+      }
+    },
+    "Add to the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Einkaufsliste hinzufügen"
           }
         }
       }
@@ -597,6 +667,16 @@
     "Answers what is planned for the current week." : {
 
     },
+    "Always at home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer zu Hause"
+          }
+        }
+      }
+    },
     "Any" : {
       "localizations" : {
         "de" : {
@@ -686,6 +766,16 @@
         }
       }
     },
+    "Both lists were already the same." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beide Listen waren schon gleich."
+          }
+        }
+      }
+    },
     "Both recipes stay separate — they're only shown together, so you can pick the one you feel like cooking." : {
       "localizations" : {
         "de" : {
@@ -715,6 +805,79 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rezepte hereinholen"
+          }
+        }
+      }
+    },
+    "Bring!" : {
+
+    },
+    "Bring! answered with an error (%lld). Please try again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring! hat mit einem Fehler geantwortet (%lld). Bitte versuche es später noch einmal."
+          }
+        }
+      }
+    },
+    "Bring! didn’t accept that email and password. If you signed up with Apple or Google, set a password in the Bring! app first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring! hat diese E-Mail-Adresse und dieses Passwort nicht akzeptiert. Wenn du dich mit Apple oder Google registriert hast, lege zuerst in der Bring!-App ein Passwort fest."
+          }
+        }
+      }
+    },
+    "Bring! doesn’t offer apps a way to connect on your behalf, so MealPlan signs in the way the Bring! app does. If you created your Bring! account with Apple or Google, set a password in Bring! first. Bring! can change how this works at any time — when it stops working, your MealPlan list is untouched." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring! bietet Apps keine Möglichkeit, sich in deinem Namen zu verbinden – MealPlan meldet sich deshalb so an wie die Bring!-App selbst. Wenn du dein Bring!-Konto mit Apple oder Google erstellt hast, lege zuerst in Bring! ein Passwort fest. Bring! kann das jederzeit ändern; wenn es nicht mehr funktioniert, bleibt deine MealPlan-Liste unberührt."
+          }
+        }
+      }
+    },
+    "Bring! email" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring!-E-Mail"
+          }
+        }
+      }
+    },
+    "Bring! password" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring!-Passwort"
+          }
+        }
+      }
+    },
+    "Bring! sent something MealPlan couldn’t read. This can happen when Bring! changes their app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring! hat etwas geschickt, das MealPlan nicht lesen konnte. Das kann passieren, wenn Bring! seine App ändert."
+          }
+        }
+      }
+    },
+    "Bring! settings…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bring!-Einstellungen …"
           }
         }
       }
@@ -771,6 +934,16 @@
     },
     "by %@" : {
 
+    },
+    "Butter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butter"
+          }
+        }
+      }
     },
     "Café" : {
 
@@ -955,6 +1128,16 @@
     "Clear" : {
 
     },
+    "Clear everything" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles löschen"
+          }
+        }
+      }
+    },
     "Clear filters" : {
       "localizations" : {
         "de" : {
@@ -971,6 +1154,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Suche löschen"
+          }
+        }
+      }
+    },
+    "Clear the whole list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganze Liste leeren"
+          }
+        }
+      }
+    },
+    "Clear the whole list?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganze Liste leeren?"
           }
         }
       }
@@ -1009,6 +1212,26 @@
     },
     "Confirmed" : {
 
+    },
+    "Connect to Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Bring! verbinden"
+          }
+        }
+      }
+    },
+    "Connect to Bring!…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Bring! verbinden …"
+          }
+        }
+      }
     },
     "Contains %@" : {
       "localizations" : {
@@ -1105,6 +1328,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Kochmodus führt dich durch die Schritte und rechnet die Zutaten auf die Portionen um, die du kochst."
+          }
+        }
+      }
+    },
+    "Cooking oil" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speiseöl"
           }
         }
       }
@@ -1309,6 +1542,26 @@
         }
       }
     },
+    "Disconnect" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung trennen"
+          }
+        }
+      }
+    },
+    "Disconnected. Nothing was removed from either list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung getrennt. Auf keiner der beiden Listen wurde etwas entfernt."
+          }
+        }
+      }
+    },
     "Dish" : {
 
     },
@@ -1486,6 +1739,26 @@
     "Every fourth week" : {
 
     },
+    "Every line goes, ticked or not, here and — at the next sync — in Bring! too. Rebuild from the plan to get the planned ones back." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Zeile verschwindet, abgehakt oder nicht – hier und beim nächsten Synchronisieren auch in Bring!. Mit „Aus Plan neu aufbauen“ kommen die geplanten zurück."
+          }
+        }
+      }
+    },
+    "Every line goes, ticked or not. Rebuild from the plan to get the planned ones back." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jede Zeile verschwindet, abgehakt oder nicht. Mit „Aus Plan neu aufbauen“ kommen die geplanten zurück."
+          }
+        }
+      }
+    },
     "Every recipe in this group has been removed from it." : {
       "localizations" : {
         "de" : {
@@ -1532,6 +1805,16 @@
     },
     "Everything now on this device is deleted first. This can’t be undone." : {
 
+    },
+    "Everything your dishes and shopping lists have used so far. Pick the ones you always keep in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles, was deine Gerichte und Einkaufslisten bisher gebraucht haben. Wähle aus, was du immer im Haus hast."
+          }
+        }
+      }
     },
     "Expand day" : {
 
@@ -1619,6 +1902,16 @@
         }
       }
     },
+    "Flour" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehl"
+          }
+        }
+      }
+    },
     "Food market" : {
 
     },
@@ -1673,6 +1966,16 @@
     },
     "From week of" : {
 
+    },
+    "From your recipes and lists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus deinen Rezepten und Listen"
+          }
+        }
+      }
     },
     "Frozen" : {
 
@@ -1949,6 +2252,16 @@
     "In season now" : {
 
     },
+    "In step means both ways: what the plan puts on your list appears in Bring!, what somebody adds in Bring! appears here, and ticking something off in either app takes it off the other. Amounts come from your meal plan, so a rebuild rewrites them in Bring! too." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchron heißt in beide Richtungen: Was der Plan auf deine Liste setzt, taucht in Bring! auf, was jemand in Bring! hinzufügt, taucht hier auf, und abgehakt in der einen App verschwindet aus der anderen. Die Mengen kommen aus deinem Essensplan – ein Neuaufbau schreibt sie also auch in Bring! neu."
+          }
+        }
+      }
+    },
     "In the “%@” group" : {
       "localizations" : {
         "de" : {
@@ -2053,6 +2366,16 @@
         }
       }
     },
+    "Keep both lists in step" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beide Listen synchron halten"
+          }
+        }
+      }
+    },
     "Keep editing" : {
 
     },
@@ -2092,6 +2415,16 @@
         }
       }
     },
+    "Last synced" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zuletzt synchronisiert"
+          }
+        }
+      }
+    },
     "Layout" : {
 
     },
@@ -2107,6 +2440,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "In dieser Datei doppelt als „%@“"
+          }
+        }
+      }
+    },
+    "Load my Bring! lists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meine Bring!-Listen laden"
           }
         }
       }
@@ -2140,16 +2483,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Als gekocht markieren"
-          }
-        }
-      }
-    },
-    "Mark pantry staples in Settings to keep things you always have at home off the list." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Markiere Vorratsartikel in den Einstellungen, damit Dinge, die du immer zu Hause hast, nicht auf der Liste landen."
           }
         }
       }
@@ -2206,6 +2539,16 @@
     "MealPlan" : {
 
     },
+    "MealPlan couldn’t save the Bring! password to the keychain: %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan konnte das Bring!-Passwort nicht im Schlüsselbund speichern: %@"
+          }
+        }
+      }
+    },
     "MealPlan doesn’t have permission to add to Reminders." : {
 
     },
@@ -2225,6 +2568,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "MealPlan ist für einen Haushalt gemacht, nicht nur für eine Person am Herd. Alles liegt auf deinem Gerät und wird über iCloud geteilt."
+          }
+        }
+      }
+    },
+    "MealPlan isn’t connected to Bring! yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan ist noch nicht mit Bring! verbunden."
           }
         }
       }
@@ -2477,6 +2830,26 @@
     "No subscription and no recurring charge." : {
 
     },
+    "No staples match “%@”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Vorratsartikel passen zu „%@“."
+          }
+        }
+      }
+    },
+    "No staples yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Vorratsartikel."
+          }
+        }
+      }
+    },
     "No templates yet" : {
 
     },
@@ -2509,6 +2882,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Normale Kochzeit"
+          }
+        }
+      }
+    },
+    "Not a staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Vorratsartikel"
+          }
+        }
+      }
+    },
+    "Not connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht verbunden"
           }
         }
       }
@@ -2644,6 +3037,26 @@
         }
       }
     },
+    "On the list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Liste"
+          }
+        }
+      }
+    },
+    "On the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Einkaufsliste"
+          }
+        }
+      }
+    },
     "On this device" : {
 
     },
@@ -2775,11 +3188,31 @@
     "Pantry" : {
 
     },
+    "Pantry staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel"
+          }
+        }
+      }
+    },
     "Pantry staples" : {
 
     },
     "Partly planned" : {
 
+    },
+    "Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel kommen nie aus dem Plan auf die Liste. Etwas ausgegangen? Hier hinzufügen – es bleibt auch beim Neuaufbau der Liste stehen."
+          }
+        }
+      }
     },
     "Pasta" : {
       "localizations" : {
@@ -2810,6 +3243,19 @@
     "Person" : {
 
     },
+    "Pepper" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pfeffer"
+          }
+        }
+      }
+    },
+    "Photograph a page" : {
+
+    },
     "Photos" : {
       "localizations" : {
         "de" : {
@@ -2828,6 +3274,26 @@
     },
     "Pick an emoji or a symbol to stand in for dishes you don’t have a photo of." : {
 
+    },
+    "Pick the Bring! list this family’s shopping list belongs to. Everyone in your family who connects their own Bring! account should pick the same one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle die Bring!-Liste, zu der die Einkaufsliste dieser Familie gehört. Alle in der Familie, die ihr eigenes Bring!-Konto verbinden, sollten dieselbe wählen."
+          }
+        }
+      }
+    },
+    "Pick which Bring! list to use first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle zuerst aus, welche Bring!-Liste verwendet werden soll."
+          }
+        }
+      }
     },
     "Pizza" : {
       "localizations" : {
@@ -3326,6 +3792,36 @@
         }
       }
     },
+    "Salt" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz"
+          }
+        }
+      }
+    },
+    "Salt, pepper, oil — what your family always has at home. Staples stay off the shopping list when it's rebuilt, and you can put one on it yourself when you run out." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz, Pfeffer, Öl – was deine Familie immer zu Hause hat. Vorratsartikel bleiben beim Neuaufbau der Einkaufsliste außen vor; geht etwas aus, setzt du es selbst darauf."
+          }
+        }
+      }
+    },
+    "Salt, pepper, oil — your household’s pantry staples stay off the list. Manage them under Household, and add one back by hand when you run out." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz, Pfeffer, Öl – die Vorratsartikel deines Haushalts bleiben von der Liste fern. Du verwaltest sie unter „Haushalt“ und setzt sie von Hand darauf, wenn etwas ausgeht."
+          }
+        }
+      }
+    },
     "Save" : {
 
     },
@@ -3418,6 +3914,16 @@
     "Search ingredients" : {
 
     },
+    "Search or add an ingredient" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat suchen oder hinzufügen"
+          }
+        }
+      }
+    },
     "Search with" : {
 
     },
@@ -3482,6 +3988,36 @@
     },
     "Servings" : {
 
+    },
+    "Send the whole list to Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ganze Liste an Bring! senden"
+          }
+        }
+      }
+    },
+    "Send to Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An Bring! senden"
+          }
+        }
+      }
+    },
+    "Send your shopping list to Bring!, or keep the two in step so ticking something off in either app ticks it off in the other." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sende deine Einkaufsliste an Bring! oder halte beide synchron – abgehakt in der einen App heißt abgehakt in der anderen."
+          }
+        }
+      }
     },
     "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead." : {
       "localizations" : {
@@ -3626,6 +4162,16 @@
         }
       }
     },
+    "Signed in as" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Angemeldet als"
+          }
+        }
+      }
+    },
     "Skip" : {
       "localizations" : {
         "de" : {
@@ -3711,6 +4257,16 @@
     "Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you." : {
 
     },
+    "Staples are left off the shopping list when it's rebuilt from the plan. Run out of one? Put it on the list yourself with the cart button." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel bleiben beim Neuaufbau der Einkaufsliste außen vor. Etwas ausgegangen? Mit der Einkaufswagen-Taste setzt du es selbst auf die Liste."
+          }
+        }
+      }
+    },
     "Staples are omitted when a shopping list is rebuilt. You can still add them manually whenever you run out." : {
 
     },
@@ -3740,6 +4296,16 @@
     "Steps, notes, anything…" : {
 
     },
+    "Sugar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zucker"
+          }
+        }
+      }
+    },
     "Suggest automatically" : {
 
     },
@@ -3768,6 +4334,26 @@
     },
     "Summer" : {
 
+    },
+    "Sync now" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jetzt synchronisieren"
+          }
+        }
+      }
+    },
+    "Sync with Bring!" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit Bring! synchronisieren"
+          }
+        }
+      }
     },
     "Syncing" : {
 
@@ -4196,6 +4782,26 @@
     "View only" : {
 
     },
+    "Vinegar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essig"
+          }
+        }
+      }
+    },
+    "Water" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wasser"
+          }
+        }
+      }
+    },
     "We skipped this" : {
       "localizations" : {
         "de" : {
@@ -4262,6 +4868,16 @@
     "Which meal should I add it to?" : {
 
     },
+    "Which list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Welche Liste"
+          }
+        }
+      }
+    },
     "While sharing you can put the new dish straight onto a day in your plan." : {
       "localizations" : {
         "de" : {
@@ -4322,6 +4938,16 @@
     "Your backup is ready." : {
 
     },
+    "Your Bring! account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Bring!-Konto"
+          }
+        }
+      }
+    },
     "Your dishes" : {
       "localizations" : {
         "de" : {
@@ -4357,6 +4983,16 @@
     },
     "Your portable recipe archive is ready." : {
 
+    },
+    "Your shopping list can be sent to Bring! — or kept in step with it, so ticking something off in either app ticks it off in the other." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Einkaufsliste kann an Bring! gesendet oder mit Bring! synchron gehalten werden – abgehakt in der einen App heißt dann abgehakt in der anderen."
+          }
+        }
+      }
     },
     "Your week is ready as a PDF." : {
 
