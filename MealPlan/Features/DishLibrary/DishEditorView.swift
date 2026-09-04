@@ -248,7 +248,7 @@ struct DishEditorView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 12) {
                 ForEach(dish.sortedImages) { image in
-                    DishThumbnail(data: image.data, size: 88, cornerRadius: 12)
+                    DishThumbnail(image: image, size: 88, cornerRadius: 12)
                         .overlay(alignment: .topTrailing) {
                             Button(role: .destructive) {
                                 removeImage(image)

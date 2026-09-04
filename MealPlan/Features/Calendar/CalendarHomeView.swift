@@ -19,6 +19,10 @@ struct CalendarHomeView: View {
     @State private var exportedPDF: ExportedPDF?
     @State private var showingPaywall = false
     @State private var showingMealsSettings = false
+    /// Kept separate from `AppState`: day visibility changes rapidly during a
+    /// scroll and only the small week strip needs to observe them. If this
+    /// lives on the app state, every change invalidates the whole calendar.
+    @State private var visibilityTracker = PlanVisibilityTracker()
     /// First day of the week shown in the strip above the plan. Follows the
     /// user's locale, unlike the Monday-based week sections below it.
     @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
@@ -27,10 +31,10 @@ struct CalendarHomeView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            WeekStripView(
+            TrackedWeekStrip(
                 weekStart: $stripWeekStart,
                 selectedDate: appState.selectedDate,
-                visibleDayIDs: appState.visibleDayIDs,
+                visibilityTracker: visibilityTracker,
                 onDropDish: { references, day in drop(references, on: day) }
             ) { day in
                 goTo(day)
@@ -103,7 +107,13 @@ struct CalendarHomeView: View {
                         }
 
                     ForEach(paginator.weekStarts, id: \.self) { weekStart in
-                        WeekSectionView(weekStart: weekStart, style: .week)
+                        WeekSectionView(
+                            weekStart: weekStart,
+                            style: .week,
+                            onDayVisibilityChange: { visible, dayID in
+                                visibilityTracker.setDayVisible(visible, id: dayID)
+                            }
+                        )
                             .id(weekStart)
                     }
 
@@ -278,6 +288,42 @@ struct CalendarHomeView: View {
         if let url = WeekExport.pdf(data) {
             exportedPDF = ExportedPDF(url: url)
         }
+    }
+}
+
+/// The rapidly changing scroll visibility state is observed only here. This
+/// keeps the planner's lazy stack, queries, and meal cards out of the update
+/// path while the glass pill moves across the week strip.
+@Observable
+@MainActor
+private final class PlanVisibilityTracker {
+    private(set) var visibleDayIDs: Set<String> = []
+
+    func setDayVisible(_ visible: Bool, id: String) {
+        if visible {
+            visibleDayIDs.insert(id)
+        } else {
+            visibleDayIDs.remove(id)
+        }
+    }
+}
+
+@MainActor
+private struct TrackedWeekStrip: View {
+    @Binding var weekStart: Date
+    let selectedDate: Date
+    let visibilityTracker: PlanVisibilityTracker
+    var onDropDish: ([DishReference], Date) -> Bool
+    var onSelect: (Date) -> Void
+
+    var body: some View {
+        WeekStripView(
+            weekStart: $weekStart,
+            selectedDate: selectedDate,
+            visibleDayIDs: visibilityTracker.visibleDayIDs,
+            onDropDish: onDropDish,
+            onSelect: onSelect
+        )
     }
 }
 

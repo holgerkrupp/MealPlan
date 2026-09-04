@@ -36,6 +36,9 @@ struct WeekNutritionSummary: Sendable {
     /// Estimates keyed by `Date.dayID`, so lookups don't depend on calendars.
     private var estimates: [String: NutritionEstimate]
     private var standings: [String: NutritionDayStanding]
+    /// The same recipe estimates reused by meal-card captions. Without this,
+    /// every card adds up its ingredients again on every SwiftUI redraw.
+    private var dishEstimates: [UUID: NutritionEstimate]
 
     /// A day has to differ from the week's middle by this much before it is
     /// worth pointing out. Under a fifth is well inside the error the estimate
@@ -48,6 +51,7 @@ struct WeekNutritionSummary: Sendable {
 
     init(estimatesByDayID: [String: NutritionEstimate]) {
         self.estimates = estimatesByDayID
+        self.dishEstimates = [:]
 
         let comparable = estimatesByDayID
             .filter { $0.value.isTrustworthy && $0.value.facts.energyKcal > 0 }
@@ -77,10 +81,17 @@ struct WeekNutritionSummary: Sendable {
     /// harmless — they simply become days of their own.
     init(entries: [MealPlanEntry]) {
         var byDay: [String: [MealPlanEntry]] = [:]
+        var dishes: [UUID: NutritionEstimate] = [:]
         for entry in entries {
             byDay[entry.date.dayID, default: []].append(entry)
+            if let dish = entry.dish, dishes[dish.uuid] == nil {
+                dishes[dish.uuid] = NutritionEstimator.perServing(for: dish)
+            }
         }
-        self.init(estimatesByDayID: byDay.mapValues { NutritionEstimator.perPerson(for: $0) })
+        self.init(estimatesByDayID: byDay.mapValues { entries in
+            Self.perPerson(for: entries, dishEstimates: dishes)
+        })
+        self.dishEstimates = dishes
     }
 
     func estimate(on day: Date) -> NutritionEstimate? {
@@ -91,6 +102,31 @@ struct WeekNutritionSummary: Sendable {
     /// state of a half-planned week and must not be dressed up as "average".
     func standing(on day: Date) -> NutritionDayStanding? {
         standings[day.dayID]
+    }
+
+    func estimate(for dish: Dish) -> NutritionEstimate? {
+        dishEstimates[dish.uuid]
+    }
+
+    private static func perPerson(
+        for entries: [MealPlanEntry],
+        dishEstimates: [UUID: NutritionEstimate]
+    ) -> NutritionEstimate {
+        var combined = NutritionEstimate.unavailable
+        var hasPlannedMeal = false
+
+        for entry in entries where !entry.skipped {
+            guard let dish = entry.dish else { continue }
+            let estimate = dishEstimates[dish.uuid] ?? .unavailable
+            if estimate.origin == .none {
+                combined.dishesWithoutEstimate += 1
+            } else {
+                combined.merge(estimate)
+            }
+            hasPlannedMeal = true
+        }
+
+        return hasPlannedMeal ? combined : .unavailable
     }
 
     private static func median(_ values: [Double]) -> Double? {

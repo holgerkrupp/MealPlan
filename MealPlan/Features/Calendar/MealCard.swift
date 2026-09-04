@@ -14,6 +14,7 @@ struct MealCard: View {
     let title: String
     let symbolName: String
     let entries: [MealPlanEntry]
+    var nutritionSummary: WeekNutritionSummary? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(PurchaseManager.self) private var purchaseManager
@@ -45,13 +46,6 @@ struct MealCard: View {
         return Self.palette[Int(hash % UInt64(Self.palette.count))]
     }
 
-    /// The photo to use as the card's full background, if any dish has one.
-    private var backdropData: Data? {
-        entries.lazy.compactMap { $0.dish?.primaryImageData }.first
-    }
-
-    private var onImage: Bool { backdropData != nil }
-
     /// The placeholder glyph of the first planned dish that has one. Used as
     /// the card's backdrop in place of the meal symbol, so a dish without a
     /// photo still reads at a glance. Keeps the meal's accent colour so the
@@ -74,8 +68,13 @@ struct MealCard: View {
     private var isPlanningLocked: Bool { !purchaseManager.canPlan(on: date) }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            header
+        // Resolve the relationship once for this render. The image data stays
+        // externally stored until `CachedDishPhoto` requests it.
+        let backdropImage = entries.lazy.compactMap { $0.dish?.primaryImage }.first
+        let showsBackdrop = backdropImage != nil
+
+        return VStack(alignment: .leading, spacing: 8) {
+            header(showsBackdrop: showsBackdrop)
 
             if entries.isEmpty {
                 Spacer(minLength: 0)
@@ -107,7 +106,7 @@ struct MealCard: View {
                         // the press to the menu and a drag out of it to the
                         // meal. Attached one level up, as it used to be, the
                         // menu won every press and nothing could be dragged.
-                        entryRow(entry)
+                        entryRow(entry, showsBackdrop: showsBackdrop)
                             #if MEALPLAN_ENABLE_OS27_APP_INTENTS
                             .appEntityIdentifier(EntityIdentifier(
                                 for: MealPlanEntryEntity.self,
@@ -134,7 +133,7 @@ struct MealCard: View {
                             } label: {
                                 Image(systemName: "minus.circle.fill")
                                     .font(.body)
-                                    .foregroundStyle(onImage ? AnyShapeStyle(.white.opacity(0.9)) : AnyShapeStyle(.secondary))
+                                    .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white.opacity(0.9)) : AnyShapeStyle(.secondary))
                                     .padding(.vertical, 2)
                             }
                             .buttonStyle(.plain)
@@ -151,7 +150,7 @@ struct MealCard: View {
                             systemImage: isPlanningLocked ? "lock.fill" : "plus"
                         )
                             .font(.caption.weight(.medium))
-                            .foregroundStyle(onImage ? .white : Color.primary)
+                            .foregroundStyle(showsBackdrop ? .white : Color.primary)
                             .opacity(0.9)
                     }
                     .buttonStyle(.plain)
@@ -166,12 +165,12 @@ struct MealCard: View {
         )
         // Drawn as a background so the oversized backdrop glyph can't set the
         // card's height — the content alone decides how tall the card is.
-        .background { cardBackground }
+        .background { cardBackground(backdropImage) }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(
-                    isTargeted ? Color.accentColor : accent.opacity(onImage ? 0 : 0.35),
+                    isTargeted ? Color.accentColor : accent.opacity(showsBackdrop ? 0 : 0.35),
                     lineWidth: isTargeted ? 2.5 : 1
                 )
         )
@@ -228,11 +227,13 @@ struct MealCard: View {
     // MARK: - Background
 
     @ViewBuilder
-    private var cardBackground: some View {
-        if let backdropData, let image = Image(data: backdropData) {
-            image
-                .resizable()
-                .scaledToFill()
+    private func cardBackground(_ backdropImage: DishImage?) -> some View {
+        if let backdropImage {
+            CachedDishPhoto(
+                image: backdropImage,
+                cacheKey: "\(backdropImage.uuid.uuidString)-\(backdropImage.modifiedAt.timeIntervalSinceReferenceDate)",
+                maxPixelSize: 900
+            )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(
                     LinearGradient(
@@ -274,7 +275,7 @@ struct MealCard: View {
 
     // MARK: - Header
 
-    private var header: some View {
+    private func header(showsBackdrop: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: symbolName)
                 .font(.caption)
@@ -283,8 +284,8 @@ struct MealCard: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .foregroundStyle(onImage ? AnyShapeStyle(.white) : AnyShapeStyle(accent))
-        .shadow(color: .black.opacity(onImage ? 0.5 : 0), radius: 2, y: 1)
+        .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white) : AnyShapeStyle(accent))
+        .shadow(color: .black.opacity(showsBackdrop ? 0.5 : 0), radius: 2, y: 1)
     }
 
     // MARK: - Drag and drop
@@ -396,17 +397,17 @@ struct MealCard: View {
 
     // MARK: - Entry row
 
-    private func entryRow(_ entry: MealPlanEntry) -> some View {
-        let hasOwnImage = entry.dish?.primaryImageData != nil
+    private func entryRow(_ entry: MealPlanEntry, showsBackdrop: Bool) -> some View {
+        let hasOwnImage = entry.dish?.primaryImage != nil
         let isEatingOut = entry.dish == nil && entry.isEatingOut
 
         return HStack(spacing: 8) {
             if isEatingOut {
                 Image(systemName: "storefront")
-                    .font(onImage ? .caption2 : .body)
-                    .foregroundStyle(onImage ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(accent))
-                    .frame(width: onImage ? 18 : 34)
-            } else if !onImage {
+                    .font(showsBackdrop ? .caption2 : .body)
+                    .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(accent))
+                    .frame(width: showsBackdrop ? 18 : 34)
+            } else if !showsBackdrop {
                 DishThumbnail(dish: entry.dish, size: 34, cornerRadius: 8)
             } else if !hasOwnImage {
                 switch entry.dish?.glyph {
@@ -427,10 +428,10 @@ struct MealCard: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayTitle)
-                    .font(.subheadline.weight(onImage ? .semibold : .regular))
+                    .font(.subheadline.weight(showsBackdrop ? .semibold : .regular))
                     .lineLimit(2)
                     .strikethrough(entry.skipped)
-                    .foregroundStyle(onImage ? AnyShapeStyle(.white) : AnyShapeStyle(entry.skipped ? Color.secondary : Color.primary))
+                    .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white) : AnyShapeStyle(entry.skipped ? Color.secondary : Color.primary))
 
                 HStack(spacing: 6) {
                     if entry.routineUUID != nil {
@@ -445,26 +446,28 @@ struct MealCard: View {
                     }
                     if let reaction = entry.reaction {
                         Image(systemName: reaction.symbolName)
-                            .foregroundStyle(onImage ? .white : (reaction == .down ? .red : .yellow))
+                            .foregroundStyle(showsBackdrop ? .white : (reaction == .down ? .red : .yellow))
                     }
                     if entry.dish?.needsReview == true {
                         Image(systemName: "exclamationmark.triangle.fill")
-                            .foregroundStyle(onImage ? .white : .orange)
+                            .foregroundStyle(showsBackdrop ? .white : .orange)
                     }
                     // Reading the day's total is one thing; seeing which meal
                     // put it there is what makes tomorrow plannable.
-                    if appState.showsNutritionEstimates, let dish = entry.dish {
-                        MealNutritionCaption(dish: dish, unit: appState.energyUnit)
+                    if appState.showsNutritionEstimates,
+                       let dish = entry.dish,
+                       let estimate = nutritionSummary?.estimate(for: dish) {
+                        MealNutritionCaption(estimate: estimate, unit: appState.energyUnit)
                     }
                 }
                 .font(.caption2)
-                .foregroundStyle(onImage ? .white.opacity(0.9) : Color.secondary)
+                .foregroundStyle(showsBackdrop ? .white.opacity(0.9) : Color.secondary)
             }
             .frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
 
             Spacer(minLength: 0)
         }
-        .shadow(color: .black.opacity(onImage ? 0.45 : 0), radius: 2, y: 1)
+        .shadow(color: .black.opacity(showsBackdrop ? 0.45 : 0), radius: 2, y: 1)
     }
 }
 

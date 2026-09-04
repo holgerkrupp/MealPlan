@@ -5,6 +5,7 @@ import SwiftData
 struct WeekSectionView: View {
     let weekStart: Date
     let style: CalendarStyle
+    var onDayVisibilityChange: (Bool, String) -> Void
 
     @Query private var entries: [MealPlanEntry]
     @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
@@ -26,9 +27,14 @@ struct WeekSectionView: View {
         GridItem(.flexible(minimum: 0), spacing: 10),
     ]
 
-    init(weekStart: Date, style: CalendarStyle) {
+    init(
+        weekStart: Date,
+        style: CalendarStyle,
+        onDayVisibilityChange: @escaping (Bool, String) -> Void = { _, _ in }
+    ) {
         self.weekStart = weekStart
         self.style = style
+        self.onDayVisibilityChange = onDayVisibilityChange
         let end = weekStart.adding(weeks: 1)
         _entries = Query(
             filter: #Predicate<MealPlanEntry> { $0.date >= weekStart && $0.date < end },
@@ -151,7 +157,8 @@ struct WeekSectionView: View {
                                         mealKey: meal.key,
                                         title: meal.name,
                                         symbolName: meal.symbolName,
-                                        entries: entries(on: day, mealKey: meal.key)
+                                        entries: entries(on: day, mealKey: meal.key),
+                                        nutritionSummary: nutrition
                                     )
                                 }
                             }
@@ -163,9 +170,9 @@ struct WeekSectionView: View {
                 // the lazy stack can tear a card down without a final
                 // visibility callback.
                 .onScrollVisibilityChange(threshold: 0.05) { visible in
-                    appState.setDayVisible(visible, id: day.dayID)
+                    onDayVisibilityChange(visible, day.dayID)
                 }
-                .onDisappear { appState.setDayVisible(false, id: day.dayID) }
+                .onDisappear { onDayVisibilityChange(false, day.dayID) }
             }
         }
         .padding(.vertical, 8)

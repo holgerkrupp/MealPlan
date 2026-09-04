@@ -64,20 +64,6 @@ final class AppState {
         Set(UserDefaults.standard.stringArray(forKey: collapsedDaysKey) ?? [])
     }
 
-    /// Day cards currently on screen in the plan, as `dayID`s. The week strip
-    /// draws its glass pill over exactly these days, so the strip shows where
-    /// in the week the plan is scrolled to.
-    private(set) var visibleDayIDs: Set<String> = []
-
-    func setDayVisible(_ visible: Bool, id: String) {
-        // Only write on a real change: this fires continuously while scrolling.
-        if visible {
-            if !visibleDayIDs.contains(id) { visibleDayIDs.insert(id) }
-        } else if visibleDayIDs.contains(id) {
-            visibleDayIDs.remove(id)
-        }
-    }
-
     /// A transient "undo" offer shown after a forgiving destructive action.
     var undoOffer: UndoOffer?
 

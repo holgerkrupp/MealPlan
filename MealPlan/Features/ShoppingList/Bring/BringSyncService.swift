@@ -14,12 +14,17 @@ final class BringSyncService {
     static let shared = BringSyncService()
 
     private let client: BringClient
+    /// Keychain access is synchronous and can take long enough to hitch a tab
+    /// transition. Load once, then update the cache when this service changes
+    /// the credentials.
+    private var credentials: BringCredentials?
 
     /// A sync in flight, so the UI can show it and a second one can't start.
     private(set) var isSyncing = false
 
     init(client: BringClient = BringClient()) {
         self.client = client
+        self.credentials = BringCredentialStore.load()
     }
 
     /// What a sync did, for the sentence shown afterwards.
@@ -48,16 +53,18 @@ final class BringSyncService {
 
     /// Whether this device has a Bring! account to sync with. Which list it
     /// syncs is on the household.
-    var hasAccount: Bool { BringCredentialStore.load() != nil }
+    var hasAccount: Bool { credentials != nil }
 
-    var accountEmail: String? { BringCredentialStore.load()?.email }
+    var accountEmail: String? { credentials?.email }
 
     /// Sign in and report which lists the account can use, so one can be
     /// picked. The password is only written to the keychain once Bring! has
     /// accepted it.
     func signIn(email: String, password: String) async throws -> [BringList] {
         try await client.signIn(email: email, password: password)
-        try BringCredentialStore.save(BringCredentials(email: email, password: password))
+        let credentials = BringCredentials(email: email, password: password)
+        try BringCredentialStore.save(credentials)
+        self.credentials = credentials
         return try await client.lists()
     }
 
@@ -71,6 +78,7 @@ final class BringSyncService {
     /// shopping list — disconnecting is not a way to lose your groceries.
     func signOut(household: Household?, context: ModelContext) {
         BringCredentialStore.clear()
+        credentials = nil
         Task { await client.signOut() }
         household?.bringListUuid = nil
         household?.bringListName = nil

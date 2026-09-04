@@ -315,6 +315,20 @@ struct NutritionEstimatorTests {
         #expect(summary.standing(on: days[2]) == .typical)
     }
 
+    @Test func weekSummaryReusesItsDishEstimateForMealCards() throws {
+        let noodles = dish("Nudeln", servings: 2)
+        line(noodles, "Nudeln", 250, .mass)
+        let day = Date.now
+        let summary = WeekNutritionSummary(entries: [
+            MealPlanEntry(date: day, slot: .dinner, dish: noodles),
+        ])
+
+        let meal = try #require(summary.estimate(for: noodles))
+        let daily = try #require(summary.estimate(on: day))
+        #expect(meal == NutritionEstimator.perServing(for: noodles))
+        #expect(daily.facts == meal.facts)
+    }
+
     // MARK: - Presentation
 
     @Test func everyFigureIsMarkedAsAnEstimate() {

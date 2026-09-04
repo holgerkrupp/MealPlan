@@ -277,7 +277,7 @@ struct DishDetailView: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(images) { image in
-                        DishThumbnail(data: image.data, size: 200, cornerRadius: 20)
+                        DishThumbnail(image: image, size: 200, cornerRadius: 20)
                     }
                 }
             }

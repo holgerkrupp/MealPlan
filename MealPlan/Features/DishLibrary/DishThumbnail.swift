@@ -1,4 +1,5 @@
 import SwiftUI
+import ImageIO
 
 #if canImport(UIKit)
 import UIKit
@@ -28,7 +29,8 @@ extension Image {
 /// to the generic fork-and-knife.
 @MainActor
 struct DishThumbnail: View {
-    let data: Data?
+    private let imageRecord: DishImage?
+    private let rawData: Data?
     var glyph: DishGlyph?
     /// Tints the glyph placeholder; derived from the dish name so each dish
     /// keeps the same colour everywhere.
@@ -37,13 +39,30 @@ struct DishThumbnail: View {
     var cornerRadius: CGFloat = 12
     private var width: CGFloat
     private var height: CGFloat
+    @Environment(\.displayScale) private var displayScale
 
     init(
         data: Data?, glyph: DishGlyph? = nil, tint: Color = .gray,
         size: CGFloat = 56, cornerRadius: CGFloat = 12,
         width: CGFloat? = nil, height: CGFloat? = nil
     ) {
-        self.data = data
+        self.imageRecord = nil
+        self.rawData = data
+        self.glyph = glyph
+        self.tint = tint
+        self.width = width ?? size
+        self.height = height ?? size
+        self.size = max(self.width, self.height)
+        self.cornerRadius = cornerRadius
+    }
+
+    init(
+        image: DishImage?, glyph: DishGlyph? = nil, tint: Color = .gray,
+        size: CGFloat = 56, cornerRadius: CGFloat = 12,
+        width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
+        self.imageRecord = image
+        self.rawData = nil
         self.glyph = glyph
         self.tint = tint
         self.width = width ?? size
@@ -57,7 +76,8 @@ struct DishThumbnail: View {
         dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12,
         width: CGFloat? = nil, height: CGFloat? = nil
     ) {
-        self.data = dish?.primaryImageData
+        self.imageRecord = dish?.primaryImage
+        self.rawData = nil
         self.glyph = dish?.glyph
         self.tint = DishGlyph.tint(forName: dish?.name ?? "")
         self.width = width ?? size
@@ -67,17 +87,28 @@ struct DishThumbnail: View {
     }
 
     var body: some View {
-        Group {
-            if let data, let image = Image(data: data) {
-                image
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                placeholder
+        ZStack {
+            placeholder
+            if let imageRecord {
+                CachedDishPhoto(
+                    image: imageRecord,
+                    cacheKey: "\(imageRecord.uuid.uuidString)-\(imageRecord.modifiedAt.timeIntervalSinceReferenceDate)",
+                    maxPixelSize: size * displayScale
+                )
+            } else if let rawData {
+                CachedDishPhoto(
+                    data: rawData,
+                    cacheKey: Self.rawCacheKey(rawData),
+                    maxPixelSize: size * displayScale
+                )
             }
         }
         .frame(width: width, height: height)
         .clipShape(RoundedRectangle(cornerRadius: cornerRadius, style: .continuous))
+    }
+
+    private static func rawCacheKey(_ data: Data) -> String {
+        "raw-\(data.count)-\(data.prefix(12).base64EncodedString())"
     }
 
     @ViewBuilder
@@ -104,6 +135,103 @@ struct DishThumbnail: View {
                     .font(.system(size: size * 0.4))
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+}
+
+/// Decodes large recipe photos away from the main actor and keeps only a
+/// display-sized CGImage. Reusing the decoded result avoids both scroll-time
+/// JPEG decoding and repeatedly allocating full-resolution image buffers.
+private actor DishPhotoCache {
+    static let shared = DishPhotoCache()
+    private let images = NSCache<NSString, CGImage>()
+
+    private init() {
+        images.totalCostLimit = 48 * 1024 * 1024
+        images.countLimit = 160
+    }
+
+    func image(data: Data, key: String, maxPixelSize: CGFloat) -> CGImage? {
+        guard !Task.isCancelled else { return nil }
+        let cacheKey = key as NSString
+        if let cached = images.object(forKey: cacheKey) { return cached }
+        guard let decoded = Self.downsample(data, maxPixelSize: maxPixelSize) else { return nil }
+        images.setObject(
+            decoded,
+            forKey: cacheKey,
+            cost: decoded.bytesPerRow * decoded.height
+        )
+        return decoded
+    }
+
+    func cachedImage(for key: String) -> CGImage? {
+        images.object(forKey: key as NSString)
+    }
+
+    nonisolated private static func downsample(_ data: Data, maxPixelSize: CGFloat) -> CGImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceShouldCacheImmediately: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+        ]
+        return CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary)
+    }
+}
+
+struct CachedDishPhoto: View {
+    private let imageRecord: DishImage?
+    private let rawData: Data?
+    let cacheKey: String
+    let maxPixelSize: CGFloat
+
+    @State private var decoded: CGImage?
+
+    private var sizedKey: String {
+        "\(cacheKey)-\(Int(maxPixelSize.rounded(.up)))"
+    }
+
+    init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
+        self.imageRecord = image
+        self.rawData = nil
+        self.cacheKey = cacheKey
+        self.maxPixelSize = maxPixelSize
+    }
+
+    init(data: Data, cacheKey: String, maxPixelSize: CGFloat) {
+        self.imageRecord = nil
+        self.rawData = data
+        self.cacheKey = cacheKey
+        self.maxPixelSize = maxPixelSize
+    }
+
+    var body: some View {
+        Group {
+            if let decoded {
+                Image(decorative: decoded, scale: 1)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Color.clear
+            }
+        }
+        .task(id: sizedKey) {
+            decoded = nil
+            if let cached = await DishPhotoCache.shared.cachedImage(for: sizedKey) {
+                decoded = cached
+                return
+            }
+            guard !Task.isCancelled,
+                  let sourceData = imageRecord?.data ?? rawData
+            else { return }
+            let image = await DishPhotoCache.shared.image(
+                data: sourceData,
+                key: sizedKey,
+                maxPixelSize: max(1, maxPixelSize)
+            )
+            guard !Task.isCancelled, let image else { return }
+            decoded = image
         }
     }
 }

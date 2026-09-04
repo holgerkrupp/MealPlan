@@ -70,6 +70,10 @@ final class HouseholdRecordSyncService {
     /// CKSyncEngine traps when explicit fetch/send operations overlap. Keep a
     /// single ordered chain for launch sync, save-driven sends, and pushes.
     private var cloudOperationTask: Task<Void, Never>?
+    /// CKSyncEngine requests pending records one at a time. Keep the snapshots
+    /// prepared by the scan so that callback is O(1), not a full household
+    /// rebuild (including every externally stored photo) per record.
+    private var pendingSnapshots: [String: LocalHouseholdRecord] = [:]
     private var needsLocalScan = true
     private var isApplyingRemoteChanges = false
     private(set) var lastError: Error?
@@ -81,7 +85,7 @@ final class HouseholdRecordSyncService {
     func synchronize(household: Household, context: ModelContext) async throws {
         try activateIfNeeded(household: household, context: context)
         guard let locator else { return }
-        if !locator.isReadOnly, needsLocalScan { try scanLocalChanges() }
+        if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
         await performCloudOperation(fetch: true, send: !locator.isReadOnly)
         if let lastError { throw lastError }
     }
@@ -103,12 +107,19 @@ final class HouseholdRecordSyncService {
         household = nil
         context = nil
         locator = nil
+        pendingSnapshots.removeAll(keepingCapacity: false)
         needsLocalScan = true
     }
 
     func record(for id: CKRecord.ID) throws -> CKRecord? {
         guard id.zoneID == locator?.zoneID else { return nil }
-        guard let snapshot = try snapshotsByName()[id.recordName] else { return nil }
+        let snapshot: LocalHouseholdRecord?
+        if let pending = pendingSnapshots[id.recordName] {
+            snapshot = pending
+        } else {
+            snapshot = try snapshotsByName()[id.recordName]
+        }
+        guard let snapshot else { return nil }
         let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
         return try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
     }
@@ -164,6 +175,7 @@ final class HouseholdRecordSyncService {
         self.context = context
         locator = nextLocator
         metadata = loadMetadata(for: nextLocator)
+        pendingSnapshots.removeAll(keepingCapacity: false)
         needsLocalScan = true
 
         let database = nextLocator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
@@ -195,7 +207,7 @@ final class HouseholdRecordSyncService {
             try? await Task.sleep(for: .milliseconds(1200))
             guard !Task.isCancelled, let self else { return }
             do {
-                try self.scanLocalChanges()
+                try await self.scanLocalChanges()
                 await self.performCloudOperation(fetch: false, send: true)
             } catch {
                 self.lastError = error
@@ -203,29 +215,43 @@ final class HouseholdRecordSyncService {
         }
     }
 
-    private func scanLocalChanges() throws {
+    private func scanLocalChanges() async throws {
         guard let household, let context, let engine, let locator, !locator.isReadOnly else { return }
         var snapshots = try HouseholdRecordCodec.records(for: household, context: context)
-        var didTouch = false
+        // Photo hashes are deliberately expensive. Calculate every snapshot's
+        // fingerprint once per scan and carry it through both passes.
+        let initialSnapshots = snapshots
+        var evaluated = await Task.detached(priority: .utility) {
+            initialSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
+        }.value
+        var changesToTouch: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)] = []
 
-        for snapshot in snapshots where metadata.fingerprints[snapshot.identity.recordName] != nil && metadata.fingerprints[snapshot.identity.recordName] != snapshot.fingerprint {
+        for item in evaluated where metadata.fingerprints[item.snapshot.identity.recordName] != nil
+            && metadata.fingerprints[item.snapshot.identity.recordName] != item.fingerprint {
+            let snapshot = item.snapshot
             let previousGroups = metadata.groupFingerprints[snapshot.identity.recordName] ?? [:]
             let changedGroups = Set(snapshot.groupFingerprints.compactMap { previousGroups[$0.key] == $0.value ? nil : $0.key })
-            HouseholdRecordApplier.touch(snapshot.identity, at: .now, changedGroups: changedGroups, context: context)
-            didTouch = true
+            changesToTouch.append((snapshot.identity, changedGroups))
         }
-        if didTouch {
+        if !changesToTouch.isEmpty {
+            HouseholdRecordApplier.touch(changesToTouch, at: .now, household: household)
             isApplyingRemoteChanges = true
             try context.save()
             isApplyingRemoteChanges = false
             snapshots = try HouseholdRecordCodec.records(for: household, context: context)
+            let touchedSnapshots = snapshots
+            evaluated = await Task.detached(priority: .utility) {
+                touchedSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
+            }.value
         }
 
         let byName = keyedSnapshots(snapshots)
-        for snapshot in snapshots where metadata.fingerprints[snapshot.identity.recordName] != snapshot.fingerprint {
+        for item in evaluated where metadata.fingerprints[item.snapshot.identity.recordName] != item.fingerprint {
+            let snapshot = item.snapshot
             let id = CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: locator.zoneID)
             engine.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
-            metadata.fingerprints[snapshot.identity.recordName] = snapshot.fingerprint
+            pendingSnapshots[snapshot.identity.recordName] = snapshot
+            metadata.fingerprints[snapshot.identity.recordName] = item.fingerprint
             metadata.groupFingerprints[snapshot.identity.recordName] = snapshot.groupFingerprints
         }
 
@@ -237,6 +263,7 @@ final class HouseholdRecordSyncService {
             metadata.tombstones.append(tombstone)
             metadata.fingerprints.removeValue(forKey: deletedName)
             metadata.groupFingerprints.removeValue(forKey: deletedName)
+            pendingSnapshots.removeValue(forKey: deletedName)
             engine.state.add(pendingRecordZoneChanges: [
                 .deleteRecord(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)),
                 .saveRecord(CKRecord.ID(recordName: HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName, zoneID: locator.zoneID))
@@ -343,6 +370,7 @@ final class HouseholdRecordSyncService {
         var didFail = false
         for record in changes.savedRecords {
             metadata.systemFields[record.recordID.recordName] = encodeSystemFields(record)
+            pendingSnapshots.removeValue(forKey: record.recordID.recordName)
         }
         for failure in changes.failedRecordSaves {
             if failure.error.code == .serverRecordChanged, let server = failure.error.serverRecord {

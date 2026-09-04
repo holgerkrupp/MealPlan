@@ -63,11 +63,10 @@ struct DayNutritionBadge: View {
 /// the row it sits in, which is grey on a plain card and white on a photo.
 @MainActor
 struct MealNutritionCaption: View {
-    let dish: Dish
+    let estimate: NutritionEstimate
     let unit: EnergyUnit
 
     var body: some View {
-        let estimate = NutritionEstimator.perServing(for: dish)
         if estimate.isTrustworthy, estimate.facts.energyKcal > 0 {
             Text(NutritionFormatting.energy(estimate.facts, unit: unit))
                 .monospacedDigit()

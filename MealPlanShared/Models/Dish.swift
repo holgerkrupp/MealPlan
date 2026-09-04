@@ -198,7 +198,15 @@ final class Dish {
     }
 
     var primaryImageData: Data? {
-        sortedImages.first?.data
+        primaryImage?.data
+    }
+
+    /// The record is cheap to pass through scrolling views; its externally
+    /// stored data is loaded and downsampled only by the photo view itself.
+    var primaryImage: DishImage? {
+        (images ?? []).min {
+            ($0.isPrimary ? 0 : 1, $0.sortIndex) < ($1.isPrimary ? 0 : 1, $1.sortIndex)
+        }
     }
 
     var totalTimeMinutes: Int? {
