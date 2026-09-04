@@ -97,7 +97,8 @@ struct WeekSectionView: View {
                     day: day,
                     isCollapsed: appState.isDayCollapsed(day),
                     onToggleCollapse: { appState.setDayCollapsed(!appState.isDayCollapsed(day), for: day) },
-                    onCopyLastWeek: { copyFromLastWeek(to: day) }
+                    onCopyLastWeek: { copyFromLastWeek(to: day) },
+                    onDropDish: { handleDrop($0, on: day) }
                 ) {
                     let dayMeals = meals(on: day)
                     if dayMeals.isEmpty {
@@ -148,6 +149,20 @@ struct WeekSectionView: View {
         }
     }
 
+    /// A drop on the day's header, rather than on one of its meal cards: the
+    /// meal keeps the meal it was planned in and only changes day, which is
+    /// what dragging a card onto a day reads as. It is also the only way to
+    /// drop onto a collapsed day, whose meal cards aren't on screen.
+    private func handleDrop(_ references: [DishReference], on day: Date) -> Bool {
+        guard !appState.isGuest, let reference = references.first else { return false }
+        return MealPlanner.drop(
+            reference, onto: day, mealKey: nil,
+            household: appState.currentHousehold,
+            memberName: appState.currentMemberName,
+            context: context
+        )
+    }
+
     private func copyFromLastWeek(to day: Date) {
         MealPlanner.copyDay(
             from: day.adding(weeks: -1), to: day,
@@ -184,7 +199,12 @@ private struct DayCard<Content: View>: View {
     var isCollapsed: Bool
     var onToggleCollapse: () -> Void
     var onCopyLastWeek: () -> Void
+    /// Handles a meal dragged onto the day's header. Returns false when there
+    /// is nothing to do, so the drag animates back.
+    var onDropDish: ([DishReference]) -> Bool = { _ in false }
     @ViewBuilder var content: Content
+
+    @State private var isDropTargeted = false
 
     private var isToday: Bool { day.isSameDay(as: .now) }
 
@@ -236,6 +256,20 @@ private struct DayCard<Content: View>: View {
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
+            // Dropping a meal on the day itself moves it to this day and
+            // leaves it in its own meal. Collapsed days accept drops too —
+            // their header is all there is to aim at.
+            .background {
+                if isDropTargeted {
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.accentColor.opacity(0.18))
+                        .padding(.horizontal, 4)
+                }
+            }
+            .contentShape(Rectangle())
+            .dropDestination(for: DishReference.self) { references, _ in
+                onDropDish(references)
+            } isTargeted: { isDropTargeted = $0 }
 
             if !isCollapsed {
                 Divider()
@@ -248,7 +282,10 @@ private struct DayCard<Content: View>: View {
         .background(.background.secondary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: 16, style: .continuous)
-                .strokeBorder(isToday ? Color.accentColor : .clear, lineWidth: 2)
+                .strokeBorder(
+                    isDropTargeted || isToday ? Color.accentColor : .clear,
+                    lineWidth: isDropTargeted ? 3 : 2
+                )
         )
         .padding(.horizontal)
     }
