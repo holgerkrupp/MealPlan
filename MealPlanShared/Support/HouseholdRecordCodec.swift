@@ -191,7 +191,17 @@ struct LocalHouseholdRecord: Sendable {
     var fingerprint: String {
         var data = payloadData
         if let assetData { data.append(contentsOf: SHA256.hash(data: assetData)) }
-        return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        // Avoid Foundation's variadic formatter here. Besides being much
+        // slower across hundreds of records, passing UInt8 through C varargs
+        // has crashed in concurrent scans on iOS 27 beta.
+        let digits = Array("0123456789abcdef".utf8)
+        var bytes: [UInt8] = []
+        bytes.reserveCapacity(SHA256.Digest.byteCount * 2)
+        for byte in SHA256.hash(data: data) {
+            bytes.append(digits[Int(byte >> 4)])
+            bytes.append(digits[Int(byte & 0x0f)])
+        }
+        return String(decoding: bytes, as: UTF8.self)
     }
 }
 
@@ -450,6 +460,17 @@ actor HouseholdSnapshotActor {
         let households = try modelContext.fetch(FetchDescriptor<Household>())
         guard let household = households.first(where: { $0.uuid == householdID }) else { return [] }
         return try HouseholdRecordCodec.records(for: household, context: modelContext)
+    }
+
+    func touch(
+        _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
+        at date: Date,
+        householdID: UUID
+    ) throws {
+        let households = try modelContext.fetch(FetchDescriptor<Household>())
+        guard let household = households.first(where: { $0.uuid == householdID }) else { return }
+        HouseholdRecordApplier.touch(changes, at: date, household: household)
+        try modelContext.save()
     }
 }
 

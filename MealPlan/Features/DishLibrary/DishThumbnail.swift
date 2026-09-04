@@ -89,7 +89,13 @@ struct DishThumbnail: View {
 
     var body: some View {
         ZStack {
-            placeholder
+            if imageRecord == nil {
+                placeholder
+            } else {
+                // A photo-backed dish should not flash its emoji while a
+                // newly-created lazy cell obtains the already-decoded image.
+                Rectangle().fill(tint.opacity(0.18))
+            }
             if let imageRecord {
                 CachedDishPhoto(
                     image: imageRecord,
@@ -140,36 +146,36 @@ struct DishThumbnail: View {
     }
 }
 
-/// Decodes large recipe photos away from the main actor and keeps only a
-/// display-sized CGImage. Reusing the decoded result avoids both scroll-time
-/// JPEG decoding and repeatedly allocating full-resolution image buffers.
-private actor DishPhotoCache {
-    static let shared = DishPhotoCache()
+/// The rendered-image cache is read synchronously by `body`. Lazy grids often
+/// recreate an off-screen cell; an actor hop here would leave one empty frame
+/// even when its photo was already cached, which looks like flicker.
+@MainActor
+private final class DishPhotoMemoryCache {
+    static let shared = DishPhotoMemoryCache()
     private let images = NSCache<NSString, CGImage>()
 
     private init() {
-        images.totalCostLimit = 48 * 1024 * 1024
-        images.countLimit = 160
+        images.totalCostLimit = 96 * 1024 * 1024
+        images.countLimit = 240
     }
 
-    func image(data: Data, key: String, maxPixelSize: CGFloat) -> CGImage? {
-        guard !Task.isCancelled else { return nil }
-        let cacheKey = key as NSString
-        if let cached = images.object(forKey: cacheKey) { return cached }
-        guard let decoded = Self.downsample(data, maxPixelSize: maxPixelSize) else { return nil }
-        images.setObject(
-            decoded,
-            forKey: cacheKey,
-            cost: decoded.bytesPerRow * decoded.height
-        )
-        return decoded
-    }
-
-    func cachedImage(for key: String) -> CGImage? {
+    func image(for key: String) -> CGImage? {
         images.object(forKey: key as NSString)
     }
 
-    nonisolated private static func downsample(_ data: Data, maxPixelSize: CGFloat) -> CGImage? {
+    func insert(_ image: CGImage, for key: String) {
+        images.setObject(image, forKey: key as NSString, cost: image.bytesPerRow * image.height)
+    }
+}
+
+/// JPEG/HEIF decoding stays serialized and off the main actor. The separate
+/// memory cache above is intentionally main-actor-owned for zero-latency reads
+/// while SwiftUI builds a frame.
+private actor DishPhotoDecoder {
+    static let shared = DishPhotoDecoder()
+
+    func image(data: Data, maxPixelSize: CGFloat) -> CGImage? {
+        guard !Task.isCancelled else { return nil }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageAlways: true,
@@ -188,6 +194,7 @@ struct CachedDishPhoto: View {
     let maxPixelSize: CGFloat
 
     @State private var decoded: CGImage?
+    @State private var decodedKey: String?
     @Environment(\.modelContext) private var modelContext
 
     private var sizedKey: String {
@@ -209,9 +216,13 @@ struct CachedDishPhoto: View {
     }
 
     var body: some View {
+        let visibleImage = decodedKey == sizedKey
+            ? decoded
+            : DishPhotoMemoryCache.shared.image(for: sizedKey)
+
         Group {
-            if let decoded {
-                Image(decorative: decoded, scale: 1)
+            if let visibleImage {
+                Image(decorative: visibleImage, scale: 1)
                     .resizable()
                     .scaledToFill()
             } else {
@@ -219,9 +230,9 @@ struct CachedDishPhoto: View {
             }
         }
         .task(id: sizedKey) {
-            decoded = nil
-            if let cached = await DishPhotoCache.shared.cachedImage(for: sizedKey) {
+            if let cached = DishPhotoMemoryCache.shared.image(for: sizedKey) {
                 decoded = cached
+                decodedKey = sizedKey
                 return
             }
             let sourceData: Data?
@@ -232,13 +243,14 @@ struct CachedDishPhoto: View {
                 sourceData = rawData
             }
             guard !Task.isCancelled, let sourceData else { return }
-            let image = await DishPhotoCache.shared.image(
+            let image = await DishPhotoDecoder.shared.image(
                 data: sourceData,
-                key: sizedKey,
                 maxPixelSize: max(1, maxPixelSize)
             )
             guard !Task.isCancelled, let image else { return }
+            DishPhotoMemoryCache.shared.insert(image, for: sizedKey)
             decoded = image
+            decodedKey = sizedKey
         }
     }
 }

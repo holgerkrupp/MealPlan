@@ -406,6 +406,7 @@ struct DishEditorView: View {
 
     private func save(checkDuplicates: Bool = true) {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        dish.modifiedAt = .now
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.sourceURLString = trimmedURL.isEmpty ? nil : trimmedURL
         let trimmedAppLink = appLinkURLText.trimmingCharacters(in: .whitespacesAndNewlines)

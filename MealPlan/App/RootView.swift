@@ -101,7 +101,7 @@ struct RootView: View {
             Task { await acceptPendingCloudShares() }
         }
         .task(id: appState.currentHousehold?.uuid) {
-            await synchronizeHouseholdRegularly()
+            await synchronizeHousehold()
         }
         .alert(
             String(localized: "iCloud sharing needs attention"),
@@ -183,20 +183,19 @@ struct RootView: View {
 
     /// Keeps both solo and shared households in sync through their per-record
     /// CloudKit zone while the app is open.
-    private func synchronizeHouseholdRegularly() async {
+    private func synchronizeHousehold() async {
         guard let household = appState.currentHousehold else { return }
-        while !Task.isCancelled {
-            do {
-                try await HouseholdCloudSharingService.synchronize(household, context: context)
-            } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
-                // Offline editing remains available; the next pass retries.
-            } catch {
-                sharingErrorMessage = error.localizedDescription
-            }
-            // CKSyncEngine push notifications handle remote edits promptly.
-            // This is only a safety-net reconciliation and roster refresh, so
-            // it must not keep rescanning the household while someone scrolls.
-            try? await Task.sleep(for: .seconds(60))
+        do {
+            // CKSyncEngine push notifications fetch remote edits and local
+            // saves schedule their own sends. A minute-by-minute full safety
+            // scan only competes with foreground reads and can overlap an
+            // engine callback on current iOS betas.
+            try await HouseholdCloudSharingService.synchronize(household, context: context)
+        } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
+            // Offline editing remains available; a push or the next launch
+            // retries without interrupting the foreground UI.
+        } catch {
+            sharingErrorMessage = error.localizedDescription
         }
     }
 

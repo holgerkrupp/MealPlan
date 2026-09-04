@@ -71,10 +71,10 @@ struct DishGridCell: View {
         Label("\(variantCount)", systemImage: "square.on.square")
             .font(.caption2.weight(.bold))
             .labelStyle(.titleAndIcon)
-            .foregroundStyle(.indigo)
+            .foregroundStyle(.white)
             .padding(.horizontal, 9)
             .padding(.vertical, 7)
-            .glassEffect(.regular.tint(.indigo.opacity(0.18)), in: Capsule())
+            .background(.indigo.opacity(0.88), in: Capsule())
     }
 
     private var displayName: String {
@@ -86,9 +86,10 @@ struct DishGridCell: View {
         Text(displayName)
             .font(.headline)
             .lineLimit(2)
+            .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .glassEffect(.regular, in: Capsule())
+            .background(.black.opacity(0.56), in: Capsule())
     }
 
     @ViewBuilder
@@ -96,9 +97,10 @@ struct DishGridCell: View {
         if variantGroupName != nil {
             Text(String(localized: "\(variantCount) variants"))
                 .font(.caption2.weight(.medium))
+                .foregroundStyle(.white)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 7)
-                .glassEffect(.regular, in: Capsule())
+                .background(.black.opacity(0.48), in: Capsule())
         } else {
             HStack(spacing: 6) {
                 if dish.rating > 0 {
@@ -114,9 +116,10 @@ struct DishGridCell: View {
                 }
             }
             .font(.caption2.weight(.medium))
+            .foregroundStyle(.white)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .glassEffect(.regular, in: Capsule())
+            .background(.black.opacity(0.48), in: Capsule())
         }
     }
 
@@ -138,16 +141,16 @@ struct DishGridCell: View {
             .font(.caption2)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
-            .foregroundStyle(tint)
-            .glassEffect(.regular.tint(tint.opacity(0.18)), in: Capsule())
+            .foregroundStyle(.white)
+            .background(tint.opacity(0.82), in: Capsule())
     }
 
     private func statusIcon(_ systemName: String, tint: Color) -> some View {
         Image(systemName: systemName)
             .font(.caption.weight(.bold))
-            .foregroundStyle(tint)
+            .foregroundStyle(.white)
             .padding(9)
-            .glassEffect(.regular.tint(tint.opacity(0.18)), in: Circle())
+            .background(tint.opacity(0.84), in: Circle())
     }
 }
 

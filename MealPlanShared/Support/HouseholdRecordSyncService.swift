@@ -207,7 +207,9 @@ final class HouseholdRecordSyncService {
         guard !isApplyingRemoteChanges, locator?.isReadOnly != true else { return }
         scheduledScan?.cancel()
         scheduledScan = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(1200))
+            // Keep database serialization and photo hashing out of the burst
+            // of layout work that normally follows an edit or tab switch.
+            try? await Task.sleep(for: .seconds(5))
             guard !Task.isCancelled, let self else { return }
             do {
                 try await self.scanLocalChanges()
@@ -219,7 +221,7 @@ final class HouseholdRecordSyncService {
     }
 
     private func scanLocalChanges() async throws {
-        guard let household, let context, let engine, let locator, !locator.isReadOnly else { return }
+        guard let household, let engine, let locator, !locator.isReadOnly else { return }
         var snapshots = try await snapshotRecords(for: household.uuid)
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
@@ -237,10 +239,10 @@ final class HouseholdRecordSyncService {
             changesToTouch.append((snapshot.identity, changedGroups))
         }
         if !changesToTouch.isEmpty {
-            HouseholdRecordApplier.touch(changesToTouch, at: .now, household: household)
-            isApplyingRemoteChanges = true
-            try context.save()
-            isApplyingRemoteChanges = false
+            // Advancing sync clocks can update hundreds of legacy records.
+            // Save them through a private SwiftData executor so SQLite never
+            // blocks the scrolling main context.
+            try await touchRecords(changesToTouch, householdID: household.uuid)
             snapshots = try await snapshotRecords(for: household.uuid)
             let touchedSnapshots = snapshots
             evaluated = await Task.detached(priority: .utility) {
@@ -414,6 +416,15 @@ final class HouseholdRecordSyncService {
         guard let modelContainer else { return [] }
         let snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
         return try await snapshotActor.records(for: householdID)
+    }
+
+    private func touchRecords(
+        _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
+        householdID: UUID
+    ) async throws {
+        guard let modelContainer else { return }
+        let snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        try await snapshotActor.touch(changes, at: .now, householdID: householdID)
     }
 
     private func snapshotsByName() async throws -> [String: LocalHouseholdRecord] {

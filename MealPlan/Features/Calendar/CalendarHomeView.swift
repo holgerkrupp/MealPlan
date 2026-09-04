@@ -10,6 +10,8 @@ struct CalendarHomeView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
     private var mealTypes: [MealType]
+    @Query(sort: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)])
+    private var planEntries: [MealPlanEntry]
     @State private var paginator = CalendarPaginator()
     @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
     @State private var didSettle = false
@@ -86,7 +88,14 @@ struct CalendarHomeView: View {
 
     /// The scrolling list of week sections below the week strip.
     private var plan: some View {
-        ScrollViewReader { proxy in
+        // One live query feeds the whole lazy calendar. A query in every week
+        // makes SwiftData install and update many fetch observers while the
+        // scroll view is creating and recycling sections.
+        let entriesByWeek = Dictionary(grouping: planEntries) {
+            CalendarPaginator.normalizedWeek(of: $0.date)
+        }
+
+        return ScrollViewReader { proxy in
             ScrollView {
                 LazyVStack(spacing: 16) {
                     Color.clear.frame(height: 1)
@@ -113,6 +122,7 @@ struct CalendarHomeView: View {
                             weekStart: weekStart,
                             style: .week,
                             mealTypes: mealTypes,
+                            entries: entriesByWeek[weekStart] ?? [],
                             onDayVisibilityChange: { visible, dayID in
                                 visibilityTracker.setDayVisible(visible, id: dayID)
                             }

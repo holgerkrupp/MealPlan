@@ -8,7 +8,7 @@ enum HouseholdRecordApplier {
     /// fetch per changed record. All models are already reachable from the
     /// household because the scan just serialized them, so update that object
     /// graph in a handful of linear passes.
-    static func touch(
+    nonisolated static func touch(
         _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
         at date: Date,
         household: Household

@@ -6,6 +6,17 @@ import Testing
 
 @MainActor
 struct HouseholdRecordSyncTests {
+    @Test func fingerprintUsesStableLowercaseHex() {
+        let record = LocalHouseholdRecord(
+            identity: .init(type: .dish, uuid: UUID()),
+            householdID: UUID(),
+            modifiedAt: .now,
+            payloadData: Data("abc".utf8)
+        )
+
+        #expect(record.fingerprint == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+    }
+
     @Test func photoLoaderDistinguishesLegacyDuplicateUUIDs() async throws {
         // A separate ModelActor needs a real SQLite connection. SwiftData's
         // in-memory configuration has no eligible background connection on

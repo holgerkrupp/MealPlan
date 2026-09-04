@@ -6,9 +6,9 @@ struct WeekSectionView: View {
     let weekStart: Date
     let style: CalendarStyle
     let mealTypes: [MealType]
+    let entries: [MealPlanEntry]
     var onDayVisibilityChange: (Bool, String) -> Void
 
-    @Query private var entries: [MealPlanEntry]
     @Environment(AppState.self) private var appState
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
@@ -30,17 +30,14 @@ struct WeekSectionView: View {
         weekStart: Date,
         style: CalendarStyle,
         mealTypes: [MealType] = [],
+        entries: [MealPlanEntry] = [],
         onDayVisibilityChange: @escaping (Bool, String) -> Void = { _, _ in }
     ) {
         self.weekStart = weekStart
         self.style = style
         self.mealTypes = mealTypes
+        self.entries = entries
         self.onDayVisibilityChange = onDayVisibilityChange
-        let end = weekStart.adding(weeks: 1)
-        _entries = Query(
-            filter: #Predicate<MealPlanEntry> { $0.date >= weekStart && $0.date < end },
-            sort: \MealPlanEntry.sortIndex
-        )
     }
 
     private var days: [Date] {
@@ -205,52 +202,19 @@ struct WeekSectionView: View {
     /// nutrition for every week on screen.
     private var nutritionCacheKey: Int {
         guard appState.showsNutritionEstimates else { return 0 }
-        var combinedEntries = 0
-        for entry in entries {
-            combinedEntries ^= nutritionSignature(for: entry)
-        }
         var hasher = Hasher()
         hasher.combine(entries.count)
-        hasher.combine(combinedEntries)
-        return hasher.finalize()
-    }
-
-    private func nutritionSignature(for entry: MealPlanEntry) -> Int {
-        let dish = entry.dish
-        let lines = dish?.ingredients ?? []
-        var combinedLines = 0
-        for line in lines {
-            combinedLines ^= ingredientNutritionSignature(line)
+        for entry in entries {
+            // These are scalar columns already present in the plan fetch.
+            // Walking every ingredient relationship here defeated the delay
+            // below and faulted recipe data during scroll-time rendering.
+            hasher.combine(entry.uuid)
+            hasher.combine(entry.modifiedAt)
+            hasher.combine(entry.servingsOverride)
+            hasher.combine(entry.skipped)
+            hasher.combine(entry.dish?.uuid)
+            hasher.combine(entry.dish?.modifiedAt)
         }
-        var hasher = Hasher()
-        hasher.combine(entry.uuid)
-        hasher.combine(entry.skipped)
-        hasher.combine(dish?.uuid)
-        hasher.combine(dish?.servings)
-        hasher.combine(dish?.statedEnergyKcalPerServing)
-        hasher.combine(dish?.statedProteinGramsPerServing)
-        hasher.combine(dish?.statedCarbGramsPerServing)
-        hasher.combine(dish?.statedFatGramsPerServing)
-        hasher.combine(lines.count)
-        hasher.combine(combinedLines)
-        return hasher.finalize()
-    }
-
-    private func ingredientNutritionSignature(_ line: DishIngredient) -> Int {
-        let ingredient = line.ingredient
-        var hasher = Hasher()
-        hasher.combine(line.uuid)
-        hasher.combine(line.canonicalValue)
-        hasher.combine(line.canonicalDimensionRaw)
-        hasher.combine(line.displayUnit)
-        hasher.combine(line.isApproximate)
-        hasher.combine(line.rawText)
-        hasher.combine(ingredient?.name)
-        hasher.combine(ingredient?.nutritionEnergyKcal)
-        hasher.combine(ingredient?.nutritionProteinGrams)
-        hasher.combine(ingredient?.nutritionCarbGrams)
-        hasher.combine(ingredient?.nutritionFatGrams)
-        hasher.combine(ingredient?.nutritionReferenceRaw)
         return hasher.finalize()
     }
 
