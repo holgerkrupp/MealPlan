@@ -119,7 +119,7 @@ final class AppState {
 
     /// Fetch the single household (creating it on first launch) and run
     /// housekeeping that turns past plans into cooked-history.
-    func bootstrap(context: ModelContext) {
+    func bootstrap(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) {
         if let existing = try? context.fetch(FetchDescriptor<Household>()).first {
             currentHousehold = existing
         } else {
@@ -134,6 +134,7 @@ final class AppState {
             MealRoutineScheduler.apply(
                 for: household,
                 context: context,
+                through: latestPlanningDate,
                 memberName: currentMemberName
             )
         }

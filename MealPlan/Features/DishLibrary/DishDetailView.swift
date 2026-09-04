@@ -6,6 +6,7 @@ import ESADesignKit
 @MainActor
 struct DishDetailView: View {
     @Bindable var dish: Dish
+    var onClose: (() -> Void)? = nil
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -131,28 +132,34 @@ struct DishDetailView: View {
         .focusedSceneValue(\.dishCommands, dishCommands)
         .sheet(isPresented: $showingEditor) {
             NavigationStack { DishEditorView(dish: dish, isNew: false) }
+                .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingPlanSheet) {
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
             .presentationDetents([.medium])
+            .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingRecipeFinder) {
             NavigationStack { RecipeFinderView(dish: dish) }
+                .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingCookingMode) {
             NavigationStack { CookingModeView(dish: dish) }
                 .environment(appState)
+                .dismissesOnOutsideClick()
         }
-        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
+        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
         .sheet(isPresented: $showingVariantPicker) {
             NavigationStack {
                 DishVariantPickerView(dish: dish)
             }
+            .dismissesOnOutsideClick()
         }
         .sheet(item: $editingVariant) { variant in
             NavigationStack { DishEditorView(dish: variant, isNew: true) }
+                .dismissesOnOutsideClick()
         }
         .alert(
             String(localized: "Couldn’t export recipe"),
@@ -420,7 +427,11 @@ struct DishDetailView: View {
         context.delete(dish)
         try? context.save()
         SharedStore.reloadWidgets()
-        dismiss()
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 }
 

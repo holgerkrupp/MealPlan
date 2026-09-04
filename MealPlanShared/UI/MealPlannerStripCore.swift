@@ -29,6 +29,9 @@ struct MealPlannerStripCore: View {
     @Binding var selectedMealKey: String
     /// A square was tapped. The caller updates its state / plans / reschedules.
     var onSelect: (_ day: Date, _ key: String) -> Void
+    /// Locked dates stay visible, but their slots lead to an unlock action.
+    var isDateLocked: (Date) -> Bool = { _ in false }
+    var onSelectLockedDate: (Date) -> Void = { _ in }
     var isDisabled: Bool = false
     /// Accessibility hint spoken for each square ("Plans this dish here", …).
     var selectHint: String = ""
@@ -156,13 +159,18 @@ struct MealPlannerStripCore: View {
 
     private func mealSquare(day: Date, slot: MealStripSlot, isFilled: Bool) -> some View {
         let accent = Self.accent(for: slot.key)
+        let isLocked = isDateLocked(day)
         let isCurrentSlot = day.isSameDay(as: selectedDate) && slot.key == selectedMealKey
         let isEntrySlot = entrySlot.map { $0.day.isSameDay(as: day) && $0.key == slot.key } ?? false
 
         return Button {
             didUserTap = true
-            tapTick += 1
-            onSelect(day, slot.key)
+            if isLocked {
+                onSelectLockedDate(day)
+            } else {
+                tapTick += 1
+                onSelect(day, slot.key)
+            }
         } label: {
             ZStack {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -177,6 +185,14 @@ struct MealPlannerStripCore: View {
                     .font(.system(size: 15, weight: .medium))
                     .foregroundStyle(isFilled ? AnyShapeStyle(accent) : AnyShapeStyle(.secondary))
                     .opacity(isFilled ? 0.9 : 0.55)
+
+                if isLocked {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(3)
+                        .background(.thinMaterial, in: Circle())
+                }
 
                 if isFilled {
                     Image(systemName: isEntrySlot ? "location.fill" : "checkmark")
@@ -195,7 +211,11 @@ struct MealPlannerStripCore: View {
         .disabled(isDisabled)
         .accessibilityLabel("\(slot.name), \(day.formatted(.dateTime.weekday(.wide).day().month()))")
         .accessibilityValue(isFilled ? String(localized: "Planned") : String(localized: "Empty"))
-        .accessibilityHint(selectHint)
+        .accessibilityHint(
+            isLocked
+                ? String(localized: "Unlock MealPlan to plan this far ahead")
+                : selectHint
+        )
     }
 
     // MARK: - Colour

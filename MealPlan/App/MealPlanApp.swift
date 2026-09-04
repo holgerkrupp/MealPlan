@@ -11,6 +11,7 @@ import AppKit
 struct MealPlanApp: App {
     let container = SharedStore.make(cloudKit: true)
     @State private var appState = AppState()
+    @State private var purchaseManager = PurchaseManager.shared
     /// Calendar integration. Creating it touches no calendar data and never
     /// asks for permission — it only reads the (off by default) preference.
     @State private var calendarStore = CalendarContextStore()
@@ -28,8 +29,13 @@ struct MealPlanApp: App {
             RootView()
                 .environment(appState)
                 .environment(calendarStore)
+                .environment(purchaseManager)
                 .task {
-                    appState.bootstrap(context: container.mainContext)
+                    await purchaseManager.prepareForLaunch()
+                    appState.bootstrap(
+                        context: container.mainContext,
+                        planningThrough: purchaseManager.latestPlanningDate()
+                    )
                     MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                     await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
                     await calendarStore.start()
@@ -43,6 +49,14 @@ struct MealPlanApp: App {
                     MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                     Task { await calendarStore.applicationBecameActive() }
                 }
+                .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
+                    guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
+                    MealRoutineScheduler.apply(
+                        for: household,
+                        context: container.mainContext,
+                        memberName: appState.currentMemberName
+                    )
+                }
                 .onOpenURL { url in
                     appState.handle(openedURL: url, context: container.mainContext)
                 }
@@ -50,12 +64,25 @@ struct MealPlanApp: App {
         .modelContainer(container)
         .commands { MealPlanCommands() }
         #if os(macOS)
+        WindowGroup("MealPlan", for: MacDetailWindowRoute.self) { $route in
+            if let route {
+                MacDetailWindow(route: route)
+                    .environment(appState)
+                    .environment(calendarStore)
+                    .environment(purchaseManager)
+            }
+        }
+        .defaultSize(width: 720, height: 760)
+        .modelContainer(container)
+        .commands { MealPlanCommands() }
+
         Settings {
             // SettingsView sizes its own window: it is a sidebar of panes, the
             // shape people expect from a macOS Settings window.
             SettingsView()
                 .environment(appState)
                 .environment(calendarStore)
+                .environment(purchaseManager)
                 .modelContainer(container)
         }
         #endif

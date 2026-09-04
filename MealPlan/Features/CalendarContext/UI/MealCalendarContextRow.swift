@@ -48,6 +48,7 @@ struct MealCalendarContextRow: View {
             .accessibilityAddTraits(.isButton)
             .sheet(isPresented: $showingDetail) {
                 MealCalendarContextSheet(day: day, summary: summary)
+                    .dismissesOnOutsideClick()
             }
         }
     }

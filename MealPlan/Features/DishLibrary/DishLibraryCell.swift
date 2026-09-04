@@ -23,6 +23,9 @@ struct DishLibraryCell: View {
     let library: [Dish]
 
     @Environment(\.modelContext) private var context
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     @State private var isTargeted = false
 
@@ -53,11 +56,23 @@ struct DishLibraryCell: View {
             }
             .buttonStyle(.plain)
         } else {
+            #if os(macOS)
+            DishGridCell(dish: dish)
+                .onTapGesture {
+                    openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                }
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction {
+                    openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                }
+                .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+            #else
             NavigationLink(value: dish) {
                 DishGridCell(dish: dish)
             }
             .buttonStyle(.plain)
             .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+            #endif
         }
     }
 

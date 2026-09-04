@@ -17,6 +17,9 @@ struct DishVariantGroupView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @State private var renaming = false
@@ -44,6 +47,22 @@ struct DishVariantGroupView: View {
             } else {
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(members) { dish in
+                        #if os(macOS)
+                        DishGridCell(dish: dish)
+                            .onTapGesture {
+                                openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                            }
+                            .accessibilityAddTraits(.isButton)
+                            .accessibilityAction {
+                                openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                            }
+                            .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+                            .contextMenu {
+                                Button(String(localized: "Remove from group"), systemImage: "minus.circle") {
+                                    removeFromGroup(dish)
+                                }
+                            }
+                        #else
                         NavigationLink(value: dish) {
                             DishGridCell(dish: dish)
                         }
@@ -51,10 +70,10 @@ struct DishVariantGroupView: View {
                         .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
                         .contextMenu {
                             Button(String(localized: "Remove from group"), systemImage: "minus.circle") {
-                                DishVariants.leaveGroup(dish, in: allDishes)
-                                try? context.save()
+                                removeFromGroup(dish)
                             }
                         }
+                        #endif
                     }
                 }
                 .padding()
@@ -88,6 +107,11 @@ struct DishVariantGroupView: View {
         } message: {
             Text("All \(members.count) recipes in this group are shown under this name.")
         }
+    }
+
+    private func removeFromGroup(_ dish: Dish) {
+        DishVariants.leaveGroup(dish, in: allDishes)
+        try? context.save()
     }
 }
 

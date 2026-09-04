@@ -7,10 +7,14 @@ import PhotosUI
 @MainActor
 struct EntryQuickActionsSheet: View {
     @Bindable var entry: MealPlanEntry
+    var onClose: (() -> Void)? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     @State private var date: Date = .now
     @State private var mealKey: String = ""
@@ -24,20 +28,20 @@ struct EntryQuickActionsSheet: View {
             Form {
                 Section {
                     if let dish = entry.dish {
+                        #if os(macOS)
+                        Button {
+                            openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                        } label: {
+                            dishHeader(dish)
+                        }
+                        .buttonStyle(.plain)
+                        #else
                         NavigationLink {
                             DishDetailView(dish: dish)
                         } label: {
-                            HStack(spacing: 12) {
-                                DishThumbnail(dish: dish, size: 52)
-                                VStack(alignment: .leading) {
-                                    Text(dish.name).font(.headline)
-                                    if let by = entry.plannedByName {
-                                        Text(String(localized: "Planned by \(by)"))
-                                            .font(.caption).foregroundStyle(.secondary)
-                                    }
-                                }
-                            }
+                            dishHeader(dish)
                         }
+                        #endif
                     } else if entry.isEatingOut {
                         eatingOutHeader
                     }
@@ -116,7 +120,7 @@ struct EntryQuickActionsSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done")) { applyReschedule(); dismiss() }
+                    Button(String(localized: "Done")) { applyReschedule(); close() }
                 }
             }
             .onAppear {
@@ -133,6 +137,19 @@ struct EntryQuickActionsSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private func dishHeader(_ dish: Dish) -> some View {
+        HStack(spacing: 12) {
+            DishThumbnail(dish: dish, size: 52)
+            VStack(alignment: .leading) {
+                Text(dish.name).font(.headline)
+                if let by = entry.plannedByName {
+                    Text(String(localized: "Planned by \(by)"))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+            }
+        }
     }
 
     /// Header for a meal the family eats out: the place, its address, and a
@@ -250,7 +267,15 @@ struct EntryQuickActionsSheet: View {
             undoManager?.undo()
             try? context.save()
         }
-        dismiss()
+        close()
+    }
+
+    private func close() {
+        if let onClose {
+            onClose()
+        } else {
+            dismiss()
+        }
     }
 
     private func touch() {
@@ -265,11 +290,13 @@ struct EntryQuickActionsSheet: View {
 #Preview {
     EntryQuickActionsSheet(entry: PreviewData.entry)
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }
 
 #Preview("Eating out") {
     EntryQuickActionsSheet(entry: PreviewData.eatingOutEntry)
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }

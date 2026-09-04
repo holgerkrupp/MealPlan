@@ -16,8 +16,12 @@ struct MealCard: View {
     let entries: [MealPlanEntry]
 
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var colorScheme
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
 
     @State private var showingPicker = false
     @State private var selectedEntry: MealPlanEntry?
@@ -27,6 +31,7 @@ struct MealCard: View {
     /// Presented here rather than from inside the picker: on macOS the picker
     /// is a popover, and a sheet put up by a popover goes down with it.
     @State private var newDishToEdit: Dish?
+    @State private var showingPaywall = false
 
     private static let cornerRadius: CGFloat = 14
     private static let palette: [Color] = [
@@ -66,6 +71,8 @@ struct MealCard: View {
         entries.isEmpty ? 68 : 108
     }
 
+    private var isPlanningLocked: Bool { !purchaseManager.canPlan(on: date) }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             header
@@ -73,9 +80,12 @@ struct MealCard: View {
             if entries.isEmpty {
                 Spacer(minLength: 0)
                 Button {
-                    showingPicker = true
+                    showPlanningUI()
                 } label: {
-                    Label(String(localized: "Add a meal"), systemImage: "plus")
+                    Label(
+                        isPlanningLocked ? String(localized: "Unlock App") : String(localized: "Add a meal"),
+                        systemImage: isPlanningLocked ? "lock.fill" : "plus"
+                    )
                         .font(.subheadline.weight(.medium))
                         .padding(.vertical, 6)
                         .padding(.horizontal, 10)
@@ -103,17 +113,17 @@ struct MealCard: View {
                                 identifier: entry.uuid
                             ))
                             .contentShape(Rectangle())
-                            .onTapGesture { selectedEntry = entry }
+                            .onTapGesture { showDetails(for: entry) }
                             .draggable(dragPayload(entry)) { dragPreview(entry) }
                             .contextMenu { entryMenu(entry) }
                             .accessibilityElement(children: .combine)
                             .accessibilityAddTraits(.isButton)
-                            .accessibilityAction { selectedEntry = entry }
+                            .accessibilityAction { showDetails(for: entry) }
                             // Dragging needs an equivalent for VoiceOver and
                             // the keyboard: the quick actions sheet moves the
                             // same meal without a pointer.
                             .accessibilityAction(named: String(localized: "Move to another day or meal…")) {
-                                selectedEntry = entry
+                                showDetails(for: entry)
                             }
 
                         if !appState.isGuest {
@@ -132,9 +142,12 @@ struct MealCard: View {
                 }
                 if !appState.isGuest {
                     Button {
-                        showingPicker = true
+                        showPlanningUI()
                     } label: {
-                        Label(String(localized: "Add another"), systemImage: "plus")
+                        Label(
+                            isPlanningLocked ? String(localized: "Unlock App") : String(localized: "Add another"),
+                            systemImage: isPlanningLocked ? "lock.fill" : "plus"
+                        )
                             .font(.caption.weight(.medium))
                             .foregroundStyle(onImage ? .white : Color.primary)
                             .opacity(0.9)
@@ -176,12 +189,28 @@ struct MealCard: View {
         #else
         .sheet(isPresented: $showingPicker) { picker }
         #endif
+        #if !os(macOS)
         .sheet(item: $selectedEntry) { entry in
             EntryQuickActionsSheet(entry: entry)
+                .dismissesOnOutsideClick()
         }
+        #endif
         .sheet(item: $newDishToEdit) { dish in
             NavigationStack { DishEditorView(dish: dish, isNew: true) }
+                .dismissesOnOutsideClick()
         }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .dismissesOnOutsideClick()
+        }
+    }
+
+    private func showDetails(for entry: MealPlanEntry) {
+        #if os(macOS)
+        openWindow(value: MacDetailWindowRoute.plannedMeal(entry.uuid))
+        #else
+        selectedEntry = entry
+        #endif
     }
 
     private var picker: some View {
@@ -295,6 +324,10 @@ struct MealCard: View {
 
     private func handleDrop(_ refs: [DishReference]) -> Bool {
         guard !appState.isGuest, let ref = refs.first else { return false }
+        guard !isPlanningLocked else {
+            showingPaywall = true
+            return false
+        }
         let accepted = MealPlanner.drop(
             ref, onto: date, mealKey: mealKey,
             household: appState.currentHousehold,
@@ -310,7 +343,7 @@ struct MealCard: View {
     @ViewBuilder
     private func entryMenu(_ entry: MealPlanEntry) -> some View {
         Button {
-            MealPlanner.repeatEntry(entry, weeksAhead: 1, memberName: appState.currentMemberName, context: context)
+            repeatNextWeek(entry)
         } label: {
             Label(String(localized: "Repeat next week"), systemImage: "arrow.uturn.forward")
         }
@@ -324,6 +357,28 @@ struct MealCard: View {
         } label: {
             Label(String(localized: "Remove"), systemImage: "trash")
         }
+    }
+
+    private func showPlanningUI() {
+        if isPlanningLocked {
+            showingPaywall = true
+        } else {
+            showingPicker = true
+        }
+    }
+
+    private func repeatNextWeek(_ entry: MealPlanEntry) {
+        let target = entry.date.adding(weeks: 1)
+        guard purchaseManager.canPlan(on: target) else {
+            showingPaywall = true
+            return
+        }
+        MealPlanner.repeatEntry(
+            entry,
+            weeksAhead: 1,
+            memberName: appState.currentMemberName,
+            context: context
+        )
     }
 
     private func remove(_ entry: MealPlanEntry) {
@@ -417,6 +472,7 @@ struct MealCard: View {
     .frame(width: 220)
     .padding()
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }
 
@@ -431,5 +487,6 @@ struct MealCard: View {
     .frame(width: 220)
     .padding()
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }

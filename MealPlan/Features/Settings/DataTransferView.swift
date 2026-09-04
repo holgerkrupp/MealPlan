@@ -32,8 +32,8 @@ struct DataTransferView: View {
         }
         .navigationTitle(String(localized: "Data"))
         .formStyle(.grouped)
-        .sheet(item: $exported) { BackupShareSheet(backup: $0) }
-        .sheet(item: $restoring) { RestoreBackupSheet(backup: $0) }
+        .sheet(item: $exported) { BackupShareSheet(backup: $0).dismissesOnOutsideClick() }
+        .sheet(item: $restoring) { RestoreBackupSheet(backup: $0).dismissesOnOutsideClick() }
         .fileImporter(
             isPresented: $showingRestorePicker,
             allowedContentTypes: BackupFileType.importableContentTypes

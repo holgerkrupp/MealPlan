@@ -19,6 +19,22 @@ private enum MealPlanIntentResolver {
         }
     }
 
+    static func requirePlanningAllowed(on date: Date) async throws {
+        let purchases = PurchaseManager.shared
+        await purchases.updateEntitlement()
+        guard purchases.canPlan(on: date) else {
+            throw NSError(
+                domain: "MealPlan.AppIntents",
+                code: 7,
+                userInfo: [
+                    NSLocalizedDescriptionKey: String(
+                        localized: "Unlock MealPlan in the app to plan more than 7 days ahead."
+                    )
+                ]
+            )
+        }
+    }
+
     static func dish(for entity: DishEntity) throws -> Dish {
         let id = entity.id
         guard let dish = try context.fetch(FetchDescriptor<Dish>(
@@ -221,6 +237,7 @@ struct PlanMealIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<MealPlanEntryEntity> {
         try MealPlanIntentResolver.requireEditingAllowed()
+        try await MealPlanIntentResolver.requirePlanningAllowed(on: date)
         let context = MealPlanIntentStore.context
         let model = try MealPlanIntentResolver.dish(for: dish)
         let mealModel = try MealPlanIntentResolver.meal(for: meal)
@@ -334,6 +351,7 @@ struct CreatePlannedMealIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ReturnsValue<MealPlanEntryEntity> {
         try MealPlanIntentResolver.requireEditingAllowed()
+        try await MealPlanIntentResolver.requirePlanningAllowed(on: startDate)
         let context = MealPlanIntentStore.context
         let calendarID = calendar.id
         let household = (try? context.fetch(FetchDescriptor<Household>(
@@ -378,6 +396,7 @@ struct CreatePlannedMealIntent {
                 routine,
                 household: household,
                 context: context,
+                through: PurchaseManager.shared.latestPlanningDate(),
                 memberName: DeviceOwner.name
             )
         }
@@ -418,6 +437,9 @@ struct UpdatePlannedMealIntent {
 
         let meals = MealPlanIntentStore.mealTypes()
         let effectiveDate = startDate ?? entry.date
+        if startDate != nil {
+            try await MealPlanIntentResolver.requirePlanningAllowed(on: effectiveDate)
+        }
         let effectiveTitle = title ?? entry.displayTitle
         let meal = MealPlanIntentResolver.meal(
             mentionedIn: effectiveTitle + " " + (note ?? ""),

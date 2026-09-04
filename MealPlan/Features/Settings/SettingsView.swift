@@ -48,13 +48,13 @@ struct SettingsView: View {
 
     private var stacked: some View {
         Form {
-            FamilySettingsSection()
+            UnlockSettingsSection()
+            HouseholdSettingsSection()
             UnitsSettingsSection()
             PlanSettingsSection()
             CalendarIntegrationSection()
             RecipeSearchSettingsSection()
             RemindersSettingsSection()
-            ShoppingSettingsSection()
             DataSettingsSection()
             AboutSettingsSection()
         }
@@ -92,10 +92,12 @@ struct SettingsView: View {
         switch pane {
         case .general:
             paneForm {
-                FamilySettingsSection()
+                UnlockSettingsSection()
                 UnitsSettingsSection()
                 RecipeSearchSettingsSection()
             }
+        case .household:
+            HouseholdSettingsView()
         case .plan:
             paneForm {
                 PlanSettingsSection(showsMealsLink: false, header: nil)
@@ -107,8 +109,6 @@ struct SettingsView: View {
             paneForm {
                 CalendarIntegrationSection()
             }
-        case .shopping:
-            PantryStaplesView()
         case .data:
             DataTransferView()
         case .about:
@@ -130,10 +130,10 @@ struct SettingsView: View {
 /// The panes in the sidebar, in the order they appear.
 enum SettingsPane: String, CaseIterable, Identifiable {
     case general
+    case household
     case plan
     case meals
     case calendar
-    case shopping
     case data
     case about
 
@@ -142,10 +142,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: String(localized: "General")
+        case .household: String(localized: "Household")
         case .plan: String(localized: "Plan")
         case .meals: String(localized: "Meals")
         case .calendar: String(localized: "Calendar")
-        case .shopping: String(localized: "Pantry staples")
         case .data: String(localized: "Data")
         case .about: String(localized: "About")
         }
@@ -154,10 +154,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var symbol: String {
         switch self {
         case .general: "gearshape"
+        case .household: "person.2"
         case .plan: "calendar"
         case .meals: "fork.knife"
         case .calendar: "calendar.badge.clock"
-        case .shopping: "cart"
         case .data: "externaldrive"
         case .about: "info.circle"
         }
@@ -166,10 +166,10 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var tint: Color {
         switch self {
         case .general: .gray
+        case .household: .purple
         case .plan: .blue
         case .meals: .orange
         case .calendar: .red
-        case .shopping: .green
         case .data: .indigo
         case .about: .teal
         }
@@ -194,6 +194,7 @@ private struct SettingsPaneIcon: View {
 #Preview("Stacked") {
     NavigationStack { SettingsView(layout: .stacked) }
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }
 
@@ -201,6 +202,7 @@ private struct SettingsPaneIcon: View {
 #Preview("Settings window") {
     SettingsView()
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }
 #endif

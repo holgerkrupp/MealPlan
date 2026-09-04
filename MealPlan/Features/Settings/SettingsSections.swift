@@ -7,40 +7,44 @@ import ESADesignKit
 // a Settings window (macOS). Every section reads what it needs from the
 // environment, so a pane is just a list of the sections that belong in it.
 
-// MARK: - Family
+// MARK: - Unlock
 
 @MainActor
-struct FamilySettingsSection: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
+struct UnlockSettingsSection: View {
+    @Environment(PurchaseManager.self) private var purchaseManager
+    @State private var showingPaywall = false
 
     var body: some View {
-        if let household = appState.currentHousehold {
+        if !purchaseManager.isUnlocked {
             Section {
-                TextField(String(localized: "Family name"), text: name(household))
-                Stepper(value: standardServings(household), in: 1...50) {
-                    LabeledContent(
-                        String(localized: "Standard portions"),
-                        value: String(localized: "\(household.scalingServings) servings")
-                    )
+                Button {
+                    showingPaywall = true
+                } label: {
+                    Label(String(localized: "Unlock App"), systemImage: "lock.open")
                 }
-            } header: {
-                Text(String(localized: "Family"))
             } footer: {
-                Text("Recipes are scaled to your standard portions automatically. Everyone in the family shares this setting.")
+                Text("Unlock unlimited planning with a one-time purchase.")
+            }
+            .sheet(isPresented: $showingPaywall) {
+                PaywallView()
+                    .dismissesOnOutsideClick()
             }
         }
     }
+}
 
-    private func name(_ household: Household) -> Binding<String> {
-        Binding(get: { household.name }, set: { household.name = $0; try? context.save() })
-    }
+// MARK: - Household
 
-    private func standardServings(_ household: Household) -> Binding<Int> {
-        Binding(
-            get: { household.scalingServings },
-            set: { household.standardServings = max(1, $0); try? context.save() }
-        )
+@MainActor
+struct HouseholdSettingsSection: View {
+    var body: some View {
+        Section {
+            NavigationLink {
+                HouseholdSettingsView()
+            } label: {
+                Label(String(localized: "Household"), systemImage: "person.2")
+            }
+        }
     }
 }
 
@@ -205,22 +209,6 @@ struct RemindersSettingsSection: View {
     }
 }
 
-// MARK: - Shopping
-
-/// Only used where the pantry isn't a pane of its own.
-@MainActor
-struct ShoppingSettingsSection: View {
-    var body: some View {
-        Section(String(localized: "Shopping")) {
-            NavigationLink {
-                PantryStaplesView()
-            } label: {
-                Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
-            }
-        }
-    }
-}
-
 // MARK: - Data
 
 /// Only used where backup and restore aren't a pane of their own.
@@ -270,6 +258,7 @@ struct AboutSettingsSection: View {
         }
         .sheet(isPresented: $showingOnboarding) {
             OnboardingView()
+                .dismissesOnOutsideClick()
         }
     }
 

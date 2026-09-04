@@ -327,6 +327,9 @@
     "About" : {
 
     },
+    "Accepted" : {
+
+    },
     "Access" : {
 
     },
@@ -480,6 +483,9 @@
     "Adds a dish by name, or imports one from a recipe link." : {
 
     },
+    "Adds a dish to a chosen day and meal in the meal plan." : {
+
+    },
     "Aisle" : {
 
     },
@@ -518,6 +524,19 @@
           }
         }
       }
+    },
+    "All items are checked" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Artikel sind erledigt"
+          }
+        }
+      }
+    },
+    "All meals" : {
+
     },
     "All meals planned" : {
 
@@ -571,6 +590,12 @@
           }
         }
       }
+    },
+    "Answers what is planned for a day, date range, or meal." : {
+
+    },
+    "Answers what is planned for the current week." : {
+
     },
     "Any" : {
       "localizations" : {
@@ -744,6 +769,9 @@
         }
       }
     },
+    "by %@" : {
+
+    },
     "Café" : {
 
     },
@@ -873,6 +901,9 @@
         }
       }
     },
+    "Cancelled" : {
+
+    },
     "Casserole" : {
       "localizations" : {
         "de" : {
@@ -882,6 +913,9 @@
           }
         }
       }
+    },
+    "Check the split is right, then save. The dish opens for editing and is marked to review." : {
+
     },
     "Choose a date range and rebuild the list; the same ingredient from several dishes is added up." : {
       "localizations" : {
@@ -906,7 +940,13 @@
         }
       }
     },
+    "Choose ingredients that should be omitted when a shopping list is rebuilt." : {
+
+    },
     "Choose photo" : {
+
+    },
+    "Choose photos or screenshots" : {
 
     },
     "Choose recipe photos" : {
@@ -965,6 +1005,9 @@
 
     },
     "Collections, separated by commas" : {
+
+    },
+    "Confirmed" : {
 
     },
     "Contains %@" : {
@@ -1103,6 +1146,9 @@
     "Couldn’t reach that page." : {
 
     },
+    "Couldn’t reach the App Store. Check your connection and try again." : {
+
+    },
     "Couldn’t read that file" : {
       "localizations" : {
         "de" : {
@@ -1169,7 +1215,7 @@
     "Day" : {
 
     },
-    "Default" : {
+    "Declined" : {
 
     },
     "Delete" : {
@@ -1544,6 +1590,9 @@
     "Favourite" : {
 
     },
+    "Fill your calendar weeks, months, or years ahead." : {
+
+    },
     "Filter" : {
       "localizations" : {
         "de" : {
@@ -1637,6 +1686,12 @@
     "Generate an image" : {
 
     },
+    "Get Meal Plan" : {
+
+    },
+    "Get the meal plan" : {
+
+    },
     "Get This Week’s Meal Plan" : {
 
     },
@@ -1709,8 +1764,15 @@
     "Herbs & spices" : {
 
     },
-    "Here’s this week’s plan." : {
-
+    "Hide checked items" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erledigte Artikel ausblenden"
+          }
+        }
+      }
     },
     "Hide dish list" : {
 
@@ -1734,6 +1796,9 @@
           }
         }
       }
+    },
+    "Household member" : {
+
     },
     "How are we eating?" : {
 
@@ -2030,6 +2095,9 @@
     "Layout" : {
 
     },
+    "Let regular meals keep your future plan filled." : {
+
+    },
     "Liked it" : {
 
     },
@@ -2112,6 +2180,9 @@
     "Meal name" : {
 
     },
+    "Meal Plan" : {
+
+    },
     "Meal times" : {
       "localizations" : {
         "de" : {
@@ -2191,9 +2262,6 @@
     "Meals" : {
 
     },
-    "Meals planned" : {
-
-    },
     "Meat & fish" : {
 
     },
@@ -2213,22 +2281,22 @@
     "Metric (g, ml, °C)" : {
 
     },
-    "Move to another day or meal…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auf anderen Tag oder andere Mahlzeit verschieben …"
-          }
-        }
-      }
-    },
     "More" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mehr"
+          }
+        }
+      }
+    },
+    "Move to another day or meal…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf anderen Tag oder andere Mahlzeit verschieben …"
           }
         }
       }
@@ -2343,6 +2411,9 @@
     "No ingredients added yet." : {
 
     },
+    "No meals are configured in MealPlan." : {
+
+    },
     "No other dishes" : {
       "localizations" : {
         "de" : {
@@ -2359,7 +2430,13 @@
     "No places found." : {
 
     },
+    "No previous purchase was found for this Apple Account." : {
+
+    },
     "No readable text was found." : {
+
+    },
+    "No readable text was found. Try again with more light or a straighter angle." : {
 
     },
     "No recipe found on that page" : {
@@ -2396,6 +2473,9 @@
           }
         }
       }
+    },
+    "No subscription and no recurring charge." : {
+
     },
     "No templates yet" : {
 
@@ -2454,6 +2534,9 @@
       }
     },
     "Not included" : {
+
+    },
+    "Not Now" : {
 
     },
     "Note" : {
@@ -2576,6 +2659,9 @@
           }
         }
       }
+    },
+    "One-time purchase" : {
+
     },
     "Only events near a meal’s time are considered, so a day’s full calendar never lands in your plan." : {
       "localizations" : {
@@ -2721,7 +2807,7 @@
         }
       }
     },
-    "Photograph a page" : {
+    "Person" : {
 
     },
     "Photos" : {
@@ -2772,7 +2858,13 @@
         }
       }
     },
+    "Plan ${dish} for ${meal} on ${date}" : {
+
+    },
     "Plan ${dish} for ${slot} on ${date}" : {
+
+    },
+    "Plan a Meal" : {
 
     },
     "Plan meal" : {
@@ -2788,13 +2880,13 @@
     "Plan Meal" : {
 
     },
-    "Plan Meal for Date" : {
-
-    },
     "Plan meal…" : {
 
     },
     "Plan some meals, then rebuild the list — or add items yourself below." : {
+
+    },
+    "Plan the next 7 days for free, or unlock MealPlan to plan as far ahead as you like." : {
 
     },
     "Plan the week" : {
@@ -2820,18 +2912,21 @@
     "Plan this dish…" : {
 
     },
+    "Plan without limits" : {
+
+    },
     "Planned" : {
 
     },
     "Planned “%@” for %@" : {
 
     },
-    "Planned “%@” for %@." : {
+    "Planned “%@” for %@ on %@." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "Planned “%1$@” for %2$@."
+            "value" : "Planned “%1$@” for %2$@ on %3$@."
           }
         }
       }
@@ -2850,6 +2945,9 @@
 
     },
     "Plans this dish here" : {
+
+    },
+    "Point the camera at a recipe book, or pick screenshots. Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
 
     },
     "Pork" : {
@@ -2923,6 +3021,9 @@
     "Production" : {
 
     },
+    "Purchases could not be restored: %@" : {
+
+    },
     "QR code for the household invitation" : {
 
     },
@@ -2978,6 +3079,9 @@
     "Recipe archive" : {
 
     },
+    "Recipe details" : {
+
+    },
     "Recipe import" : {
 
     },
@@ -3021,6 +3125,7 @@
       }
     },
     "Recipes are scaled to your standard portions automatically. Everyone in the family shares this setting." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3180,6 +3285,9 @@
     "Restore from a backup…" : {
 
     },
+    "Restore Purchases" : {
+
+    },
     "Restored %lld dishes and %lld planned meals." : {
       "localizations" : {
         "en" : {
@@ -3196,10 +3304,10 @@
     "Resume" : {
 
     },
-    "Returns the meals planned for the current week." : {
+    "Review" : {
 
     },
-    "Review" : {
+    "Room for every routine" : {
 
     },
     "Round scaled and converted amounts" : {
@@ -3262,10 +3370,16 @@
     "Saved to %@" : {
 
     },
+    "Scan a recipe" : {
+
+    },
     "Scan from photo or PDF" : {
 
     },
     "Scan recipe" : {
+
+    },
+    "Scan with camera" : {
 
     },
     "Schedule is clear" : {
@@ -3277,9 +3391,6 @@
           }
         }
       }
-    },
-    "Schedules a dish on a day and meal." : {
-
     },
     "Seafood" : {
       "localizations" : {
@@ -3364,6 +3475,12 @@
       }
     },
     "Send Invitation" : {
+
+    },
+    "Serves %lld" : {
+
+    },
+    "Servings" : {
 
     },
     "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead." : {
@@ -3458,9 +3575,6 @@
 
     },
     "Shop for" : {
-
-    },
-    "Shopping" : {
 
     },
     "Shopping list" : {
@@ -3707,6 +3821,9 @@
     "Template name" : {
 
     },
+    "Tentative" : {
+
+    },
     "Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
 
     },
@@ -3719,7 +3836,16 @@
     "That isn’t a MealPlan backup, or it was written by a newer version." : {
 
     },
+    "That meal no longer exists." : {
+
+    },
     "That PDF couldn’t be read." : {
+
+    },
+    "That planned meal no longer exists." : {
+
+    },
+    "The dish needs a name." : {
 
     },
     "The household stays in iCloud." : {
@@ -3737,6 +3863,9 @@
           }
         }
       }
+    },
+    "The purchase could not be verified: %@" : {
+
     },
     "The shared household could not be found." : {
 
@@ -3770,6 +3899,9 @@
     "This aisle name will be remembered for the ingredient." : {
 
     },
+    "This and future meals" : {
+
+    },
     "This device only" : {
 
     },
@@ -3783,6 +3915,9 @@
 
     },
     "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app." : {
+
+    },
+    "This meal" : {
 
     },
     "This month" : {
@@ -3801,6 +3936,9 @@
 
     },
     "This Week’s Plan" : {
+
+    },
+    "Through" : {
 
     },
     "Time to cook" : {
@@ -3849,6 +3987,19 @@
     "Tonight’s dinner" : {
 
     },
+    "Transcript:\n%@" : {
+
+    },
+    "Turn off “Hide checked items” to show them again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deaktiviere „Erledigte Artikel ausblenden“, um sie wieder anzuzeigen."
+          }
+        }
+      }
+    },
     "Turn the planned week into a shopping list without writing it twice." : {
       "localizations" : {
         "de" : {
@@ -3896,6 +4047,27 @@
       }
     },
     "Unknown" : {
+
+    },
+    "Unlimited planning" : {
+
+    },
+    "Unlock App" : {
+
+    },
+    "Unlock App for %@" : {
+
+    },
+    "Unlock MealPlan in the app to plan more than 7 days ahead." : {
+
+    },
+    "Unlock MealPlan to plan this far ahead" : {
+
+    },
+    "Unlock unlimited planning with a one-time purchase." : {
+
+    },
+    "Unlocks planning beyond the next 7 days" : {
 
     },
     "Until" : {
@@ -4072,10 +4244,22 @@
     "What should the dish be called?" : {
 
     },
+    "What’s Planned?" : {
+
+    },
     "When" : {
 
     },
     "Where are we going?" : {
+
+    },
+    "Which day should I plan it for?" : {
+
+    },
+    "Which dish would you like to plan?" : {
+
+    },
+    "Which meal should I add it to?" : {
 
     },
     "While sharing you can put the new dish straight onto a day in your plan." : {
@@ -4126,6 +4310,9 @@
     "You" : {
 
     },
+    "You have view-only access to this meal plan." : {
+
+    },
     "You joined as a view-only guest." : {
 
     },
@@ -4172,24 +4359,6 @@
 
     },
     "Your week is ready as a PDF." : {
-
-    },
-    "Scan a recipe" : {
-
-    },
-    "Scan with camera" : {
-
-    },
-    "Choose photos or screenshots" : {
-
-    },
-    "Point the camera at a recipe book, or pick screenshots. Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
-
-    },
-    "No readable text was found. Try again with more light or a straighter angle." : {
-
-    },
-    "Check the split is right, then save. The dish opens for editing and is marked to review." : {
 
     }
   },

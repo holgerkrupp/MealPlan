@@ -12,13 +12,21 @@ import FoundationModels
 /// declines) it falls back to `ScannedRecipeParser`. Nothing leaves the device
 /// either way.
 enum RecipeExtractor {
-    static func extract(from text: String) async -> ScannedRecipeDraft {
+    enum Source: Sendable {
+        case scannedPage
+        case socialPost
+    }
+
+    static func extract(
+        from text: String,
+        source: Source = .scannedPage
+    ) async -> ScannedRecipeDraft {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else {
             return ScannedRecipeDraft(name: "", ingredientLines: [], instructions: "")
         }
         #if canImport(FoundationModels)
-        if let draft = await modelExtraction(from: trimmed) {
+        if let draft = await modelExtraction(from: trimmed, source: source) {
             return draft
         }
         #endif
@@ -36,18 +44,31 @@ enum RecipeExtractor {
         var steps: [String]
     }
 
-    private static let promptInstructions = """
-    You extract a single cooking recipe from text captured by OCR from a printed page.
-    The text often has line-break noise, page numbers, book titles or other page \
-    furniture mixed in — ignore anything that isn't part of the recipe. Keep the \
-    recipe's original language and wording. Never invent an ingredient or a step that \
-    isn't in the text; if a part is missing, leave it empty.
-    """
+    private static func promptInstructions(for source: Source) -> String {
+        switch source {
+        case .scannedPage:
+            """
+            You extract a single cooking recipe from text captured by OCR from a printed page.
+            The text often has line-break noise, page numbers, book titles or other page \
+            furniture mixed in — ignore anything that isn't part of the recipe. Keep the \
+            recipe's original language and wording. Never invent an ingredient or a step that \
+            isn't in the text; if a part is missing, leave it empty.
+            """
+        case .socialPost:
+            """
+            You extract a single cooking recipe from a social-media caption, video description, \
+            or transcript. Ignore usernames, engagement prompts, sponsorships, hashtags, and \
+            unrelated commentary. Keep the recipe's original language and wording. Never invent \
+            an ingredient, quantity, or step that isn't in the text; if a part is missing, leave \
+            it empty.
+            """
+        }
+    }
 
-    private static func modelExtraction(from text: String) async -> ScannedRecipeDraft? {
+    private static func modelExtraction(from text: String, source: Source) async -> ScannedRecipeDraft? {
         guard case .available = SystemLanguageModel.default.availability else { return nil }
         do {
-            let session = LanguageModelSession(instructions: promptInstructions)
+            let session = LanguageModelSession(instructions: promptInstructions(for: source))
             let fields = try await session.respond(
                 to: "Extract the recipe from this text:\n\n\(text)",
                 generating: RecipeFields.self

@@ -10,9 +10,11 @@ struct WeekSectionView: View {
     @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
     private var mealTypes: [MealType]
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     /// Optional: absent in previews and whenever calendar integration is off.
     @Environment(CalendarContextStore.self) private var calendarStore: CalendarContextStore?
+    @State private var showingPaywall = false
 
     private let calendar = Date.mondayCalendar
     /// Keep meal cards in two equal-width cells. An adaptive column is allowed
@@ -96,7 +98,9 @@ struct WeekSectionView: View {
                 DayCard(
                     day: day,
                     isCollapsed: appState.isDayCollapsed(day),
+                    isPlanningLocked: !purchaseManager.canPlan(on: day),
                     onToggleCollapse: { appState.setDayCollapsed(!appState.isDayCollapsed(day), for: day) },
+                    onUnlock: { showingPaywall = true },
                     onCopyLastWeek: { copyFromLastWeek(to: day) },
                     onDropDish: { handleDrop($0, on: day) }
                 ) {
@@ -147,6 +151,10 @@ struct WeekSectionView: View {
             // queries the days the planner actually shows.
             calendarStore?.requestWeek(weekStart)
         }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .dismissesOnOutsideClick()
+        }
     }
 
     /// A drop on the day's header, rather than on one of its meal cards: the
@@ -155,6 +163,10 @@ struct WeekSectionView: View {
     /// drop onto a collapsed day, whose meal cards aren't on screen.
     private func handleDrop(_ references: [DishReference], on day: Date) -> Bool {
         guard !appState.isGuest, let reference = references.first else { return false }
+        guard purchaseManager.canPlan(on: day) else {
+            showingPaywall = true
+            return false
+        }
         return MealPlanner.drop(
             reference, onto: day, mealKey: nil,
             household: appState.currentHousehold,
@@ -164,6 +176,10 @@ struct WeekSectionView: View {
     }
 
     private func copyFromLastWeek(to day: Date) {
+        guard purchaseManager.canPlan(on: day) else {
+            showingPaywall = true
+            return
+        }
         MealPlanner.copyDay(
             from: day.adding(weeks: -1), to: day,
             household: appState.currentHousehold,
@@ -197,7 +213,9 @@ struct DayMeal: Identifiable {
 private struct DayCard<Content: View>: View {
     let day: Date
     var isCollapsed: Bool
+    var isPlanningLocked: Bool = false
     var onToggleCollapse: () -> Void
+    var onUnlock: () -> Void = {}
     var onCopyLastWeek: () -> Void
     /// Handles a meal dragged onto the day's header. Returns false when there
     /// is nothing to do, so the drag animates back.
@@ -239,6 +257,14 @@ private struct DayCard<Content: View>: View {
                         .background(.tint, in: Capsule())
                         .foregroundStyle(.white)
                 }
+                if isPlanningLocked {
+                    Button(action: onUnlock) {
+                        Label(String(localized: "Unlock App"), systemImage: "lock.fill")
+                            .font(.caption.weight(.semibold))
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityHint(String(localized: "Unlocks planning beyond the next 7 days"))
+                }
                 Menu {
                     Button(
                         isCollapsed ? String(localized: "Expand day") : String(localized: "Collapse day"),
@@ -249,6 +275,7 @@ private struct DayCard<Content: View>: View {
                     Button(String(localized: "Copy from last week"), systemImage: "arrow.uturn.backward") {
                         onCopyLastWeek()
                     }
+                    .disabled(isPlanningLocked)
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(.secondary)
@@ -299,6 +326,7 @@ private struct DayCard<Content: View>: View {
         }
     }
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }
 

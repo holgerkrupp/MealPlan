@@ -57,6 +57,7 @@ struct SeasonalSuggestionsStrip: View {
             .sheet(item: $planning) { dish in
                 NavigationStack { PlanDishSheet(dish: dish, defaultDate: appState.selectedDate) }
                     .presentationDetents([.medium])
+                    .dismissesOnOutsideClick()
             }
         }
     }

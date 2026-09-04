@@ -72,6 +72,7 @@ struct DishEditorView: View {
         }
         .sheet(isPresented: $showingRecipeScanner) {
             NavigationStack { RecipeScannerView(dish: dish) }
+                .dismissesOnOutsideClick()
         }
         .alert(item: $duplicateDish) { duplicate in
             Alert(

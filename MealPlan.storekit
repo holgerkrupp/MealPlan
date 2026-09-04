@@ -1,0 +1,33 @@
+{
+  "identifier" : "56DAE3C0-8361-4EF4-B80D-4D45414C504C",
+  "nonRenewingSubscriptions" : [
+
+  ],
+  "products" : [
+    {
+      "displayPrice" : "4.99",
+      "familyShareable" : true,
+      "internalID" : "02A1DEAA-BB9B-4A62-9290-554E4C4F434B",
+      "localizations" : [
+        {
+          "description" : "Plan meals as far into the future as you like.",
+          "displayName" : "Unlimited Planning",
+          "locale" : "en_US"
+        }
+      ],
+      "productID" : "de.holgerkrupp.mealplan.unlock",
+      "referenceName" : "MealPlan Unlimited Planning",
+      "type" : "NonConsumable"
+    }
+  ],
+  "settings" : {
+
+  },
+  "subscriptionGroups" : [
+
+  ],
+  "version" : {
+    "major" : 3,
+    "minor" : 0
+  }
+}

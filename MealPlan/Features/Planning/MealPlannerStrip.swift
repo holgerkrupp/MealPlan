@@ -29,6 +29,7 @@ struct MealPlannerStrip: View {
     @Binding var selectedMealKey: String
 
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
 
     @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
@@ -37,6 +38,7 @@ struct MealPlannerStrip: View {
     /// the query identity never changes as the strip grows; a household's plan
     /// is small enough to group in memory.
     @Query private var entries: [MealPlanEntry]
+    @State private var showingPaywall = false
 
     private static let pastDays = 14
 
@@ -87,17 +89,27 @@ struct MealPlannerStrip: View {
             selectedDate: $selectedDate,
             selectedMealKey: $selectedMealKey,
             onSelect: assign(to:mealKey:),
+            isDateLocked: { !purchaseManager.canPlan(on: $0) },
+            onSelectLockedDate: { _ in showingPaywall = true },
             isDisabled: appState.isGuest,
             selectHint: reschedulingEntry != nil
                 ? String(localized: "Moves this meal here")
                 : String(localized: "Plans this dish here")
         )
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .dismissesOnOutsideClick()
+        }
     }
 
     // MARK: - Assign
 
     private func assign(to day: Date, mealKey: String) {
         guard !appState.isGuest else { return }
+        guard purchaseManager.canPlan(on: day) else {
+            showingPaywall = true
+            return
+        }
         selectedDate = day.startOfDay
         selectedMealKey = mealKey
 
@@ -137,6 +149,7 @@ struct MealPlannerStrip: View {
         selectedMealKey: $mealKey
     )
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
     .padding()
 }

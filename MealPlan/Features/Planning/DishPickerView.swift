@@ -437,5 +437,6 @@ struct DishPickerView: View {
         mealSymbol: PreviewData.mealType.symbolName
     )
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }

@@ -106,5 +106,6 @@ struct PlanDishSheet: View {
         PlanDishSheet(dish: PreviewData.household.dishes?.first ?? Dish(name: "Test"))
     }
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }

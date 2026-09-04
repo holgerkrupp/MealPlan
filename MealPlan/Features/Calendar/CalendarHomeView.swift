@@ -6,6 +6,7 @@ struct ExportedPDF: Identifiable { let id = UUID(); let url: URL }
 @MainActor
 struct CalendarHomeView: View {
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @State private var paginator = CalendarPaginator()
     @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
@@ -16,6 +17,7 @@ struct CalendarHomeView: View {
     @State private var savingTemplateWeek: Date?
     @State private var applyingTemplateWeek: Date?
     @State private var exportedPDF: ExportedPDF?
+    @State private var showingPaywall = false
     /// First day of the week shown in the strip above the plan. Follows the
     /// user's locale, unlike the Monday-based week sections below it.
     @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
@@ -151,13 +153,20 @@ struct CalendarHomeView: View {
         .sheet(item: Binding(get: { savingTemplateWeek.map { IdentifiableDate(date: $0) } },
                              set: { savingTemplateWeek = $0?.date })) { wrapper in
             SaveTemplateSheet(weekStart: wrapper.date)
+                .dismissesOnOutsideClick()
         }
         .sheet(item: Binding(get: { applyingTemplateWeek.map { IdentifiableDate(date: $0) } },
                              set: { applyingTemplateWeek = $0?.date })) { wrapper in
             ApplyTemplateSheet(targetWeekStart: wrapper.date)
+                .dismissesOnOutsideClick()
         }
         .sheet(item: $exportedPDF) { pdf in
             PDFShareSheet(url: pdf.url)
+                .dismissesOnOutsideClick()
+        }
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingDatePicker) {
             NavigationStack {
@@ -185,6 +194,7 @@ struct CalendarHomeView: View {
                 }
             }
             .presentationDetents([.medium])
+            .dismissesOnOutsideClick()
         }
         .overlay(alignment: .bottom) {
             if let offer = appState.undoOffer {
@@ -202,6 +212,10 @@ struct CalendarHomeView: View {
     /// scrolls under a drag on iOS, and not at all on the Mac.
     private func drop(_ references: [DishReference], on day: Date) -> Bool {
         guard !appState.isGuest, let reference = references.first else { return false }
+        guard purchaseManager.canPlan(on: day) else {
+            showingPaywall = true
+            return false
+        }
         let accepted = MealPlanner.drop(
             reference, onto: day, mealKey: nil,
             household: appState.currentHousehold,

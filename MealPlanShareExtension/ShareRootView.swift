@@ -97,6 +97,12 @@ struct ShareRootView: View {
                             date = day.startOfDay
                             mealKey = key
                         },
+                        isDateLocked: {
+                            !PlanningAccess.canPlan(
+                                on: $0,
+                                isUnlocked: PurchaseEntitlementCache.isUnlocked
+                            )
+                        },
                         selectHint: String(localized: "Plans it here")
                     )
                     .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
@@ -186,7 +192,7 @@ struct ShareRootView: View {
         let result = RecipeImportCommitter.importAll(
             recipes, household: household, createdByName: member, context: context
         )
-        if plan {
+        if plan, PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked) {
             for dish in result.dishes {
                 MealPlanner.plan(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context)
             }

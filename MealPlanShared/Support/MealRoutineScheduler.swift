@@ -18,12 +18,20 @@ enum MealRoutineScheduler {
         for household: Household,
         context: ModelContext,
         now: Date = .now,
+        through latestPlanningDate: Date? = nil,
         memberName: String = ""
     ) {
         let routines = (household.mealRoutines ?? []).filter(\.isActive)
         guard !routines.isEmpty else { return }
         for routine in routines {
-            apply(routine, household: household, context: context, now: now, memberName: memberName)
+            apply(
+                routine,
+                household: household,
+                context: context,
+                now: now,
+                through: latestPlanningDate,
+                memberName: memberName
+            )
         }
     }
 
@@ -35,12 +43,14 @@ enum MealRoutineScheduler {
         household: Household?,
         context: ModelContext,
         now: Date = .now,
+        through latestPlanningDate: Date? = nil,
         memberName: String = ""
     ) {
         guard routine.isActive, let dish = routine.dish else { return }
 
         let today = now.startOfDay
-        let horizon = today.adding(weeks: horizonWeeks)
+        let routineHorizon = today.adding(weeks: horizonWeeks)
+        let horizon = latestPlanningDate.map { min(routineHorizon, $0.startOfDay) } ?? routineHorizon
         // Never backfill: start after whatever has already been planned, and
         // never before today.
         let from = max(today, routine.plannedThrough?.adding(days: 1).startOfDay ?? today)

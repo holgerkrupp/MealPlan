@@ -146,11 +146,13 @@ struct ApplyTemplateSheet: View {
     let targetWeekStart: Date
 
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query(sort: \WeekTemplate.name) private var templates: [WeekTemplate]
 
     @State private var replaceExisting = false
+    @State private var showingPaywall = false
 
     var body: some View {
         NavigationStack {
@@ -168,6 +170,10 @@ struct ApplyTemplateSheet: View {
                     Section(String(localized: "Apply to week of \(targetWeekStart.formatted(date: .abbreviated, time: .omitted))")) {
                         ForEach(templates) { template in
                             Button {
+                                guard purchaseManager.canPlan(on: targetWeekStart.adding(days: 6)) else {
+                                    showingPaywall = true
+                                    return
+                                }
                                 TemplateEngine.apply(
                                     template, toWeekContaining: targetWeekStart,
                                     replaceExisting: replaceExisting,
@@ -202,6 +208,10 @@ struct ApplyTemplateSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
+        .sheet(isPresented: $showingPaywall) {
+            PaywallView()
+                .dismissesOnOutsideClick()
+        }
     }
 }
 
@@ -214,5 +224,6 @@ struct ApplyTemplateSheet: View {
 #Preview("Apply template") {
     ApplyTemplateSheet(targetWeekStart: Date.now.startOfWeek())
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }

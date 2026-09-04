@@ -97,5 +97,6 @@ struct PlanView: View {
 #Preview {
     NavigationStack { PlanView() }
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }

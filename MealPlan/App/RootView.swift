@@ -3,7 +3,7 @@ import SwiftData
 import CloudKit
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
-    case plan, dishes, shopping, household, settings
+    case plan, dishes, shopping, settings
 
     var id: String { rawValue }
 
@@ -12,7 +12,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: String(localized: "Plan")
         case .dishes: String(localized: "Dishes")
         case .shopping: String(localized: "Shopping list")
-        case .household: String(localized: "Household")
         case .settings: String(localized: "Settings")
         }
     }
@@ -22,7 +21,6 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: "calendar"
         case .dishes: "fork.knife"
         case .shopping: "cart"
-        case .household: "person.2"
         case .settings: "gearshape"
         }
     }
@@ -42,6 +40,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
 struct RootView: View {
     @Environment(\.horizontalSizeClass) private var sizeClass
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @AppStorage(OnboardingPreferenceKeys.didCompleteOnboarding) private var didCompleteOnboarding = false
     @State private var selection: AppSection? = .plan
@@ -77,6 +76,7 @@ struct RootView: View {
         }
         .sheet(isPresented: $showOnboarding, onDismiss: { didCompleteOnboarding = true }) {
             OnboardingView()
+                .dismissesOnOutsideClick()
                 #if os(iOS)
                 .interactiveDismissDisabled()
                 #endif
@@ -93,6 +93,7 @@ struct RootView: View {
             #if os(macOS)
             .frame(minWidth: 520, minHeight: 460)
             #endif
+            .dismissesOnOutsideClick()
         }
         .task { await evaluateOnboarding() }
         .task { await acceptPendingCloudShares() }
@@ -168,7 +169,12 @@ struct RootView: View {
                 // one if this device had already seeded its own.
                 MealType.ensure(for: household, context: context)
                 CookedLogMaintenance.run(for: household, context: context)
-                MealRoutineScheduler.apply(for: household, context: context, memberName: appState.currentMemberName)
+                MealRoutineScheduler.apply(
+                    for: household,
+                    context: context,
+                    through: purchaseManager.latestPlanningDate(),
+                    memberName: appState.currentMemberName
+                )
             } catch {
                 sharingErrorMessage = error.localizedDescription
             }
@@ -217,9 +223,6 @@ struct RootView: View {
             Tab(AppSection.shopping.title, systemImage: AppSection.shopping.symbol, value: .shopping) {
                 NavigationStack { ShoppingListView() }
             }
-            Tab(AppSection.household.title, systemImage: AppSection.household.symbol, value: .household) {
-                NavigationStack { HouseholdView() }
-            }
             Tab(AppSection.settings.title, systemImage: AppSection.settings.symbol, value: .settings) {
                 NavigationStack { SettingsView(layout: .stacked) }
             }
@@ -244,7 +247,6 @@ struct RootView: View {
                 case .plan: PlanView()
                 case .dishes: DishLibraryView()
                 case .shopping: ShoppingListView()
-                case .household: HouseholdView()
                 case .settings: SettingsView(layout: .stacked)
                 }
             }

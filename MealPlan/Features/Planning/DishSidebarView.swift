@@ -11,6 +11,9 @@ import SwiftData
 struct DishSidebarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
+    #if os(macOS)
+    @Environment(\.openWindow) private var openWindow
+    #endif
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @State private var planningDish: Dish?
@@ -57,7 +60,9 @@ struct DishSidebarView: View {
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
+            .dismissesOnOutsideClick()
         }
+        #if !os(macOS)
         .sheet(item: $detailDish) { dish in
             NavigationStack {
                 DishDetailView(dish: dish)
@@ -67,7 +72,9 @@ struct DishSidebarView: View {
                         }
                     }
             }
+            .dismissesOnOutsideClick()
         }
+        #endif
     }
 
     private var sidebarCommands: DishLibraryCommands {
@@ -175,7 +182,7 @@ struct DishSidebarView: View {
 
     /// What tapping a row does: guests can only look, everyone else plans.
     private func open(_ dish: Dish) {
-        if appState.isGuest { detailDish = dish } else { planningDish = dish }
+        if appState.isGuest { showDetails(for: dish) } else { planningDish = dish }
     }
 
     private var dishList: some View {
@@ -200,7 +207,7 @@ struct DishSidebarView: View {
                             }
                         }
                         Button(String(localized: "Show details"), systemImage: "info.circle") {
-                            detailDish = dish
+                            showDetails(for: dish)
                         }
                     }
                     .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
@@ -209,6 +216,14 @@ struct DishSidebarView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+    }
+
+    private func showDetails(for dish: Dish) {
+        #if os(macOS)
+        openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+        #else
+        detailDish = dish
+        #endif
     }
 
     private func row(_ dish: Dish) -> some View {

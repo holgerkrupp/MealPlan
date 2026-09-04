@@ -158,15 +158,17 @@ struct DishLibraryView: View {
                 NavigationStack {
                     DishEditorView(dish: newDish, isNew: true)
                 }
+                .dismissesOnOutsideClick()
             }
         }
-        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0) }
-        .sheet(item: $importingFile) { ImportRecipesSheet(fileURL: $0.url) }
+        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
+        .sheet(item: $importingFile) { ImportRecipesSheet(fileURL: $0.url).dismissesOnOutsideClick() }
         .sheet(isPresented: $showingScanner) {
             ScanRecipeSheet { dish in
                 newDish = dish
                 editingNewDish = true
             }
+            .dismissesOnOutsideClick()
         }
         .fileImporter(
             isPresented: $showingFilePicker,

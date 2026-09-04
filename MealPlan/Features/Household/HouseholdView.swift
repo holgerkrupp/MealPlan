@@ -2,7 +2,7 @@ import SwiftUI
 import SwiftData
 
 @MainActor
-struct HouseholdView: View {
+struct HouseholdSettingsView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
 
@@ -85,6 +85,16 @@ struct HouseholdView: View {
                     Text("Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you.")
                 }
 
+                Section {
+                    NavigationLink {
+                        PantryStaplesView()
+                    } label: {
+                        Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
+                    }
+                } footer: {
+                    Text("Choose ingredients that should be omitted when a shopping list is rebuilt.")
+                }
+
                 Section(String(localized: "Who’s planning")) {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
                     ForEach(members) { member in
@@ -100,17 +110,18 @@ struct HouseholdView: View {
             }
         }
         .formStyle(.grouped)
-        .navigationTitle(AppSection.household.title)
+        .navigationTitle(String(localized: "Household"))
         .sheet(isPresented: $showingShareSheet) {
             if let household = appState.currentHousehold {
                 HouseholdSharingView(household: household)
+                    .dismissesOnOutsideClick()
             }
         }
     }
 }
 
 #Preview {
-    NavigationStack { HouseholdView() }
+    NavigationStack { HouseholdSettingsView() }
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
 }

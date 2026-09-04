@@ -12,6 +12,7 @@ struct ShoppingListView: View {
     @State private var isExporting = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
+    @AppStorage("shoppingList.hideCheckedItems") private var hideCheckedItems = false
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
     /// the add field.
     @FocusState private var addItemFocused: Bool
@@ -29,8 +30,12 @@ struct ShoppingListView: View {
         )
     }
 
+    private var visibleItems: [ShoppingListItem] {
+        hideCheckedItems ? items.filter { !$0.isChecked } : items
+    }
+
     private var grouped: [AisleGroup] {
-        Dictionary(grouping: items, by: \.aisleName)
+        Dictionary(grouping: visibleItems, by: \.aisleName)
             .map { name, values in
                 AisleGroup(
                     name: name,
@@ -65,6 +70,12 @@ struct ShoppingListView: View {
                     String(localized: "Nothing to buy yet"),
                     systemImage: "cart",
                     description: Text("Plan some meals, then rebuild the list — or add items yourself below.")
+                )
+            } else if visibleItems.isEmpty {
+                ContentUnavailableView(
+                    String(localized: "All items are checked"),
+                    systemImage: "checkmark.circle",
+                    description: Text("Turn off “Hide checked items” to show them again.")
                 )
             }
 
@@ -111,6 +122,10 @@ struct ShoppingListView: View {
                     }
                     .disabled(isExporting || items.isEmpty)
                     #endif
+                    Toggle(isOn: $hideCheckedItems) {
+                        Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
+                    }
+                    Divider()
                     Button(String(localized: "Clear ticked items"), role: .destructive) {
                         clearChecked()
                     }
@@ -197,7 +212,9 @@ struct ShoppingListView: View {
     }
 
     private func toggle(_ item: ShoppingListItem) {
-        item.isChecked.toggle()
+        withAnimation {
+            item.isChecked.toggle()
+        }
         try? context.save()
     }
 

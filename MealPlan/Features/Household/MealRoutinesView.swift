@@ -63,6 +63,7 @@ struct MealRoutinesView: View {
             NavigationStack {
                 MealRoutineEditor(routine: routine, dishes: dishes, mealTypes: mealTypes)
             }
+            .dismissesOnOutsideClick()
         }
     }
 
@@ -130,6 +131,7 @@ struct MealRoutineEditor: View {
     let mealTypes: [MealType]
 
     @Environment(AppState.self) private var appState
+    @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
 
@@ -227,6 +229,7 @@ struct MealRoutineEditor: View {
             routine,
             household: appState.currentHousehold,
             context: context,
+            through: purchaseManager.latestPlanningDate(),
             memberName: appState.currentMemberName
         )
         dismiss()
@@ -236,6 +239,7 @@ struct MealRoutineEditor: View {
 #Preview("Routines") {
     NavigationStack { MealRoutinesView() }
         .environment(AppState.preview)
+        .environment(PurchaseManager.shared)
         .modelContainer(PreviewData.container)
 }
 
@@ -248,5 +252,6 @@ struct MealRoutineEditor: View {
         )
     }
     .environment(AppState.preview)
+    .environment(PurchaseManager.shared)
     .modelContainer(PreviewData.container)
 }
