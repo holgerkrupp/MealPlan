@@ -77,6 +77,8 @@ enum MealPlanBackupRestore {
         household.roundsDisplayedAmounts = backup.household.roundsDisplayedAmounts
         household.calendarStyleRaw = CalendarStyle.week.rawValue
         household.standardServings = backup.household.standardServings ?? Household.defaultStandardServings
+        household.showsNutritionEstimates = backup.household.showsNutritionEstimates ?? true
+        household.energyUnitRaw = backup.household.energyUnitRaw ?? EnergyUnit.kilocalories.rawValue
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         // A restored library brings its own staples with it; an older file
@@ -117,6 +119,12 @@ enum MealPlanBackupRestore {
             ingredient.normalizedName = stored.normalizedName
             ingredient.customAisleName = stored.customAisleName
             ingredient.isPantryStaple = stored.isPantryStaple
+            ingredient.nutritionEnergyKcal = stored.nutritionEnergyKcal
+            ingredient.nutritionProteinGrams = stored.nutritionProteinGrams
+            ingredient.nutritionCarbGrams = stored.nutritionCarbGrams
+            ingredient.nutritionFatGrams = stored.nutritionFatGrams
+            ingredient.nutritionReferenceRaw = stored.nutritionReferenceRaw
+            ingredient.nutritionSourceRaw = stored.nutritionSourceRaw
             ingredient.household = household
             context.insert(ingredient)
             ingredients[stored.normalizedName] = ingredient
@@ -273,6 +281,10 @@ enum MealPlanBackupRestore {
         dish.needsReview = stored.needsReview
         dish.glyphRaw = stored.glyphRaw
         dish.glyphIsAuto = stored.glyphIsAuto
+        dish.statedEnergyKcalPerServing = stored.statedEnergyKcalPerServing
+        dish.statedProteinGramsPerServing = stored.statedProteinGramsPerServing
+        dish.statedCarbGramsPerServing = stored.statedCarbGramsPerServing
+        dish.statedFatGramsPerServing = stored.statedFatGramsPerServing
         dish.household = household
         context.insert(dish)
 

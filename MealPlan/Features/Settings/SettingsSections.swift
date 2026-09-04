@@ -106,6 +106,57 @@ struct UnitsSettingsSection: View {
     }
 }
 
+// MARK: - Nutrition
+
+/// Estimated energy and macros: whether to show them at all, and in which
+/// unit.
+///
+/// The off switch is not a formality. Calories on a family calendar are
+/// unwelcome in plenty of households, and a meal planner has to work just as
+/// well for them — so one toggle removes every figure from the recipe screen,
+/// the meal cards and the day headers at once.
+@MainActor
+struct NutritionSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        if let household = appState.currentHousehold {
+            Section {
+                Toggle(
+                    String(localized: "Show nutrition estimates"),
+                    isOn: showsEstimates(household)
+                )
+                if household.showsNutritionEstimates {
+                    Picker(String(localized: "Energy in"), selection: energyUnit(household)) {
+                        ForEach(EnergyUnit.allCases) { unit in
+                            Text(unit.localizedName).tag(unit)
+                        }
+                    }
+                }
+            } header: {
+                Text(String(localized: "Nutrition"))
+            } footer: {
+                Text("Worked out from each recipe's ingredients using average reference values, so figures are rough — a planning aid, not a nutrition label. Add your own values to an ingredient from the recipe screen.")
+            }
+        }
+    }
+
+    private func showsEstimates(_ household: Household) -> Binding<Bool> {
+        Binding(
+            get: { household.showsNutritionEstimates },
+            set: { household.showsNutritionEstimates = $0; try? context.save() }
+        )
+    }
+
+    private func energyUnit(_ household: Household) -> Binding<EnergyUnit> {
+        Binding(
+            get: { household.energyUnit },
+            set: { household.energyUnit = $0; try? context.save() }
+        )
+    }
+}
+
 // MARK: - Plan
 
 /// The way into the meal editor where Meals isn't its own pane.

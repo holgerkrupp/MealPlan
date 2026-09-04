@@ -55,6 +55,18 @@ final class Dish {
     /// Set when a recipe was imported with best-effort heuristics and the
     /// user should double-check it.
     var needsReview: Bool = false
+
+    // MARK: Nutrition
+    //
+    // Values the recipe itself states, per serving of `servings`. A recipe
+    // that came with its own figures beats anything we can add up from the
+    // ingredient list, so these win outright when present — see
+    // `NutritionEstimator.perServing(for:)`. Written by the schema.org
+    // importer and by hand; `nil` everywhere else, which is the normal case.
+    var statedEnergyKcalPerServing: Double?
+    var statedProteinGramsPerServing: Double?
+    var statedCarbGramsPerServing: Double?
+    var statedFatGramsPerServing: Double?
     /// An emoji or SF Symbol shown wherever the dish has no photo. See `DishGlyph`.
     var glyphRaw: String?
     /// True while the placeholder is the app's own suggestion, so it can keep
@@ -153,6 +165,24 @@ final class Dish {
             ingredientNames: sortedIngredients.compactMap { $0.ingredient?.name },
             mealTypeTags: mealTypeTags
         )
+    }
+
+    /// What the recipe says one serving contains, if it says anything.
+    var statedNutritionPerServing: NutritionFacts? {
+        guard let statedEnergyKcalPerServing else { return nil }
+        return NutritionFacts(
+            energyKcal: statedEnergyKcalPerServing,
+            proteinGrams: statedProteinGramsPerServing ?? 0,
+            carbGrams: statedCarbGramsPerServing ?? 0,
+            fatGrams: statedFatGramsPerServing ?? 0
+        )
+    }
+
+    func setStatedNutritionPerServing(_ facts: NutritionFacts?) {
+        statedEnergyKcalPerServing = facts?.energyKcal
+        statedProteinGramsPerServing = facts?.proteinGrams
+        statedCarbGramsPerServing = facts?.carbGrams
+        statedFatGramsPerServing = facts?.fatGrams
     }
 
     var sortedIngredients: [DishIngredient] {

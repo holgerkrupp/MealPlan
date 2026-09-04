@@ -21,6 +21,14 @@ final class Household {
     /// arithmetic. A planned meal can still override it for one occasion.
     /// Defaults to 2 for both new and migrated households.
     var standardServings: Int = Household.defaultStandardServings
+    /// Whether the app shows its estimated energy and macros at all. On by
+    /// default, and a single switch off for families who would rather not have
+    /// calories on the calendar — a plan is a plan whether or not anybody is
+    /// counting. Applies everywhere: dish detail, meal cards, day totals.
+    var showsNutritionEstimates: Bool = true
+    /// kcal or kJ. Both are on every European package and which one people
+    /// think in is habit, not nationality.
+    var energyUnitRaw: String = EnergyUnit.kilocalories.rawValue
     var localeIdentifier: String = Locale.current.identifier
     var dateCreated: Date = Date.now
     /// Base64-encoded locator for this household's CloudKit share (zone,
@@ -83,6 +91,11 @@ final class Household {
     /// `standardServings`, guarded against a zero or negative value arriving
     /// from a corrupted record or an older peer.
     var scalingServings: Int { max(1, standardServings) }
+
+    var energyUnit: EnergyUnit {
+        get { EnergyUnit(rawValue: energyUnitRaw) ?? .kilocalories }
+        set { energyUnitRaw = newValue.rawValue }
+    }
 
     /// Meals in display order, falling back to a seeded default set if this
     /// household has none configured yet.

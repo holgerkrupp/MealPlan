@@ -201,10 +201,55 @@ struct RecipeSchemaParser: RecipeImporter {
             recipe.cookTimeMinutes = minutes(dict["totalTime"])
         }
 
+        recipe.nutritionPerServing = nutrition(dict["nutrition"])
+
         if recipe.ingredientLines.isEmpty && recipe.instructions == nil {
             recipe.needsReview = true
         }
         return recipe
+    }
+
+    /// schema.org `NutritionInformation`, which states everything per serving.
+    ///
+    /// Its values are strings with units baked in — "540 calories", "31 g",
+    /// "2200 kJ" — so each one is scanned for its number and, for energy,
+    /// checked for kilojoules before being taken as kilocalories. A block with
+    /// no usable energy figure is dropped rather than stored as zero: the
+    /// computed estimate is a far better answer than a confident nought.
+    static func nutrition(_ any: Any?) -> NutritionFacts? {
+        guard let dict = any as? [String: Any] else { return nil }
+        guard let energy = energyKcal(dict["calories"] ?? dict["energyContent"]) else { return nil }
+        return NutritionFacts(
+            energyKcal: energy,
+            proteinGrams: measurement(dict["proteinContent"]) ?? 0,
+            carbGrams: measurement(dict["carbohydrateContent"]) ?? 0,
+            fatGrams: measurement(dict["fatContent"]) ?? 0
+        )
+    }
+
+    static func energyKcal(_ any: Any?) -> Double? {
+        guard let value = measurement(any), value > 0 else { return nil }
+        let text = (string(any) ?? "").lowercased()
+        // "2200 kJ" and "2200 kilojoules", but not "540 kcal", which contains
+        // no "kj" — and not a bare number, which every site means as calories.
+        if text.contains("kj") || text.contains("kilojoule") {
+            return value / 4.184
+        }
+        return value
+    }
+
+    /// The first number in a value like "31 g", "31g", "about 540 kcal" or 31.
+    static func measurement(_ any: Any?) -> Double? {
+        if let number = any as? NSNumber { return sane(number.doubleValue) }
+        guard let text = string(any) else { return nil }
+        let normalized = text.replacingOccurrences(of: ",", with: ".")
+        guard let start = normalized.firstIndex(where: \.isNumber) else { return nil }
+        let digits = normalized[start...].prefix { $0.isNumber || $0 == "." }
+        return Double(digits).flatMap(sane)
+    }
+
+    private static func sane(_ value: Double) -> Double? {
+        value.isFinite && value >= 0 ? value : nil
     }
 
     // MARK: - Field coercion

@@ -230,6 +230,12 @@ enum PreviewData {
             .sorted { $0.sortIndex < $1.sortIndex }
     }
 
+    /// A catalogue entry by name, for screens that edit one ingredient.
+    static func ingredient(_ fragment: String) -> Ingredient {
+        (household.ingredients ?? []).first { $0.name.localizedCaseInsensitiveContains(fragment) }
+            ?? Ingredient(name: fragment)
+    }
+
     static var ingredientLine: DishIngredient {
         richDish.sortedIngredients.first ?? DishIngredient(canonicalValue: 250, dimension: .mass, displayUnit: "g")
     }

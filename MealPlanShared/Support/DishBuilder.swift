@@ -34,6 +34,7 @@ enum DishBuilder {
         dish.mealTypeTags = recipe.mealTypeTags
         dish.dietaryTags = recipe.dietaryTags
         dish.season = recipe.season
+        dish.setStatedNutritionPerServing(recipe.nutritionPerServing)
         if let glyph = recipe.glyph {
             dish.glyph = glyph
             dish.glyphIsAuto = false
@@ -52,6 +53,12 @@ enum DishBuilder {
                 ingredient.category = value.category
                 ingredient.customAisleName = value.customAisleName
                 ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
+                // Only fill a gap: a household that has typed its own values
+                // for an ingredient keeps them when a recipe arrives with
+                // different ones.
+                if ingredient.nutritionFacts == nil, let facts = value.nutrition {
+                    ingredient.setNutrition(facts, reference: value.nutritionReference, source: .imported)
+                }
                 let line = DishIngredient(
                     canonicalValue: value.canonicalValue,
                     dimension: value.dimension,

@@ -39,6 +39,11 @@ struct ImportedRecipe: Sendable {
     /// restores the groups it was exported with.
     var variantGroupID: UUID?
     var variantGroupName: String?
+    /// What the source said one serving contains, when it said anything.
+    /// schema.org recipes carry a `NutritionInformation` block often enough to
+    /// be worth reading, and a figure the recipe's own author published beats
+    /// anything MealPlan can add up from an ingredient list.
+    var nutritionPerServing: NutritionFacts?
     /// True when the data came from HTML guesswork rather than structured markup.
     var needsReview: Bool = true
 
@@ -59,6 +64,11 @@ struct ImportedIngredient: Sendable {
     var isApproximate: Bool
     var note: String?
     var rawText: String?
+    /// Values the exporting household had entered for this ingredient, so a
+    /// shared recipe arrives knowing what its ingredients contain instead of
+    /// falling back to generic reference figures.
+    var nutrition: NutritionFacts? = nil
+    var nutritionReference: NutritionReference = .per100Grams
 }
 
 enum RecipeImportError: LocalizedError {

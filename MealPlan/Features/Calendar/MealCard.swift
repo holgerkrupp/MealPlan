@@ -451,6 +451,11 @@ struct MealCard: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(onImage ? .white : .orange)
                     }
+                    // Reading the day's total is one thing; seeing which meal
+                    // put it there is what makes tomorrow plannable.
+                    if appState.showsNutritionEstimates, let dish = entry.dish {
+                        MealNutritionCaption(dish: dish, unit: appState.energyUnit)
+                    }
                 }
                 .font(.caption2)
                 .foregroundStyle(onImage ? .white.opacity(0.9) : Color.secondary)

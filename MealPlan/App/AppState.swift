@@ -108,6 +108,16 @@ final class AppState {
         currentHousehold?.scalingServings ?? Household.defaultStandardServings
     }
 
+    /// Whether estimated energy and macros appear anywhere in the app. A
+    /// household can switch the whole thing off in Settings ▸ Nutrition.
+    var showsNutritionEstimates: Bool {
+        currentHousehold?.showsNutritionEstimates ?? true
+    }
+
+    var energyUnit: EnergyUnit {
+        currentHousehold?.energyUnit ?? .kilocalories
+    }
+
     /// An `AppState` wired to the seeded in-memory store, for previews.
     /// Deliberately not `#if DEBUG`: `#Preview` bodies compile in Release too,
     /// and `PreviewData` — which this is useless without — isn't gated either.

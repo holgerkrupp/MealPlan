@@ -68,6 +68,10 @@ struct MealPlanBackup: Codable, Sendable {
         /// Optional so backups written before the household had a standard
         /// portion count still decode; `nil` reads back as the default 2.
         var standardServings: Int? = nil
+        /// Nutrition display preferences. Optional for the same reason;
+        /// `nil` reads back as "shown, in kcal".
+        var showsNutritionEstimates: Bool? = nil
+        var energyUnitRaw: String? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -91,6 +95,15 @@ struct MealPlanBackup: Codable, Sendable {
         var categoryRaw: String
         var customAisleName: String?
         var isPantryStaple: Bool
+        // Nutrition values somebody entered or imported for this ingredient.
+        // Optional so files written before nutrition existed still decode,
+        // which is why the format version doesn't move.
+        var nutritionEnergyKcal: Double? = nil
+        var nutritionProteinGrams: Double? = nil
+        var nutritionCarbGrams: Double? = nil
+        var nutritionFatGrams: Double? = nil
+        var nutritionReferenceRaw: String? = nil
+        var nutritionSourceRaw: String? = nil
     }
 
     struct PortableDish: Codable, Sendable {
@@ -120,6 +133,12 @@ struct MealPlanBackup: Codable, Sendable {
         var needsReview: Bool
         var glyphRaw: String?
         var glyphIsAuto: Bool
+        /// Figures the recipe itself stated, per serving. Optional for the
+        /// same backwards-compatibility reason as the ingredient values.
+        var statedEnergyKcalPerServing: Double? = nil
+        var statedProteinGramsPerServing: Double? = nil
+        var statedCarbGramsPerServing: Double? = nil
+        var statedFatGramsPerServing: Double? = nil
         var images: [PortableImage]
         var ingredients: [PortableDishIngredient]
     }
@@ -342,7 +361,13 @@ extension MealPlanBackup {
                     normalizedName: key,
                     categoryRaw: ingredient.categoryRaw,
                     customAisleName: ingredient.customAisleName,
-                    isPantryStaple: ingredient.isPantryStaple
+                    isPantryStaple: ingredient.isPantryStaple,
+                    nutritionEnergyKcal: ingredient.nutritionEnergyKcal,
+                    nutritionProteinGrams: ingredient.nutritionProteinGrams,
+                    nutritionCarbGrams: ingredient.nutritionCarbGrams,
+                    nutritionFatGrams: ingredient.nutritionFatGrams,
+                    nutritionReferenceRaw: ingredient.nutritionReferenceRaw,
+                    nutritionSourceRaw: ingredient.nutritionSourceRaw
                 )
             } else if ingredient.isPantryStaple {
                 // Merging duplicates: a pantry staple stays a pantry staple.
@@ -366,7 +391,9 @@ extension MealPlanBackup {
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
                 dateCreated: primary?.dateCreated ?? .now,
                 didSeedPantryStaples: primary?.didSeedPantryStaples,
-                standardServings: primary?.scalingServings ?? Household.defaultStandardServings
+                standardServings: primary?.scalingServings ?? Household.defaultStandardServings,
+                showsNutritionEstimates: primary?.showsNutritionEstimates,
+                energyUnitRaw: primary?.energyUnitRaw
             )
         )
         backup.includesPhotos = includePhotos
@@ -431,6 +458,10 @@ extension MealPlanBackup {
                 needsReview: dish.needsReview,
                 glyphRaw: dish.glyphRaw,
                 glyphIsAuto: dish.glyphIsAuto,
+                statedEnergyKcalPerServing: dish.statedEnergyKcalPerServing,
+                statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
+                statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
+                statedFatGramsPerServing: dish.statedFatGramsPerServing,
                 images: includePhotos ? dish.sortedImages.map {
                     PortableImage(
                         data: $0.data,

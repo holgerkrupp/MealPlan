@@ -23,6 +23,7 @@ struct DishDetailView: View {
     @State private var confirmingDelete = false
     @State private var showingVariantPicker = false
     @State private var editingVariant: Dish?
+    @State private var editingNutritionFor: Ingredient?
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -55,6 +56,11 @@ struct DishDetailView: View {
                 timeRow
                 Divider()
                 ingredientsSection
+
+                if appState.showsNutritionEstimates {
+                    Divider()
+                    NutritionSummaryView(dish: dish, targetServings: max(1, targetServings))
+                }
 
                 if let recipe = dish.recipeText, !recipe.isEmpty {
                     section(String(localized: "How to make it")) {
@@ -173,6 +179,10 @@ struct DishDetailView: View {
         }
         .sheet(item: $editingVariant) { variant in
             NavigationStack { DishEditorView(dish: variant, isNew: true) }
+                .dismissesOnOutsideClick()
+        }
+        .sheet(item: $editingNutritionFor) { ingredient in
+            NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
                 .dismissesOnOutsideClick()
         }
     }
@@ -376,6 +386,14 @@ struct DishDetailView: View {
                         setStaple(ingredient, true)
                     } label: {
                         Label(String(localized: "Usually have this"), systemImage: "shippingbox")
+                    }
+                }
+                if appState.showsNutritionEstimates {
+                    Divider()
+                    Button {
+                        editingNutritionFor = ingredient
+                    } label: {
+                        Label(String(localized: "Nutrition values…"), systemImage: "chart.bar.doc.horizontal")
                     }
                 }
             }

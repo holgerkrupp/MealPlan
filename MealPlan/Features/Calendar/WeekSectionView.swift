@@ -86,7 +86,13 @@ struct WeekSectionView: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        // Built once per redraw rather than per day: a day's standing is
+        // relative to the whole week, so every card needs the same summary.
+        let nutrition = appState.showsNutritionEstimates
+            ? WeekNutritionSummary(entries: entries)
+            : nil
+
+        return VStack(alignment: .leading, spacing: 10) {
             if style == .week {
                 Text(weekHeader)
                     .font(.headline)
@@ -99,6 +105,9 @@ struct WeekSectionView: View {
                     day: day,
                     isCollapsed: appState.isDayCollapsed(day),
                     isPlanningLocked: !purchaseManager.canPlan(on: day),
+                    nutrition: nutrition?.estimate(on: day),
+                    nutritionStanding: nutrition?.standing(on: day),
+                    energyUnit: appState.energyUnit,
                     onToggleCollapse: { appState.setDayCollapsed(!appState.isDayCollapsed(day), for: day) },
                     onUnlock: { showingPaywall = true },
                     onCopyLastWeek: { copyFromLastWeek(to: day) },
@@ -214,6 +223,11 @@ private struct DayCard<Content: View>: View {
     let day: Date
     var isCollapsed: Bool
     var isPlanningLocked: Bool = false
+    /// The day's estimate for one person, when nutrition is switched on and
+    /// the day has enough planned to say anything.
+    var nutrition: NutritionEstimate? = nil
+    var nutritionStanding: NutritionDayStanding? = nil
+    var energyUnit: EnergyUnit = .kilocalories
     var onToggleCollapse: () -> Void
     var onUnlock: () -> Void = {}
     var onCopyLastWeek: () -> Void
@@ -264,6 +278,13 @@ private struct DayCard<Content: View>: View {
                     }
                     .buttonStyle(.borderless)
                     .accessibilityHint(String(localized: "Unlocks planning beyond the next 7 days"))
+                }
+                if let nutrition {
+                    DayNutritionBadge(
+                        estimate: nutrition,
+                        standing: nutritionStanding,
+                        unit: energyUnit
+                    )
                 }
                 Menu {
                     Button(

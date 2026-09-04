@@ -51,6 +51,7 @@ struct SettingsView: View {
             UnlockSettingsSection()
             HouseholdSettingsSection()
             UnitsSettingsSection()
+            NutritionSettingsSection()
             PlanSettingsSection()
             CalendarIntegrationSection()
             RecipeSearchSettingsSection()
@@ -95,6 +96,7 @@ struct SettingsView: View {
             paneForm {
                 UnlockSettingsSection()
                 UnitsSettingsSection()
+                NutritionSettingsSection()
                 RecipeSearchSettingsSection()
             }
         case .household:

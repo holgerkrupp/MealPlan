@@ -35,6 +35,12 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         var variantGroupID: UUID?
         var variantGroupName: String?
         var glyph: String?
+        /// Per serving, when the recipe states its own figures. Optional so
+        /// archives written before nutrition existed still decode.
+        var statedEnergyKcalPerServing: Double? = nil
+        var statedProteinGramsPerServing: Double? = nil
+        var statedCarbGramsPerServing: Double? = nil
+        var statedFatGramsPerServing: Double? = nil
         var images: [Data]
         var ingredients: [PortableIngredient]
     }
@@ -50,6 +56,11 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         var isApproximate: Bool
         var note: String?
         var rawText: String?
+        var nutritionEnergyKcal: Double? = nil
+        var nutritionProteinGrams: Double? = nil
+        var nutritionCarbGrams: Double? = nil
+        var nutritionFatGrams: Double? = nil
+        var nutritionReferenceRaw: String? = nil
     }
 
     @MainActor
@@ -74,6 +85,10 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                 variantGroupID: dish.variantGroupID,
                 variantGroupName: dish.variantGroupName,
                 glyph: dish.glyphRaw,
+                statedEnergyKcalPerServing: dish.statedEnergyKcalPerServing,
+                statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
+                statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
+                statedFatGramsPerServing: dish.statedFatGramsPerServing,
                 images: dish.sortedImages.compactMap(\.data),
                 ingredients: dish.sortedIngredients.map { line in
                     PortableIngredient(
@@ -86,7 +101,12 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                         displayUnit: line.displayUnit,
                         isApproximate: line.isApproximate,
                         note: line.note,
-                        rawText: line.rawText
+                        rawText: line.rawText,
+                        nutritionEnergyKcal: line.ingredient?.nutritionEnergyKcal,
+                        nutritionProteinGrams: line.ingredient?.nutritionProteinGrams,
+                        nutritionCarbGrams: line.ingredient?.nutritionCarbGrams,
+                        nutritionFatGrams: line.ingredient?.nutritionFatGrams,
+                        nutritionReferenceRaw: line.ingredient?.nutritionReferenceRaw
                     )
                 }
             )
@@ -130,21 +150,39 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             recipe.dietaryTags = Set(stored.dietaryTags.compactMap(DietaryTag.init(rawValue:)))
             recipe.season = stored.season.flatMap(Season.init(rawValue:))
             recipe.glyph = stored.glyph.flatMap(DishGlyph.init(rawValue:))
+            if let energy = stored.statedEnergyKcalPerServing {
+                recipe.nutritionPerServing = NutritionFacts(
+                    energyKcal: energy,
+                    proteinGrams: stored.statedProteinGramsPerServing ?? 0,
+                    carbGrams: stored.statedCarbGramsPerServing ?? 0,
+                    fatGrams: stored.statedFatGramsPerServing ?? 0
+                )
+            }
             recipe.imageData = stored.images.first
             recipe.additionalImageData = Array(stored.images.dropFirst())
             recipe.ingredientLines = stored.ingredients.map { $0.rawText ?? $0.name }
-            recipe.structuredIngredients = stored.ingredients.map {
+            recipe.structuredIngredients = stored.ingredients.map { line in
                 ImportedIngredient(
-                    name: $0.name,
-                    category: IngredientCategory(rawValue: $0.category) ?? .other,
-                    customAisleName: $0.customAisleName,
-                    isPantryStaple: $0.isPantryStaple,
-                    canonicalValue: $0.canonicalValue,
-                    dimension: $0.dimension.flatMap(QuantityDimension.init(rawValue:)),
-                    displayUnit: $0.displayUnit,
-                    isApproximate: $0.isApproximate,
-                    note: $0.note,
-                    rawText: $0.rawText
+                    name: line.name,
+                    category: IngredientCategory(rawValue: line.category) ?? .other,
+                    customAisleName: line.customAisleName,
+                    isPantryStaple: line.isPantryStaple,
+                    canonicalValue: line.canonicalValue,
+                    dimension: line.dimension.flatMap(QuantityDimension.init(rawValue:)),
+                    displayUnit: line.displayUnit,
+                    isApproximate: line.isApproximate,
+                    note: line.note,
+                    rawText: line.rawText,
+                    nutrition: line.nutritionEnergyKcal.map {
+                        NutritionFacts(
+                            energyKcal: $0,
+                            proteinGrams: line.nutritionProteinGrams ?? 0,
+                            carbGrams: line.nutritionCarbGrams ?? 0,
+                            fatGrams: line.nutritionFatGrams ?? 0
+                        )
+                    },
+                    nutritionReference: line.nutritionReferenceRaw
+                        .flatMap(NutritionReference.init(rawValue:)) ?? .per100Grams
                 )
             }
             recipe.needsReview = false

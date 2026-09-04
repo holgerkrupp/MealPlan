@@ -4996,6 +4996,153 @@
     },
     "Your week is ready as a PDF." : {
 
+    },
+    "Kilocalories (kcal)" : {
+
+    },
+    "Kilojoules (kJ)" : {
+
+    },
+    "per 100 g" : {
+
+    },
+    "per 100 ml" : {
+
+    },
+    "per piece" : {
+
+    },
+    "MealPlan reference values" : {
+
+    },
+    "Entered by hand" : {
+
+    },
+    "From the recipe" : {
+
+    },
+    "Light" : {
+
+    },
+    "Middling" : {
+
+    },
+    "Hearty" : {
+
+    },
+    "Stated by the recipe." : {
+
+    },
+    "From %lld of %lld ingredients." : {
+
+    },
+    "%lld planned meals have no ingredients yet." : {
+
+    },
+    "%lld ingredients have no amount and were left out." : {
+
+    },
+    "No values for %@ and %lld more." : {
+
+    },
+    "No values for %@." : {
+
+    },
+    "Lighter than this week" : {
+
+    },
+    "About average for this week" : {
+
+    },
+    "Heavier than this week" : {
+
+    },
+    "For %lld servings: %@" : {
+
+    },
+    "Nutrition" : {
+
+    },
+    "Estimate" : {
+
+    },
+    "These values are estimates" : {
+
+    },
+    "per serving" : {
+
+    },
+    "Protein" : {
+
+    },
+    "Carbs" : {
+
+    },
+    "Fat" : {
+
+    },
+    "Add ingredients with amounts and MealPlan can estimate this dish." : {
+
+    },
+    "Not enough is known about the ingredients to estimate this dish." : {
+
+    },
+    "Worked out from the ingredient list using average reference values. Real portions vary — treat it as a rough guide, not a nutrition label." : {
+
+    },
+    "Add missing values" : {
+
+    },
+    "Nutrition values" : {
+
+    },
+    "Values are" : {
+
+    },
+    "Energy" : {
+
+    },
+    "Energy is the only value MealPlan needs. Anything you leave blank counts as zero for this ingredient." : {
+
+    },
+    "MealPlan's value" : {
+
+    },
+    "%@ per 100 g" : {
+
+    },
+    "Use this instead" : {
+
+    },
+    "A generic reference value for this ingredient, not a particular product." : {
+
+    },
+    "Remove these values" : {
+
+    },
+    "Estimated %@ per person. %@" : {
+
+    },
+    "Estimated %@ per person" : {
+
+    },
+    "Estimated for one person across this day's meals." : {
+
+    },
+    "Estimated %@ per serving" : {
+
+    },
+    "Show nutrition estimates" : {
+
+    },
+    "Energy in" : {
+
+    },
+    "Worked out from each recipe's ingredients using average reference values, so figures are rough — a planning aid, not a nutrition label. Add your own values to an ingredient from the recipe screen." : {
+
+    },
+    "Nutrition values…" : {
+
     }
   },
   "version" : "1.0"
