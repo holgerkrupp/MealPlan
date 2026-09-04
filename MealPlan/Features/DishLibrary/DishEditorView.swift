@@ -27,6 +27,9 @@ struct DishEditorView: View {
 
     var body: some View {
         Form {
+            if isNew {
+                scanRecipeSection
+            }
             identitySections
             detailsSection
             organizationSection
@@ -200,9 +203,21 @@ struct DishEditorView: View {
                 axis: .vertical
             )
             .lineLimit(4...12)
-            Button { showingRecipeScanner = true } label: {
-                Label(String(localized: "Scan from photo or PDF"), systemImage: "doc.viewfinder")
+            if !isNew {
+                scanRecipeButton
             }
+        }
+    }
+
+    private var scanRecipeSection: some View {
+        Section {
+            scanRecipeButton
+        }
+    }
+
+    private var scanRecipeButton: some View {
+        Button { showingRecipeScanner = true } label: {
+            Label(String(localized: "Scan from photo or PDF"), systemImage: "doc.viewfinder")
         }
     }
 

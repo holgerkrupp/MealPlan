@@ -163,15 +163,6 @@ struct MealPlanCommands: Commands {
             .keyboardShortcut("s", modifiers: [.option, .command])
             .disabled(planSidebar == nil)
 
-            // The pickers stay in place and grey out rather than vanishing:
-            // a menu whose items come and go is hard to aim at.
-            Picker(String(localized: "Calendar layout"), selection: calendarStyleBinding) {
-                ForEach(CalendarStyle.allCases) { style in
-                    Text(style.localizedName).tag(style)
-                }
-            }
-            .disabled(plan == nil)
-
             Picker(String(localized: "Sort dishes by"), selection: dishSortBinding) {
                 ForEach(DishFilter.Sort.allCases) { sort in
                     Text(sort.localizedName).tag(sort)
@@ -190,10 +181,6 @@ struct MealPlanCommands: Commands {
 
     private func shortcutKey(for index: Int) -> KeyEquivalent {
         KeyEquivalent(Character("\(index + 1)"))
-    }
-
-    private var calendarStyleBinding: Binding<CalendarStyle> {
-        Binding(get: { plan?.calendarStyle ?? .week }, set: { plan?.setCalendarStyle($0) })
     }
 
     private var dishSortBinding: Binding<DishFilter.Sort> {
@@ -440,7 +427,6 @@ struct AppNavigationCommands {
 
 /// What the calendar can do for the menu bar.
 struct PlanCommands {
-    var calendarStyle: CalendarStyle
     var goToToday: @MainActor () -> Void
     var jumpToDate: @MainActor () -> Void
     var goToPreviousWeek: @MainActor () -> Void
@@ -448,7 +434,6 @@ struct PlanCommands {
     var saveWeekAsTemplate: @MainActor () -> Void
     var applyTemplate: @MainActor () -> Void
     var exportWeekPDF: @MainActor () -> Void
-    var setCalendarStyle: @MainActor (CalendarStyle) -> Void
 }
 
 /// Published only when the plan is actually wide enough to show the dish list

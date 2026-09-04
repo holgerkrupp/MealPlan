@@ -18,7 +18,7 @@ struct MealPlanBackupTests {
         let household = Household(name: name)
         household.unitSystem = .metric
         household.roundsDisplayedAmounts = false
-        household.calendarStyle = .day
+        household.calendarStyle = .week
         household.standardServings = 6
         household.dateCreated = created
         return household
@@ -78,7 +78,7 @@ struct MealPlanBackupTests {
         #expect(restored.household.uuid == household.uuid)
         #expect(restored.household.name == "Krupp")
         #expect(restored.household.unitSystemRaw == UnitSystem.metric.rawValue)
-        #expect(restored.household.calendarStyleRaw == CalendarStyle.day.rawValue)
+        #expect(restored.household.calendarStyleRaw == CalendarStyle.week.rawValue)
         #expect(restored.household.roundsDisplayedAmounts == false)
         #expect(restored.household.standardServings == 6)
         #expect(restored.householdCount == 1)

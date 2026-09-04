@@ -362,7 +362,7 @@ extension MealPlanBackup {
                 name: primary?.name ?? String(localized: "Family"),
                 unitSystemRaw: primary?.unitSystemRaw ?? UnitSystem.metric.rawValue,
                 roundsDisplayedAmounts: primary?.roundsDisplayedAmounts ?? true,
-                calendarStyleRaw: primary?.calendarStyleRaw ?? CalendarStyle.week.rawValue,
+                calendarStyleRaw: CalendarStyle.week.rawValue,
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
                 dateCreated: primary?.dateCreated ?? .now,
                 didSeedPantryStaples: primary?.didSeedPantryStaples,

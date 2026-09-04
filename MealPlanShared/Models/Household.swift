@@ -12,6 +12,8 @@ final class Household {
     /// Whether displayed scaled and converted quantities use kitchen-friendly
     /// increments. Defaults on for both new and migrated households.
     var roundsDisplayedAmounts: Bool = true
+    /// Retained for compatibility with existing stores and backup files. The
+    /// app now supports only the grouped-by-week calendar.
     var calendarStyleRaw: String = CalendarStyle.week.rawValue
     /// How many portions this family normally cooks. Dishes are scaled from
     /// their own recipe yield to this number automatically, so a recipe
@@ -114,7 +116,7 @@ final class Household {
     }
 
     var calendarStyle: CalendarStyle {
-        get { CalendarStyle(rawValue: calendarStyleRaw) ?? .week }
-        set { calendarStyleRaw = newValue.rawValue }
+        get { .week }
+        set { calendarStyleRaw = CalendarStyle.week.rawValue }
     }
 }

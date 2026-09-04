@@ -24,10 +24,6 @@ struct CalendarHomeView: View {
 
     private var focusWeek: Date { anchorWeek ?? CalendarPaginator.normalizedWeek(of: .now) }
 
-    private var calendarStyle: CalendarStyle {
-        appState.currentHousehold?.calendarStyle ?? .week
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             WeekStripView(
@@ -51,7 +47,6 @@ struct CalendarHomeView: View {
         // The Plan menu only works while the calendar is on screen; switching
         // to another section drops this value and greys the menu out.
         .focusedSceneValue(\.planCommands, PlanCommands(
-            calendarStyle: calendarStyle,
             goToToday: { goTo(.now) },
             jumpToDate: {
                 jumpDate = appState.selectedDate
@@ -61,11 +56,7 @@ struct CalendarHomeView: View {
             goToNextWeek: { goTo(appState.selectedDate.adding(days: 7)) },
             saveWeekAsTemplate: { savingTemplateWeek = focusWeek },
             applyTemplate: { applyingTemplateWeek = focusWeek },
-            exportWeekPDF: { exportPDF() },
-            setCalendarStyle: { style in
-                appState.currentHousehold?.calendarStyle = style
-                try? context.save()
-            }
+            exportWeekPDF: { exportPDF() }
         ))
     }
 
@@ -94,7 +85,7 @@ struct CalendarHomeView: View {
                         }
 
                     ForEach(paginator.weekStarts, id: \.self) { weekStart in
-                        WeekSectionView(weekStart: weekStart, style: calendarStyle)
+                        WeekSectionView(weekStart: weekStart, style: .week)
                             .id(weekStart)
                     }
 

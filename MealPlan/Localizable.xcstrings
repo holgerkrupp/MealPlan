@@ -661,12 +661,6 @@
         }
       }
     },
-    "Answers what is planned for a day, date range, or meal." : {
-
-    },
-    "Answers what is planned for the current week." : {
-
-    },
     "Always at home" : {
       "localizations" : {
         "de" : {
@@ -676,6 +670,12 @@
           }
         }
       }
+    },
+    "Answers what is planned for a day, date range, or meal." : {
+
+    },
+    "Answers what is planned for the current week." : {
+
     },
     "Any" : {
       "localizations" : {
@@ -932,9 +932,6 @@
         }
       }
     },
-    "by %@" : {
-
-    },
     "Butter" : {
       "localizations" : {
         "de" : {
@@ -944,6 +941,9 @@
           }
         }
       }
+    },
+    "by %@" : {
+
     },
     "Café" : {
 
@@ -1038,9 +1038,6 @@
         }
       }
     },
-    "Calendar layout" : {
-
-    },
     "Calendar options" : {
       "localizations" : {
         "de" : {
@@ -1112,9 +1109,6 @@
           }
         }
       }
-    },
-    "Choose ingredients that should be omitted when a shopping list is rebuilt." : {
-
     },
     "Choose photo" : {
 
@@ -2425,9 +2419,6 @@
         }
       }
     },
-    "Layout" : {
-
-    },
     "Let regular meals keep your future plan filled." : {
 
     },
@@ -2827,9 +2818,6 @@
         }
       }
     },
-    "No subscription and no recurring charge." : {
-
-    },
     "No staples match “%@”." : {
       "localizations" : {
         "de" : {
@@ -2849,6 +2837,9 @@
           }
         }
       }
+    },
+    "No subscription and no recurring charge." : {
+
     },
     "No templates yet" : {
 
@@ -3060,9 +3051,6 @@
     "On this device" : {
 
     },
-    "One day at a time" : {
-
-    },
     "One pot" : {
       "localizations" : {
         "de" : {
@@ -3201,9 +3189,6 @@
     "Pantry staples" : {
 
     },
-    "Partly planned" : {
-
-    },
     "Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt." : {
       "localizations" : {
         "de" : {
@@ -3213,6 +3198,9 @@
           }
         }
       }
+    },
+    "Partly planned" : {
+
     },
     "Pasta" : {
       "localizations" : {
@@ -3240,9 +3228,6 @@
         }
       }
     },
-    "Person" : {
-
-    },
     "Pepper" : {
       "localizations" : {
         "de" : {
@@ -3253,7 +3238,7 @@
         }
       }
     },
-    "Photograph a page" : {
+    "Person" : {
 
     },
     "Photos" : {
@@ -3911,9 +3896,6 @@
         }
       }
     },
-    "Search ingredients" : {
-
-    },
     "Search or add an ingredient" : {
       "localizations" : {
         "de" : {
@@ -3983,12 +3965,6 @@
     "Send Invitation" : {
 
     },
-    "Serves %lld" : {
-
-    },
-    "Servings" : {
-
-    },
     "Send the whole list to Bring!" : {
       "localizations" : {
         "de" : {
@@ -4018,6 +3994,12 @@
           }
         }
       }
+    },
+    "Serves %lld" : {
+
+    },
+    "Servings" : {
+
     },
     "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead." : {
       "localizations" : {
@@ -4111,6 +4093,9 @@
 
     },
     "Shop for" : {
+
+    },
+    "Shopping" : {
 
     },
     "Shopping list" : {
@@ -4266,9 +4251,6 @@
           }
         }
       }
-    },
-    "Staples are omitted when a shopping list is rebuilt. You can still add them manually whenever you run out." : {
-
     },
     "Start planning" : {
       "localizations" : {
@@ -4865,9 +4847,6 @@
     "Which dish would you like to plan?" : {
 
     },
-    "Which meal should I add it to?" : {
-
-    },
     "Which list" : {
       "localizations" : {
         "de" : {
@@ -4877,6 +4856,9 @@
           }
         }
       }
+    },
+    "Which meal should I add it to?" : {
+
     },
     "While sharing you can put the new dish straight onto a day in your plan." : {
       "localizations" : {

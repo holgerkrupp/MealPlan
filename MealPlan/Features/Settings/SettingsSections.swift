@@ -106,10 +106,9 @@ struct UnitsSettingsSection: View {
     }
 }
 
-// MARK: - Plan layout
+// MARK: - Plan
 
-/// How the plan is laid out, plus — where the meals aren't a pane of their own —
-/// the way into the meal editor.
+/// The way into the meal editor where Meals isn't its own pane.
 @MainActor
 struct PlanSettingsSection: View {
     /// `false` on macOS, where Meals is its own pane in the sidebar.
@@ -118,16 +117,10 @@ struct PlanSettingsSection: View {
     var header: String? = String(localized: "Calendar")
 
     @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
 
     var body: some View {
         if let household = appState.currentHousehold {
             Section {
-                Picker(String(localized: "Layout"), selection: style(household)) {
-                    ForEach(CalendarStyle.allCases) { style in
-                        Text(style.localizedName).tag(style)
-                    }
-                }
                 if showsMealsLink {
                     NavigationLink {
                         MealsSettingsView()
@@ -141,10 +134,6 @@ struct PlanSettingsSection: View {
                 }
             }
         }
-    }
-
-    private func style(_ household: Household) -> Binding<CalendarStyle> {
-        Binding(get: { household.calendarStyle }, set: { household.calendarStyle = $0; try? context.save() })
     }
 
     private func mealsSummary(_ household: Household) -> String {

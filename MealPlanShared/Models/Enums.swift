@@ -192,14 +192,13 @@ enum UnitSystem: String, CaseIterable, Identifiable, Codable, Sendable {
 // MARK: - Calendar style
 
 enum CalendarStyle: String, CaseIterable, Identifiable, Codable, Sendable {
-    case week, day
+    case week
 
     var id: String { rawValue }
 
     var localizedName: String {
         switch self {
         case .week: String(localized: "Grouped by week")
-        case .day: String(localized: "One day at a time")
         }
     }
 }
