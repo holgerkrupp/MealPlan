@@ -7,7 +7,10 @@ struct ShoppingListRow: View {
     var onToggle: () -> Void
     var onCategoryChange: (IngredientCategory) -> Void
     var onCustomAisle: () -> Void
-    var onMarkStaple: () -> Void
+    /// Make this line's ingredient a household staple, or stop it being one.
+    var onSetStaple: (Bool) -> Void
+
+    private var isStaple: Bool { item.ingredient?.isPantryStaple == true }
 
     var body: some View {
         HStack(spacing: 12) {
@@ -40,7 +43,12 @@ struct ShoppingListRow: View {
             }
             .buttonStyle(.plain)
 
-            if item.isManual {
+            if isStaple {
+                Image(systemName: "shippingbox")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel(String(localized: "Pantry staple"))
+            } else if item.isManual {
                 Image(systemName: "hand.draw")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -56,8 +64,17 @@ struct ShoppingListRow: View {
                 Button(action: onCustomAisle) {
                     Label(String(localized: "Custom aisle…"), systemImage: "text.badge.plus")
                 }
-                if !item.isManual, item.ingredient != nil {
-                    Button(action: onMarkStaple) {
+                Divider()
+                if isStaple {
+                    Button {
+                        onSetStaple(false)
+                    } label: {
+                        Label(String(localized: "Not a staple"), systemImage: "minus.circle")
+                    }
+                } else {
+                    Button {
+                        onSetStaple(true)
+                    } label: {
                         Label(String(localized: "Usually have this"), systemImage: "shippingbox")
                     }
                 }
@@ -77,14 +94,14 @@ struct ShoppingListRow: View {
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},
-            onMarkStaple: {}
+            onSetStaple: { _ in }
         )
         ShoppingListRow(
             item: PreviewData.checkedShoppingItem,
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},
-            onMarkStaple: {}
+            onSetStaple: { _ in }
         )
     }
     .modelContainer(PreviewData.container)

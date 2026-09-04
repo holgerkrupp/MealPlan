@@ -188,22 +188,6 @@ struct RemindersSettingsSection: View {
     }
 }
 
-// MARK: - Shopping
-
-/// Only used where the pantry isn't a pane of its own.
-@MainActor
-struct ShoppingSettingsSection: View {
-    var body: some View {
-        Section(String(localized: "Shopping")) {
-            NavigationLink {
-                PantryStaplesView()
-            } label: {
-                Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
-            }
-        }
-    }
-}
-
 // MARK: - Data
 
 /// Only used where backup and restore aren't a pane of their own.

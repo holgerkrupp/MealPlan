@@ -61,6 +61,10 @@ struct MealPlanBackup: Codable, Sendable {
         var calendarStyleRaw: String
         var localeIdentifier: String
         var dateCreated: Date
+        /// Whether this household had already been given the default pantry
+        /// staples. Optional so files written before staples became a
+        /// household setting still decode.
+        var didSeedPantryStaples: Bool? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -352,7 +356,8 @@ extension MealPlanBackup {
                 roundsDisplayedAmounts: primary?.roundsDisplayedAmounts ?? true,
                 calendarStyleRaw: primary?.calendarStyleRaw ?? CalendarStyle.week.rawValue,
                 localeIdentifier: primary?.localeIdentifier ?? Locale.current.identifier,
-                dateCreated: primary?.dateCreated ?? .now
+                dateCreated: primary?.dateCreated ?? .now,
+                didSeedPantryStaples: primary?.didSeedPantryStaples
             )
         )
         backup.includesPhotos = includePhotos

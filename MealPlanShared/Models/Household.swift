@@ -20,6 +20,10 @@ final class Household {
     /// the household has been shared or a share has been accepted. See
     /// `HouseholdCloudSharingService`.
     var cloudKitShareIdentifier: String?
+    /// Whether this household has already been given the default pantry
+    /// staples (salt, pepper, water, …). Seeded once, for a household created
+    /// on this device; clearing a staple afterwards has to stick.
+    var didSeedPantryStaples: Bool = false
 
     @Relationship(deleteRule: .cascade, inverse: \Dish.household)
     var dishes: [Dish]? = []
@@ -52,6 +56,15 @@ final class Household {
     /// household has none configured yet.
     var sortedMealTypes: [MealType] {
         (mealTypes ?? []).sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+    }
+
+    /// The ingredients this household always has at home, in display order.
+    /// They are left out when the shopping list is rebuilt from the plan; see
+    /// `PantryStaples`.
+    var pantryStaples: [Ingredient] {
+        (ingredients ?? [])
+            .filter(\.isPantryStaple)
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 
     init(name: String = "") {

@@ -32,6 +32,7 @@ enum ShoppingListBuilder {
             let factor = Double(entry.effectiveServings) / Double(base)
 
             for item in dish.sortedIngredients {
+                // Pantry staples are always at home; see `PantryStaples`.
                 guard item.ingredient?.isPantryStaple != true else { continue }
                 let displayName = item.ingredient?.name
                     ?? item.rawText
@@ -154,6 +155,77 @@ enum ShoppingListBuilder {
         }
 
         try? context.save()
+    }
+
+    /// Put a line on the list by hand, the way the "Add an item" field does.
+    ///
+    /// The text is parsed for a leading amount ("2 Dosen Tomaten"), and the
+    /// line is tied to the household's catalogue entry when there is one, so a
+    /// hand-added item lands in the same aisle as the generated one would.
+    /// Manual lines survive the next rebuild.
+    @MainActor
+    @discardableResult
+    static func addManualItem(
+        named text: String,
+        household: Household,
+        system: UnitSystem,
+        roundsAmounts: Bool = true,
+        context: ModelContext
+    ) -> ShoppingListItem? {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        let parsed = GermanUnitParser.parse(trimmed)
+        let name = parsed.name.isEmpty ? trimmed : parsed.name
+        let normalized = Ingredient.normalize(name)
+        let ingredient = (household.ingredients ?? []).first { $0.normalizedName == normalized }
+
+        let item = ShoppingListItem(name: name, category: ingredient?.category ?? .other, isManual: true)
+        item.household = household
+        item.ingredient = ingredient
+        item.customAisleName = ingredient?.customAisleName
+        if let quantity = parsed.quantity {
+            item.canonicalValue = quantity.value
+            item.dimension = quantity.dimension
+            item.isApproximate = parsed.isApproximate
+            item.displayUnit = parsed.displayUnit
+            item.displayText = displayText(
+                for: AggregatedLine(
+                    name: name,
+                    normalizedName: normalized,
+                    category: item.category,
+                    quantity: quantity,
+                    displayUnit: parsed.displayUnit,
+                    isApproximate: parsed.isApproximate
+                ),
+                system: system,
+                roundsAmounts: roundsAmounts
+            )
+        }
+        item.sortIndex = item.category.sortOrder * 1000 + 999
+        context.insert(item)
+        try? context.save()
+        return item
+    }
+
+    /// Put a pantry staple on the list — the "we've run out of salt" case.
+    /// Staples are never generated from the plan, so this is a manual line
+    /// like any other and stays put when the list is rebuilt.
+    @MainActor
+    @discardableResult
+    static func addManualItem(
+        for ingredient: Ingredient,
+        household: Household,
+        context: ModelContext
+    ) -> ShoppingListItem {
+        let item = ShoppingListItem(name: ingredient.name, category: ingredient.category, isManual: true)
+        item.household = household
+        item.ingredient = ingredient
+        item.customAisleName = ingredient.customAisleName
+        item.sortIndex = ingredient.category.sortOrder * 1000 + 999
+        context.insert(item)
+        try? context.save()
+        return item
     }
 
     /// Reformat persisted shopping amounts immediately after a unit or

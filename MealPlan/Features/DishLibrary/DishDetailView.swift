@@ -300,16 +300,7 @@ struct DishDetailView: View {
                     .foregroundStyle(.secondary)
             } else {
                 ForEach(dish.sortedIngredients) { line in
-                    HStack(alignment: .firstTextBaseline) {
-                        Text(line.ingredient?.name ?? line.rawText ?? "—")
-                        Spacer()
-                        if let amount = scaler.amountText(for: line) {
-                            Text(amount)
-                                .foregroundStyle(.secondary)
-                                .monospacedDigit()
-                        }
-                    }
-                    .padding(.vertical, 2)
+                    ingredientRow(line)
                     if let note = line.note, !note.isEmpty, line.quantity != nil {
                         Text(note)
                             .font(.caption)
@@ -318,6 +309,55 @@ struct DishDetailView: View {
                 }
             }
         }
+    }
+
+    /// One ingredient of the recipe, with a long press to make it something the
+    /// family always has at home — a staple is left off the shopping list when
+    /// it's rebuilt from the plan. The full list lives in Household ▸ Pantry
+    /// staples.
+    @ViewBuilder
+    private func ingredientRow(_ line: DishIngredient) -> some View {
+        let row = HStack(alignment: .firstTextBaseline) {
+            Text(line.ingredient?.name ?? line.rawText ?? "—")
+            if line.ingredient?.isPantryStaple == true {
+                Image(systemName: "shippingbox")
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
+                    .accessibilityLabel(String(localized: "Pantry staple"))
+            }
+            Spacer()
+            if let amount = scaler.amountText(for: line) {
+                Text(amount)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+        }
+        .padding(.vertical, 2)
+
+        if !appState.isGuest, let ingredient = line.ingredient {
+            row.contextMenu {
+                if ingredient.isPantryStaple {
+                    Button {
+                        setStaple(ingredient, false)
+                    } label: {
+                        Label(String(localized: "Not a staple"), systemImage: "minus.circle")
+                    }
+                } else {
+                    Button {
+                        setStaple(ingredient, true)
+                    } label: {
+                        Label(String(localized: "Usually have this"), systemImage: "shippingbox")
+                    }
+                }
+            }
+        } else {
+            row
+        }
+    }
+
+    private func setStaple(_ ingredient: Ingredient, _ isStaple: Bool) {
+        ingredient.isPantryStaple = isStaple
+        try? context.save()
     }
 
     /// Other takes on the same dish. Present only once there is a group —

@@ -345,6 +345,16 @@
         }
       }
     },
+    "Add %@ to the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ zur Einkaufsliste hinzufügen"
+          }
+        }
+      }
+    },
     "Add ${name} to MealPlan" : {
 
     },
@@ -366,6 +376,16 @@
     },
     "Add a regular meal" : {
 
+    },
+    "Add a staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel hinzufügen"
+          }
+        }
+      }
     },
     "Add a tag" : {
       "localizations" : {
@@ -438,6 +458,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zu Erinnerungen hinzufügen"
+          }
+        }
+      }
+    },
+    "Add to the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zur Einkaufsliste hinzufügen"
           }
         }
       }
@@ -546,6 +576,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zeigt zusätzlich den Titel eines Termins. Notizen, Teilnehmende, Orte und Links werden nie gezeigt."
+          }
+        }
+      }
+    },
+    "Always at home" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer zu Hause"
           }
         }
       }
@@ -718,6 +758,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beschäftigt bis %@"
+          }
+        }
+      }
+    },
+    "Butter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Butter"
           }
         }
       }
@@ -1040,6 +1090,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Der Kochmodus führt dich durch die Schritte und rechnet die Zutaten auf die Portionen um, die du kochst."
+          }
+        }
+      }
+    },
+    "Cooking oil" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speiseöl"
           }
         }
       }
@@ -1459,6 +1519,16 @@
     "Everything now on this device is deleted first. This can’t be undone." : {
 
     },
+    "Everything your dishes and shopping lists have used so far. Pick the ones you always keep in." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles, was deine Gerichte und Einkaufslisten bisher gebraucht haben. Wähle aus, was du immer im Haus hast."
+          }
+        }
+      }
+    },
     "Expand day" : {
 
     },
@@ -1542,6 +1612,16 @@
         }
       }
     },
+    "Flour" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mehl"
+          }
+        }
+      }
+    },
     "Food market" : {
 
     },
@@ -1596,6 +1676,16 @@
     },
     "From week of" : {
 
+    },
+    "From your recipes and lists" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus deinen Rezepten und Listen"
+          }
+        }
+      }
     },
     "Frozen" : {
 
@@ -2017,16 +2107,6 @@
         }
       }
     },
-    "Mark pantry staples in Settings to keep things you always have at home off the list." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Markiere Vorratsartikel in den Einstellungen, damit Dinge, die du immer zu Hause hast, nicht auf der Liste landen."
-          }
-        }
-      }
-    },
     "Max. time" : {
       "localizations" : {
         "de" : {
@@ -2325,6 +2405,26 @@
         }
       }
     },
+    "No staples match “%@”." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Vorratsartikel passen zu „%@“."
+          }
+        }
+      }
+    },
+    "No staples yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Vorratsartikel."
+          }
+        }
+      }
+    },
     "No templates yet" : {
 
     },
@@ -2357,6 +2457,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Normale Kochzeit"
+          }
+        }
+      }
+    },
+    "Not a staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Vorratsartikel"
           }
         }
       }
@@ -2489,6 +2599,26 @@
         }
       }
     },
+    "On the list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Liste"
+          }
+        }
+      }
+    },
+    "On the shopping list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf der Einkaufsliste"
+          }
+        }
+      }
+    },
     "On this device" : {
 
     },
@@ -2605,8 +2735,28 @@
     "Pantry" : {
 
     },
+    "Pantry staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel"
+          }
+        }
+      }
+    },
     "Pantry staples" : {
 
+    },
+    "Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel kommen nie aus dem Plan auf die Liste. Etwas ausgegangen? Hier hinzufügen – es bleibt auch beim Neuaufbau der Liste stehen."
+          }
+        }
+      }
     },
     "Pasta" : {
       "localizations" : {
@@ -2630,6 +2780,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Personen sind zu unterschiedlichen Zeiten frei."
+          }
+        }
+      }
+    },
+    "Pepper" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pfeffer"
           }
         }
       }
@@ -3086,6 +3246,36 @@
         }
       }
     },
+    "Salt" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz"
+          }
+        }
+      }
+    },
+    "Salt, pepper, oil — what your family always has at home. Staples stay off the shopping list when it's rebuilt, and you can put one on it yourself when you run out." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz, Pfeffer, Öl – was deine Familie immer zu Hause hat. Vorratsartikel bleiben beim Neuaufbau der Einkaufsliste außen vor; geht etwas aus, setzt du es selbst darauf."
+          }
+        }
+      }
+    },
+    "Salt, pepper, oil — your household’s pantry staples stay off the list. Manage them under Household, and add one back by hand when you run out." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salz, Pfeffer, Öl – die Vorratsartikel deines Haushalts bleiben von der Liste fern. Du verwaltest sie unter „Haushalt“ und setzt sie von Hand darauf, wenn etwas ausgeht."
+          }
+        }
+      }
+    },
     "Save" : {
 
     },
@@ -3174,6 +3364,16 @@
     },
     "Search ingredients" : {
 
+    },
+    "Search or add an ingredient" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat suchen oder hinzufügen"
+          }
+        }
+      }
     },
     "Search with" : {
 
@@ -3443,6 +3643,16 @@
     "Standing arrangements like Taco Tuesday or pizza every second Sunday, planned into the calendar for you." : {
 
     },
+    "Staples are left off the shopping list when it's rebuilt from the plan. Run out of one? Put it on the list yourself with the cart button." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsartikel bleiben beim Neuaufbau der Einkaufsliste außen vor. Etwas ausgegangen? Mit der Einkaufswagen-Taste setzt du es selbst auf die Liste."
+          }
+        }
+      }
+    },
     "Staples are omitted when a shopping list is rebuilt. You can still add them manually whenever you run out." : {
 
     },
@@ -3471,6 +3681,16 @@
     },
     "Steps, notes, anything…" : {
 
+    },
+    "Sugar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zucker"
+          }
+        }
+      }
     },
     "Suggest automatically" : {
 
@@ -3839,6 +4059,26 @@
     },
     "View only" : {
 
+    },
+    "Vinegar" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Essig"
+          }
+        }
+      }
+    },
+    "Water" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wasser"
+          }
+        }
+      }
     },
     "We skipped this" : {
       "localizations" : {

@@ -35,6 +35,7 @@ enum MealPlanBackupSync {
         household.calendarStyleRaw = backup.household.calendarStyleRaw
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
+        household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? household.didSeedPantryStaples
         household.cloudKitShareIdentifier = shareIdentifier
 
         // MARK: Meal types

@@ -78,6 +78,10 @@ enum MealPlanBackupRestore {
         household.calendarStyleRaw = backup.household.calendarStyleRaw
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
+        // A restored library brings its own staples with it; an older file
+        // that already has an ingredient catalogue counts as set up too, so the
+        // defaults aren't seeded over the top of it.
+        household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? !backup.ingredients.isEmpty
         context.insert(household)
 
         for stored in backup.mealTypes {

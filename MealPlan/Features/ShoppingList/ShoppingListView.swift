@@ -6,6 +6,7 @@ struct ShoppingListView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Query(sort: \ShoppingListItem.sortIndex) private var items: [ShoppingListItem]
+    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
 
     @State private var newItemName = ""
     @State private var exportMessage: String?
@@ -27,6 +28,14 @@ struct ShoppingListView: View {
             customStart: appState.shoppingCustomStart,
             customEnd: appState.shoppingCustomEnd
         )
+    }
+
+    /// The household's pantry staples that aren't on the list already. These
+    /// are never planned onto it — see `PantryStaples` — so this menu is how
+    /// one gets there on the day the family runs out.
+    private var stapleSuggestions: [Ingredient] {
+        let onList = Set(items.map(\.normalizedName))
+        return ingredients.filter { $0.isPantryStaple && !onList.contains($0.normalizedName) }
     }
 
     private var grouped: [AisleGroup] {
@@ -76,7 +85,7 @@ struct ShoppingListView: View {
                             onToggle: { toggle(item) },
                             onCategoryChange: { changeCategory(item, to: $0) },
                             onCustomAisle: { beginCustomAisle(for: item) },
-                            onMarkStaple: { markAsStaple(item) }
+                            onSetStaple: { setStaple(item, $0) }
                         )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
@@ -91,6 +100,17 @@ struct ShoppingListView: View {
                     Button(String(localized: "Add"), action: addManualItem)
                         .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                if !stapleSuggestions.isEmpty {
+                    Menu {
+                        ForEach(stapleSuggestions) { ingredient in
+                            Button(ingredient.name) { addStaple(ingredient) }
+                        }
+                    } label: {
+                        Label(String(localized: "Add a staple"), systemImage: "shippingbox")
+                    }
+                }
+            } footer: {
+                Text("Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt.")
             }
         }
         .navigationTitle(AppSection.shopping.title)
@@ -202,28 +222,21 @@ struct ShoppingListView: View {
     }
 
     private func addManualItem() {
-        let name = newItemName.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !name.isEmpty, let household = appState.currentHousehold else { return }
-        let parsed = GermanUnitParser.parse(name)
-        let item = ShoppingListItem(name: parsed.name.isEmpty ? name : parsed.name, isManual: true)
-        item.household = household
-        if let q = parsed.quantity {
-            item.canonicalValue = q.value
-            item.dimension = q.dimension
-            item.isApproximate = parsed.isApproximate
-            item.displayUnit = parsed.displayUnit
-            item.displayText = ShoppingListBuilder.displayText(
-                for: AggregatedLine(name: parsed.name, normalizedName: item.normalizedName,
-                                    category: .other, quantity: q, displayUnit: parsed.displayUnit,
-                                    isApproximate: parsed.isApproximate),
-                system: appState.unitSystem,
-                roundsAmounts: appState.roundsDisplayedAmounts
-            )
-        }
-        item.sortIndex = IngredientCategory.other.sortOrder * 1000 + 999
-        context.insert(item)
-        try? context.save()
+        guard let household = appState.currentHousehold else { return }
+        ShoppingListBuilder.addManualItem(
+            named: newItemName,
+            household: household,
+            system: appState.unitSystem,
+            roundsAmounts: appState.roundsDisplayedAmounts,
+            context: context
+        )
         newItemName = ""
+    }
+
+    /// Put a staple on the list by hand — "we've run out of salt".
+    private func addStaple(_ ingredient: Ingredient) {
+        guard let household = appState.currentHousehold else { return }
+        ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
     }
 
     private func delete(_ offsets: IndexSet, in list: [ShoppingListItem]) {
@@ -271,9 +284,25 @@ struct ShoppingListView: View {
         customAisleItem = nil
     }
 
-    private func markAsStaple(_ item: ShoppingListItem) {
-        item.ingredient?.isPantryStaple = true
-        context.delete(item)
+    /// Promote a line to a household staple (or take it back off the list of
+    /// them). A line that was planned onto the list is dropped along the way —
+    /// the point of a staple is that it isn't bought week by week — while a
+    /// line the family added by hand stays, because they asked for it.
+    private func setStaple(_ item: ShoppingListItem, _ isStaple: Bool) {
+        guard let household = appState.currentHousehold else { return }
+        if let ingredient = item.ingredient {
+            ingredient.isPantryStaple = isStaple
+        } else if isStaple {
+            item.ingredient = PantryStaples.add(
+                named: item.name,
+                category: item.category,
+                to: household,
+                context: context
+            )
+        }
+        if isStaple, !item.isManual {
+            context.delete(item)
+        }
         try? context.save()
     }
 
