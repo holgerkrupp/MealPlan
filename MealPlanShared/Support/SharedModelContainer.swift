@@ -6,9 +6,8 @@ import WidgetKit
 #endif
 
 /// The one SwiftData store, shared between the app, the Share Extension and
-/// the widgets through an App Group container. The app mirrors it to CloudKit;
-/// the extensions open it read/write without CloudKit and let the app sync
-/// their changes on its next run.
+/// the widgets through an App Group container. Every process opens the same
+/// local store; the main app transports its records with CKSyncEngine.
 enum SharedStore {
 
     static let appGroupID = "group.de.holgerkrupp.mealplan"
@@ -71,19 +70,9 @@ enum SharedStore {
             return try! ModelContainer(for: schema, configurations: [config])
         }
 
-        if cloudKit {
-            let cloud = ModelConfiguration(
-                schema: schema,
-                url: storeURL,
-                cloudKitDatabase: .private(cloudKitContainerID)
-            )
-            if let c = try? ModelContainer(for: schema, configurations: [cloud]) {
-                isMirroringToCloudKit = true
-                return c
-            }
-            logger.error("CloudKit store unavailable, using on-device storage")
-        }
-
+        // CKSyncEngine is the only CloudKit writer. Keeping SwiftData's
+        // private mirror enabled here would create a second conflict path for
+        // the same models and cannot address the shared database.
         isMirroringToCloudKit = false
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {

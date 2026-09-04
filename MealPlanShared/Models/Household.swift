@@ -7,6 +7,7 @@ import SwiftData
 @Model
 final class Household {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var name: String = ""
     var unitSystemRaw: String = UnitSystem.metric.rawValue
     /// Whether displayed scaled and converted quantities use kitchen-friendly

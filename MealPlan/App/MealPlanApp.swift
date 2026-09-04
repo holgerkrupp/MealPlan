@@ -104,16 +104,44 @@ struct MealPlanApp: App {
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        application.registerForRemoteNotifications()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
         HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
+    }
+
+    func application(
+        _ application: UIApplication,
+        didReceiveRemoteNotification userInfo: [AnyHashable: Any],
+        fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
+    ) {
+        Task {
+            await HouseholdRecordSyncService.shared.fetchChanges()
+            completionHandler(.newData)
+        }
     }
 }
 #elseif os(macOS)
 /// macOS equivalent of the iOS `AppDelegate` hook above.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        NSApplication.shared.registerForRemoteNotifications()
+    }
+
     func application(_ application: NSApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
         HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
+    }
+
+
+    func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
+        Task { await HouseholdRecordSyncService.shared.fetchChanges() }
     }
 }
 #endif

@@ -5,6 +5,8 @@ import SwiftData
 /// large photos don't bloat sync payloads.
 @Model
 final class DishImage {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     @Attribute(.externalStorage) var data: Data?
     var sortIndex: Int = 0
     var isPrimary: Bool = false

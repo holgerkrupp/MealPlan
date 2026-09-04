@@ -7,6 +7,8 @@ import SwiftData
 /// originally entered it.
 @Model
 final class DishIngredient {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     /// Amount in the canonical unit for `dimension`. `nil` for things like
     /// "a pinch" or "to taste".
     var canonicalValue: Double?

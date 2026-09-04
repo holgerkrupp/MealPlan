@@ -9,6 +9,7 @@ import SwiftData
 @Model
 final class MealRoutine {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var dish: Dish?
     /// Which meal of the day this lands in. See `MealType.key`.
     var mealKey: String = MealSlot.dinner.rawValue

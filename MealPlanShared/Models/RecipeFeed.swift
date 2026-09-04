@@ -6,6 +6,7 @@ import SwiftData
 @Model
 final class RecipeFeed {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var title: String = ""
     var siteURLString: String = ""
     var feedURLString: String = ""
@@ -48,6 +49,7 @@ final class RecipeFeed {
 @Model
 final class RecipeFeedItem {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     /// Feed-provided id, or a deterministic URL/title fallback.
     var stableID: String = ""
     var title: String = ""

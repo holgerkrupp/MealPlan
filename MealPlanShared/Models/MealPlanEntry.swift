@@ -5,6 +5,9 @@ import SwiftData
 @Model
 final class MealPlanEntry {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
+    var placementModifiedAt: Date = Date.now
+    var contentModifiedAt: Date = Date.now
     /// Start of the planned day (see `Date.startOfDay`).
     var date: Date = Date.now
     var mealSlotRaw: String = MealSlot.dinner.rawValue

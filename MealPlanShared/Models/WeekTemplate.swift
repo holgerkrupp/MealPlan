@@ -5,6 +5,7 @@ import SwiftData
 @Model
 final class WeekTemplate {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var name: String = ""
     var createdByName: String?
     var dateCreated: Date = Date.now
@@ -30,6 +31,8 @@ final class WeekTemplate {
 /// One planned dish inside a `WeekTemplate`. `weekday` is 0 (Monday) … 6 (Sunday).
 @Model
 final class WeekTemplateEntry {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var weekday: Int = 0
     var mealSlotRaw: String = MealSlot.dinner.rawValue
     var servingsOverride: Int?

@@ -4767,6 +4767,22 @@
     "This household was shared by a newer version of MealPlan." : {
 
     },
+    "This household is view only. Ask its owner for edit access to make changes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt ist schreibgeschützt. Bitte den Eigentümer um Bearbeitungszugriff, um Änderungen vorzunehmen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This household is view only. Ask its owner for edit access to make changes."
+          }
+        }
+      }
+    },
     "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app." : {
 
     },

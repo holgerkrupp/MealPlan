@@ -10,6 +10,7 @@ final class CookedLog {
     /// log" instead of duplicating it on every merge. Added after launch, so
     /// every property carries a default for the lightweight migration.
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var date: Date = Date.now
     /// Snapshot of the dish name in case the dish is later deleted.
     var dishName: String?

@@ -100,8 +100,8 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
             Task { await acceptPendingCloudShares() }
         }
-        .task(id: appState.currentHousehold?.cloudKitShareIdentifier) {
-            await synchronizeSharedHouseholdRegularly()
+        .task(id: appState.currentHousehold?.uuid) {
+            await synchronizeHouseholdRegularly()
         }
         .alert(
             String(localized: "iCloud sharing needs attention"),
@@ -181,11 +181,10 @@ struct RootView: View {
         }
     }
 
-    /// Keeps a shared household's data in sync with iCloud while the app is
-    /// open. Cancelled and restarted automatically whenever the current
-    /// household's share identifier changes (joining, leaving, or switching).
-    private func synchronizeSharedHouseholdRegularly() async {
-        guard let household = appState.currentHousehold, household.cloudKitShareIdentifier != nil else { return }
+    /// Keeps both solo and shared households in sync through their per-record
+    /// CloudKit zone while the app is open.
+    private func synchronizeHouseholdRegularly() async {
+        guard let household = appState.currentHousehold else { return }
         while !Task.isCancelled {
             do {
                 try await HouseholdCloudSharingService.synchronize(household, context: context)

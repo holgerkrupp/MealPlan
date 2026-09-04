@@ -6,6 +6,7 @@ import SwiftData
 @Model
 final class RecipeBookmark {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var title: String = ""
     var urlString: String = ""
     var dateAdded: Date = Date.now

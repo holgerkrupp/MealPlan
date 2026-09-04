@@ -12,6 +12,7 @@ import SwiftData
 @Model
 final class MealType {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     /// Stable identifier stored on `MealPlanEntry.mealSlotRaw`. Never shown to
     /// the user; the display name is `name`.
     var key: String = UUID().uuidString

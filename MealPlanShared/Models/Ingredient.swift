@@ -5,6 +5,8 @@ import SwiftData
 /// Matched and de-duplicated on `normalizedName`.
 @Model
 final class Ingredient {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var name: String = ""
     /// Lowercased / trimmed form used for matching and aggregation.
     var normalizedName: String = ""

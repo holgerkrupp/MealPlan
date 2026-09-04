@@ -6,6 +6,7 @@ import SwiftData
 @Model
 final class Dish {
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
     var name: String = ""
     var recipeText: String?
     var sourceURLString: String?

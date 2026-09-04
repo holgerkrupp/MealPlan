@@ -9,6 +9,9 @@ final class ShoppingListItem {
     /// line" instead of duplicating it on every merge. Added after launch, so
     /// every property carries a default for the lightweight migration.
     var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
+    var contentModifiedAt: Date = Date.now
+    var checkStateModifiedAt: Date = Date.now
     var name: String = ""
     var normalizedName: String = ""
     var categoryRaw: String = IngredientCategory.other.rawValue
