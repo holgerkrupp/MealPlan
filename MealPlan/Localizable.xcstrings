@@ -4,438 +4,6 @@
     "" : {
 
     },
-    "Bake the potatoes until tender and serve with your favorite toppings." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Backe die Kartoffeln weich und serviere sie mit deinen Lieblingsbelägen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Bake the potatoes until tender and serve with your favorite toppings." } }
-      }
-    },
-    "Baked potatoes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Ofenkartoffeln" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Baked potatoes" } }
-      }
-    },
-    "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schneide das Gemüse, brate es bissfest an, würze es und serviere es mit Reis." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." } }
-      }
-    },
-    "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle Gerichte, die du bereits kochst. Es sind ganz normale Gerichte, die du jederzeit bearbeiten oder löschen kannst." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." } }
-      }
-    },
-    "Configure meals…" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mahlzeiten konfigurieren …" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Configure meals…" } }
-      }
-    },
-    "Connected" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbunden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connected" } }
-      }
-    },
-    "Connections" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Verbindungen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Connections" } }
-      }
-    },
-    "Cook the pasta. Warm the tomato sauce, combine, and season to taste." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Koche die Nudeln. Erwärme die Tomatensoße, vermische alles und schmecke es ab." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cook the pasta. Warm the tomato sauce, combine, and season to taste." } }
-      }
-    },
-    "Easy" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Einfach" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Easy" } }
-      }
-    },
-    "Family favorite" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Familienliebling" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Family favorite" } }
-      }
-    },
-    "Free planning through %@. Unlock for later dates." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kostenlos planen bis %@. Schalte spätere Termine frei." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Free planning through %@. Unlock for later dates." } }
-      }
-    },
-    "Household standard" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Haushaltsstandard" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Household standard" } }
-      }
-    },
-    "Mix a smooth batter and cook small portions in a lightly greased pan until golden." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rühre einen glatten Teig und backe kleine Portionen in einer leicht gefetteten Pfanne goldbraun." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Mix a smooth batter and cook small portions in a lightly greased pan until golden." } }
-      }
-    },
-    "Needs attention" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktion erforderlich" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Needs attention" } }
-      }
-    },
-    "Off" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aus" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Off" } }
-      }
-    },
-    "Pantry staples…" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Vorräte …" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pantry staples…" } }
-      }
-    },
-    "Pick any familiar dishes you want in your library on day one." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle bekannte Gerichte für deine Bibliothek am ersten Tag." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Pick any familiar dishes you want in your library on day one." } }
-      }
-    },
-    "Quick" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schnell" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Quick" } }
-      }
-    },
-    "See what is connected, then open only the service you want to change." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sieh sofort, was verbunden ist, und öffne nur den Dienst, den du ändern möchtest." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "See what is connected, then open only the service you want to change." } }
-      }
-    },
-    "Skip them all if you prefer an empty library." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wähle keines, wenn du lieber mit einer leeren Bibliothek beginnst." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Skip them all if you prefer an empty library." } }
-      }
-    },
-    "Start with a few dishes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Starte mit ein paar Gerichten" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start with a few dishes" } }
-      }
-    },
-    "Tomato pasta" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nudeln mit Tomatensoße" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Tomato pasta" } }
-      }
-    },
-    "Unlimited planning starts here" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Hier beginnt unbegrenztes Planen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlimited planning starts here" } }
-      }
-    },
-    "Unlock to plan this day and later dates." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schalte die App frei, um diesen und spätere Tage zu planen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Unlock to plan this day and later dates." } }
-      }
-    },
-    "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nutze Tags für Ernährungsweisen, Anlässe, Sammlungen und alles, was du wiederfinden möchtest. Einige werden aus Name und Zutaten vorgeschlagen." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." } }
-      }
-    },
-    "Vegetable stir-fry" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gebratenes Gemüse" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Vegetable stir-fry" } }
-      }
-    },
-    "Add recipe site" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptseite hinzufügen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add recipe site" } }
-      }
-    },
-    "Couldn’t subscribe" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonnieren nicht möglich" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Couldn’t subscribe" } }
-      }
-    },
-    "Discover recipes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezepte entdecken" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Discover recipes" } }
-      }
-    },
-    "Delete feed" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Feed löschen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Delete feed" } }
-      }
-    },
-    "Enter a valid website address." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gib eine gültige Website-Adresse ein." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Enter a valid website address." } }
-      }
-    },
-    "Find something good" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Finde etwas Gutes" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Find something good" } }
-      }
-    },
-    "MealPlan finds the site’s RSS, Atom or JSON feed automatically." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "MealPlan findet den RSS-, Atom- oder JSON-Feed der Website automatisch." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "MealPlan finds the site’s RSS, Atom or JSON feed automatically." } }
-      }
-    },
-    "No posts yet." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Noch keine Beiträge." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No posts yet." } }
-      }
-    },
-    "No recipe feed was advertised by this site." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Website weist keinen Rezept-Feed aus." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recipe feed was advertised by this site." } }
-      }
-    },
-    "No recipe found" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kein Rezept gefunden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "No recipe found" } }
-      }
-    },
-    "Recipe article" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptbeitrag" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recipe article" } }
-      }
-    },
-    "Recipe sites" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezeptseiten" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Recipe sites" } }
-      }
-    },
-    "Refresh will retry later." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Aktualisierung wird später erneut versucht." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Refresh will retry later." } }
-      }
-    },
-    "Save recipe" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezept speichern" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Save recipe" } }
-      }
-    },
-    "Saved %@ to your dishes." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%@ wurde zu deinen Gerichten hinzugefügt." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Saved %@ to your dishes." } }
-      }
-    },
-    "Subscribe" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonnieren" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe" } }
-      }
-    },
-    "Subscribe to a recipe blog or bookmark a site your household likes." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Abonniere einen Rezeptblog oder merke eine Website, die dein Haushalt mag." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe to a recipe blog or bookmark a site your household likes." } }
-      }
-    },
-    "Subscribe to a site" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Website abonnieren" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Subscribe to a site" } }
-      }
-    },
-    "The site returned HTTP status %lld." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Website meldete HTTP-Status %lld." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "The site returned HTTP status %lld." } }
-      }
-    },
-    "This feed has been unavailable for two weeks." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Dieser Feed ist seit zwei Wochen nicht erreichbar." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "This feed has been unavailable for two weeks." } }
-      }
-    },
-    "This site did not return an RSS, Atom or JSON feed." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Diese Website hat keinen RSS-, Atom- oder JSON-Feed geliefert." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "This site did not return an RSS, Atom or JSON feed." } }
-      }
-    },
-    "Untitled recipe" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Rezept ohne Titel" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Untitled recipe" } }
-      }
-    },
-    "Updated %@" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Aktualisiert %@" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Updated %@" } }
-      }
-    },
-    "Website address" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Website-Adresse" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Website address" } }
-      }
-    },
-    "%lld minutes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "%lld Minuten" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "%lld minutes" } }
-      }
-    },
-    "Add a dish" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gericht hinzufügen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add a dish" } }
-      }
-    },
-    "Add dish" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gericht hinzufügen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add dish" } }
-      }
-    },
-    "Add timer" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer hinzufügen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Add timer" } }
-      }
-    },
-    "Close" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schließen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Close" } }
-      }
-    },
-    "Cooking session" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cooking session" } }
-      }
-    },
-    "Cooking timers" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochtimer" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Cooking timers" } }
-      }
-    },
-    "Default text size" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Standardtextgröße" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Default text size" } }
-      }
-    },
-    "Dish library" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Gerichtesammlung" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Dish library" } }
-      }
-    },
-    "Finish session" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession beenden" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Finish session" } }
-      }
-    },
-    "Larger text" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Größerer Text" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Larger text" } }
-      }
-    },
-    "Manual timer" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Manueller Timer" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Manual timer" } }
-      }
-    },
-    "Planned for this meal" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Für diese Mahlzeit geplant" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Planned for this meal" } }
-      }
-    },
-    "Resume cooking session?" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochsession fortsetzen?" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Resume cooking session?" } }
-      }
-    },
-    "Smaller text" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kleinerer Text" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Smaller text" } }
-      }
-    },
-    "Start new" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neu beginnen" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start new" } }
-      }
-    },
-    "Start timer" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer starten" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Start timer" } }
-      }
-    },
-    "Step %lld" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Schritt %lld" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Step %lld" } }
-      }
-    },
-    "Text size" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Textgröße" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Text size" } }
-      }
-    },
-    "Timer" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timer" } }
-      }
-    },
-    "Timer label" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timerbezeichnung" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Timer label" } }
-      }
-    },
-    "Your dishes, steps, ingredients and timers are still here." : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Deine Gerichte, Schritte, Zutaten und Timer sind noch da." } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Your dishes, steps, ingredients and timers are still here." } }
-      }
-    },
     "—" : {
 
     },
@@ -477,6 +45,9 @@
           }
         }
       }
+    },
+    "%@ per 100 g" : {
+
     },
     "%@, %@" : {
       "localizations" : {
@@ -611,6 +182,7 @@
 
     },
     "%lld days ago" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -643,11 +215,30 @@
         }
       }
     },
+    "%lld ingredients have no amount and were left out." : {
+
+    },
     "%lld meals" : {
 
     },
     "%lld min" : {
 
+    },
+    "%lld minutes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Minuten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld minutes"
+          }
+        }
+      }
     },
     "%lld people currently have access." : {
 
@@ -656,6 +247,9 @@
 
     },
     "%lld planned meals" : {
+
+    },
+    "%lld planned meals have no ingredients yet." : {
 
     },
     "%lld routines" : {
@@ -702,6 +296,7 @@
       }
     },
     "%lld variants" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -744,6 +339,9 @@
       }
     },
     "1 person currently has access." : {
+
+    },
+    "A generic reference value for this ingredient, not a particular product." : {
 
     },
     "A little going on" : {
@@ -799,6 +397,9 @@
     "About" : {
 
     },
+    "About average for this week" : {
+
+    },
     "Accepted" : {
 
     },
@@ -851,6 +452,22 @@
     },
     "Add ${name} to MealPlan" : {
 
+    },
+    "Add a dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gericht hinzufügen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add a dish"
+          }
+        }
+      }
     },
     "Add a dish to your library first — a regular meal repeats one of your dishes." : {
 
@@ -921,10 +538,29 @@
         }
       }
     },
+    "Add dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gericht hinzufügen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add dish"
+          }
+        }
+      }
+    },
     "Add Dish" : {
 
     },
     "Add Dish to MealPlan" : {
+
+    },
+    "Add ingredients with amounts and MealPlan can estimate this dish." : {
 
     },
     "Add it and fill in the recipe" : {
@@ -943,8 +579,43 @@
     "Add meals in Settings to start planning." : {
 
     },
+    "Add missing values" : {
+
+    },
+    "Add recipe site" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezeptseite hinzufügen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add recipe site"
+          }
+        }
+      }
+    },
     "Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later." : {
 
+    },
+    "Add timer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer hinzufügen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Add timer"
+          }
+        }
+      }
     },
     "Add to Reminders" : {
       "localizations" : {
@@ -1171,6 +842,38 @@
     },
     "Backup" : {
 
+    },
+    "Bake the potatoes until tender and serve with your favorite toppings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Backe die Kartoffeln weich und serviere sie mit deinen Lieblingsbelägen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bake the potatoes until tender and serve with your favorite toppings."
+          }
+        }
+      }
+    },
+    "Baked potatoes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ofenkartoffeln"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Baked potatoes"
+          }
+        }
+      }
     },
     "Bakery" : {
 
@@ -1506,6 +1209,9 @@
     "Cancelled" : {
 
     },
+    "Carbs" : {
+
+    },
     "Casserole" : {
       "localizations" : {
         "de" : {
@@ -1532,6 +1238,22 @@
     "Choose a PDF" : {
 
     },
+    "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle Gerichte, die du bereits kochst. Es sind ganz normale Gerichte, die du jederzeit bearbeiten oder löschen kannst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime."
+          }
+        }
+      }
+    },
     "Choose calendars" : {
       "localizations" : {
         "de" : {
@@ -1550,6 +1272,22 @@
     },
     "Choose recipe photos" : {
 
+    },
+    "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schneide das Gemüse, brate es bissfest an, würze es und serviere es mit Reis."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice."
+          }
+        }
+      }
     },
     "Clear" : {
 
@@ -1614,6 +1352,22 @@
         }
       }
     },
+    "Close" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schließen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Close"
+          }
+        }
+      }
+    },
     "Collapse day" : {
 
     },
@@ -1630,11 +1384,21 @@
         }
       }
     },
-    "Collection" : {
-
-    },
-    "Collections, separated by commas" : {
-
+    "Configure meals…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeiten konfigurieren …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configure meals…"
+          }
+        }
+      }
     },
     "Confirmed" : {
 
@@ -1655,6 +1419,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mit Bring! verbinden …"
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connected"
+          }
+        }
+      }
+    },
+    "Connections" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindungen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Connections"
           }
         }
       }
@@ -1685,6 +1481,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kochen"
+          }
+        }
+      }
+    },
+    "Cook the pasta. Warm the tomato sauce, combine, and season to taste." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Koche die Nudeln. Erwärme die Tomatensoße, vermische alles und schmecke es ab."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cook the pasta. Warm the tomato sauce, combine, and season to taste."
           }
         }
       }
@@ -1729,9 +1541,6 @@
         }
       }
     },
-    "Cooked %lld d ago" : {
-
-    },
     "Cooked meals" : {
 
     },
@@ -1744,9 +1553,6 @@
           }
         }
       }
-    },
-    "Cooking mode" : {
-
     },
     "Cooking mode walks you through the steps and scales ingredients to the servings you cook." : {
       "localizations" : {
@@ -1768,8 +1574,41 @@
         }
       }
     },
+    "Cooking session" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochsession"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cooking session"
+          }
+        }
+      }
+    },
     "Cooking timer finished" : {
 
+    },
+    "Cooking timers" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochtimer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cooking timers"
+          }
+        }
+      }
     },
     "Copy from last week" : {
 
@@ -1830,6 +1669,22 @@
     "Couldn’t scan recipe" : {
 
     },
+    "Couldn’t subscribe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonnieren nicht möglich"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Couldn’t subscribe"
+          }
+        }
+      }
+    },
     "Create a backup…" : {
 
     },
@@ -1877,6 +1732,22 @@
     "Declined" : {
 
     },
+    "Default text size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Standardtextgröße"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Default text size"
+          }
+        }
+      }
+    },
     "Delete" : {
 
     },
@@ -1892,6 +1763,22 @@
     },
     "Delete “%@”?" : {
 
+    },
+    "Delete feed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Feed löschen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Delete feed"
+          }
+        }
+      }
     },
     "Delete meal" : {
 
@@ -1988,8 +1875,40 @@
         }
       }
     },
+    "Discover recipes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte entdecken"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Discover recipes"
+          }
+        }
+      }
+    },
     "Dish" : {
 
+    },
+    "Dish library" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gerichtesammlung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dish library"
+          }
+        }
+      }
     },
     "Dish name or link" : {
       "extractionState" : "stale",
@@ -2064,6 +1983,22 @@
     "e.g. use up the spinach" : {
 
     },
+    "Easy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einfach"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Easy"
+          }
+        }
+      }
+    },
     "Eat out" : {
 
     },
@@ -2103,6 +2038,49 @@
 
     },
     "Empty" : {
+
+    },
+    "Energy" : {
+
+    },
+    "Energy in" : {
+
+    },
+    "Energy is the only value MealPlan needs. Anything you leave blank counts as zero for this ingredient." : {
+
+    },
+    "Enter a valid website address." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib eine gültige Website-Adresse ein."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter a valid website address."
+          }
+        }
+      }
+    },
+    "Entered by hand" : {
+
+    },
+    "Estimate" : {
+
+    },
+    "Estimated %@ per person" : {
+
+    },
+    "Estimated %@ per person. %@" : {
+
+    },
+    "Estimated %@ per serving" : {
+
+    },
+    "Estimated for one person across this day's meals." : {
 
     },
     "Event notes, invitees, locations and links are never read, shown or stored." : {
@@ -2277,6 +2255,22 @@
         }
       }
     },
+    "Family favorite" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Familienliebling"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Family favorite"
+          }
+        }
+      }
+    },
     "Family member" : {
 
     },
@@ -2289,6 +2283,9 @@
           }
         }
       }
+    },
+    "Fat" : {
+
     },
     "Favorite" : {
 
@@ -2317,6 +2314,38 @@
     },
     "Find a recipe" : {
 
+    },
+    "Find something good" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finde etwas Gutes"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Find something good"
+          }
+        }
+      }
+    },
+    "Finish session" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochsession beenden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish session"
+          }
+        }
+      }
     },
     "Fish" : {
       "localizations" : {
@@ -2351,6 +2380,9 @@
         }
       }
     },
+    "For %lld servings: %@" : {
+
+    },
     "For this meal" : {
 
     },
@@ -2367,6 +2399,22 @@
         }
       }
     },
+    "Free planning through %@. Unlock for later dates." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kostenlos planen bis %@. Schalte spätere Termine frei."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Free planning through %@. Unlock for later dates."
+          }
+        }
+      }
+    },
     "From" : {
       "localizations" : {
         "de" : {
@@ -2376,6 +2424,9 @@
           }
         }
       }
+    },
+    "From %lld of %lld ingredients." : {
+
     },
     "From build" : {
 
@@ -2389,6 +2440,9 @@
           }
         }
       }
+    },
+    "From the recipe" : {
+
     },
     "From week of" : {
 
@@ -2490,6 +2544,12 @@
     "Grouped by week" : {
 
     },
+    "Hearty" : {
+
+    },
+    "Heavier than this week" : {
+
+    },
     "Herbs & spices" : {
 
     },
@@ -2528,6 +2588,22 @@
     },
     "Household member" : {
 
+    },
+    "Household standard" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushaltsstandard"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Household standard"
+          }
+        }
+      }
     },
     "How are we eating?" : {
 
@@ -2818,6 +2894,12 @@
         }
       }
     },
+    "Kilocalories (kcal)" : {
+
+    },
+    "Kilojoules (kJ)" : {
+
+    },
     "Lactose-free" : {
 
     },
@@ -2827,6 +2909,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Lamm"
+          }
+        }
+      }
+    },
+    "Larger text" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Größerer Text"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Larger text"
           }
         }
       }
@@ -2852,6 +2950,12 @@
       }
     },
     "Let regular meals keep your future plan filled." : {
+
+    },
+    "Light" : {
+
+    },
+    "Lighter than this week" : {
 
     },
     "Liked it" : {
@@ -2896,6 +3000,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Mittagessen"
+          }
+        }
+      }
+    },
+    "Manual timer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manueller Timer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Manual timer"
           }
         }
       }
@@ -2975,6 +3095,22 @@
     "MealPlan doesn’t have permission to add to Reminders." : {
 
     },
+    "MealPlan finds the site’s RSS, Atom or JSON feed automatically." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan findet den RSS-, Atom- oder JSON-Feed der Website automatisch."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan finds the site’s RSS, Atom or JSON feed automatically."
+          }
+        }
+      }
+    },
     "MealPlan hasn’t asked for Calendar access yet." : {
       "localizations" : {
         "de" : {
@@ -3035,6 +3171,12 @@
         }
       }
     },
+    "MealPlan reference values" : {
+
+    },
+    "MealPlan's value" : {
+
+    },
     "Meals" : {
 
     },
@@ -3056,6 +3198,25 @@
     },
     "Metric (g, ml, °C)" : {
 
+    },
+    "Middling" : {
+
+    },
+    "Mix a smooth batter and cook small portions in a lightly greased pan until golden." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rühre einen glatten Teig und backe kleine Portionen in einer leicht gefetteten Pfanne goldbraun."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mix a smooth batter and cook small portions in a lightly greased pan until golden."
+          }
+        }
+      }
     },
     "More" : {
       "localizations" : {
@@ -3082,6 +3243,22 @@
     },
     "Name" : {
 
+    },
+    "Needs attention" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktion erforderlich"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Needs attention"
+          }
+        }
+      }
     },
     "Never" : {
       "localizations" : {
@@ -3206,6 +3383,22 @@
     "No places found." : {
 
     },
+    "No posts yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Noch keine Beiträge."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No posts yet."
+          }
+        }
+      }
+    },
     "No previous purchase was found for this Apple Account." : {
 
     },
@@ -3214,6 +3407,38 @@
     },
     "No readable text was found. Try again with more light or a straighter angle." : {
 
+    },
+    "No recipe feed was advertised by this site." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Website weist keinen Rezept-Feed aus."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recipe feed was advertised by this site."
+          }
+        }
+      }
+    },
+    "No recipe found" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kein Rezept gefunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "No recipe found"
+          }
+        }
+      }
     },
     "No recipe found on that page" : {
 
@@ -3276,6 +3501,12 @@
     "No templates yet" : {
 
     },
+    "No values for %@ and %lld more." : {
+
+    },
+    "No values for %@." : {
+
+    },
     "No variants left" : {
       "localizations" : {
         "de" : {
@@ -3327,7 +3558,12 @@
             "value" : "Nicht verbunden"
           }
         },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "Not connected" } }
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Not connected"
+          }
+        }
       }
     },
     "Not cooked in" : {
@@ -3349,6 +3585,9 @@
           }
         }
       }
+    },
+    "Not enough is known about the ingredients to estimate this dish." : {
+
     },
     "Not included" : {
 
@@ -3438,6 +3677,31 @@
     "Nut-free" : {
 
     },
+    "Nutrition" : {
+
+    },
+    "Nutrition values" : {
+
+    },
+    "Nutrition values…" : {
+
+    },
+    "Off" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Off"
+          }
+        }
+      }
+    },
     "OK" : {
       "localizations" : {
         "de" : {
@@ -3450,8 +3714,18 @@
     },
     "On" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "An" } },
-        "en" : { "stringUnit" : { "state" : "translated", "value" : "On" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "An"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "On"
+          }
+        }
       }
     },
     "On iPhone and iPad, share a recipe page from Safari or another app straight to MealPlan — it appears here through iCloud." : {
@@ -3609,6 +3883,9 @@
     "Owner" : {
 
     },
+    "Pancakes" : {
+
+    },
     "Pantry" : {
 
     },
@@ -3631,6 +3908,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vorratsartikel kommen nie aus dem Plan auf die Liste. Etwas ausgegangen? Hier hinzufügen – es bleibt auch beim Neuaufbau der Liste stehen."
+          }
+        }
+      }
+    },
+    "Pantry staples…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorräte …"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pantry staples…"
           }
         }
       }
@@ -3674,6 +3967,18 @@
         }
       }
     },
+    "per 100 g" : {
+
+    },
+    "per 100 ml" : {
+
+    },
+    "per piece" : {
+
+    },
+    "per serving" : {
+
+    },
     "Person" : {
 
     },
@@ -3695,6 +4000,22 @@
     },
     "Pick an emoji or a symbol to stand in for dishes you don’t have a photo of." : {
 
+    },
+    "Pick any familiar dishes you want in your library on day one." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle bekannte Gerichte für deine Bibliothek am ersten Tag."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pick any familiar dishes you want in your library on day one."
+          }
+        }
+      }
     },
     "Pick the Bring! list this family’s shopping list belongs to. Everyone in your family who connects their own Bring! account should pick the same one." : {
       "localizations" : {
@@ -3828,6 +4149,22 @@
         }
       }
     },
+    "Planned for this meal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Für diese Mahlzeit geplant"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planned for this meal"
+          }
+        }
+      }
+    },
     "Planned Meal" : {
 
     },
@@ -3914,11 +4251,30 @@
     "Production" : {
 
     },
+    "Protein" : {
+
+    },
     "Purchases could not be restored: %@" : {
 
     },
     "QR code for the household invitation" : {
 
+    },
+    "Quick" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnell"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quick"
+          }
+        }
+      }
     },
     "Rating" : {
 
@@ -3972,6 +4328,22 @@
     "Recipe archive" : {
 
     },
+    "Recipe article" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezeptbeitrag"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipe article"
+          }
+        }
+      }
+    },
     "Recipe details" : {
 
     },
@@ -3986,6 +4358,22 @@
     },
     "Recipe search" : {
 
+    },
+    "Recipe sites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezeptseiten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recipe sites"
+          }
+        }
+      }
     },
     "Recipe unavailable" : {
 
@@ -4054,6 +4442,22 @@
     "Recognizing recipe…" : {
 
     },
+    "Refresh will retry later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Aktualisierung wird später erneut versucht."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Refresh will retry later."
+          }
+        }
+      }
+    },
     "Regular meal" : {
 
     },
@@ -4114,6 +4518,9 @@
           }
         }
       }
+    },
+    "Remove these values" : {
+
     },
     "Removed “%@”" : {
       "localizations" : {
@@ -4199,6 +4606,22 @@
     },
     "Resume" : {
 
+    },
+    "Resume cooking session?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochsession fortsetzen?"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Resume cooking session?"
+          }
+        }
+      }
     },
     "Review" : {
 
@@ -4287,11 +4710,47 @@
     "Save link only" : {
 
     },
+    "Save recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept speichern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save recipe"
+          }
+        }
+      }
+    },
     "Save to a folder…" : {
 
     },
     "Save week as template" : {
 
+    },
+    "Saved" : {
+
+    },
+    "Saved %@ to your dishes." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ wurde zu deinen Gerichten hinzugefügt."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saved %@ to your dishes."
+          }
+        }
+      }
     },
     "Saved to %@" : {
 
@@ -4373,6 +4832,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saison"
+          }
+        }
+      }
+    },
+    "See what is connected, then open only the service you want to change." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sieh sofort, was verbunden ist, und öffne nur den Dienst, den du ändern möchtest."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "See what is connected, then open only the service you want to change."
           }
         }
       }
@@ -4572,6 +5047,9 @@
     "Show dish list" : {
 
     },
+    "Show nutrition estimates" : {
+
+    },
     "Shows only when someone is busy, never what they are doing." : {
       "localizations" : {
         "de" : {
@@ -4608,6 +5086,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Überspringen"
+          }
+        }
+      }
+    },
+    "Skip them all if you prefer an empty library." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle keines, wenn du lieber mit einer leeren Bibliothek beginnst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip them all if you prefer an empty library."
+          }
+        }
+      }
+    },
+    "Smaller text" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleinerer Text"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Smaller text"
           }
         }
       }
@@ -4697,6 +5207,22 @@
         }
       }
     },
+    "Start new" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu beginnen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start new"
+          }
+        }
+      }
+    },
     "Start planning" : {
       "localizations" : {
         "de" : {
@@ -4707,21 +5233,110 @@
         }
       }
     },
+    "Start timer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer starten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start timer"
+          }
+        }
+      }
+    },
+    "Start with a few dishes" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Starte mit ein paar Gerichten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start with a few dishes"
+          }
+        }
+      }
+    },
     "Starting" : {
 
     },
-    "Step %lld: %@" : {
+    "Stated by the recipe." : {
+
+    },
+    "Step %lld" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schritt %lld"
+          }
+        },
         "en" : {
           "stringUnit" : {
-            "state" : "new",
-            "value" : "Step %1$lld: %2$@"
+            "state" : "translated",
+            "value" : "Step %lld"
           }
         }
       }
     },
     "Steps, notes, anything…" : {
 
+    },
+    "Subscribe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonnieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscribe"
+          }
+        }
+      }
+    },
+    "Subscribe to a recipe blog or bookmark a site your household likes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonniere einen Rezeptblog oder merke eine Website, die dein Haushalt mag."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscribe to a recipe blog or bookmark a site your household likes."
+          }
+        }
+      }
+    },
+    "Subscribe to a site" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website abonnieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Subscribe to a site"
+          }
+        }
+      }
     },
     "Sugar" : {
       "localizations" : {
@@ -4840,6 +5455,22 @@
     "Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
 
     },
+    "Text size" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Textgröße"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Text size"
+          }
+        }
+      }
+    },
     "That dish isn’t in your library." : {
 
     },
@@ -4883,15 +5514,28 @@
     "The shared household could not be found." : {
 
     },
-    "The shared household did not contain downloadable data." : {
-
-    },
     "The shopping list is built from the days you plan to cook, so it matches what is actually on the calendar." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Die Einkaufsliste entsteht aus den Tagen, an denen du kochen willst – sie passt also zu dem, was wirklich im Kalender steht."
+          }
+        }
+      }
+    },
+    "The site returned HTTP status %lld." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Website meldete HTTP-Status %lld."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "The site returned HTTP status %lld."
           }
         }
       }
@@ -4909,6 +5553,9 @@
         }
       }
     },
+    "These values are estimates" : {
+
+    },
     "This aisle name will be remembered for the ingredient." : {
 
     },
@@ -4921,10 +5568,23 @@
     "This family" : {
 
     },
-    "This file" : {
-
+    "This feed has been unavailable for two weeks." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Feed ist seit zwei Wochen nicht erreichbar."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This feed has been unavailable for two weeks."
+          }
+        }
+      }
     },
-    "This household was shared by a newer version of MealPlan." : {
+    "This file" : {
 
     },
     "This household is view only. Ask its owner for edit access to make changes." : {
@@ -4964,6 +5624,22 @@
     "This recipe may have been deleted." : {
 
     },
+    "This site did not return an RSS, Atom or JSON feed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Website hat keinen RSS-, Atom- oder JSON-Feed geliefert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "This site did not return an RSS, Atom or JSON feed."
+          }
+        }
+      }
+    },
     "This store holds %lld family records — two devices each created one before they first synced. Restoring a backup folds them back into a single family." : {
 
     },
@@ -4982,6 +5658,38 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Zeit zum Kochen"
+          }
+        }
+      }
+    },
+    "Timer" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer"
+          }
+        }
+      }
+    },
+    "Timer label" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timerbezeichnung"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Timer label"
           }
         }
       }
@@ -5018,6 +5726,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Heute"
+          }
+        }
+      }
+    },
+    "Tomato pasta" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nudeln mit Tomatensoße"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tomato pasta"
           }
         }
       }
@@ -5059,6 +5783,7 @@
       }
     },
     "Type to reuse a tag your household already has, or add a new one. A few are suggested from the name and ingredients." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -5090,6 +5815,22 @@
     "Unlimited planning" : {
 
     },
+    "Unlimited planning starts here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hier beginnt unbegrenztes Planen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlimited planning starts here"
+          }
+        }
+      }
+    },
     "Unlock App" : {
 
     },
@@ -5101,6 +5842,22 @@
     },
     "Unlock MealPlan to plan this far ahead" : {
 
+    },
+    "Unlock to plan this day and later dates." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schalte die App frei, um diesen und spätere Tage zu planen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unlock to plan this day and later dates."
+          }
+        }
+      }
     },
     "Unlock unlimited planning with a one-time purchase." : {
 
@@ -5130,6 +5887,38 @@
     },
     "Untitled meal" : {
 
+    },
+    "Untitled recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept ohne Titel"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Untitled recipe"
+          }
+        }
+      }
+    },
+    "Updated %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisiert %@"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Updated %@"
+          }
+        }
+      }
     },
     "Use a template" : {
 
@@ -5163,6 +5952,22 @@
     "Use standard aisle" : {
 
     },
+    "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nutze Tags für Ernährungsweisen, Anlässe, Sammlungen und alles, was du wiederfinden möchtest. Einige werden aus Name und Zutaten vorgeschlagen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients."
+          }
+        }
+      }
+    },
     "Use the standard times" : {
       "localizations" : {
         "de" : {
@@ -5172,6 +5977,9 @@
           }
         }
       }
+    },
+    "Use this instead" : {
+
     },
     "Use this recipe" : {
 
@@ -5191,6 +5999,9 @@
     "Usually have this" : {
 
     },
+    "Values are" : {
+
+    },
     "Variant of “%@”" : {
       "localizations" : {
         "de" : {
@@ -5207,6 +6018,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vegan"
+          }
+        }
+      }
+    },
+    "Vegetable stir-fry" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gebratenes Gemüse"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vegetable stir-fry"
           }
         }
       }
@@ -5260,6 +6087,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Haben wir ausgelassen"
+          }
+        }
+      }
+    },
+    "Website address" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website-Adresse"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Website address"
           }
         }
       }
@@ -5369,6 +6212,12 @@
     "Winter" : {
 
     },
+    "Worked out from each recipe's ingredients using average reference values, so figures are rough — a planning aid, not a nutrition label. Add your own values to an ingredient from the recipe screen." : {
+
+    },
+    "Worked out from the ingredient list using average reference values. Real portions vary — treat it as a rough guide, not a nutrition label." : {
+
+    },
     "Writes one file holding everything: dishes, ingredients, the plan, routines, cooked history, the shopping list, week templates and your settings. Save it somewhere you can reach from the other build — iCloud Drive or AirDrop." : {
 
     },
@@ -5410,6 +6259,22 @@
         }
       }
     },
+    "Your dishes, steps, ingredients and timers are still here." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Gerichte, Schritte, Zutaten und Timer sind noch da."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Your dishes, steps, ingredients and timers are still here."
+          }
+        }
+      }
+    },
     "Your family is being created." : {
 
     },
@@ -5447,153 +6312,6 @@
       }
     },
     "Your week is ready as a PDF." : {
-
-    },
-    "Kilocalories (kcal)" : {
-
-    },
-    "Kilojoules (kJ)" : {
-
-    },
-    "per 100 g" : {
-
-    },
-    "per 100 ml" : {
-
-    },
-    "per piece" : {
-
-    },
-    "MealPlan reference values" : {
-
-    },
-    "Entered by hand" : {
-
-    },
-    "From the recipe" : {
-
-    },
-    "Light" : {
-
-    },
-    "Middling" : {
-
-    },
-    "Hearty" : {
-
-    },
-    "Stated by the recipe." : {
-
-    },
-    "From %lld of %lld ingredients." : {
-
-    },
-    "%lld planned meals have no ingredients yet." : {
-
-    },
-    "%lld ingredients have no amount and were left out." : {
-
-    },
-    "No values for %@ and %lld more." : {
-
-    },
-    "No values for %@." : {
-
-    },
-    "Lighter than this week" : {
-
-    },
-    "About average for this week" : {
-
-    },
-    "Heavier than this week" : {
-
-    },
-    "For %lld servings: %@" : {
-
-    },
-    "Nutrition" : {
-
-    },
-    "Estimate" : {
-
-    },
-    "These values are estimates" : {
-
-    },
-    "per serving" : {
-
-    },
-    "Protein" : {
-
-    },
-    "Carbs" : {
-
-    },
-    "Fat" : {
-
-    },
-    "Add ingredients with amounts and MealPlan can estimate this dish." : {
-
-    },
-    "Not enough is known about the ingredients to estimate this dish." : {
-
-    },
-    "Worked out from the ingredient list using average reference values. Real portions vary — treat it as a rough guide, not a nutrition label." : {
-
-    },
-    "Add missing values" : {
-
-    },
-    "Nutrition values" : {
-
-    },
-    "Values are" : {
-
-    },
-    "Energy" : {
-
-    },
-    "Energy is the only value MealPlan needs. Anything you leave blank counts as zero for this ingredient." : {
-
-    },
-    "MealPlan's value" : {
-
-    },
-    "%@ per 100 g" : {
-
-    },
-    "Use this instead" : {
-
-    },
-    "A generic reference value for this ingredient, not a particular product." : {
-
-    },
-    "Remove these values" : {
-
-    },
-    "Estimated %@ per person. %@" : {
-
-    },
-    "Estimated %@ per person" : {
-
-    },
-    "Estimated for one person across this day's meals." : {
-
-    },
-    "Estimated %@ per serving" : {
-
-    },
-    "Show nutrition estimates" : {
-
-    },
-    "Energy in" : {
-
-    },
-    "Worked out from each recipe's ingredients using average reference values, so figures are rough — a planning aid, not a nutrition label. Add your own values to an ingredient from the recipe screen." : {
-
-    },
-    "Nutrition values…" : {
 
     }
   },
