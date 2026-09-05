@@ -6313,6 +6313,256 @@
     },
     "Your week is ready as a PDF." : {
 
+    },
+    "Add ingredients or steps first — there is nothing to translate yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge zuerst Zutaten oder Schritte hinzu – es gibt noch nichts zu übersetzen."
+          }
+        }
+      }
+    },
+    "Apple Intelligence is still getting ready. Try again in a little while." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence ist noch nicht bereit. Versuche es in Kürze noch einmal."
+          }
+        }
+      }
+    },
+    "Couldn’t translate recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht übersetzt werden"
+          }
+        }
+      }
+    },
+    "Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache"
+          }
+        }
+      }
+    },
+    "Original recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Originalrezept"
+          }
+        }
+      }
+    },
+    "Recipes can’t be translated on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Gerät können Rezepte nicht übersetzt werden."
+          }
+        }
+      }
+    },
+    "Remove saved translation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeicherte Übersetzung entfernen"
+          }
+        }
+      }
+    },
+    "Saved in %@ as well. Changing the recipe here removes that translation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusätzlich auf %@ gespeichert. Wenn du das Rezept hier änderst, wird diese Übersetzung entfernt."
+          }
+        }
+      }
+    },
+    "Show original" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original anzeigen"
+          }
+        }
+      }
+    },
+    "Show translation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung anzeigen"
+          }
+        }
+      }
+    },
+    "The recipe keeps its own wording either way." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Rezept behält in jedem Fall seinen eigenen Wortlaut."
+          }
+        }
+      }
+    },
+    "The translation didn’t come back. Please try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Übersetzung kam nicht zurück. Bitte versuche es noch einmal."
+          }
+        }
+      }
+    },
+    "This device can’t translate recipes on its own — Apple Intelligence isn’t available on it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Gerät kann Rezepte nicht selbst übersetzen – Apple Intelligence ist darauf nicht verfügbar."
+          }
+        }
+      }
+    },
+    "This recipe already reads as %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept ist bereits auf %@."
+          }
+        }
+      }
+    },
+    "This recipe has no ingredients or steps to translate yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept hat noch keine Zutaten oder Schritte zum Übersetzen."
+          }
+        }
+      }
+    },
+    "Translate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
+    "Translate again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut übersetzen"
+          }
+        }
+      }
+    },
+    "Translate into" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen in"
+          }
+        }
+      }
+    },
+    "Translate recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept übersetzen"
+          }
+        }
+      }
+    },
+    "Translate…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen …"
+          }
+        }
+      }
+    },
+    "Translated to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt nach %@"
+          }
+        }
+      }
+    },
+    "Translates the ingredients and steps from %@ to %@ on this device. The recipe keeps its original wording." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät von %1$@ nach %2$@. Das Rezept behält seinen ursprünglichen Wortlaut."
+          }
+        }
+      }
+    },
+    "Translates the ingredients and steps into %@ on this device. The recipe keeps its original wording." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät nach %@. Das Rezept behält seinen ursprünglichen Wortlaut."
+          }
+        }
+      }
+    },
+    "Translating on this device…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird auf diesem Gerät übersetzt …"
+          }
+        }
+      }
+    },
+    "Turn on Apple Intelligence in Settings to translate recipes on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviere Apple Intelligence in den Einstellungen, um Rezepte auf diesem Gerät zu übersetzen."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

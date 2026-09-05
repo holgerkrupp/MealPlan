@@ -16,5 +16,9 @@ cooking times, tags, collections, rating, favorite state, placeholder glyph,
 photos, and structured ingredients. Ingredient quantities use canonical grams,
 millilitres, or pieces alongside the original display unit and raw text.
 
+A translation saved on a recipe is not exported: it belongs to the household
+that made it, in the language that household reads (see
+`docs/recipe-translation.md`). The recipe travels in its own words.
+
 Importers should ignore unknown keys. A future MealPlan version will continue
 to read version 1 archives; newer archive versions must increment `version`.

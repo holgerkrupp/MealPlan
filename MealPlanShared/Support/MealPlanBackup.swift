@@ -143,6 +143,13 @@ struct MealPlanBackup: Codable, Sendable {
         var statedProteinGramsPerServing: Double? = nil
         var statedCarbGramsPerServing: Double? = nil
         var statedFatGramsPerServing: Double? = nil
+        /// The recipe's own language and the translation saved beside it.
+        /// Optional so backups written before translation existed decode, and
+        /// so an older MealPlan reading a newer file simply ignores them.
+        var recipeLanguageCode: String? = nil
+        var translationLanguageCode: String? = nil
+        var translatedName: String? = nil
+        var translatedRecipeText: String? = nil
         var images: [PortableImage]
         var ingredients: [PortableDishIngredient]
     }
@@ -165,6 +172,9 @@ struct MealPlanBackup: Codable, Sendable {
         var note: String?
         var rawText: String?
         var sortIndex: Int
+        /// This line in the dish's translation language, when one was saved.
+        var translatedName: String? = nil
+        var translatedNote: String? = nil
     }
 
     struct PortableEntry: Codable, Sendable {
@@ -505,6 +515,10 @@ extension MealPlanBackup {
                 statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
                 statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
                 statedFatGramsPerServing: dish.statedFatGramsPerServing,
+                recipeLanguageCode: dish.recipeLanguageCode,
+                translationLanguageCode: dish.translationLanguageCode,
+                translatedName: dish.translatedName,
+                translatedRecipeText: dish.translatedRecipeText,
                 images: includePhotos ? dish.sortedImages.map {
                     PortableImage(
                         data: $0.data,
@@ -522,7 +536,9 @@ extension MealPlanBackup {
                         isApproximate: line.isApproximate,
                         note: line.note,
                         rawText: line.rawText,
-                        sortIndex: line.sortIndex
+                        sortIndex: line.sortIndex,
+                        translatedName: line.translatedName,
+                        translatedNote: line.translatedNote
                     )
                 }
             )

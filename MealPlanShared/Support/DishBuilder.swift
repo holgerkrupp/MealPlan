@@ -200,6 +200,12 @@ enum DishBuilder {
         copy.seasonRaw = dish.seasonRaw
         copy.glyphRaw = dish.glyphRaw
         copy.glyphIsAuto = dish.glyphIsAuto
+        // The variant starts out word-for-word the original, translation
+        // included; editing it is what drops a translation that no longer
+        // matches (see `DishEditorView.save`). The name is the cook's own.
+        copy.recipeLanguageCode = dish.recipeLanguageCode
+        copy.translationLanguageCode = dish.translationLanguageCode
+        copy.translatedRecipeText = dish.translatedRecipeText
         context.insert(copy)
 
         for image in dish.sortedImages.enumerated() {
@@ -222,6 +228,8 @@ enum DishBuilder {
                 rawText: line.rawText,
                 sortIndex: line.sortIndex
             )
+            duplicate.translatedName = line.translatedName
+            duplicate.translatedNote = line.translatedNote
             duplicate.dish = copy
             duplicate.ingredient = line.ingredient
             context.insert(duplicate)

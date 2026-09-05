@@ -312,6 +312,10 @@ enum MealPlanBackupSync {
         dish.needsReview = stored.needsReview
         dish.glyphRaw = stored.glyphRaw
         dish.glyphIsAuto = stored.glyphIsAuto
+        dish.recipeLanguageCode = stored.recipeLanguageCode
+        dish.translationLanguageCode = stored.translationLanguageCode
+        dish.translatedName = stored.translatedName
+        dish.translatedRecipeText = stored.translatedRecipeText
         dish.household = household
 
         // Images and ingredient lines carry no independent identity of their
@@ -341,7 +345,9 @@ enum MealPlanBackupSync {
                 isApproximate: line.isApproximate,
                 note: line.note,
                 rawText: line.rawText,
-                sortIndex: line.sortIndex
+                sortIndex: line.sortIndex,
+                translatedName: line.translatedName,
+                translatedNote: line.translatedNote
             )
         }
         if currentLines != stored.ingredients {
@@ -356,6 +362,8 @@ enum MealPlanBackupSync {
                     rawText: storedLine.rawText,
                     sortIndex: storedLine.sortIndex
                 )
+                line.translatedName = storedLine.translatedName
+                line.translatedNote = storedLine.translatedNote
                 line.dish = dish
                 line.ingredient = storedLine.ingredientKey.flatMap { ingredients[$0] }
                 context.insert(line)

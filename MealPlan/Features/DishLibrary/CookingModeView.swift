@@ -17,6 +17,9 @@ struct CookingModeView: View {
     @State private var showingResumePrompt = false
     @State private var showingDishPicker = false
     @State private var showingManualTimer = false
+    /// Cooking follows the recipe view: a household that saved a translation
+    /// cooks from it, and "Show original" is one tap away in the toolbar.
+    @State private var showsTranslation = false
 
     private var store: CookingSessionStore { appState.cookingSession }
 
@@ -30,7 +33,9 @@ struct CookingModeView: View {
             ?? CookingDishProgress(id: currentDish.uuid, name: currentDish.name, targetServings: appState.standardServings)
     }
 
-    private var steps: [CookingStep] { CookingRecipe.steps(from: currentDish.recipeText) }
+    private var steps: [CookingStep] {
+        CookingRecipe.steps(from: currentDish.displayRecipeText(translated: showsTranslation))
+    }
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -54,12 +59,18 @@ struct CookingModeView: View {
             .frame(maxWidth: 760, alignment: .leading)
             .frame(maxWidth: .infinity)
         }
-        .navigationTitle(currentDish.name)
+        .navigationTitle(currentDish.displayName(translated: showsTranslation))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar { cookingToolbar }
-        .onAppear(perform: enterCookingMode)
+        .onAppear {
+            enterCookingMode()
+            showsTranslation = currentDish.prefersTranslation
+        }
+        .onChange(of: currentDish.uuid) { _, _ in
+            showsTranslation = currentDish.prefersTranslation
+        }
         .onDisappear(perform: releaseDisplayAwake)
         .alert(String(localized: "Resume cooking session?"), isPresented: $showingResumePrompt) {
             Button(String(localized: "Resume")) {
@@ -110,6 +121,18 @@ struct CookingModeView: View {
                 Label(String(localized: "Text size"), systemImage: "textformat.size")
             }
         }
+        if currentDish.hasSavedTranslation {
+            ToolbarItem {
+                Button(
+                    showsTranslation
+                        ? String(localized: "Show original")
+                        : String(localized: "Show translation"),
+                    systemImage: "translate"
+                ) {
+                    showsTranslation.toggle()
+                }
+            }
+        }
         ToolbarItem(placement: .confirmationAction) {
             Button(String(localized: "Finish session")) {
                 store.finish()
@@ -133,16 +156,23 @@ struct CookingModeView: View {
                 HStack {
                     ForEach(store.session?.dishes ?? []) { item in
                         if item.id == currentDish.uuid {
-                            Button(item.name) { store.select(item.id) }
+                            Button(label(for: item)) { store.select(item.id) }
                                 .buttonStyle(.borderedProminent)
                         } else {
-                            Button(item.name) { store.select(item.id) }
+                            Button(label(for: item)) { store.select(item.id) }
                                 .buttonStyle(.bordered)
                         }
                     }
                 }
             }
         }
+    }
+
+    /// The session remembers the name a dish had when cooking started; this
+    /// shows the wording that is on screen for the rest of the recipe.
+    private func label(for item: CookingDishProgress) -> String {
+        guard let dish = allDishes.first(where: { $0.uuid == item.id }) else { return item.name }
+        return dish.displayName(translated: showsTranslation)
     }
 
     private var servingsControl: some View {
@@ -177,7 +207,7 @@ struct CookingModeView: View {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(checked ? .green : .secondary)
-                            Text(line.ingredient?.name ?? line.rawText ?? "—")
+                            Text(line.displayName(translated: showsTranslation) ?? "—")
                                 .strikethrough(checked)
                             Spacer()
                             if let amount = scaler.amountText(for: line) {

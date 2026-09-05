@@ -327,6 +327,10 @@ enum MealPlanBackupRestore {
         dish.statedProteinGramsPerServing = stored.statedProteinGramsPerServing
         dish.statedCarbGramsPerServing = stored.statedCarbGramsPerServing
         dish.statedFatGramsPerServing = stored.statedFatGramsPerServing
+        dish.recipeLanguageCode = stored.recipeLanguageCode
+        dish.translationLanguageCode = stored.translationLanguageCode
+        dish.translatedName = stored.translatedName
+        dish.translatedRecipeText = stored.translatedRecipeText
         dish.household = household
         context.insert(dish)
 
@@ -351,6 +355,8 @@ enum MealPlanBackupRestore {
                 rawText: storedLine.rawText,
                 sortIndex: storedLine.sortIndex
             )
+            line.translatedName = storedLine.translatedName
+            line.translatedNote = storedLine.translatedNote
             line.dish = dish
             line.ingredient = storedLine.ingredientKey.flatMap { ingredients[$0] }
             context.insert(line)

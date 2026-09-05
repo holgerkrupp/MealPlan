@@ -130,6 +130,8 @@ enum HouseholdRecordApplier {
             model.note = value.note
             model.rawText = value.rawText
             model.sortIndex = value.sortIndex
+            model.translatedName = value.translatedName
+            model.translatedNote = value.translatedNote
             model.modifiedAt = modifiedAt
             model.dish = dish
             model.ingredient = value.ingredientID.flatMap { find(Ingredient.self, $0, context) }
@@ -355,5 +357,9 @@ enum HouseholdRecordApplier {
         dish.statedProteinGramsPerServing = value.statedProteinGramsPerServing
         dish.statedCarbGramsPerServing = value.statedCarbGramsPerServing
         dish.statedFatGramsPerServing = value.statedFatGramsPerServing
+        dish.recipeLanguageCode = value.recipeLanguageCode
+        dish.translationLanguageCode = value.translationLanguageCode
+        dish.translatedName = value.translatedName
+        dish.translatedRecipeText = value.translatedRecipeText
     }
 }

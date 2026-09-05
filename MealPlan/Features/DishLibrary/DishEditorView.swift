@@ -23,6 +23,10 @@ struct DishEditorView: View {
     @State private var sourceURLText = ""
     @State private var appLinkURLText = ""
     @State private var duplicateDish: Dish?
+    /// What the recipe read like when the editor opened. A saved translation
+    /// describes those words, so changing them drops it — a stale translation
+    /// in the kitchen is worse than none.
+    @State private var translationBaseline = ""
 
     var body: some View {
         Form {
@@ -55,6 +59,7 @@ struct DishEditorView: View {
         .onAppear {
             sourceURLText = dish.sourceURLString ?? ""
             appLinkURLText = dish.deepLinkURLString ?? ""
+            translationBaseline = dish.translationSourceSignature
         }
         .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
         // While the placeholder is still the app's suggestion it follows what
@@ -194,7 +199,7 @@ struct DishEditorView: View {
     }
 
     private var recipeSection: some View {
-        Section(String(localized: "Recipe")) {
+        Section {
             TextField(
                 String(localized: "Steps, notes, anything…"),
                 text: Binding(get: { dish.recipeText ?? "" }, set: { dish.recipeText = $0.isEmpty ? nil : $0 }),
@@ -203,6 +208,12 @@ struct DishEditorView: View {
             .lineLimit(4...12)
             if !isNew {
                 scanRecipeButton
+            }
+        } header: {
+            Text("Recipe")
+        } footer: {
+            if dish.hasSavedTranslation, let code = dish.translationLanguageCode {
+                Text("Saved in \(RecipeLanguage.displayName(for: code)) as well. Changing the recipe here removes that translation.")
             }
         }
     }
@@ -407,6 +418,7 @@ struct DishEditorView: View {
     private func save(checkDuplicates: Bool = true) {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.modifiedAt = .now
+        if dish.translationSourceSignature != translationBaseline { dish.clearTranslation() }
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
         dish.sourceURLString = trimmedURL.isEmpty ? nil : trimmedURL
         let trimmedAppLink = appLinkURLText.trimmingCharacters(in: .whitespacesAndNewlines)
