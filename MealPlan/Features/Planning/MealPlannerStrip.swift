@@ -64,8 +64,17 @@ struct MealPlannerStrip: View {
         )
     }
 
+    /// The household's meals, and below them the extras row: tapping it plans
+    /// (or moves) the dish onto that day without a meal, which is how a one-off
+    /// occasion gets onto the plan without adding a meal to every other day.
     private var slots: [MealStripSlot] {
         mealTypes.map { MealStripSlot(key: $0.key, name: $0.name, symbolName: $0.symbolName) }
+            + [MealStripSlot(
+                key: MealType.extraKey,
+                name: MealType.extraName,
+                symbolName: MealType.extraSymbolName,
+                countsTowardCompletion: false
+            )]
     }
 
     private var entrySlot: (day: Date, key: String)? {

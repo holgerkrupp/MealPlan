@@ -6,6 +6,9 @@ struct MealStripSlot: Identifiable, Hashable {
     let key: String
     let name: String
     let symbolName: String
+    /// Whether a day needs this slot filled to read as fully planned. False for
+    /// the extras row: a day nobody planned an extra on is not half-empty.
+    var countsTowardCompletion: Bool = true
     var id: String { key }
 }
 
@@ -91,9 +94,10 @@ struct MealPlannerStripCore: View {
     @ViewBuilder
     private func dayColumn(_ day: Date) -> some View {
         let planned = plannedKeys(day)
-        let fraction = slots.isEmpty
+        let counted = slots.filter(\.countsTowardCompletion)
+        let fraction = counted.isEmpty
             ? 0
-            : Double(slots.filter { planned.contains($0.key) }.count) / Double(slots.count)
+            : Double(counted.filter { planned.contains($0.key) }.count) / Double(counted.count)
 
         VStack(spacing: 8) {
             dayHeader(day, fraction: fraction)

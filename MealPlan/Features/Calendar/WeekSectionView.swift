@@ -16,6 +16,12 @@ struct WeekSectionView: View {
     @Environment(CalendarContextStore.self) private var calendarStore: CalendarContextStore?
     @State private var showingPaywall = false
     @State private var nutritionSummary: WeekNutritionSummary?
+    /// The day whose "plan an extra" picker is up. Presented from here rather
+    /// than from a meal card: a day with no extra yet has no card to tap.
+    @State private var extraPickerDay: IdentifiableDate?
+    /// Raised by the picker when a freshly added dish wants its recipe filled
+    /// in; owned here for the same reason as in `MealCard`.
+    @State private var newDishToEdit: Dish?
 
     private let calendar = Date.mondayCalendar
     /// Keep meal cards in two equal-width cells. An adaptive column is allowed
@@ -74,20 +80,12 @@ struct WeekSectionView: View {
         return order.compactMap { winners[$0] }
     }
 
-    /// The meals to show for a given day: every configured meal, plus any meal
-    /// key that already has an entry on that day but no `MealType` (so nothing
-    /// silently disappears when a meal is deleted or synced from an old build).
+    /// The meals to show for a given day. See `DayMeal.forDay`.
     private func meals(on day: Date) -> [DayMeal] {
-        let types = uniqueMealTypes
-        var result = types.map { DayMeal(key: $0.key, name: $0.name, symbolName: $0.symbolName) }
-        let known = Set(types.map(\.key))
-        let orphans = Set(entries.filter { $0.date.isSameDay(as: day) }.map(\.mealKey))
-            .subtracting(known)
-            .subtracting([""])
-        for key in orphans.sorted() {
-            result.append(DayMeal(key: key, name: MealType.legacyName(for: key), symbolName: MealType.legacySymbol(for: key)))
-        }
-        return result
+        DayMeal.forDay(
+            mealTypes: uniqueMealTypes,
+            plannedKeys: Set(entries.filter { $0.date.isSameDay(as: day) }.map(\.mealKey))
+        )
     }
 
     var body: some View {
@@ -129,6 +127,7 @@ struct WeekSectionView: View {
                     onToggleCollapse: { appState.setDayCollapsed(!appState.isDayCollapsed(day), for: day) },
                     onUnlock: { showingPaywall = true },
                     onCopyLastWeek: { copyFromLastWeek(to: day) },
+                    onAddExtra: addExtraAction(for: day),
                     onDropDish: { handleDrop($0, on: day) }
                 ) {
                     let dayMeals = meals(on: day)
@@ -141,8 +140,10 @@ struct WeekSectionView: View {
                     } else {
                         VStack(alignment: .leading, spacing: 10) {
                             // Calendar context sits above the meals and stays
-                            // visually secondary to them.
-                            MealCalendarContextRow(day: day, meals: dayMeals)
+                            // visually secondary to them. Extras are left out:
+                            // they have no time window of their own, so they
+                            // would only repeat a real meal's chip.
+                            MealCalendarContextRow(day: day, meals: dayMeals.filter { !$0.isExtra })
 
                             LazyVGrid(
                                 columns: mealColumns,
@@ -195,6 +196,20 @@ struct WeekSectionView: View {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
+        .sheet(item: $extraPickerDay) { wrapper in
+            DishPickerView(
+                date: wrapper.date,
+                mealKey: MealType.extraKey,
+                mealTitle: MealType.extraName,
+                mealSymbol: MealType.extraSymbolName,
+                onEditNewDish: { newDishToEdit = $0 }
+            )
+            .dismissesOnOutsideClick()
+        }
+        .sheet(item: $newDishToEdit) { dish in
+            NavigationStack { DishEditorView(dish: dish, isNew: true) }
+                .dismissesOnOutsideClick()
+        }
     }
 
     /// Cheap revision key for the expensive ingredient-based calculation.
@@ -236,6 +251,23 @@ struct WeekSectionView: View {
         )
     }
 
+    /// The day menu's "plan an extra" action, or nil for a guest, who can read
+    /// the plan but not add to it.
+    private func addExtraAction(for day: Date) -> (() -> Void)? {
+        guard !appState.isGuest else { return nil }
+        return { planExtra(on: day) }
+    }
+
+    /// Plan a dish onto `day` without giving it one of the household's meals.
+    /// The card it lands in shows up on this day only.
+    private func planExtra(on day: Date) {
+        guard purchaseManager.canPlan(on: day) else {
+            showingPaywall = true
+            return
+        }
+        extraPickerDay = IdentifiableDate(date: day)
+    }
+
     private func copyFromLastWeek(to day: Date) {
         guard purchaseManager.canPlan(on: day) else {
             showingPaywall = true
@@ -259,13 +291,48 @@ struct WeekSectionView: View {
     }
 }
 
-/// A meal to render inside one day, resolved from a `MealType` (or a legacy
-/// meal key that only exists on entries).
+/// A meal to render inside one day, resolved from a `MealType` (or a meal key
+/// that only exists on entries: an extra, or a meal that has since been
+/// deleted).
 struct DayMeal: Identifiable {
     let key: String
     let name: String
     let symbolName: String
     var id: String { key }
+
+    /// Whether this card is only there because the day has something in it —
+    /// true for extras, which never show on a day nobody planned one for.
+    var isExtra: Bool { MealType.isExtra(key) }
+}
+
+extension DayMeal {
+
+    /// The cards one day shows: every configured meal, then any meal key that
+    /// already has an entry on that day but no `MealType`, so nothing planned
+    /// silently disappears when a meal is deleted or synced from an old build.
+    ///
+    /// Extras (`MealType.extraKey`) come last and only on the days that have
+    /// one: a dish can be planned outside the household's meals without every
+    /// other day growing a card for it.
+    ///
+    /// Pure, so it can be tested without a `ModelContext`.
+    static func forDay(mealTypes: [MealType], plannedKeys: Set<String>) -> [DayMeal] {
+        var result = mealTypes.map { DayMeal(key: $0.key, name: $0.name, symbolName: $0.symbolName) }
+        let orphans = plannedKeys
+            .subtracting(mealTypes.map(\.key))
+            .subtracting([MealType.extraKey, ""])
+        for key in orphans.sorted() {
+            result.append(DayMeal(key: key, name: MealType.legacyName(for: key), symbolName: MealType.legacySymbol(for: key)))
+        }
+        if plannedKeys.contains(MealType.extraKey) {
+            result.append(DayMeal(
+                key: MealType.extraKey,
+                name: MealType.extraName,
+                symbolName: MealType.extraSymbolName
+            ))
+        }
+        return result
+    }
 }
 
 /// A single day's card with a highlighted header for today. Tapping the date
@@ -283,6 +350,9 @@ private struct DayCard<Content: View>: View {
     var onToggleCollapse: () -> Void
     var onUnlock: () -> Void = {}
     var onCopyLastWeek: () -> Void
+    /// Plans a dish on this day outside the household's meals. Nil for guests,
+    /// who can look at the plan but not change it.
+    var onAddExtra: (() -> Void)? = nil
     /// Handles a meal dragged onto the day's header. Returns false when there
     /// is nothing to do, so the drag animates back.
     var onDropDish: ([DishReference]) -> Bool = { _ in false }
@@ -349,6 +419,12 @@ private struct DayCard<Content: View>: View {
                         onCopyLastWeek()
                     }
                     .disabled(isPlanningLocked)
+                    if let onAddExtra {
+                        Button(String(localized: "Plan an extra…"), systemImage: MealType.extraSymbolName) {
+                            onAddExtra()
+                        }
+                        .disabled(isPlanningLocked)
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(.secondary)

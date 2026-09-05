@@ -54,7 +54,9 @@ final class MealNotificationScheduler {
         let calendar = Calendar.current
 
         if dinnerEnabled {
-            let byDay = Dictionary(grouping: entries.filter { $0.slot == .dinner }) { $0.date.startOfDay }
+            // Extras carry no meal, and `slot` reads anything it doesn't know
+            // as dinner — the birthday cake is not tonight's dinner.
+            let byDay = Dictionary(grouping: entries.filter { $0.slot == .dinner && !$0.isExtra }) { $0.date.startOfDay }
             for (day, dayEntries) in byDay {
                 guard let fireDate = calendar.date(bySettingHour: dinnerHour, minute: 0, second: 0, of: day),
                       fireDate > now else { continue }

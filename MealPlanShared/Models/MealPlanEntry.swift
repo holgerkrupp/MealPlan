@@ -64,6 +64,10 @@ final class MealPlanEntry {
         set { mealSlotRaw = newValue }
     }
 
+    /// Planned on this day without belonging to one of the household's meals —
+    /// see `MealType.extraKey`.
+    var isExtra: Bool { MealType.isExtra(mealSlotRaw) }
+
     /// Legacy accessor kept for the widget, App Intents and the dinner
     /// reminder, which still work in terms of the fixed `MealSlot` vocabulary.
     var slot: MealSlot {

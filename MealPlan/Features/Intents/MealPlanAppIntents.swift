@@ -51,6 +51,10 @@ private enum MealPlanIntentResolver {
 
     static func meal(for entity: MealTypeEntity) throws -> MealType {
         let key = entity.id
+        // "Extra" is a meal nobody configured and nothing stores; it is
+        // described by a stand-in so a dish can be planned onto a day without
+        // one of the household's meals.
+        guard !MealType.isExtra(key) else { return MealType.extraPlaceholder() }
         guard let meal = try context.fetch(FetchDescriptor<MealType>(
             predicate: #Predicate { $0.key == key }
         )).first else {
