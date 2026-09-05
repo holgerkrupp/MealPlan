@@ -118,6 +118,10 @@ struct DishIngredientPayload: Codable, Sendable {
     var note: String?
     var rawText: String?
     var sortIndex: Int
+    /// This line in the dish's translation language. Optional so records
+    /// written by a device that predates translation still decode.
+    var translatedName: String? = nil
+    var translatedNote: String? = nil
 }
 
 struct PlanEntryPayload: Codable, Sendable {
@@ -274,7 +278,9 @@ enum HouseholdRecordCodec {
                 try append(.init(type: .dishIngredient, uuid: line.uuid), line.modifiedAt, .dishIngredient(.init(
                     dishID: dish.uuid, ingredientID: line.ingredient?.uuid, canonicalValue: line.canonicalValue,
                     canonicalDimensionRaw: line.canonicalDimensionRaw, displayUnit: line.displayUnit,
-                    isApproximate: line.isApproximate, note: line.note, rawText: line.rawText, sortIndex: line.sortIndex
+                    isApproximate: line.isApproximate, note: line.note, rawText: line.rawText,
+                    sortIndex: line.sortIndex, translatedName: line.translatedName,
+                    translatedNote: line.translatedNote
                 )))
             }
         }
@@ -421,7 +427,11 @@ enum HouseholdRecordCodec {
             glyphIsAuto: dish.glyphIsAuto, statedEnergyKcalPerServing: dish.statedEnergyKcalPerServing,
             statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
             statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
-            statedFatGramsPerServing: dish.statedFatGramsPerServing, images: [], ingredients: []
+            statedFatGramsPerServing: dish.statedFatGramsPerServing,
+            recipeLanguageCode: dish.recipeLanguageCode,
+            translationLanguageCode: dish.translationLanguageCode,
+            translatedName: dish.translatedName, translatedRecipeText: dish.translatedRecipeText,
+            images: [], ingredients: []
         )
     }
 

@@ -71,6 +71,24 @@ final class Dish {
     var statedProteinGramsPerServing: Double?
     var statedCarbGramsPerServing: Double?
     var statedFatGramsPerServing: Double?
+
+    // MARK: Translation
+    //
+    // A recipe stays in the language it was written in, and a translation is
+    // kept beside it rather than over it: the original wording is what the
+    // cook imported or typed, and a household that reads in two languages
+    // needs both. One translation is kept at a time — the language this
+    // family reads the recipe in — and removing it never touches the recipe.
+    // The ingredient lines' own translations live on `DishIngredient`.
+
+    /// The language the recipe itself is written in, once it was recognised.
+    /// A BCP-47 tag such as "de" or "pt-BR"; see `RecipeLanguage`.
+    var recipeLanguageCode: String?
+    /// The language of the saved translation, or `nil` when there is none.
+    var translationLanguageCode: String?
+    var translatedName: String?
+    var translatedRecipeText: String?
+
     /// An emoji or SF Symbol shown wherever the dish has no photo. See `DishGlyph`.
     var glyphRaw: String?
     /// True while the placeholder is the app's own suggestion, so it can keep
@@ -219,10 +237,12 @@ final class Dish {
     }
 
     /// Text searched by the recipe library. Keeping this as a computed value
-    /// avoids a migration-prone denormalized search index.
+    /// avoids a migration-prone denormalized search index. A saved translation
+    /// is searched too, so a cook finds the recipe under either wording.
     var searchableText: String {
-        ([name, recipeText ?? ""]
+        ([name, recipeText ?? "", translatedName ?? "", translatedRecipeText ?? ""]
             + sortedIngredients.compactMap { $0.ingredient?.name ?? $0.rawText }
+            + sortedIngredients.compactMap(\.translatedName)
             + tagNames)
             .joined(separator: " ")
     }

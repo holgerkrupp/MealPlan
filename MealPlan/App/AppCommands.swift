@@ -296,6 +296,15 @@ struct MealPlanCommands: Commands {
             .keyboardShortcut("f", modifiers: [.option, .command])
             .disabled(dish?.findRecipe == nil)
 
+            Button {
+                dish?.translate()
+            } label: {
+                Label(String(localized: "Translate…"), systemImage: "translate")
+            }
+            // ⇧⌘T is the plan's "Jump to date…".
+            .keyboardShortcut("t", modifiers: [.option, .command])
+            .disabled(dish == nil)
+
             Divider()
 
             Button {
@@ -460,6 +469,7 @@ struct DishLibraryCommands {
 struct DishCommands {
     var plan: @MainActor () -> Void
     var edit: @MainActor () -> Void
+    var translate: @MainActor () -> Void
     var exportRecipe: @MainActor () -> Void
     var delete: @MainActor () -> Void
     /// Nil when there's nothing to cook from yet.

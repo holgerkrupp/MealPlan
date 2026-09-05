@@ -24,6 +24,12 @@ struct DishDetailView: View {
     @State private var showingVariantPicker = false
     @State private var editingVariant: Dish?
     @State private var editingNutritionFor: Ingredient?
+    @State private var showingTranslation = false
+    /// Whether the saved translation is the wording on screen. Starts from
+    /// what this device reads (see `Dish.prefersTranslation`) and is a
+    /// per-visit choice after that — switching to the original is a glance at
+    /// the cook's own words, not a change to the recipe.
+    @State private var showsTranslation = false
 
     private var scaler: ServingScaler {
         ServingScaler(
@@ -52,6 +58,7 @@ struct DishDetailView: View {
                         .foregroundStyle(.orange)
                 }
 
+                translationBanner
                 tagRow
                 timeRow
                 Divider()
@@ -62,7 +69,7 @@ struct DishDetailView: View {
                     NutritionSummaryView(dish: dish, targetServings: max(1, targetServings))
                 }
 
-                if let recipe = dish.recipeText, !recipe.isEmpty {
+                if let recipe = dish.displayRecipeText(translated: showsTranslation), !recipe.isEmpty {
                     section(String(localized: "How to make it")) {
                         Text(recipe)
                     }
@@ -90,7 +97,7 @@ struct DishDetailView: View {
 
     private var configuredDetail: some View {
         detailContent
-        .navigationTitle(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
+        .navigationTitle(displayedName)
         #if MEALPLAN_ENABLE_OS27_APP_INTENTS
         .appEntityIdentifier(EntityIdentifier(for: DishEntity.self, identifier: dish.uuid))
         #endif
@@ -99,7 +106,7 @@ struct DishDetailView: View {
         #endif
         .coverHero(
             imageData: dish.primaryImageData,
-            title: dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name,
+            title: displayedName,
             enabled: usesCoverHero
         )
         .ignoresSafeArea(.all, edges: usesCoverHero ? .top : [])
@@ -132,6 +139,11 @@ struct DishDetailView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Translate…"), systemImage: "translate") {
+                    showingTranslation = true
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Export recipe"), systemImage: "square.and.arrow.up") {
                     exportRecipe()
                 }
@@ -142,7 +154,10 @@ struct DishDetailView: View {
                 }
             }
         }
-        .onAppear { if targetServings == 0 { targetServings = appState.standardServings } }
+        .onAppear {
+            if targetServings == 0 { targetServings = appState.standardServings }
+            showsTranslation = dish.prefersTranslation
+        }
         // Backs the Dish menu. It is the only publisher of this value, so the
         // whole menu greys out as soon as no recipe is open.
         .focusedSceneValue(\.dishCommands, dishCommands)
@@ -185,6 +200,16 @@ struct DishDetailView: View {
             NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
                 .dismissesOnOutsideClick()
         }
+        .sheet(isPresented: $showingTranslation) {
+            NavigationStack { RecipeTranslationSheet(dish: dish) }
+                .environment(appState)
+                .dismissesOnOutsideClick()
+        }
+        // A translation saved (or removed) in the sheet decides what the
+        // recipe opens as from here on.
+        .onChange(of: dish.translationLanguageCode) { _, _ in
+            showsTranslation = dish.prefersTranslation
+        }
     }
 
     private var detailWithDialogs: some View {
@@ -218,6 +243,7 @@ struct DishDetailView: View {
         var commands = DishCommands(
             plan: { showingPlanSheet = true },
             edit: { showingEditor = true },
+            translate: { showingTranslation = true },
             exportRecipe: { exportRecipe() },
             delete: { confirmingDelete = true }
         )
@@ -236,6 +262,40 @@ struct DishDetailView: View {
             commands.groupWithDish = { showingVariantPicker = true }
         }
         return commands
+    }
+
+    /// The dish's name in whichever language is on screen.
+    private var displayedName: String {
+        let name = dish.displayName(translated: showsTranslation)
+        return name.isEmpty ? String(localized: "Untitled dish") : name
+    }
+
+    /// Present only once a translation has been saved: it says which wording
+    /// is on screen and switches to the other one.
+    @ViewBuilder
+    private var translationBanner: some View {
+        if dish.hasSavedTranslation, let code = dish.translationLanguageCode {
+            HStack {
+                Label(
+                    showsTranslation
+                        ? String(localized: "Translated to \(RecipeLanguage.displayName(for: code))")
+                        : String(localized: "Original recipe"),
+                    systemImage: "translate"
+                )
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                Spacer()
+                Button(
+                    showsTranslation
+                        ? String(localized: "Show original")
+                        : String(localized: "Show translation")
+                ) {
+                    showsTranslation.toggle()
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+            }
+        }
     }
 
     private var appLinkLabel: String {
@@ -334,7 +394,8 @@ struct DishDetailView: View {
             } else {
                 ForEach(dish.sortedIngredients) { line in
                     ingredientRow(line)
-                    if let note = line.note, !note.isEmpty, line.quantity != nil {
+                    if let note = line.displayNote(translated: showsTranslation),
+                       !note.isEmpty, line.quantity != nil {
                         Text(note)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -351,7 +412,7 @@ struct DishDetailView: View {
     @ViewBuilder
     private func ingredientRow(_ line: DishIngredient) -> some View {
         let row = HStack(alignment: .firstTextBaseline) {
-            Text(line.ingredient?.name ?? line.rawText ?? "—")
+            Text(line.displayName(translated: showsTranslation) ?? "—")
             if line.ingredient?.isPantryStaple == true {
                 Image(systemName: "shippingbox")
                     .font(.caption2)

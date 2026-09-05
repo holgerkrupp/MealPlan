@@ -21,6 +21,13 @@ final class DishIngredient {
     var note: String?
     /// The original line the user / importer entered, kept for review.
     var rawText: String?
+    /// This line in the dish's translation language. Display only: the shared
+    /// `Ingredient` keeps its original name, which is what the shopping list
+    /// matches and aggregates on, so translating a recipe can never split a
+    /// household's onions into two catalogue entries.
+    var translatedName: String?
+    var translatedNote: String?
+
     var sortIndex: Int = 0
 
     var dish: Dish?
