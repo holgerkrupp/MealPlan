@@ -475,147 +475,6 @@
         }
       }
     },
-    "%1$@: free from %2$@" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: frei ab %2$@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: libre desde %2$@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ : libre à partir de %2$@"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: libero da %2$@"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: vrij vanaf %2$@"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: livre a partir de %2$@"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: fri fra %2$@"
-          }
-        }
-      }
-    },
-    "%1$@: nothing planned" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: nichts geplant"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: nada planificado"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@ : rien de prévu"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: niente in programma"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: niets gepland"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: nada planeado"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$@: intet planlagt"
-          }
-        }
-      }
-    },
-    "%1$lld events around %2$@" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Termine rund um %2$@"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld eventos alrededor de %2$@"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld événements autour de %2$@"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld eventi intorno a %2$@"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld afspraken rond %2$@"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld eventos à volta de %2$@"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld begivenheder omkring %2$@"
-          }
-        }
-      }
-    },
     "%lld" : {
 
     },
@@ -833,53 +692,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld d"
-          }
-        }
-      }
-    },
-    "%lld days ago" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "vor %lld Tagen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "hace %lld días"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "il y a %lld jours"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld giorni fa"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld dagen geleden"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "há %lld dias"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "for %lld dage siden"
           }
         }
       }
@@ -1614,53 +1426,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "%lld krydset af her"
-          }
-        }
-      }
-    },
-    "%lld variants" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld Varianten"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld variantes"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld variantes"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld varianti"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld varianten"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld variantes"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld varianter"
           }
         }
       }
@@ -2515,53 +2280,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Tilføj “%@”"
-          }
-        }
-      }
-    },
-    "Add “%@” as a new dish" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "„%@“ als neues Gericht hinzufügen"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Añadir “%@” como plato nuevo"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ajouter « %@ » comme nouveau plat"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aggiungi “%@” come nuovo piatto"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "“%@” als nieuw gerecht toevoegen"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Adicionar “%@” como prato novo"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tilføj “%@” som en ny ret"
           }
         }
       }
@@ -11297,53 +11015,6 @@
         }
       }
     },
-    "Dish name or link" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gericht oder Link"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nombre del plato o enlace"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nom du plat ou lien"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nome del piatto o link"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gerechtnaam of link"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nome do prato ou link"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rettens navn eller link"
-          }
-        }
-      }
-    },
     "Dishes" : {
       "localizations" : {
         "de" : {
@@ -12704,53 +12375,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Begivenheder mellem %@ og %@ tæller med til dette måltid."
-          }
-        }
-      }
-    },
-    "Events between %1$@ and %2$@ count towards this meal." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Termine zwischen %1$@ und %2$@ zählen zu dieser Mahlzeit."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Los eventos entre %1$@ y %2$@ cuentan para esta comida."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les événements entre %1$@ et %2$@ comptent pour ce repas."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gli eventi tra le %1$@ e le %2$@ contano per questo pasto."
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Afspraken tussen %1$@ en %2$@ tellen mee voor deze maaltijd."
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Os eventos entre as %1$@ e as %2$@ contam para esta refeição."
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begivenheder mellem %1$@ og %2$@ tæller med til dette måltid."
           }
         }
       }
@@ -25709,46 +25333,6 @@
         }
       }
     },
-    "Plan ${dish} for ${slot} on ${date}" : {
-      "localizations" : {
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Planificar ${dish} para ${slot} el ${date}"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Prévoir ${dish} pour ${slot} le ${date}"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pianifica ${dish} per ${slot} il ${date}"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "${dish} plannen voor ${slot} op ${date}"
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Planear ${dish} para ${slot} em ${date}"
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Planlæg ${dish} til ${slot} den ${date}"
-          }
-        }
-      }
-    },
     "Plan a Meal" : {
       "localizations" : {
         "es" : {
@@ -28237,53 +27821,6 @@
         }
       }
     },
-    "Recipes are scaled to your standard portions automatically. Everyone in the family shares this setting." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rezepte werden automatisch auf eure Standard-Portionen umgerechnet. Diese Einstellung teilt die ganze Familie."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Las recetas se ajustan automáticamente a tus raciones estándar. Toda la familia comparte este ajuste."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Les recettes sont automatiquement ajustées à vos portions standard. Ce réglage est partagé par toute la famille."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Le ricette vengono adattate automaticamente alle tue porzioni standard. Tutta la famiglia condivide questa impostazione."
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Recepten worden automatisch omgerekend naar je standaardporties. Het hele gezin deelt deze instelling."
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "As receitas são ajustadas automaticamente às tuas doses padrão. Toda a família partilha esta definição."
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Opskrifter skaleres automatisk til dine standardportioner. Hele familien deler denne indstilling."
-          }
-        }
-      }
-    },
     "Recipes rarely start in MealPlan. Bring them in from the web, from other recipe apps, and from your iPhone." : {
       "localizations" : {
         "de" : {
@@ -30612,59 +30149,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gemt"
-          }
-        }
-      }
-    },
-    "Saved %@ to your dishes." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ wurde zu deinen Gerichten hinzugefügt."
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saved %@ to your dishes."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ se ha guardado en tus platos."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ a été enregistré dans vos plats."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ è stato salvato nei tuoi piatti."
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ is bij je gerechten bewaard."
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ foi guardado nos teus pratos."
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ blev gemt blandt dine retter."
           }
         }
       }
@@ -37373,53 +36857,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Skriv et navn for at tilføje en ret, eller indsæt et opskriftslink."
-          }
-        }
-      }
-    },
-    "Type to reuse a tag your household already has, or add a new one. A few are suggested from the name and ingredients." : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Tippe, um ein vorhandenes Schlagwort zu übernehmen, oder lege ein neues an. Ein paar werden aus Name und Zutaten vorgeschlagen."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escribe para reutilizar una etiqueta que tu hogar ya tenga o añade una nueva. Algunas se sugieren a partir del nombre y los ingredientes."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Saisissez du texte pour réutiliser un tag que votre foyer possède déjà, ou ajoutez-en un nouveau. Quelques-uns sont suggérés d’après le nom et les ingrédients."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Scrivi per riutilizzare un tag che la tua famiglia ha già, oppure aggiungine uno nuovo. Alcuni vengono suggeriti dal nome e dagli ingredienti."
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Typ om een label te hergebruiken dat je huishouden al heeft, of voeg een nieuw label toe. Een paar worden voorgesteld op basis van de naam en de ingrediënten."
-          }
-        },
-        "pt-PT" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Escreve para reutilizar uma etiqueta que a tua casa já tem ou adiciona uma nova. Algumas são sugeridas a partir do nome e dos ingredientes."
-          }
-        },
-        "da" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skriv for at genbruge et tag, din husstand allerede har, eller tilføj et nyt. Nogle foreslås ud fra navn og ingredienser."
           }
         }
       }
