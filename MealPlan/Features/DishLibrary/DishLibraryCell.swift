@@ -52,7 +52,7 @@ struct DishLibraryCell: View {
     private var content: some View {
         if let group {
             NavigationLink(value: group) {
-                DishGridCell(dish: dish, variantGroupName: group.name, variantCount: variantCount)
+                DishGridCell(dish: dish, variantGroupName: group.name)
             }
             .buttonStyle(.plain)
         } else {

@@ -4,10 +4,9 @@ import SwiftData
 @MainActor
 struct DishGridCell: View {
     let dish: Dish
-    /// Set when the cell stands in for a whole variant group: the name and
-    /// count come from the group, the artwork from its leading dish.
+    /// Set when the cell stands in for a whole variant group: this supplies
+    /// the group name while the artwork comes from its leading dish.
     var variantGroupName: String? = nil
-    var variantCount: Int = 0
 
     var body: some View {
         GeometryReader { proxy in
@@ -19,20 +18,10 @@ struct DishGridCell: View {
                     height: proxy.size.height
                 )
 
-                VStack(alignment: .leading, spacing: 7) {
-                    dishName
-
-                    HStack(spacing: 6) {
-                        dishMetadata
-                        stalenessChip
-                    }
-                }
-                .padding(10)
+                dishName
+                    .padding(10)
 
                 HStack(spacing: 6) {
-                    if variantCount > 1 {
-                        variantBadge
-                    }
                     if dish.needsReview, variantGroupName == nil {
                         statusIcon("exclamationmark.triangle.fill", tint: .orange)
                     }
@@ -67,16 +56,6 @@ struct DishGridCell: View {
     private var cardCornerRadius: CGFloat { 24 }
     private var cardAspectRatio: CGFloat { 0.82 }
 
-    private var variantBadge: some View {
-        Label("\(variantCount)", systemImage: "square.on.square")
-            .font(.caption2.weight(.bold))
-            .labelStyle(.titleAndIcon)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 9)
-            .padding(.vertical, 7)
-            .background(.indigo.opacity(0.88), in: Capsule())
-    }
-
     private var displayName: String {
         if let variantGroupName, !variantGroupName.isEmpty { return variantGroupName }
         return dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name
@@ -90,59 +69,6 @@ struct DishGridCell: View {
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(.black.opacity(0.56), in: Capsule())
-    }
-
-    @ViewBuilder
-    private var dishMetadata: some View {
-        if variantGroupName != nil {
-            Text(String(localized: "\(variantCount) variants"))
-                .font(.caption2.weight(.medium))
-                .foregroundStyle(.white)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 7)
-                .background(.black.opacity(0.48), in: Capsule())
-        } else {
-            HStack(spacing: 6) {
-                if dish.rating > 0 {
-                    Text(String(repeating: "★", count: dish.rating))
-                        .foregroundStyle(.yellow)
-                }
-                if let tag = dish.sortedTagNames.first {
-                    Text(verbatim: tag)
-                }
-                if let minutes = dish.totalTimeMinutes {
-                    Label("\(minutes) min", systemImage: "clock")
-                        .labelStyle(.titleAndIcon)
-                }
-            }
-            .font(.caption2.weight(.medium))
-            .foregroundStyle(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(.black.opacity(0.48), in: Capsule())
-        }
-    }
-
-    @ViewBuilder
-    private var stalenessChip: some View {
-        if variantGroupName != nil {
-            EmptyView()
-        } else if dish.usageCount == 0 && dish.lastUsedDate == nil {
-            chip(String(localized: "Never cooked"), system: "sparkles", tint: .blue)
-        } else if let days = dish.daysSinceLastCooked(), days >= 30 {
-            chip(String(localized: "\(days) days ago"), system: "clock.badge.exclamationmark", tint: .orange)
-        } else if let days = dish.daysSinceLastCooked() {
-            chip(String(localized: "Cooked \(days) d ago"), system: "checkmark.circle", tint: .green)
-        }
-    }
-
-    private func chip(_ text: String, system: String, tint: Color) -> some View {
-        Label(text, systemImage: system)
-            .font(.caption2)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .foregroundStyle(.white)
-            .background(tint.opacity(0.82), in: Capsule())
     }
 
     private func statusIcon(_ systemName: String, tint: Color) -> some View {
