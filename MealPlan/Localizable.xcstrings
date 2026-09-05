@@ -2220,6 +2220,16 @@
         }
       }
     },
+    "Extra" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra"
+          }
+        }
+      }
+    },
     "Expand day" : {
 
     },
@@ -4075,6 +4085,16 @@
     "Plan a Meal" : {
 
     },
+    "Plan an extra…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra einplanen…"
+          }
+        }
+      }
+    },
     "Plan meal" : {
       "localizations" : {
         "de" : {
@@ -5440,11 +5460,28 @@
         }
       }
     },
-    "Tap a slot to move this meal." : {
-
+    "Tap a slot to move this meal. The bottom row makes it an extra on that day, outside your usual meals." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tippe auf ein Feld, um diese Mahlzeit zu verschieben. Die unterste Reihe macht sie zu einem Extra an diesem Tag, außerhalb deiner üblichen Mahlzeiten."
+          }
+        }
+      }
     },
     "Tap a slot to plan it" : {
 
+    },
+    "The bottom row plans it as an extra on that day, without using one of your meals." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die unterste Reihe plant es als Extra an diesem Tag ein – ohne eine deiner Mahlzeiten zu belegen."
+          }
+        }
+      }
     },
     "Template name" : {
 
@@ -5540,7 +5577,7 @@
         }
       }
     },
-    "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it." : {
+    "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it. For a one-off occasion, plan an extra from the day’s menu instead of adding a meal here." : {
 
     },
     "These choices stay on this device and are never shared with your family or iCloud. MealPlan only reads your calendars — it never adds, changes or deletes events." : {

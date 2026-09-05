@@ -61,16 +61,23 @@ struct MealTypeEntity: AppEntity {
 }
 
 struct MealTypeEntityQuery: EnumerableEntityQuery, EntityStringQuery {
+    /// Offered alongside the household's meals so a dish can be planned onto a
+    /// day without one — see `MealType.extraKey`.
+    private static var extra: MealTypeEntity {
+        MealTypeEntity(id: MealType.extraKey, name: MealType.extraName)
+    }
+
     @MainActor
     func allEntities() async throws -> [MealTypeEntity] {
-        MealPlanIntentStore.mealTypes().map(MealTypeEntity.init)
+        MealPlanIntentStore.mealTypes().map(MealTypeEntity.init) + [Self.extra]
     }
 
     @MainActor
     func entities(for identifiers: [String]) async throws -> [MealTypeEntity] {
-        MealPlanIntentStore.mealTypes()
+        let meals = MealPlanIntentStore.mealTypes()
             .filter { identifiers.contains($0.key) }
             .map(MealTypeEntity.init)
+        return identifiers.contains(MealType.extraKey) ? meals + [Self.extra] : meals
     }
 
     @MainActor
@@ -80,12 +87,14 @@ struct MealTypeEntityQuery: EnumerableEntityQuery, EntityStringQuery {
 
     @MainActor
     func entities(matching string: String) async throws -> [MealTypeEntity] {
-        MealPlanIntentStore.mealTypes()
+        let meals = MealPlanIntentStore.mealTypes()
             .filter {
                 $0.name.localizedCaseInsensitiveContains(string)
                     || $0.key.localizedCaseInsensitiveContains(string)
             }
             .map(MealTypeEntity.init)
+        let extra = Self.extra
+        return extra.name.localizedCaseInsensitiveContains(string) ? meals + [extra] : meals
     }
 }
 

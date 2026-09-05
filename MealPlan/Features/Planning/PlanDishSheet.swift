@@ -39,6 +39,8 @@ struct PlanDishSheet: View {
                 .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
             } header: {
                 Text(String(localized: "Tap a slot to plan it"))
+            } footer: {
+                Text(String(localized: "The bottom row plans it as an extra on that day, without using one of your meals."))
             }
 
             Section {

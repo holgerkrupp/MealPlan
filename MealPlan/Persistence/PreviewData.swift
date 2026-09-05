@@ -102,6 +102,14 @@ enum PreviewData {
             context.insert(entry)
         }
 
+        // A dish planned outside the household's meals, so previews show the
+        // extra card the way a birthday cake would.
+        let extra = MealPlanEntry(date: Date.now.adding(days: 1), mealKey: MealType.extraKey, dish: pancakes)
+        extra.household = household
+        extra.plannedByName = "Mama"
+        extra.note = "Geburtstagskuchen"
+        context.insert(extra)
+
         // One evening out, so the restaurant picker has a regular to offer.
         let eatingOut = MealPlanEntry(date: Date.now.adding(days: 2), slot: .dinner)
         eatingOut.household = household

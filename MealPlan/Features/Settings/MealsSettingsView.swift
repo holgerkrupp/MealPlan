@@ -43,7 +43,7 @@ struct MealsSettingsView: View {
                 .onDelete(perform: requestDelete)
                 .onMove(perform: move)
             } footer: {
-                Text("These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it.")
+                Text("These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it. For a one-off occasion, plan an extra from the day’s menu instead of adding a meal here.")
             }
 
             Section {

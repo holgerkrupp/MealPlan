@@ -39,6 +39,32 @@ final class MealType {
 
 extension MealType {
 
+    /// The reserved meal key for a dish planned on a day without belonging to
+    /// any of the household's meals — the birthday cake, the batch of jam, the
+    /// extra course on a Sunday.
+    ///
+    /// Deliberately *not* a `MealType`: a one-off occasion should not add an
+    /// empty card to every other day of the year. Entries carrying it are drawn
+    /// on the days that have one and nowhere else, so `ensure` never backfills
+    /// a meal for it and Settings never lists it.
+    static let extraKey = "__extra__"
+
+    /// What an extra is called wherever a meal name is shown.
+    static var extraName: String { String(localized: "Extra") }
+    static let extraSymbolName = "sparkles"
+
+    static func isExtra(_ key: String) -> Bool { key == extraKey }
+
+    /// A stand-in `MealType` for the extra key, for the few places that need a
+    /// meal object to describe one (App Intents, mainly).
+    ///
+    /// Never inserted into a `ModelContext` — the whole point of an extra is
+    /// that the household has no meal for it. `sortOrder` is high so anything
+    /// ordering by it puts extras after the real meals.
+    static func extraPlaceholder() -> MealType {
+        MealType(key: extraKey, name: extraName, symbolName: extraSymbolName, sortOrder: 999)
+    }
+
     /// The meals seeded for a brand-new household.
     static var defaultSeeds: [(key: String, name: String, symbol: String)] {
         [
@@ -114,9 +140,8 @@ extension MealType {
         let plannedKeys = (try? context.fetch(FetchDescriptor<MealPlanEntry>()))?.map(\.mealSlotRaw)
             ?? (household.entries ?? []).map(\.mealSlotRaw)
         let knownKeys = Set(meals.map(\.key))
-        let usedKeys = Set(plannedKeys).subtracting(knownKeys)
         var nextOrder = (meals.map(\.sortOrder).max() ?? -1) + 1
-        for key in usedKeys.sorted() where !key.isEmpty {
+        for key in backfillKeys(planned: plannedKeys, known: knownKeys) {
             let meal = MealType(
                 key: key,
                 name: legacyName(for: key),
@@ -140,10 +165,28 @@ extension MealType {
         }
     }
 
+    /// The planned meal keys that need a `MealType` of their own, in the order
+    /// they should be created.
+    ///
+    /// Anything a plan already uses but the household no longer has a meal for
+    /// is backfilled, so upgrading users don't lose e.g. their "snack" entries.
+    /// The extra key is the one exception: it is not a meal and must never
+    /// become one, or every day would grow a card for it.
+    ///
+    /// Pure, so it can be tested without a `ModelContext`.
+    static func backfillKeys(planned: [String], known: Set<String>) -> [String] {
+        Set(planned)
+            .subtracting(known)
+            .subtracting([extraKey, ""])
+            .sorted()
+    }
+
     /// Best-effort display name for a meal key that has no `MealType` (e.g. a
-    /// plan synced from a device on an older version).
+    /// plan synced from a device on an older version, or the extra key, which
+    /// never has one).
     static func legacyName(for key: String) -> String {
         switch key {
+        case extraKey: extraName
         case "breakfast": String(localized: "Breakfast")
         case "lunch": String(localized: "Lunch")
         case "dinner": String(localized: "Dinner")
@@ -154,6 +197,7 @@ extension MealType {
 
     static func legacySymbol(for key: String) -> String {
         switch key {
+        case extraKey: extraSymbolName
         case "breakfast": "sunrise"
         case "lunch": "sun.max"
         case "dinner": "sunset"

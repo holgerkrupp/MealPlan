@@ -57,7 +57,7 @@ struct EntryQuickActionsSheet: View {
                 } header: {
                     Text(String(localized: "When"))
                 } footer: {
-                    Text(String(localized: "Tap a slot to move this meal."))
+                    Text(String(localized: "Tap a slot to move this meal. The bottom row makes it an extra on that day, outside your usual meals."))
                 }
 
                 Section(String(localized: "For this meal")) {
