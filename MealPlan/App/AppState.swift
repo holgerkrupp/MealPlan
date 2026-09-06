@@ -1,3 +1,4 @@
+import CloudKit
 import Foundation
 import SwiftData
 import SwiftUI
@@ -180,6 +181,24 @@ final class AppState {
     /// second take on a dish you already have is imported as a variant rather
     /// than dropped, so re-opening the same backup is safe either way.
     func handle(openedURL url: URL, context: ModelContext) {
+        // The system is meant to intercept iCloud share links itself and
+        // call `AppDelegate`'s `userDidAcceptCloudKitShareWith`, but that
+        // hand-off doesn't always happen (the link opened from inside
+        // another app's browser, a chat app's link preview, or while
+        // MealPlan is already frontmost). When that happens the URL reaches
+        // here instead, and without this fallback the invitation would
+        // silently do nothing on the recipient's phone.
+        if HouseholdCloudSharingService.isShareURL(url) {
+            Task {
+                do {
+                    let metadata = try await HouseholdCloudSharingService.fetchMetadata(for: url)
+                    HouseholdShareInvitationInbox.shared.enqueue(metadata)
+                } catch {
+                    importNotice = String(localized: "Couldn’t open that invitation: \(error.localizedDescription)")
+                }
+            }
+            return
+        }
         guard RecipeFileType.isImportable(url) else {
             handle(url: url)
             return

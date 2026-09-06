@@ -61,6 +61,32 @@ enum HouseholdCloudSharingService {
         HouseholdShareLocator.decode(shareIdentifier)?.isOwner
     }
 
+    /// Whether `url` looks like an iCloud share link, so a URL that reaches
+    /// the app through `onOpenURL` instead of the system's CloudKit
+    /// acceptance sheet can still be routed to `accept(_:context:)`.
+    ///
+    /// The system is supposed to intercept these links itself and call
+    /// `application(_:userDidAcceptCloudKitShareWith:)` before the app ever
+    /// sees the URL, but that hand-off is unreliable in practice — a link
+    /// opened from inside another app's in-app browser, forwarded through a
+    /// chat app's link preview, or tapped while MealPlan is already the
+    /// foreground app can all fall through to a plain universal-link open
+    /// instead. When that happens the invitation silently does nothing
+    /// unless something here also treats `onOpenURL` as a valid entry point.
+    static func isShareURL(_ url: URL) -> Bool {
+        guard let host = url.host()?.lowercased() else { return false }
+        return host.hasSuffix("icloud.com") && url.path.contains("/share/")
+    }
+
+    /// Resolves the `CKShare.Metadata` for an iCloud share link opened
+    /// through `onOpenURL`, so it can be handed to `accept(_:context:)` the
+    /// same way a metadata delivered via `userDidAcceptCloudKitShareWith`
+    /// would be.
+    static func fetchMetadata(for url: URL) async throws -> CKShare.Metadata {
+        let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
+        return try await container.shareMetadata(for: url)
+    }
+
     static func prepareInvitation(for household: Household, canEdit: Bool, context: ModelContext) async throws -> HouseholdShareInvitation {
         let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
         var locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
