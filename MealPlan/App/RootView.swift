@@ -48,6 +48,17 @@ struct RootView: View {
     @State private var didEvaluateOnboarding = false
     @State private var rootSheet: RootSheet?
     @State private var sharingErrorMessage: String?
+    /// Set instead of joining immediately when accepting `metadata` would
+    /// replace a household this device already has something in. Presented
+    /// by the `confirmationDialog` below; see
+    /// `HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting:context:)`.
+    @State private var pendingHouseholdJoin: PendingHouseholdJoin?
+
+    private struct PendingHouseholdJoin {
+        let metadata: CKShare.Metadata
+        let existingHouseholdName: String
+        let dishCount: Int
+    }
 
     var body: some View {
         Group {
@@ -111,6 +122,30 @@ struct RootView: View {
         } message: {
             Text(sharingErrorMessage ?? "")
         }
+        .confirmationDialog(
+            String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
+            isPresented: Binding(get: { pendingHouseholdJoin != nil }, set: { if !$0 { pendingHouseholdJoin = nil } }),
+            titleVisibility: .visible,
+            presenting: pendingHouseholdJoin
+        ) { pending in
+            Button(String(localized: "Merge Recipes"), role: .none) {
+                pendingHouseholdJoin = nil
+                Task { await acceptHouseholdJoin(pending.metadata, mergeRecipes: true) }
+            }
+            Button(String(localized: "Replace Everything"), role: .destructive) {
+                pendingHouseholdJoin = nil
+                Task { await acceptHouseholdJoin(pending.metadata, mergeRecipes: false) }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                pendingHouseholdJoin = nil
+            }
+        } message: { pending in
+            Text(pending.dishCount == 0
+                ? "This device already has its own “\(pending.existingHouseholdName)” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device."
+                : pending.dishCount == 1
+                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way."
+                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way.")
+        }
         // Everything the menu bar can reach from any section. Published here
         // rather than read from `AppState` directly so the menu items update —
         // and grey out — with the view hierarchy that owns them.
@@ -156,28 +191,44 @@ struct RootView: View {
 
     /// Accepts any CloudKit share invitations that arrived while the app had
     /// no `ModelContext` to accept them into yet (see `AppDelegate`), merging
-    /// each into the store and switching to it.
+    /// each into the store and switching to it. A device that already has a
+    /// household with something in it is asked first, since joining replaces
+    /// it — see `pendingHouseholdJoin`.
     private func acceptPendingCloudShares() async {
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
-            do {
-                let (household, isGuest) = try await HouseholdCloudSharingService.accept(metadata, context: context)
-                appState.currentHousehold = household
-                appState.isGuest = isGuest
-                // Mirrors the household-specific half of `AppState.bootstrap`
-                // rather than calling it outright: bootstrap re-fetches
-                // "the first household", which could pick a different local
-                // one if this device had already seeded its own.
-                MealType.ensure(for: household, context: context)
-                CookedLogMaintenance.run(for: household, context: context)
-                MealRoutineScheduler.apply(
-                    for: household,
-                    context: context,
-                    through: purchaseManager.latestPlanningDate(),
-                    memberName: appState.currentMemberName
+            if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
+                pendingHouseholdJoin = PendingHouseholdJoin(
+                    metadata: metadata,
+                    existingHouseholdName: atRisk.name,
+                    dishCount: (atRisk.dishes ?? []).count
                 )
-            } catch {
-                sharingErrorMessage = error.localizedDescription
+            } else {
+                await acceptHouseholdJoin(metadata, mergeRecipes: false)
             }
+        }
+    }
+
+    /// Finishes joining a household after `acceptPendingCloudShares` either
+    /// found nothing at risk or the person chose how to handle what was.
+    private func acceptHouseholdJoin(_ metadata: CKShare.Metadata, mergeRecipes: Bool) async {
+        do {
+            let (household, isGuest) = try await HouseholdCloudSharingService.accept(metadata, mergeRecipes: mergeRecipes, context: context)
+            appState.currentHousehold = household
+            appState.isGuest = isGuest
+            // Mirrors the household-specific half of `AppState.bootstrap`
+            // rather than calling it outright: bootstrap re-fetches
+            // "the first household", which could pick a different local
+            // one if this device had already seeded its own.
+            MealType.ensure(for: household, context: context)
+            CookedLogMaintenance.run(for: household, context: context)
+            MealRoutineScheduler.apply(
+                for: household,
+                context: context,
+                through: purchaseManager.latestPlanningDate(),
+                memberName: appState.currentMemberName
+            )
+        } catch {
+            sharingErrorMessage = error.localizedDescription
         }
     }
 

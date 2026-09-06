@@ -61,6 +61,27 @@ enum HouseholdCloudSharingService {
         HouseholdShareLocator.decode(shareIdentifier)?.isOwner
     }
 
+    /// The local household `accept(_:mergeRecipes:context:)` would replace
+    /// (and its `mergeRecipes` option would salvage recipes from) if asked to
+    /// join `metadata` right now — so the caller can warn before doing
+    /// anything destructive instead of after. `nil` means there's nothing to
+    /// warn about: either this device has no household with real content
+    /// yet, or its household already *is* the one behind this invitation
+    /// (re-opening a link you already accepted just refreshes it).
+    ///
+    /// Deliberately does no networking — `metadata.share` is already on
+    /// hand — so a household that would be lost is never touched unless the
+    /// person actually chooses to continue.
+    static func localHouseholdAtRisk(ofAccepting metadata: CKShare.Metadata, context: ModelContext) -> Household? {
+        let incomingShareRecordName = metadata.share.recordID.recordName
+        let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
+        return households.first { household in
+            guard !(household.dishes ?? []).isEmpty || !(household.entries ?? []).isEmpty else { return false }
+            let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
+            return locator?.shareRecordName != incomingShareRecordName
+        }
+    }
+
     /// Whether `url` looks like an iCloud share link, so a URL that reaches
     /// the app through `onOpenURL` instead of the system's CloudKit
     /// acceptance sheet can still be routed to `accept(_:context:)`.
@@ -129,7 +150,13 @@ enum HouseholdCloudSharingService {
         return .init(url: url, participantCount: acceptedParticipantCount(in: savedShare), isOwner: true)
     }
 
-    static func accept(_ metadata: CKShare.Metadata, context: ModelContext) async throws -> (household: Household, isGuest: Bool) {
+    /// Joins the household behind `metadata`. `mergeRecipes` decides what
+    /// happens to any other local household this device already has (see
+    /// `localHouseholdAtRisk(ofAccepting:context:)`): `false` drops it along
+    /// with everything in it, `true` moves its dishes — and the ingredients
+    /// they need — into the joined household first, so its recipes survive
+    /// even though its plan, shopping list, and history don't.
+    static func accept(_ metadata: CKShare.Metadata, mergeRecipes: Bool = false, context: ModelContext) async throws -> (household: Household, isGuest: Bool) {
         guard metadata.containerIdentifier == SharedStore.cloudKitContainerID else { throw HouseholdSharingError.invalidInvitation }
         let container = CKContainer(identifier: metadata.containerIdentifier)
         _ = try await container.accept([metadata])
@@ -165,8 +192,13 @@ enum HouseholdCloudSharingService {
                 // the next launch. The cascade delete this triggers is
                 // picked up by the same safety-net scan that reports any
                 // other local deletion, so the old household's own zone gets
-                // cleaned up in CloudKit too.
+                // cleaned up in CloudKit too. `RootView` warns about this
+                // before ever calling `accept`, and offers `mergeRecipes` as
+                // a way to keep the old household's dishes.
                 for other in localHouseholds where other.uuid != identity.uuid {
+                    if mergeRecipes {
+                        mergeDishes(from: other, into: household)
+                    }
                     context.delete(other)
                 }
                 try HouseholdRecordApplier.apply(
@@ -207,6 +239,34 @@ enum HouseholdCloudSharingService {
         let database = locator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
         if let share = try? await fetchRecord(shareID, from: database) as? CKShare {
             refreshMembers(from: share, household: household, context: context)
+        }
+    }
+
+    /// Moves every dish in `oldHousehold` to `newHousehold`, along with the
+    /// ingredients each one needs, ahead of `oldHousehold` being deleted.
+    /// Everything else about `oldHousehold` — its plan, shopping list, cooked
+    /// history, routines — isn't a recipe and is left to go with it.
+    ///
+    /// Ingredients are shared across a household's dishes, so a moved dish's
+    /// ingredient either joins an ingredient `newHousehold` already has with
+    /// the same normalized name (keeping the shopping list's aggregation
+    /// intact) or moves over with the dish when there's no match yet.
+    private static func mergeDishes(from oldHousehold: Household, into newHousehold: Household) {
+        var ingredientsByName = [String: Ingredient](
+            (newHousehold.ingredients ?? []).map { ($0.normalizedName, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for dish in oldHousehold.dishes ?? [] {
+            dish.household = newHousehold
+            for dishIngredient in dish.ingredients ?? [] {
+                guard let ingredient = dishIngredient.ingredient, ingredient.household === oldHousehold else { continue }
+                if let match = ingredientsByName[ingredient.normalizedName] {
+                    dishIngredient.ingredient = match
+                } else {
+                    ingredient.household = newHousehold
+                    ingredientsByName[ingredient.normalizedName] = ingredient
+                }
+            }
         }
     }
 
