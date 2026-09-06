@@ -149,11 +149,25 @@ enum HouseholdCloudSharingService {
                     throw HouseholdSharingError.missingRootRecord
                 }
 
-                let existing = try context.fetch(FetchDescriptor<Household>()).first { $0.uuid == identity.uuid }
+                let localHouseholds = try context.fetch(FetchDescriptor<Household>())
+                let existing = localHouseholds.first { $0.uuid == identity.uuid }
                 let household = existing ?? Household()
                 if existing == nil {
                     household.uuid = identity.uuid
                     context.insert(household)
+                }
+                // The app keeps exactly one household per device (see
+                // `Household`'s doc comment). Joining a share replaces
+                // whatever solo household this device already had rather
+                // than adding a second one alongside it — otherwise the
+                // invitation looked like it did nothing, since bootstrap's
+                // "the household" fetch could still return the old one on
+                // the next launch. The cascade delete this triggers is
+                // picked up by the same safety-net scan that reports any
+                // other local deletion, so the old household's own zone gets
+                // cleaned up in CloudKit too.
+                for other in localHouseholds where other.uuid != identity.uuid {
+                    context.delete(other)
                 }
                 try HouseholdRecordApplier.apply(
                     payloadData: payload,
