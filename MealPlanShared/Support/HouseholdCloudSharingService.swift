@@ -81,12 +81,15 @@ enum HouseholdCloudSharingService {
             share[householdIDKey] = household.uuid.uuidString as CKRecordValue
         }
 
-        let participant = CKShare.Participant.oneTimeURLParticipant()
-        participant.permission = canEdit ? .readWrite : .readOnly
-        share.addParticipant(participant)
+        // Anyone holding the link may join, at the permission the owner picked.
+        // A `CKShare.Participant.oneTimeURLParticipant()` would be tighter, but
+        // `addParticipant(_:)` traps (not throws) unless the app carries Apple's
+        // restricted `com.apple.developer.icloud-extended-share-access`
+        // entitlement — which crashed the app on every invitation.
+        share.publicPermission = canEdit ? .readWrite : .readOnly
         let result = try await database.modifyRecords(saving: [share], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
         guard let savedShare = try savedRecord(share.recordID, in: result.saveResults) as? CKShare,
-              let url = savedShare.oneTimeURL(for: participant.participantID) else {
+              let url = savedShare.url else {
             throw HouseholdSharingError.missingShareURL
         }
 

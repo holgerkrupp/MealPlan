@@ -20,7 +20,7 @@ struct CalendarHomeView: View {
     @State private var jumpTarget: Date?
     @State private var savingTemplateWeek: Date?
     @State private var applyingTemplateWeek: Date?
-    @State private var exportedPDF: ExportedPDF?
+    @State private var printingWeek: Date?
     @State private var showingPaywall = false
     @State private var showingMealsSettings = false
     /// Kept separate from `AppState`: day visibility changes rapidly during a
@@ -82,7 +82,7 @@ struct CalendarHomeView: View {
             goToNextWeek: { goTo(appState.selectedDate.adding(days: 7)) },
             saveWeekAsTemplate: { savingTemplateWeek = focusWeek },
             applyTemplate: { applyingTemplateWeek = focusWeek },
-            exportWeekPDF: { exportPDF() }
+            printPlan: { printingWeek = focusWeek }
         ))
     }
 
@@ -174,15 +174,17 @@ struct CalendarHomeView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Print plan…"), systemImage: "printer") {
+                    printingWeek = focusWeek
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
                 Menu(String(localized: "This week"), systemImage: "square.on.square") {
                     Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
                         savingTemplateWeek = focusWeek
                     }
                     Button(String(localized: "Apply a template…"), systemImage: "square.on.square.dashed") {
                         applyingTemplateWeek = focusWeek
-                    }
-                    Button(String(localized: "Export week as PDF"), systemImage: "doc.richtext") {
-                        exportPDF()
                     }
                 }
             }
@@ -197,8 +199,9 @@ struct CalendarHomeView: View {
             ApplyTemplateSheet(targetWeekStart: wrapper.date)
                 .dismissesOnOutsideClick()
         }
-        .sheet(item: $exportedPDF) { pdf in
-            PDFShareSheet(url: pdf.url)
+        .sheet(item: Binding(get: { printingWeek.map { IdentifiableDate(date: $0) } },
+                             set: { printingWeek = $0?.date })) { wrapper in
+            PrintPlanSheet(referenceWeek: wrapper.date)
                 .dismissesOnOutsideClick()
         }
         .sheet(isPresented: $showingPaywall) {
@@ -292,16 +295,6 @@ struct CalendarHomeView: View {
         proxy.scrollTo(day.dayID, anchor: .top)
     }
 
-    private func exportPDF() {
-        let data = WeekExport.data(
-            forWeekContaining: focusWeek,
-            householdName: appState.currentHousehold?.name ?? "MealPlan",
-            context: context
-        )
-        if let url = WeekExport.pdf(data) {
-            exportedPDF = ExportedPDF(url: url)
-        }
-    }
 }
 
 /// The rapidly changing scroll visibility state is observed only here. This

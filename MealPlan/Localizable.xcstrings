@@ -6600,6 +6600,231 @@
           }
         }
       }
+    },
+    "Printed %@ with MealPlan" : {
+
+    },
+    "Nutrition figures are estimates per person, accurate to about ±20 %." : {
+
+    },
+    "for %lld" : {
+
+    },
+    "Lightest: %@" : {
+
+    },
+    "Heaviest: %@" : {
+
+    },
+    "Per person" : {
+
+    },
+    "Average per day" : {
+
+    },
+    "The week shown" : {
+
+    },
+    "The next 7 days" : {
+
+    },
+    "The next 14 days" : {
+
+    },
+    "The next 30 days" : {
+
+    },
+    "Custom dates" : {
+
+    },
+    "A3" : {
+
+    },
+    "A4" : {
+
+    },
+    "A5" : {
+
+    },
+    "US Letter" : {
+
+    },
+    "US Legal" : {
+
+    },
+    "US Tabloid" : {
+
+    },
+    "297 × 420 mm" : {
+
+    },
+    "210 × 297 mm" : {
+
+    },
+    "148 × 210 mm" : {
+
+    },
+    "8.5 × 11 in" : {
+
+    },
+    "8.5 × 14 in" : {
+
+    },
+    "11 × 17 in" : {
+
+    },
+    "Portrait" : {
+
+    },
+    "Landscape" : {
+
+    },
+    "Print plan" : {
+
+    },
+    "Couldn’t prepare the printout" : {
+
+    },
+    "Days" : {
+
+    },
+    "Paper" : {
+
+    },
+    "Print…" : {
+
+    },
+    "The plan couldn’t be rendered." : {
+
+    },
+    "Save as PDF…" : {
+
+    },
+    "%lld days" : {
+
+    },
+    "Time span" : {
+
+    },
+    "Size" : {
+
+    },
+    "Orientation" : {
+
+    },
+    "Per meal" : {
+
+    },
+    "Per day" : {
+
+    },
+    "Summary page" : {
+
+    },
+    "Protein, carbs and fat" : {
+
+    },
+    "Estimates for one person, accurate to about ±20 %. Meals MealPlan can’t work out are left blank." : {
+
+    },
+    "Meal notes" : {
+
+    },
+    "Empty meals" : {
+
+    },
+    "Print plan…" : {
+
+    },
+    "P %@ · C %@ · F %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "P %1$@ · C %2$@ · F %3$@"
+          }
+        }
+      }
+    },
+    "From %lld of %lld days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "From %1$lld of %2$lld days"
+          }
+        }
+      }
+    },
+    "Week %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Week %1$lld · %2$@"
+          }
+        }
+      }
+    },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld days on %lld sheets of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld days on %2$lld sheets of %3$@"
+          }
+        }
+      }
+    },
+    "Fit on one page" : {
+
+    },
+    "Fitting squeezes the days onto one sheet, in smaller type, as far as the columns can take it." : {
+
+    },
+    "%lld ticked items left out." : {
+
+    },
+    "Meal plan" : {
+
+    },
+    "Plan and shopping list" : {
+
+    },
+    "Print" : {
+
+    },
+    "Print list…" : {
+
+    },
+    "The shopping list prints as it stands, ticked items left out. Rebuild it on the Shopping screen first if it is out of date." : {
+
+    },
+    "%lld sheets of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld sheets of %2$@"
+          }
+        }
+      }
+    },
+    "Anyone who opens this link gets edit access, so only send it to someone you trust." : {
+
+    },
+    "Anyone who opens this link gets view-only access." : {
+
     }
   },
   "version" : "1.0"

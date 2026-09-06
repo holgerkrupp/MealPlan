@@ -6,38 +6,9 @@
     {
       "layers" : [
         {
-          "blend-mode" : "normal",
-          "fill" : {
-            "automatic-gradient" : "srgb:0.00000,0.00000,0.00000,1.00000"
-          },
-          "glass" : true,
-          "image-name" : "f-1.svg",
-          "name" : "f 1",
-          "opacity" : 1,
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              16,
-              -4
-            ]
-          }
-        },
-        {
-          "blend-mode" : "normal",
-          "fill" : {
-            "automatic-gradient" : "srgb:0.00000,0.35494,0.00000,1.00000"
-          },
-          "glass" : true,
-          "image-name" : "c.svg",
-          "name" : "c",
-          "opacity" : 1,
-          "position" : {
-            "scale" : 1,
-            "translation-in-points" : [
-              -29,
-              -18
-            ]
-          }
+          "hidden" : false,
+          "image-name" : "Untitled.svg",
+          "name" : "Untitled"
         }
       ],
       "lighting" : "individual",

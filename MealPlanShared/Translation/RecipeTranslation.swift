@@ -60,9 +60,10 @@ struct RecipeDirectionsLayout: Sendable, Equatable {
 
     init(_ text: String?) {
         let normalized = (text ?? "").replacingOccurrences(of: "\r\n", with: "\n")
-        lines = normalized.isEmpty ? [] : normalized.components(separatedBy: .newlines)
-        translatableIndexes = lines.indices.filter {
-            !lines[$0].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        let allLines = normalized.isEmpty ? [] : normalized.components(separatedBy: .newlines)
+        lines = allLines
+        translatableIndexes = allLines.indices.filter { index in
+            !allLines[index].trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
         }
     }
 

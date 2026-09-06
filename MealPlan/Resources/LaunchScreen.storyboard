@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  The static launch screen. It must be pixel-identical to the first frame of
+  AnimatedLaunchView, otherwise the handoff from system launch screen to app
+  flickers.
+
+  Colours come from the LaunchStripeInk / LaunchStripeLinen colour sets in
+  Assets.xcassets — the same two colours LaunchTheme reads — so a seasonal
+  repaint is a one-place edit. The stripe *count* is duplicated here and in
+  LaunchTheme.stripeCount; change both together.
+-->
+<document type="com.apple.InterfaceBuilder3.CocoaTouch.Storyboard.XIB" version="3.0" toolsVersion="22505" targetRuntime="iOS.CocoaTouch" propertyAccessControl="none" useAutolayout="YES" launchScreen="YES" useTraitCollections="YES" useSafeAreas="NO" colorMatched="YES" initialViewController="LNC-vc-001">
+    <device id="retina6_12" orientation="portrait" appearance="light"/>
+    <dependencies>
+        <plugIn identifier="com.apple.InterfaceBuilder.IBCocoaTouchPlugin" version="22504"/>
+        <capability name="Named colors" minToolsVersion="9.0"/>
+        <capability name="Safe area layout guides" minToolsVersion="9.0"/>
+        <capability name="documents saved in the Xcode 8 format" minToolsVersion="8.0"/>
+    </dependencies>
+    <scenes>
+        <!--Launch Screen-->
+        <scene sceneID="LNC-sc-001">
+            <objects>
+                <viewController id="LNC-vc-001" sceneMemberID="viewController">
+                    <view key="view" contentMode="scaleToFill" id="LNC-rv-001">
+                        <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                        <autoresizingMask key="autoresizingMask" widthSizable="YES" heightSizable="YES"/>
+                        <subviews>
+                            <stackView opaque="NO" contentMode="scaleToFill" axis="vertical" distribution="fillEqually" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-st-001">
+                                <rect key="frame" x="0.0" y="0.0" width="393" height="852"/>
+                                <subviews>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-b0-001">
+                                        <rect key="frame" x="0.0" y="0.0" width="393" height="170.5"/>
+                                        <color key="backgroundColor" name="LaunchStripeInk"/>
+                                    </view>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-b1-001">
+                                        <rect key="frame" x="0.0" y="170.5" width="393" height="170.5"/>
+                                        <color key="backgroundColor" name="LaunchStripeLinen"/>
+                                    </view>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-b2-001">
+                                        <rect key="frame" x="0.0" y="341" width="393" height="170.5"/>
+                                        <color key="backgroundColor" name="LaunchStripeInk"/>
+                                    </view>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-b3-001">
+                                        <rect key="frame" x="0.0" y="511.5" width="393" height="170.5"/>
+                                        <color key="backgroundColor" name="LaunchStripeLinen"/>
+                                    </view>
+                                    <view contentMode="scaleToFill" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-b4-001">
+                                        <rect key="frame" x="0.0" y="682" width="393" height="170"/>
+                                        <color key="backgroundColor" name="LaunchStripeInk"/>
+                                    </view>
+                                </subviews>
+                            </stackView>
+                            <imageView clipsSubviews="YES" userInteractionEnabled="NO" contentMode="scaleAspectFit" horizontalHuggingPriority="251" verticalHuggingPriority="251" image="LaunchMark" translatesAutoresizingMaskIntoConstraints="NO" id="LNC-im-001">
+                                <rect key="frame" x="66.5" y="348.5" width="260" height="154.5"/>
+                                <color key="tintColor" name="LaunchStripeLinen"/>
+                                <constraints>
+                                    <constraint firstAttribute="height" secondItem="LNC-im-001" secondAttribute="width" multiplier="0.59437" id="LNC-c5-001"/>
+                                    <constraint firstAttribute="width" relation="lessThanOrEqual" constant="260" id="LNC-c4-001"/>
+                                </constraints>
+                            </imageView>
+                        </subviews>
+                        <viewLayoutGuide key="safeArea" id="LNC-sa-001"/>
+                        <color key="backgroundColor" name="LaunchStripeInk"/>
+                        <constraints>
+                            <constraint firstItem="LNC-st-001" firstAttribute="top" secondItem="LNC-rv-001" secondAttribute="top" id="LNC-c0-001"/>
+                            <constraint firstItem="LNC-st-001" firstAttribute="leading" secondItem="LNC-rv-001" secondAttribute="leading" id="LNC-c1-001"/>
+                            <constraint firstAttribute="trailing" secondItem="LNC-st-001" secondAttribute="trailing" id="LNC-c2-001"/>
+                            <constraint firstAttribute="bottom" secondItem="LNC-st-001" secondAttribute="bottom" id="LNC-c3-001"/>
+                            <constraint firstItem="LNC-im-001" firstAttribute="centerX" secondItem="LNC-rv-001" secondAttribute="centerX" id="LNC-c6-001"/>
+                            <constraint firstItem="LNC-im-001" firstAttribute="centerY" secondItem="LNC-rv-001" secondAttribute="centerY" id="LNC-c7-001"/>
+                            <constraint firstItem="LNC-im-001" firstAttribute="width" secondItem="LNC-rv-001" secondAttribute="width" multiplier="0.42" priority="750" id="LNC-c8-001"/>
+                        </constraints>
+                    </view>
+                </viewController>
+                <placeholder placeholderIdentifier="IBFirstResponder" id="LNC-fr-001" userLabel="First Responder" sceneMemberID="firstResponder"/>
+            </objects>
+            <point key="canvasLocation" x="52" y="374"/>
+        </scene>
+    </scenes>
+    <resources>
+        <image name="LaunchMark" width="1002" height="596"/>
+        <namedColor name="LaunchStripeInk">
+            <color red="0.063" green="0.18" blue="0.31" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
+        <namedColor name="LaunchStripeLinen">
+            <color red="0.98" green="0.969" blue="0.945" alpha="1" colorSpace="custom" customColorSpace="sRGB"/>
+        </namedColor>
+    </resources>
+</document>

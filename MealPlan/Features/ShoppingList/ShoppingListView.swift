@@ -18,18 +18,13 @@ struct ShoppingListView: View {
     @State private var showingBringSetup = false
     @State private var showingPantryStaples = false
     @State private var confirmingClearAll = false
+    @State private var showingPrint = false
     @State private var customAisleItem: ShoppingListItem?
     @State private var customAisleName = ""
     @AppStorage("shoppingList.hideCheckedItems") private var hideCheckedItems = false
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
     /// the add field.
     @FocusState private var addItemFocused: Bool
-
-    private struct AisleGroup {
-        var name: String
-        var sortOrder: Int
-        var items: [ShoppingListItem]
-    }
 
     private var range: DayRange {
         appState.shoppingRange.dayRange(
@@ -60,17 +55,8 @@ struct ShoppingListView: View {
         }
     }
 
-    private var grouped: [AisleGroup] {
-        Dictionary(grouping: visibleItems, by: \.aisleName)
-            .map { name, values in
-                AisleGroup(
-                    name: name,
-                    sortOrder: values.map { $0.category.sortOrder }.min() ?? IngredientCategory.other.sortOrder,
-                    items: values.sorted { $0.sortIndex < $1.sortIndex }
-                )
-            }
-            .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
-    }
+    /// Shared with the printed list — see `ShoppingListGrouping`.
+    private var grouped: [ShoppingAisle] { ShoppingListGrouping.aisles(visibleItems) }
 
     var body: some View {
         @Bindable var appState = appState
@@ -157,6 +143,12 @@ struct ShoppingListView: View {
                         Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
                     }
                     Divider()
+                    Button {
+                        showingPrint = true
+                    } label: {
+                        Label(String(localized: "Print list…"), systemImage: "printer")
+                    }
+                    .disabled(items.isEmpty)
                     #if os(iOS)
                     Button {
                         Task { await exportToReminders() }
@@ -233,6 +225,10 @@ struct ShoppingListView: View {
             .frame(minWidth: 520, minHeight: 460)
             #endif
         }
+        .sheet(isPresented: $showingPrint) {
+            PrintPlanSheet(referenceWeek: .now, initialContent: .shoppingList)
+                .dismissesOnOutsideClick()
+        }
         .sheet(isPresented: $showingPantryStaples) {
             NavigationStack {
                 PantryStaplesView()
@@ -295,6 +291,9 @@ struct ShoppingListView: View {
             addItem: { addItemFocused = true },
             setRange: { appState.shoppingRange = $0 }
         )
+        if !items.isEmpty {
+            commands.printList = { showingPrint = true }
+        }
         #if os(iOS)
         if !isExporting, !items.isEmpty {
             commands.addToReminders = { Task { await exportToReminders() } }

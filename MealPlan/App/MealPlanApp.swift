@@ -26,45 +26,49 @@ struct MealPlanApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView()
-                .environment(appState)
-                .environment(calendarStore)
-                .environment(purchaseManager)
-                .task {
-                    await purchaseManager.prepareForLaunch()
-                    appState.bootstrap(
-                        context: container.mainContext,
-                        planningThrough: purchaseManager.latestPlanningDate()
-                    )
-                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
-                    await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
-                    await calendarStore.start()
-                }
-                .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
-                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
-                }
-                .onChange(of: scenePhase) { _, phase in
-                    // Calendar access can be revoked while the app is away.
-                    guard phase == .active else { return }
-                    MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
-                    Task {
-                        await calendarStore.applicationBecameActive()
-                        if !appState.isGuest {
-                            await RecipeFeedService.refreshAll(context: container.mainContext)
+            // The awning comes down over the real interface, which is mounted
+            // and doing its launch work underneath the whole time.
+            AppLaunchContainerView {
+                RootView()
+                    .environment(appState)
+                    .environment(calendarStore)
+                    .environment(purchaseManager)
+                    .task {
+                        await purchaseManager.prepareForLaunch()
+                        appState.bootstrap(
+                            context: container.mainContext,
+                            planningThrough: purchaseManager.latestPlanningDate()
+                        )
+                        MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
+                        await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
+                        await calendarStore.start()
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+                        MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
+                    }
+                    .onChange(of: scenePhase) { _, phase in
+                        // Calendar access can be revoked while the app is away.
+                        guard phase == .active else { return }
+                        MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
+                        Task {
+                            await calendarStore.applicationBecameActive()
+                            if !appState.isGuest {
+                                await RecipeFeedService.refreshAll(context: container.mainContext)
+                            }
                         }
                     }
-                }
-                .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
-                    guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
-                    MealRoutineScheduler.apply(
-                        for: household,
-                        context: container.mainContext,
-                        memberName: appState.currentMemberName
-                    )
-                }
-                .onOpenURL { url in
-                    appState.handle(openedURL: url, context: container.mainContext)
-                }
+                    .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
+                        guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
+                        MealRoutineScheduler.apply(
+                            for: household,
+                            context: container.mainContext,
+                            memberName: appState.currentMemberName
+                        )
+                    }
+                    .onOpenURL { url in
+                        appState.handle(openedURL: url, context: container.mainContext)
+                    }
+            }
         }
         .modelContainer(container)
         .commands { MealPlanCommands() }

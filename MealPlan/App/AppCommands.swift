@@ -91,18 +91,30 @@ struct MealPlanCommands: Commands {
         }
     }
 
-    /// The week PDF is this app's "print": ⌘P produces the sheet you'd pin to
-    /// the fridge.
+    /// ⌘P opens the print dialog: what to print, paper, orientation, how much
+    /// nutrition to carry — and from there the system print panel or a saved
+    /// PDF. It follows whichever section is on screen, since the calendar and
+    /// the shopping list never publish their commands at the same time.
     private var printCommands: some Commands {
         CommandGroup(replacing: .printItem) {
             Button {
-                plan?.exportWeekPDF()
+                if let plan {
+                    plan.printPlan()
+                } else {
+                    shopping?.printList?()
+                }
             } label: {
-                Label(String(localized: "Export week as PDF"), systemImage: "doc.richtext")
+                Label(printLabel, systemImage: "printer")
             }
             .keyboardShortcut("p", modifiers: .command)
-            .disabled(plan == nil)
+            .disabled(plan == nil && shopping?.printList == nil)
         }
+    }
+
+    private var printLabel: String {
+        plan == nil && shopping?.printList != nil
+            ? String(localized: "Print list…")
+            : String(localized: "Print plan…")
     }
 
     // MARK: - Edit
@@ -356,6 +368,15 @@ struct MealPlanCommands: Commands {
             Divider()
 
             Button {
+                shopping?.printList?()
+            } label: {
+                Label(String(localized: "Print list…"), systemImage: "printer")
+            }
+            .disabled(shopping?.printList == nil)
+
+            Divider()
+
+            Button {
                 shopping?.addToReminders?()
             } label: {
                 Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
@@ -442,7 +463,7 @@ struct PlanCommands {
     var goToNextWeek: @MainActor () -> Void
     var saveWeekAsTemplate: @MainActor () -> Void
     var applyTemplate: @MainActor () -> Void
-    var exportWeekPDF: @MainActor () -> Void
+    var printPlan: @MainActor () -> Void
 }
 
 /// Published only when the plan is actually wide enough to show the dish list
@@ -485,6 +506,8 @@ struct ShoppingCommands {
     var rebuild: @MainActor () -> Void
     var addItem: @MainActor () -> Void
     var setRange: @MainActor (ShoppingRangeOption) -> Void
+    /// Nil while the list is empty — there is nothing to put on paper.
+    var printList: (@MainActor () -> Void)?
     /// Nil on platforms without Reminders export, or while the list is empty.
     var addToReminders: (@MainActor () -> Void)?
     /// Nil when nothing is ticked.

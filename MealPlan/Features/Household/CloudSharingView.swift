@@ -8,7 +8,7 @@ import AppKit
 import UIKit
 #endif
 
-/// Presents a one-time iCloud invitation link for the current household,
+/// Presents an iCloud invitation link for the current household,
 /// with a QR code as a nearby-device fallback — the same shape as Family
 /// Budget's sharing sheet. See `HouseholdCloudSharingService` for why this
 /// isn't the system `UICloudSharingController`: the share this app can
@@ -133,8 +133,8 @@ struct HouseholdSharingView: View {
                         .foregroundStyle(Color.accentColor)
                     Text(invitation.isOwner
                         ? (canEdit
-                            ? "This one-time invitation grants edit access, so only send it to someone you trust."
-                            : "This one-time invitation grants view-only access.")
+                            ? "Anyone who opens this link gets edit access, so only send it to someone you trust."
+                            : "Anyone who opens this link gets view-only access.")
                         : "The household stays in iCloud.")
                         .font(.footnote)
                         .foregroundStyle(.secondary)
