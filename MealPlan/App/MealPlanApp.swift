@@ -15,6 +15,10 @@ struct MealPlanApp: App {
     /// Calendar integration. Creating it touches no calendar data and never
     /// asks for permission — it only reads the (off by default) preference.
     @State private var calendarStore = CalendarContextStore()
+    /// Where (if anywhere) the plan is being published as a subscribable
+    /// `.ics` file. Created eagerly like the other stores above; it only acts
+    /// once a location has actually been chosen in Settings.
+    @State private var publishedCalendarSettings = PublishedCalendarSettings()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -33,6 +37,7 @@ struct MealPlanApp: App {
                     .environment(appState)
                     .environment(calendarStore)
                     .environment(purchaseManager)
+                    .environment(publishedCalendarSettings)
                     .task {
                         await purchaseManager.prepareForLaunch()
                         appState.bootstrap(
@@ -45,6 +50,11 @@ struct MealPlanApp: App {
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
+                        PublishedCalendarService.scheduleRefreshIfNeeded(
+                            household: appState.currentHousehold,
+                            settings: publishedCalendarSettings,
+                            context: container.mainContext
+                        )
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Calendar access can be revoked while the app is away.
@@ -56,6 +66,11 @@ struct MealPlanApp: App {
                                 await RecipeFeedService.refreshAll(context: container.mainContext)
                             }
                         }
+                        PublishedCalendarService.scheduleRefreshIfNeeded(
+                            household: appState.currentHousehold,
+                            settings: publishedCalendarSettings,
+                            context: container.mainContext
+                        )
                     }
                     .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
                         guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
@@ -79,6 +94,7 @@ struct MealPlanApp: App {
                     .environment(appState)
                     .environment(calendarStore)
                     .environment(purchaseManager)
+                    .environment(publishedCalendarSettings)
             }
         }
         .defaultSize(width: 720, height: 760)
@@ -92,6 +108,7 @@ struct MealPlanApp: App {
                 .environment(appState)
                 .environment(calendarStore)
                 .environment(purchaseManager)
+                .environment(publishedCalendarSettings)
                 .modelContainer(container)
         }
         #endif
