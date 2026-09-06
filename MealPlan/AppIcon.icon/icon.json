@@ -8,7 +8,14 @@
         {
           "hidden" : false,
           "image-name" : "Untitled.svg",
-          "name" : "Untitled"
+          "name" : "Untitled",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
         }
       ],
       "lighting" : "individual",
