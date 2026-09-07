@@ -303,8 +303,8 @@
 			targets = (
 				000000000000000100000000 /* MealPlan */,
 				EE0000000000000000000001 /* MealPlanShareExtension */,
-				DD0000000000000000000001 /* MealPlanWidgets */,
 				FF0000000000000000000001 /* MealPlanTests */,
+				DD0000000000000000000001 /* MealPlanWidgets */,
 			);
 		};
 /* End PBXProject section */

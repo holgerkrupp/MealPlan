@@ -19,6 +19,8 @@ struct DishEditorView: View {
     @State private var showingCamera = false
     @State private var showingImagePlayground = false
     @State private var showingRecipeScanner = false
+    @State private var isReloadingLinkedPhoto = false
+    @State private var linkedPhotoError: String?
     @State private var newIngredientText = ""
     @State private var sourceURLText = ""
     @State private var appLinkURLText = ""
@@ -100,6 +102,24 @@ struct DishEditorView: View {
             }
             Section(String(localized: "Photos")) {
                 photoRow
+                if linkedRecipeURL != nil {
+                    Button { Task { await reloadPhotoFromLinkedRecipe() } } label: {
+                        HStack {
+                            Label(String(localized: "Reload photo from recipe link"), systemImage: "arrow.clockwise")
+                            if isReloadingLinkedPhoto {
+                                Spacer()
+                                ProgressView()
+                                    .controlSize(.small)
+                            }
+                        }
+                    }
+                    .disabled(isReloadingLinkedPhoto)
+                }
+                if let linkedPhotoError {
+                    Text(linkedPhotoError)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
             Section {
                 DishGlyphPicker(dish: dish, tint: DishGlyph.tint(forName: dish.name))
@@ -320,6 +340,33 @@ struct DishEditorView: View {
             }
         }
         photoItems.removeAll()
+    }
+
+    private var linkedRecipeURL: URL? {
+        let value = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let url = URL(string: value),
+              url.scheme == "http" || url.scheme == "https" else { return nil }
+        return url
+    }
+
+    /// Runs the same parser and image downloader as a normal URL import, but
+    /// applies only its prepared primary image to the dish being edited.
+    private func reloadPhotoFromLinkedRecipe() async {
+        guard let url = linkedRecipeURL else { return }
+        isReloadingLinkedPhoto = true
+        linkedPhotoError = nil
+        defer { isReloadingLinkedPhoto = false }
+
+        do {
+            let imported = try await RecipeSchemaParser().importRecipe(from: url)
+            guard let imageData = imported.imageData else {
+                linkedPhotoError = String(localized: "No photo was found on that recipe page.")
+                return
+            }
+            DishBuilder.assignPrimaryImage(imageData, to: dish, context: context)
+        } catch {
+            linkedPhotoError = error.localizedDescription
+        }
     }
 
     private func addImage(_ data: Data) {

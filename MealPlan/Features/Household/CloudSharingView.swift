@@ -25,6 +25,7 @@ struct HouseholdSharingView: View {
     @State private var errorMessage: String?
     @State private var isPreparing = true
     @State private var didCopyLink = false
+    @State private var isConfirmingNewInvitation = false
 
     var body: some View {
         NavigationStack {
@@ -40,11 +41,22 @@ struct HouseholdSharingView: View {
                 } else if let invitation {
                     invitationContent(invitation)
                 } else {
-                    ContentUnavailableView(
-                        String(localized: "Sharing unavailable"),
-                        systemImage: "icloud.slash",
-                        description: Text(errorMessage ?? String(localized: "The invitation could not be prepared."))
-                    )
+                    VStack(spacing: 20) {
+                        ContentUnavailableView(
+                            String(localized: "Sharing unavailable"),
+                            systemImage: "icloud.slash",
+                            description: Text(errorMessage ?? String(localized: "The invitation could not be prepared."))
+                        )
+
+                        if isOwner {
+                            Button {
+                                isConfirmingNewInvitation = true
+                            } label: {
+                                Label("Create New Invitation", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
                 }
             }
             .padding(24)
@@ -57,6 +69,22 @@ struct HouseholdSharingView: View {
         }
         .frame(minWidth: 440, minHeight: 620)
         .task { await prepareInvitation() }
+        .confirmationDialog(
+            String(localized: "Create a New Invitation?"),
+            isPresented: $isConfirmingNewInvitation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Create New Invitation"), role: .destructive) {
+                Task { await replaceInvitation() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The current link will stop working and everyone who already joined will lose access. Your household, dishes, and meal plan will stay intact.")
+        }
+    }
+
+    private var isOwner: Bool {
+        HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) ?? true
     }
 
     @ViewBuilder
@@ -146,6 +174,21 @@ struct HouseholdSharingView: View {
                 Text(accessSummary(for: invitation.participantCount))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                if invitation.isOwner {
+                    Divider()
+
+                    Button(role: .destructive) {
+                        isConfirmingNewInvitation = true
+                    } label: {
+                        Label("Create New Invitation", systemImage: "arrow.clockwise")
+                    }
+
+                    Text("Use this if iCloud says the current invitation no longer exists. It creates a different link without deleting your household data.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                }
             }
             .frame(maxWidth: 480)
             .frame(maxWidth: .infinity)
@@ -156,6 +199,23 @@ struct HouseholdSharingView: View {
         isPreparing = true
         do {
             invitation = try await HouseholdCloudSharingService.prepareInvitation(for: household, canEdit: canEdit, context: modelContext)
+            errorMessage = nil
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+        isPreparing = false
+    }
+
+    private func replaceInvitation() async {
+        isPreparing = true
+        invitation = nil
+        didCopyLink = false
+        do {
+            invitation = try await HouseholdCloudSharingService.replaceInvitation(
+                for: household,
+                canEdit: canEdit,
+                context: modelContext
+            )
             errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription

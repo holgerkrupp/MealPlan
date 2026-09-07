@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import MealPlan
 
 @MainActor
@@ -46,5 +47,26 @@ struct DishFilterAndDuplicateTests {
         #expect(RecipeDuplicateDetector.match(
             name: "Different", sourceURL: URL(string: "https://example.com/recipe"), in: [existing]
         ) === existing)
+    }
+
+    @Test func linkedRecipePhotoReplacesPrimaryAndKeepsAdditionalImages() {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let dish = Dish(name: "Soup")
+        let oldPrimary = DishImage(data: Data([1]), sortIndex: 0, isPrimary: true)
+        let additional = DishImage(data: Data([2]), sortIndex: 1, isPrimary: false)
+        oldPrimary.dish = dish
+        additional.dish = dish
+        context.insert(dish)
+        context.insert(oldPrimary)
+        context.insert(additional)
+
+        let assigned = DishBuilder.assignPrimaryImage(Data([9]), to: dish, context: context)
+
+        #expect(assigned === oldPrimary)
+        #expect(oldPrimary.data == Data([9]))
+        #expect(oldPrimary.isPrimary)
+        #expect(additional.data == Data([2]))
+        #expect(dish.images?.count == 2)
     }
 }

@@ -5,6 +5,10 @@ struct HouseholdRecordResolution: Sendable {
     var payloadData: Data
     var modifiedAt: Date
     var shouldUpload: Bool
+    /// The bytes that belong to the winning version of an asset-backed
+    /// record. A missing CloudKit asset is never a request to clear a photo;
+    /// photos are removed by deleting their dedicated record.
+    var assetData: Data?
 }
 
 @MainActor
@@ -12,11 +16,21 @@ enum HouseholdRecordConflictResolver {
     /// Resolves a fetched/server record against the current local record. The
     /// return value is always applied locally; `shouldUpload` asks the engine
     /// to submit the merged/local winner using the server change tag.
-    static func resolve(local: LocalHouseholdRecord?, server: CKRecord) throws -> HouseholdRecordResolution {
+    static func resolve(
+        local: LocalHouseholdRecord?,
+        server: CKRecord,
+        serverAssetData: Data? = nil,
+        serverHasAsset: Bool = false
+    ) throws -> HouseholdRecordResolution {
         let serverData = try payloadData(server)
         let serverDate = HouseholdRecordCodec.modifiedAt(of: server)
         guard let local else {
-            return .init(payloadData: serverData, modifiedAt: serverDate, shouldUpload: false)
+            return .init(
+                payloadData: serverData,
+                modifiedAt: serverDate,
+                shouldUpload: false,
+                assetData: serverAssetData
+            )
         }
         let localPayload = try HouseholdRecordCodec.decode(local.payloadData)
         let serverPayload = try HouseholdRecordCodec.decode(serverData)
@@ -28,7 +42,8 @@ enum HouseholdRecordConflictResolver {
             return .init(
                 payloadData: data,
                 modifiedAt: max(local.modifiedAt, serverDate),
-                shouldUpload: data != serverData
+                shouldUpload: data != serverData,
+                assetData: nil
             )
         case (.shoppingItem(let lhs), .shoppingItem(let rhs)):
             let merged = merge(lhs, rhs)
@@ -36,13 +51,27 @@ enum HouseholdRecordConflictResolver {
             return .init(
                 payloadData: data,
                 modifiedAt: max(local.modifiedAt, serverDate),
-                shouldUpload: data != serverData
+                shouldUpload: data != serverData,
+                assetData: nil
             )
         default:
             if local.modifiedAt > serverDate {
-                return .init(payloadData: local.payloadData, modifiedAt: local.modifiedAt, shouldUpload: true)
+                return .init(
+                    payloadData: local.payloadData,
+                    modifiedAt: local.modifiedAt,
+                    shouldUpload: true,
+                    assetData: local.assetData ?? serverAssetData
+                )
             }
-            return .init(payloadData: serverData, modifiedAt: serverDate, shouldUpload: false)
+            return .init(
+                payloadData: serverData,
+                modifiedAt: serverDate,
+                // Repair an older image record whose asset was accidentally
+                // cleared, but do not overwrite an asset that merely failed
+                // to download during this fetch.
+                shouldUpload: !serverHasAsset && local.assetData != nil,
+                assetData: serverAssetData ?? local.assetData
+            )
         }
     }
 

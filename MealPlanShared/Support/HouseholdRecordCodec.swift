@@ -375,6 +375,11 @@ enum HouseholdRecordCodec {
         if let data = snapshot.assetData {
             let file = try assetFile(for: snapshot.identity, data: data)
             record[assetKey] = CKAsset(fileURL: file)
+        } else if snapshot.identity.type == .dishImage || snapshot.identity.type == .cookedLogImage {
+            // Image removal is represented by deleting the dedicated record.
+            // Never turn a transiently unavailable external-storage fault into
+            // an upload that clears the recoverable CloudKit asset.
+            throw HouseholdRecordCodecError.missingAsset
         } else {
             record[assetKey] = nil
         }
@@ -555,4 +560,5 @@ actor HouseholdSnapshotActor {
 enum HouseholdRecordCodecError: Error {
     case missingPayload
     case missingRelationship
+    case missingAsset
 }

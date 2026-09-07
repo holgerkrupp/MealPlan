@@ -189,6 +189,45 @@ enum HouseholdCloudSharingService {
         return .init(url: url, participantCount: acceptedParticipantCount(in: savedShare), isOwner: true)
     }
 
+    /// Revokes the current zone-wide share and immediately creates a new one.
+    /// Deleting a `CKShare` stops sharing its zone but does not delete the zone
+    /// or any of the household records inside it, so this is the safe escape
+    /// hatch for an invitation URL that CloudKit can no longer resolve.
+    static func replaceInvitation(for household: Household, canEdit: Bool, context: ModelContext) async throws -> HouseholdShareInvitation {
+        var locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
+        guard locator.isOwner else { throw HouseholdSharingError.onlyOwnerCanInvite }
+
+        // Push current household changes before access to the zone is reset.
+        try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+
+        if let shareID = locator.shareRecordID {
+            let database = CKContainer(identifier: SharedStore.cloudKitContainerID).privateCloudDatabase
+            do {
+                let result = try await database.modifyRecords(
+                    saving: [],
+                    deleting: [shareID],
+                    savePolicy: .ifServerRecordUnchanged,
+                    atomically: true
+                )
+                guard let deletion = result.deleteResults[shareID] else {
+                    throw HouseholdSharingError.cloudKitDidNotReturnRecord
+                }
+                _ = try deletion.get()
+            } catch let error as CKError where error.code == .unknownItem {
+                // A stale local locator is precisely one of the cases this
+                // recovery action is meant to repair. There is no old share
+                // left to revoke, so continue by creating a replacement.
+            }
+        }
+
+        locator.shareRecordName = nil
+        household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
+        household.modifiedAt = .now
+        try context.save()
+
+        return try await prepareInvitation(for: household, canEdit: canEdit, context: context)
+    }
+
     /// Joins the household behind `metadata`. `mergeRecipes` decides what
     /// happens to any other local household this device already has (see
     /// `localHouseholdAtRisk(ofAccepting:context:)`): `false` drops it along

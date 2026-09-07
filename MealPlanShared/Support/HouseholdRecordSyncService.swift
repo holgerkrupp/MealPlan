@@ -338,13 +338,19 @@ final class HouseholdRecordSyncService {
                 continue
             }
 
-            let resolution = try HouseholdRecordConflictResolver.resolve(local: local[identity.recordName], server: record)
-            let assetData = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+            let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
+            let serverAssetData = serverAsset?.fileURL.flatMap { try? Data(contentsOf: $0) }
+            let resolution = try HouseholdRecordConflictResolver.resolve(
+                local: local[identity.recordName],
+                server: record,
+                serverAssetData: serverAssetData,
+                serverHasAsset: serverAsset != nil
+            )
             try HouseholdRecordApplier.apply(
                 payloadData: resolution.payloadData,
                 identity: identity,
                 modifiedAt: resolution.modifiedAt,
-                assetData: assetData,
+                assetData: resolution.assetData,
                 household: household,
                 context: context
             )
@@ -402,9 +408,15 @@ final class HouseholdRecordSyncService {
         } else {
             local = try await snapshotRecords(for: household.uuid).first { $0.identity == identity }
         }
-        let resolution = try HouseholdRecordConflictResolver.resolve(local: local, server: server)
-        let assetData = (server[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
-        try HouseholdRecordApplier.apply(payloadData: resolution.payloadData, identity: identity, modifiedAt: resolution.modifiedAt, assetData: assetData, household: household, context: context)
+        let serverAsset = server[HouseholdRecordCodec.assetKey] as? CKAsset
+        let serverAssetData = serverAsset?.fileURL.flatMap { try? Data(contentsOf: $0) }
+        let resolution = try HouseholdRecordConflictResolver.resolve(
+            local: local,
+            server: server,
+            serverAssetData: serverAssetData,
+            serverHasAsset: serverAsset != nil
+        )
+        try HouseholdRecordApplier.apply(payloadData: resolution.payloadData, identity: identity, modifiedAt: resolution.modifiedAt, assetData: resolution.assetData, household: household, context: context)
         try context.save()
         metadata.systemFields[identity.recordName] = encodeSystemFields(server)
         if resolution.shouldUpload { engine.state.add(pendingRecordZoneChanges: [.saveRecord(server.recordID)]) }
@@ -480,8 +492,17 @@ final class HouseholdRecordSyncService {
         UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
     }
 
+    /// CloudKit's Development and Production databases are completely
+    /// independent. Their sync tokens, pending changes, record change tags,
+    /// and zone state must never share a cache key even when the household's
+    /// zone ID is identical. In particular, a Production build installed over
+    /// a Development build keeps this App Group UserDefaults suite.
+    static func storageSuffix(for locator: HouseholdShareLocator, environment: CloudKitEnvironment) -> String {
+        Data("\(environment.rawValue)|\(locator.isOwner ? "private" : "shared")|\(locator.zoneName)|\(locator.ownerName)".utf8).base64EncodedString()
+    }
+
     private func storageSuffix(for locator: HouseholdShareLocator) -> String {
-        Data("\(locator.isOwner ? "private" : "shared")|\(locator.zoneName)|\(locator.ownerName)".utf8).base64EncodedString()
+        Self.storageSuffix(for: locator, environment: BuildEnvironment.cloudKit)
     }
 
     private func stateKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.state.\(storageSuffix(for: locator))" }

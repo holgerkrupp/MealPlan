@@ -114,7 +114,11 @@ enum HouseholdRecordApplier {
         case .dishImage(let value):
             guard let dish = find(Dish.self, value.dishID, context) else { throw HouseholdRecordCodecError.missingRelationship }
             let model = find(DishImage.self, identity.uuid, context) ?? insert(DishImage(data: nil), identity.uuid, context)
-            model.data = assetData
+            // A CKAsset URL can occasionally be unavailable by the time its
+            // record is applied. The photo has its own record, so absence of
+            // bytes is not a deletion signal and must not erase a good local
+            // copy. An explicit record deletion is handled in `delete` below.
+            if let assetData { model.data = assetData }
             model.sortIndex = value.sortIndex
             model.isPrimary = value.isPrimary
             model.dateAdded = value.dateAdded
@@ -188,7 +192,7 @@ enum HouseholdRecordApplier {
 
         case .cookedLogImage(let value):
             guard let log = find(CookedLog.self, value.cookedLogID, context) else { throw HouseholdRecordCodecError.missingRelationship }
-            log.photoData = assetData
+            if let assetData { log.photoData = assetData }
             log.modifiedAt = max(log.modifiedAt, modifiedAt)
 
         case .shoppingItem(let wrapped):

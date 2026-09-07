@@ -169,6 +169,33 @@ enum DishBuilder {
         try? context.save()
     }
 
+    /// Replaces the photo the app shows for a dish while retaining any
+    /// additional photos. Used when the image asset needs to be recovered from
+    /// the dish's linked recipe page.
+    @MainActor
+    @discardableResult
+    static func assignPrimaryImage(
+        _ data: Data,
+        to dish: Dish,
+        context: ModelContext
+    ) -> DishImage {
+        if let primary = dish.primaryImage {
+            primary.data = data
+            primary.isPrimary = true
+            primary.modifiedAt = .now
+            for image in dish.images ?? [] where image !== primary && image.isPrimary {
+                image.isPrimary = false
+                image.modifiedAt = .now
+            }
+            return primary
+        }
+
+        let image = DishImage(data: data, sortIndex: 0, isPrimary: true)
+        image.dish = dish
+        context.insert(image)
+        return image
+    }
+
     /// Copies a dish, ingredients and photos included, and puts the copy in
     /// the original's variant group. This is how "another take on this" is
     /// made: the copy is a full dish that can be edited, planned and cooked
