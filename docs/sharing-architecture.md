@@ -2,6 +2,10 @@
 
 Status: **approved for a pre-release clean cutover**
 
+For how the shipped implementation works — both across one account's
+devices and between different people — see
+[`icloud-sharing.md`](icloud-sharing.md).
+
 MealPlan uses one CloudKit record per SwiftData entity, driven by
 `CKSyncEngine`. The old whole-household `MealPlanBackup` sharing asset and
 SwiftData CloudKit mirror are removed. There is intentionally no data or blob
