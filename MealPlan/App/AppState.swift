@@ -6,6 +6,22 @@ import SwiftUI
 import UIKit
 #endif
 
+enum CloudBootstrapState: Equatable {
+    case checking
+    case connecting
+    case downloading(Int)
+    case importing(completed: Int, total: Int)
+    case ready
+    case failed(String)
+
+    var isWorking: Bool {
+        switch self {
+        case .checking, .connecting, .downloading, .importing: true
+        case .ready, .failed: false
+        }
+    }
+}
+
 /// App-wide UI state that isn't part of the synced model: which household is
 /// active, the calendar's focused date, and the current library / shopping
 /// filters.
@@ -31,6 +47,9 @@ final class AppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
+    /// Keeps a newly installed device from presenting an empty editable
+    /// household while it is still discovering/downloading the owner's data.
+    var cloudBootstrapState: CloudBootstrapState = .checking
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -149,6 +168,62 @@ final class AppState {
             try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
         DishGlyphMaintenance.run(context: context)
+        cloudBootstrapState = .ready
+    }
+
+    /// Before creating the first local household, look for an existing
+    /// private CloudKit zone owned by this Apple Account. Older versions
+    /// created a new empty zone immediately, so a defaults-only household is
+    /// also safe to replace during this recovery pass.
+    func bootstrapFromCloud(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) async {
+        cloudBootstrapState = .checking
+        let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
+        let local = households.count == 1 ? households[0] : nil
+        let shouldDiscover = households.isEmpty || (local.map(isReplaceableCloudPlaceholder) == true)
+
+        guard shouldDiscover else {
+            bootstrap(context: context, planningThrough: latestPlanningDate)
+            return
+        }
+
+        do {
+            _ = try await HouseholdCloudBootstrapService.restoreOwnedHouseholdIfAvailable(
+                replacing: local,
+                context: context,
+                progress: updateCloudProgress
+            )
+            bootstrap(context: context, planningThrough: latestPlanningDate)
+        } catch {
+            // Remain fully usable offline, but make the failed initial lookup
+            // visible and retryable instead of silently showing an empty plan.
+            bootstrap(context: context, planningThrough: latestPlanningDate)
+            cloudBootstrapState = .failed(error.localizedDescription)
+        }
+    }
+
+    func updateCloudProgress(_ progress: HouseholdCloudDownloadProgress) {
+        switch progress {
+        case .lookingForHousehold: cloudBootstrapState = .checking
+        case .connecting: cloudBootstrapState = .connecting
+        case .downloading(let count): cloudBootstrapState = .downloading(count)
+        case .importing(let completed, let total):
+            cloudBootstrapState = .importing(completed: completed, total: total)
+        }
+    }
+
+    func finishCloudDownload() {
+        cloudBootstrapState = .ready
+    }
+
+    private func isReplaceableCloudPlaceholder(_ household: Household) -> Bool {
+        (household.dishes ?? []).isEmpty
+            && (household.entries ?? []).isEmpty
+            && (household.shoppingItems ?? []).isEmpty
+            && (household.cookedLogs ?? []).isEmpty
+            && (household.mealRoutines ?? []).isEmpty
+            && (household.weekTemplates ?? []).isEmpty
+            && (household.recipeFeeds ?? []).isEmpty
+            && (household.recipeBookmarks ?? []).isEmpty
     }
 
     /// Route a `mealplan://` deep link (or an App Intent hand-off).

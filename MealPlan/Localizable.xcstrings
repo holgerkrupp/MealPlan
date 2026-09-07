@@ -826,6 +826,16 @@
         }
       }
     },
+    "Already in your recipes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ist schon in deinen Rezepten."
+          }
+        }
+      }
+    },
     "Already saved as “%@”" : {
       "localizations" : {
         "de" : {
@@ -1336,6 +1346,16 @@
         }
       }
     },
+    "Checking iCloud…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud wird geprüft …"
+          }
+        }
+      }
+    },
     "Check the split is right, then save. The dish opens for editing and is marked to review." : {
 
     },
@@ -1525,6 +1545,16 @@
     },
     "Confirmed" : {
 
+    },
+    "Connecting to your household…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verbindung zu deinem Haushalt …"
+          }
+        }
+      }
     },
     "Connect to Bring!" : {
       "localizations" : {
@@ -1830,6 +1860,12 @@
     "Create a backup…" : {
 
     },
+    "Create a New Invitation?" : {
+
+    },
+    "Create New Invitation" : {
+
+    },
     "Current step" : {
 
     },
@@ -2107,6 +2143,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Downloaded %lld items." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld Einträge geladen."
+          }
+        }
+      }
+    },
+    "Downloading from iCloud…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Daten werden aus iCloud geladen …"
           }
         }
       }
@@ -2863,6 +2919,27 @@
     "iCloud sharing needs attention" : {
 
     },
+    "iCloud sync paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud-Synchronisierung pausiert"
+          }
+        }
+      }
+    },
+    "iCloud is preparing the shared meal plan." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "iCloud bereitet den gemeinsamen Essensplan vor."
+          }
+        }
+      }
+
+    },
     "Icon" : {
 
     },
@@ -2895,6 +2972,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Rezepte importieren"
+          }
+        }
+      }
+    },
+    "Imported %lld of %lld items." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld von %2$lld Einträgen importiert."
           }
         }
       }
@@ -3219,6 +3306,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Meine Bring!-Listen laden"
+          }
+        }
+      }
+    },
+    "Looking for your household before setting up this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt wird gesucht, bevor dieses Gerät eingerichtet wird."
           }
         }
       }
@@ -3652,6 +3749,9 @@
           }
         }
       }
+    },
+    "No photo was found on that recipe page." : {
+
     },
     "No placeholder — shows a generic icon" : {
 
@@ -4630,6 +4730,16 @@
     "Prepare a copy to share…" : {
 
     },
+    "Preparing your household…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt wird vorbereitet …"
+          }
+        }
+      }
+    },
     "Preparing a secure iCloud invitation…" : {
 
     },
@@ -4945,6 +5055,9 @@
 
     },
     "Regular meals are planned %lld weeks ahead, and only into meals that are still empty. Change or remove a single week right in the plan — the routine keeps going." : {
+
+    },
+    "Reload photo from recipe link" : {
 
     },
     "Remind me about tonight’s dinner" : {
@@ -5272,6 +5385,16 @@
     },
     "Saved to %@" : {
 
+    },
+    "Saved to your recipes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In deinen Rezepten gespeichert."
+          }
+        }
+      }
     },
     "Say “next”, “back”, “repeat” or “start timer”." : {
 
@@ -6144,6 +6267,9 @@
         }
       }
     },
+    "The current link will stop working and everyone who already joined will lose access. Your household, dishes, and meal plan will stay intact." : {
+
+    },
     "The dish needs a name." : {
 
     },
@@ -6600,6 +6726,16 @@
         }
       }
     },
+    "Try Again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut versuchen"
+          }
+        }
+      }
+    },
     "Try another word, or widen the filter to include older posts." : {
       "localizations" : {
         "de" : {
@@ -6871,6 +7007,9 @@
         }
       }
     },
+    "Use this if iCloud says the current invitation no longer exists. It creates a different link without deleting your household data." : {
+
+    },
     "Use this instead" : {
 
     },
@@ -6969,6 +7108,16 @@
     },
     "Voice control is listening" : {
 
+    },
+    "Waiting for household data." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Haushaltsdaten wird gewartet."
+          }
+        }
+      }
     },
     "Water" : {
       "localizations" : {
@@ -7222,26 +7371,6 @@
     },
     "Your week is ready as a PDF." : {
 
-    },
-    "Saved to your recipes." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In deinen Rezepten gespeichert."
-          }
-        }
-      }
-    },
-    "Already in your recipes." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ist schon in deinen Rezepten."
-          }
-        }
-      }
     }
   },
   "version" : "1.0"

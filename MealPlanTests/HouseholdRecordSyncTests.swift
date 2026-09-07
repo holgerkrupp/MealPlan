@@ -81,6 +81,24 @@ struct HouseholdRecordSyncTests {
         #expect(HouseholdShareLocator.decode(try HouseholdShareLocator.encode(source)) == source)
     }
 
+    @Test func householdZoneRoundTripsItsIdentity() {
+        let householdID = UUID()
+        let locator = HouseholdShareLocator.solo(householdID: householdID)
+
+        #expect(HouseholdShareLocator.householdID(from: locator.zoneID) == householdID)
+        #expect(HouseholdShareLocator.householdID(from: CKRecordZone.ID(zoneName: "Unrelated")) == nil)
+    }
+
+    @Test func cloudBootstrapPrefersSharedThenOldestHousehold() {
+        let oldUnshared = CandidateSummary(zoneName: "old", isShared: false, dateCreated: Date(timeIntervalSince1970: 100))
+        let newShared = CandidateSummary(zoneName: "shared", isShared: true, dateCreated: Date(timeIntervalSince1970: 300))
+        let oldShared = CandidateSummary(zoneName: "original", isShared: true, dateCreated: Date(timeIntervalSince1970: 200))
+
+        let ordered = [oldUnshared, newShared, oldShared].sorted(by: HouseholdCloudBootstrapService.candidateComesFirst)
+
+        #expect(ordered == [oldShared, newShared, oldUnshared])
+    }
+
     @Test func syncStateIsNamespacedByCloudKitEnvironment() {
         let locator = HouseholdShareLocator(
             zoneName: "MealPlanHousehold-test",

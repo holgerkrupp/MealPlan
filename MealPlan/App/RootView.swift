@@ -68,6 +68,7 @@ struct RootView: View {
                 splitView
             }
         }
+        .overlay { cloudBootstrapOverlay }
         .onChange(of: appState.requestedSection) { _, requested in
             if let requested {
                 selection = requested
@@ -197,6 +198,9 @@ struct RootView: View {
     private func evaluateOnboarding() async {
         guard !didEvaluateOnboarding else { return }
         didEvaluateOnboarding = true
+        while appState.cloudBootstrapState.isWorking, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(150))
+        }
         guard !didCompleteOnboarding else { return }
 
         // A device joining an existing household pulls its dishes down from
@@ -215,6 +219,12 @@ struct RootView: View {
     /// household with something in it is asked first, since joining replaces
     /// it — see `pendingHouseholdJoin`.
     private func acceptPendingCloudShares() async {
+        // The app-level CloudKit discovery and a share acceptance both replace
+        // the active household. Serialize them so a launch-time invitation
+        // cannot import the same private zone while discovery is still doing so.
+        while appState.cloudBootstrapState.isWorking, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(150))
+        }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
             if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
                 pendingHouseholdJoin = PendingHouseholdJoin(
@@ -231,8 +241,14 @@ struct RootView: View {
     /// Finishes joining a household after `acceptPendingCloudShares` either
     /// found nothing at risk or the person chose how to handle what was.
     private func acceptHouseholdJoin(_ metadata: CKShare.Metadata, mergeRecipes: Bool) async {
+        appState.updateCloudProgress(.connecting)
         do {
-            let (household, isGuest) = try await HouseholdCloudSharingService.accept(metadata, mergeRecipes: mergeRecipes, context: context)
+            let (household, isGuest) = try await HouseholdCloudSharingService.accept(
+                metadata,
+                mergeRecipes: mergeRecipes,
+                context: context,
+                progress: appState.updateCloudProgress
+            )
             appState.currentHousehold = household
             appState.isGuest = isGuest
             // Mirrors the household-specific half of `AppState.bootstrap`
@@ -247,9 +263,89 @@ struct RootView: View {
                 through: purchaseManager.latestPlanningDate(),
                 memberName: appState.currentMemberName
             )
+            appState.finishCloudDownload()
         } catch {
             HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+            appState.finishCloudDownload()
             sharingErrorMessage = error.localizedDescription
+        }
+    }
+
+    @ViewBuilder
+    private var cloudBootstrapOverlay: some View {
+        switch appState.cloudBootstrapState {
+        case .checking:
+            cloudProgressPanel(
+                title: String(localized: "Checking iCloud…"),
+                detail: String(localized: "Looking for your household before setting up this device.")
+            )
+        case .connecting:
+            cloudProgressPanel(
+                title: String(localized: "Connecting to your household…"),
+                detail: String(localized: "iCloud is preparing the shared meal plan.")
+            )
+        case .downloading(let count):
+            cloudProgressPanel(
+                title: String(localized: "Downloading from iCloud…"),
+                detail: count == 0
+                    ? String(localized: "Waiting for household data.")
+                    : String(localized: "Downloaded (count) items.")
+            )
+        case .importing(let completed, let total):
+            cloudProgressPanel(
+                title: String(localized: "Preparing your household…"),
+                detail: String(localized: "Imported (completed) of (total) items."),
+                progress: total > 0 ? Double(completed) / Double(total) : nil
+            )
+        case .failed(let message):
+            VStack(spacing: 10) {
+                Label(String(localized: "iCloud sync paused"), systemImage: "icloud.slash")
+                    .font(.headline)
+                Text(message)
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                Button(String(localized: "Try Again")) {
+                    Task {
+                        await appState.bootstrapFromCloud(
+                            context: context,
+                            planningThrough: purchaseManager.latestPlanningDate()
+                        )
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+            .padding()
+            .frame(maxWidth: 420)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
+            .shadow(radius: 12)
+            .padding()
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        case .ready:
+            EmptyView()
+        }
+    }
+
+    private func cloudProgressPanel(title: String, detail: String, progress: Double? = nil) -> some View {
+        ZStack {
+            Rectangle()
+                .fill(.background)
+                .ignoresSafeArea()
+            VStack(spacing: 16) {
+                if let progress {
+                    ProgressView(value: progress)
+                        .frame(maxWidth: 280)
+                } else {
+                    ProgressView()
+                        .controlSize(.large)
+                }
+                Text(title)
+                    .font(.title3.bold())
+                Text(detail)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(32)
         }
     }
 

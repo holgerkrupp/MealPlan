@@ -234,8 +234,35 @@ enum HouseholdCloudSharingService {
     /// with everything in it, `true` moves its dishes — and the ingredients
     /// they need — into the joined household first, so its recipes survive
     /// even though its plan, shopping list, and history don't.
-    static func accept(_ metadata: CKShare.Metadata, mergeRecipes: Bool = false, context: ModelContext) async throws -> (household: Household, isGuest: Bool) {
+    static func accept(
+        _ metadata: CKShare.Metadata,
+        mergeRecipes: Bool = false,
+        context: ModelContext,
+        progress: @escaping @MainActor @Sendable (HouseholdCloudDownloadProgress) -> Void = { _ in }
+    ) async throws -> (household: Household, isGuest: Bool) {
         guard metadata.containerIdentifier == SharedStore.cloudKitContainerID else { throw HouseholdSharingError.invalidInvitation }
+
+        // An owner's second device already has access through the private
+        // database. CloudKit rejects accepting that owner's own share into the
+        // shared database, so use its zone ID as a precise download locator.
+        let privateDatabase = CKContainer(identifier: metadata.containerIdentifier).privateCloudDatabase
+        let zoneIsInPrivateDatabase = (try? await privateDatabase.recordZone(for: metadata.share.recordID.zoneID)) != nil
+        if metadata.share.currentUserParticipant?.role == .owner || zoneIsInPrivateDatabase {
+            let local = (try? context.fetch(FetchDescriptor<Household>()))?.first {
+                $0.uuid != HouseholdShareLocator.householdID(from: metadata.share.recordID.zoneID)
+            }
+            let household = try await HouseholdCloudBootstrapService.restoreOwnedHousehold(
+                in: metadata.share.recordID.zoneID,
+                shareRecordName: metadata.share.recordID.recordName,
+                replacing: local,
+                mergeRecipes: mergeRecipes,
+                context: context,
+                progress: progress
+            )
+            return (household, false)
+        }
+
+        progress(.connecting)
         let container = CKContainer(identifier: metadata.containerIdentifier)
         let database = container.sharedCloudDatabase
         // Use the single-share overload so a per-share CloudKit failure is
@@ -264,6 +291,8 @@ enum HouseholdCloudSharingService {
             }
             acceptedShare = existingShare
         }
+
+        progress(.downloading(0))
 
         var lastError: Error = HouseholdSharingError.missingRootRecord
         for attempt in 0..<6 {
@@ -356,7 +385,7 @@ enum HouseholdCloudSharingService {
     /// ingredient either joins an ingredient `newHousehold` already has with
     /// the same normalized name (keeping the shopping list's aggregation
     /// intact) or moves over with the dish when there's no match yet.
-    private static func mergeDishes(from oldHousehold: Household, into newHousehold: Household) {
+    static func mergeDishes(from oldHousehold: Household, into newHousehold: Household) {
         var ingredientsByName = [String: Ingredient](
             (newHousehold.ingredients ?? []).map { ($0.normalizedName, $0) },
             uniquingKeysWith: { first, _ in first }

@@ -3,6 +3,8 @@ import Foundation
 import SwiftData
 
 struct HouseholdShareLocator: Codable, Equatable, Sendable {
+    static let zonePrefix = "MealPlanHousehold-"
+
     var zoneName: String
     var ownerName: String
     var shareRecordName: String?
@@ -19,12 +21,17 @@ struct HouseholdShareLocator: Codable, Equatable, Sendable {
 
     static func solo(householdID: UUID) -> HouseholdShareLocator {
         .init(
-            zoneName: "MealPlanHousehold-\(householdID.uuidString)",
+            zoneName: "\(zonePrefix)\(householdID.uuidString)",
             ownerName: CKCurrentUserDefaultName,
             shareRecordName: nil,
             isOwner: true,
             isReadOnly: false
         )
+    }
+
+    static func householdID(from zoneID: CKRecordZone.ID) -> UUID? {
+        guard zoneID.zoneName.hasPrefix(zonePrefix) else { return nil }
+        return UUID(uuidString: String(zoneID.zoneName.dropFirst(zonePrefix.count)))
     }
 
     static func encode(_ locator: HouseholdShareLocator) throws -> String {

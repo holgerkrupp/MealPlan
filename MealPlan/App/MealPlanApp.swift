@@ -44,7 +44,7 @@ struct MealPlanApp: App {
                     .environment(\.calendarEventWriter, calendarEventWriter)
                     .task {
                         await purchaseManager.prepareForLaunch()
-                        appState.bootstrap(
+                        await appState.bootstrapFromCloud(
                             context: container.mainContext,
                             planningThrough: purchaseManager.latestPlanningDate()
                         )
