@@ -222,6 +222,7 @@ struct RecipeSearchSettingsSection: View {
 struct ConnectionsSettingsSection: View {
     @Environment(AppState.self) private var appState
     @Environment(CalendarContextStore.self) private var calendarStore
+    @Environment(PublishedCalendarSettings.self) private var publishedCalendarSettings
 
     var body: some View {
         Section {
@@ -234,6 +235,17 @@ struct ConnectionsSettingsSection: View {
                     Text(calendarStatus)
                 } label: {
                     Label(String(localized: "Calendar"), systemImage: "calendar.badge.clock")
+                }
+            }
+
+            NavigationLink {
+                PublishCalendarView()
+            } label: {
+                LabeledContent {
+                    Text(publishedCalendarSettings.isPublishing
+                         ? String(localized: "Published") : String(localized: "Not published"))
+                } label: {
+                    Label(String(localized: "Publish Calendar"), systemImage: "square.and.arrow.up.on.square")
                 }
             }
 
