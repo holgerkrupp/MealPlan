@@ -21,7 +21,8 @@ struct RecipeArticleReaderView: View {
     @State private var saving = false
     @State private var savedDish: Dish?
     @State private var noRecipeFound = false
-    @State private var showingPlanSheet = false
+    @State private var planningDish: Dish?
+    @State private var saveNotice: String?
     @State private var errorMessage: String?
     /// A picture found on the page itself, for an article whose feed had none.
     @State private var resolvedImageURL: URL?
@@ -46,6 +47,12 @@ struct RecipeArticleReaderView: View {
 
                 if loading {
                     ProgressView().frame(maxWidth: .infinity)
+                }
+
+                if let saveNotice {
+                    Label(saveNotice, systemImage: "checkmark.circle.fill")
+                        .font(.subheadline)
+                        .foregroundStyle(.green)
                 }
 
                 if let recipe {
@@ -106,14 +113,12 @@ struct RecipeArticleReaderView: View {
             }
         }
         .task { await load() }
-        .sheet(isPresented: $showingPlanSheet) {
-            if let savedDish {
-                NavigationStack {
-                    PlanDishSheet(dish: savedDish, defaultDate: appState.selectedDate)
-                }
-                .presentationDetents([.medium])
-                .dismissesOnOutsideClick()
+        .sheet(item: $planningDish) { dish in
+            NavigationStack {
+                PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
+            .presentationDetents([.medium])
+            .dismissesOnOutsideClick()
         }
         .alert(String(localized: "Couldn’t read that page"), isPresented: Binding(
             get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
@@ -274,13 +279,20 @@ struct RecipeArticleReaderView: View {
         // An article already in the library imports nothing, and planning it
         // still has to reach the dish that is there.
         savedDish = result.dishes.first ?? existingDish(for: recipe)
-        appState.importNotice = result.summary
+        // Deliberately not `appState.importNotice`: that raises an alert owned
+        // by RootView, and presenting one dismisses any sheet above it — which
+        // took the subscribe sheet's site preview with it. The notice belongs
+        // to this screen, so this screen shows it.
+        saveNotice = result.imported > 0
+            ? String(localized: "Saved to your recipes.")
+            : String(localized: "Already in your recipes.")
     }
 
+    /// Planning saves the recipe first when it has to. Neither step closes this
+    /// screen — a site worth one recipe is usually worth two.
     private func planRecipe() async {
         if savedDish == nil { await saveRecipe() }
-        guard savedDish != nil else { return }
-        showingPlanSheet = true
+        planningDish = savedDish
     }
 
     private func existingDish(for recipe: ImportedRecipe) -> Dish? {

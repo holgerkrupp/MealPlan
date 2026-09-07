@@ -7222,6 +7222,26 @@
     },
     "Your week is ready as a PDF." : {
 
+    },
+    "Saved to your recipes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In deinen Rezepten gespeichert."
+          }
+        }
+      }
+    },
+    "Already in your recipes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ist schon in deinen Rezepten."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"
