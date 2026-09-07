@@ -133,7 +133,17 @@ struct RootView: View {
         }
         .confirmationDialog(
             String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
-            isPresented: Binding(get: { pendingHouseholdJoin != nil }, set: { if !$0 { pendingHouseholdJoin = nil } }),
+            isPresented: Binding(
+                get: { pendingHouseholdJoin != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        if let metadata = pendingHouseholdJoin?.metadata {
+                            HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+                        }
+                        pendingHouseholdJoin = nil
+                    }
+                }
+            ),
             titleVisibility: .visible,
             presenting: pendingHouseholdJoin
         ) { pending in
@@ -146,6 +156,7 @@ struct RootView: View {
                 Task { await acceptHouseholdJoin(pending.metadata, mergeRecipes: false) }
             }
             Button(String(localized: "Cancel"), role: .cancel) {
+                HouseholdShareInvitationInbox.shared.allowRedelivery(of: pending.metadata)
                 pendingHouseholdJoin = nil
             }
         } message: { pending in
@@ -237,6 +248,7 @@ struct RootView: View {
                 memberName: appState.currentMemberName
             )
         } catch {
+            HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
             sharingErrorMessage = error.localizedDescription
         }
     }

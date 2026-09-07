@@ -7049,6 +7049,176 @@
           }
         }
       }
+    },
+    "Search recipes and sites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezepte und Seiten durchsuchen"
+          }
+        }
+      }
+    },
+    "Nothing here matches." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hier passt nichts."
+          }
+        }
+      }
+    },
+    "Show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anzeigen"
+          }
+        }
+      }
+    },
+    "Site" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seite"
+          }
+        }
+      }
+    },
+    "All sites" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle Seiten"
+          }
+        }
+      }
+    },
+    "Sort and filter" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sortieren und filtern"
+          }
+        }
+      }
+    },
+    "Nothing matches" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts gefunden"
+          }
+        }
+      }
+    },
+    "Try another word, or widen the filter to include older posts." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Probier ein anderes Wort oder erweitere den Filter auf ältere Beiträge."
+          }
+        }
+      }
+    },
+    "Shows what this site has published lately" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt, was diese Seite zuletzt veröffentlicht hat"
+          }
+        }
+      }
+    },
+    "Nothing to show" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nichts zu zeigen"
+          }
+        }
+      }
+    },
+    "This site’s feed has no recent posts." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Feed dieser Seite hat keine aktuellen Beiträge."
+          }
+        }
+      }
+    },
+    "Subscribed" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abonniert"
+          }
+        }
+      }
+    },
+    "Newest first" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neueste zuerst"
+          }
+        }
+      }
+    },
+    "Oldest first" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Älteste zuerst"
+          }
+        }
+      }
+    },
+    "By title" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach Titel"
+          }
+        }
+      }
+    },
+    "Recent" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuell"
+          }
+        }
+      }
+    },
+    "Everything" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alles"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

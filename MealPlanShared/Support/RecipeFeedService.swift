@@ -3,9 +3,19 @@ import SwiftData
 
 @MainActor
 enum RecipeFeedService {
-    /// Discovers the advertised feed from a human-friendly home page and
-    /// performs the first refresh before inserting anything into the store.
-    static func subscribe(to rawURL: URL, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+    /// A site's feed, fetched and parsed but not yet stored. The subscribe
+    /// sheet shows one of these so the recipes can be browsed before the
+    /// household commits to the site.
+    struct ResolvedFeed {
+        let parsed: ParsedRecipeFeed
+        let feedURL: URL
+        let siteURL: URL
+        let response: HTTPURLResponse
+    }
+
+    /// Discovers the advertised feed from a human-friendly home page and reads
+    /// it, touching nothing in the store.
+    static func resolveFeed(at rawURL: URL) async throws -> ResolvedFeed {
         let siteURL = normalizedWebURL(rawURL)
         let request = URLRequest(url: siteURL, cachePolicy: .reloadIgnoringLocalCacheData)
         let (data, response) = try await URLSession.shared.data(for: request)
@@ -39,16 +49,39 @@ enum RecipeFeedService {
             finalResponse = feedHTTP
         }
 
-        if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: { $0.feedURLString == feedURL.absoluteString }) {
+        return ResolvedFeed(parsed: parsed, feedURL: feedURL, siteURL: siteURL, response: finalResponse)
+    }
+
+    /// Discovers the advertised feed from a human-friendly home page and
+    /// performs the first refresh before inserting anything into the store.
+    static func subscribe(to rawURL: URL, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+        try await subscribe(to: resolveFeed(at: rawURL), household: household, context: context)
+    }
+
+    /// Stores a feed the caller has already read, so subscribing from a preview
+    /// does not fetch the same pages twice.
+    @discardableResult
+    static func subscribe(to resolved: ResolvedFeed, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+        if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: { $0.feedURLString == resolved.feedURL.absoluteString }) {
             return existing
         }
-        let feed = RecipeFeed(title: parsed.title, siteURL: parsed.homeURL ?? siteURL, feedURL: feedURL)
+        let feed = RecipeFeed(
+            title: resolved.parsed.title,
+            siteURL: resolved.parsed.homeURL ?? resolved.siteURL,
+            feedURL: resolved.feedURL
+        )
         feed.household = household
         context.insert(feed)
-        try await merge(parsed, into: feed, context: context)
-        markSuccess(feed, response: finalResponse)
+        try await merge(resolved.parsed, into: feed, context: context)
+        markSuccess(feed, response: resolved.response)
         try context.save()
         return feed
+    }
+
+    /// Whether this household is already subscribed to the given feed.
+    static func isSubscribed(toFeedAt feedURL: URL, context: ModelContext) -> Bool {
+        let feeds = (try? context.fetch(FetchDescriptor<RecipeFeed>())) ?? []
+        return feeds.contains { $0.feedURLString == feedURL.absoluteString }
     }
 
     static func refreshAll(context: ModelContext, force: Bool = false) async {
@@ -93,6 +126,11 @@ enum RecipeFeedService {
         }
     }
 
+    /// How many articles a single feed keeps, current and archived together.
+    /// Generous enough that a weekly blog is kept for years, bounded so a
+    /// high-volume magazine cannot grow the shared store without limit.
+    static let archiveLimit = 600
+
     private static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) async throws {
         var existing = Dictionary(uniqueKeysWithValues: (feed.items ?? []).map { ($0.stableID, $0) })
         for article in parsed.articles.prefix(100) {
@@ -106,12 +144,24 @@ enum RecipeFeedService {
             item.publishedAt = article.publishedAt
             item.imageURLString = article.imageURL?.absoluteString ?? item.imageURLString
             item.fetchedAt = .now
+            // A post can reappear after a site edits and republishes it.
+            item.archivedAt = nil
             item.feed = feed
         }
-        // Metadata stays bounded too. Anything outside the newest 100 is just
-        // an old discovery result, not user-authored data.
-        let keep = Set(feed.sortedItems.prefix(100).map(\.uuid))
-        for item in feed.items ?? [] where !keep.contains(item.uuid) { context.delete(item) }
+
+        // Everything the feed no longer lists is archived rather than deleted:
+        // a blog that publishes ten posts at a time would otherwise quietly
+        // lose a recipe for anyone who didn't open the app that week.
+        for stranded in existing.values where stranded.archivedAt == nil {
+            stranded.archivedAt = .now
+        }
+
+        // The archive is still bounded. The oldest archived posts go first, and
+        // only once the feed is over its limit.
+        let all = feed.sortedItems
+        guard all.count > archiveLimit else { return }
+        let doomed = all.dropFirst(archiveLimit).filter(\.isArchived)
+        for item in doomed { context.delete(item) }
     }
 
     private static func markSuccess(_ feed: RecipeFeed, response: HTTPURLResponse) {

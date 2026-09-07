@@ -11,6 +11,7 @@ struct HouseholdShareInvitation: Sendable {
 enum HouseholdSharingError: LocalizedError {
     case cloudKitUnavailable
     case invalidInvitation
+    case invitationNotFound
     case missingShareURL
     case missingRootRecord
     case cloudKitDidNotReturnRecord
@@ -21,6 +22,7 @@ enum HouseholdSharingError: LocalizedError {
         switch self {
         case .cloudKitUnavailable: String(localized: "iCloud sharing is unavailable on this device.")
         case .invalidInvitation: String(localized: "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app.")
+        case .invitationNotFound: String(localized: "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation.")
         case .missingShareURL: String(localized: "iCloud did not create an invitation link. Please try again.")
         case .missingRootRecord: String(localized: "The shared household could not be found.")
         case .cloudKitDidNotReturnRecord: String(localized: "iCloud did not return the saved collaboration record.")
@@ -38,8 +40,13 @@ extension Notification.Name {
 final class HouseholdShareInvitationInbox {
     static let shared = HouseholdShareInvitationInbox()
     private var pending: [CKShare.Metadata] = []
+    /// A share URL can reach us through more than one UIKit/SwiftUI lifecycle
+    /// hook. Keep its key for the lifetime of the process so two callbacks
+    /// cannot race two `CKContainer.accept` operations for the same invite.
+    private var deliveryGate = CloudShareDeliveryGate()
 
     func enqueue(_ metadata: CKShare.Metadata) {
+        guard deliveryGate.shouldDeliver(deliveryKey(for: metadata)) else { return }
         pending.append(metadata)
         NotificationCenter.default.post(name: .mealPlanDidReceiveCloudShare, object: nil)
     }
@@ -47,6 +54,38 @@ final class HouseholdShareInvitationInbox {
     func drain() -> [CKShare.Metadata] {
         defer { pending.removeAll() }
         return pending
+    }
+
+    /// A failed or deliberately cancelled join may be attempted again by
+    /// opening the link once more. Successful deliveries remain deduplicated
+    /// until the next process launch.
+    func allowRedelivery(of metadata: CKShare.Metadata) {
+        deliveryGate.allowRedelivery(deliveryKey(for: metadata))
+    }
+
+    private func deliveryKey(for metadata: CKShare.Metadata) -> String {
+        let id = metadata.share.recordID
+        return [
+            metadata.containerIdentifier,
+            id.zoneID.ownerName,
+            id.zoneID.zoneName,
+            id.recordName,
+        ].joined(separator: "|")
+    }
+}
+
+/// Small value-type core for the invitation inbox's at-most-once delivery.
+/// Kept separate from `CKShare.Metadata`, which has no public initializer, so
+/// the race prevention can be covered by a deterministic unit test.
+struct CloudShareDeliveryGate {
+    private var deliveredKeys: Set<String> = []
+
+    mutating func shouldDeliver(_ key: String) -> Bool {
+        deliveredKeys.insert(key).inserted
+    }
+
+    mutating func allowRedelivery(_ key: String) {
+        deliveredKeys.remove(key)
     }
 }
 
@@ -159,11 +198,33 @@ enum HouseholdCloudSharingService {
     static func accept(_ metadata: CKShare.Metadata, mergeRecipes: Bool = false, context: ModelContext) async throws -> (household: Household, isGuest: Bool) {
         guard metadata.containerIdentifier == SharedStore.cloudKitContainerID else { throw HouseholdSharingError.invalidInvitation }
         let container = CKContainer(identifier: metadata.containerIdentifier)
+        let database = container.sharedCloudDatabase
         // Use the single-share overload so a per-share CloudKit failure is
         // thrown directly. The array overload can finish successfully while
         // returning the actual rejection nested in its result dictionary.
-        let acceptedShare = try await container.accept(metadata)
-        let database = container.sharedCloudDatabase
+        let acceptedShare: CKShare
+        do {
+            acceptedShare = try await container.accept(metadata)
+        } catch {
+            // Acceptance is not usefully idempotent: when the system delivers
+            // the same URL twice, the second call can report "Share not
+            // found" even though the first call succeeded. If the share is
+            // already present in this account's shared database, continue the
+            // local import instead of turning that harmless duplicate into an
+            // error alert. Preserve the original error when the link really
+            // is stale or belongs to another CloudKit environment.
+            guard let existingShare = await fetchAcceptedShare(
+                metadata.share.recordID,
+                from: database
+            ) else {
+                if let cloudError = error as? CKError,
+                   cloudError.code == .unknownItem || cloudError.code == .zoneNotFound {
+                    throw HouseholdSharingError.invitationNotFound
+                }
+                throw error
+            }
+            acceptedShare = existingShare
+        }
 
         var lastError: Error = HouseholdSharingError.missingRootRecord
         for attempt in 0..<6 {
@@ -331,6 +392,19 @@ enum HouseholdCloudSharingService {
         let records = try await database.records(for: [id])
         guard let result = records[id] else { throw HouseholdSharingError.cloudKitDidNotReturnRecord }
         return try result.get()
+    }
+
+    /// Share acceptance can return before CloudKit has finished exposing the
+    /// shared zone. This bounded lookup recovers an already-accepted share and
+    /// also covers two lifecycle callbacks arriving almost simultaneously.
+    private static func fetchAcceptedShare(_ id: CKRecord.ID, from database: CKDatabase) async -> CKShare? {
+        for attempt in 0..<6 {
+            if let share = try? await fetchRecord(id, from: database) as? CKShare {
+                return share
+            }
+            if attempt < 5 { try? await Task.sleep(for: .milliseconds(650)) }
+        }
+        return nil
     }
 
     private static func savedRecord(_ id: CKRecord.ID, in results: [CKRecord.ID: Result<CKRecord, Error>]) throws -> CKRecord {

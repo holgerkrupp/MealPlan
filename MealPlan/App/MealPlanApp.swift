@@ -68,9 +68,10 @@ struct MealPlanApp: App {
                         Task {
                             await calendarStore.applicationBecameActive()
                             if !appState.isGuest {
-                                await RecipeFeedService.refreshAll(context: container.mainContext)
+                                await RecipeFeedBackgroundRefresh.run(context: container.mainContext)
                             }
                         }
+                        RecipeFeedBackgroundRefresh.scheduleNextRun()
                         PublishedCalendarService.scheduleRefreshIfNeeded(
                             household: appState.currentHousehold,
                             settings: publishedCalendarSettings,
@@ -92,6 +93,15 @@ struct MealPlanApp: App {
             }
         }
         .modelContainer(container)
+        #if os(iOS)
+        // Feeds refresh while the app is away so the recipes are already there
+        // — and already readable offline — next time it is opened. iOS decides
+        // if and when this runs, so nothing depends on it.
+        .backgroundTask(.appRefresh(RecipeFeedBackgroundRefresh.taskIdentifier)) {
+            await RecipeFeedBackgroundRefresh.scheduleNextRun()
+            await RecipeFeedBackgroundRefresh.run(container: container)
+        }
+        #endif
         .commands { MealPlanCommands() }
         #if os(macOS)
         WindowGroup("MealPlan", for: MacDetailWindowRoute.self) { $route in
@@ -126,10 +136,9 @@ struct MealPlanApp: App {
 #if canImport(UIKit)
 /// Configures app and scene lifecycle hooks used by CloudKit sharing.
 ///
-/// The legacy application callback remains as a fallback. Scene-based iOS
-/// versions deliver invitations to `MealPlanSceneDelegate` below. Both only
-/// queue the invitation — actually accepting it needs the `ModelContext` that
-/// exists once SwiftUI has built the view hierarchy.
+/// Scene-based iOS versions deliver invitations to `MealPlanSceneDelegate`
+/// below. It only queues the invitation — actually accepting it needs the
+/// `ModelContext` that exists once SwiftUI has built the view hierarchy.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -137,13 +146,6 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) -> Bool {
         application.registerForRemoteNotifications()
         return true
-    }
-
-    func application(
-        _ application: UIApplication,
-        userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
-    ) {
-        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 
     /// CloudKit invitations are scene events in a scene-based app. SwiftUI

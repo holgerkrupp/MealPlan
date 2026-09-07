@@ -12,10 +12,11 @@ struct RecipeDiscoveryView: View {
     @State private var showingBookmark = false
     @State private var browserTarget: BookmarkBrowserTarget?
     @State private var refreshing = false
-
-    /// The same measurements the dish library uses, so an article card and a
-    /// dish card line up when both are on screen on the same iPad.
-    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
+    @State private var search = ""
+    @State private var sort: RecipeArticleSort = .newest
+    @State private var scope: RecipeArticleScope = .current
+    /// nil means every subscribed site.
+    @State private var feedFilter: UUID?
 
     private var feeds: [RecipeFeed] {
         allFeeds.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
@@ -25,24 +26,53 @@ struct RecipeDiscoveryView: View {
         allBookmarks.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
     }
 
+    private var visibleFeeds: [RecipeFeed] {
+        feeds.filter { feedFilter == nil || $0.uuid == feedFilter }
+    }
+
+    /// True while the view is showing less than everything it has, which is
+    /// what the empty state and the toolbar badge key off.
+    private var isFiltering: Bool {
+        !search.trimmingCharacters(in: .whitespaces).isEmpty
+            || scope != .current
+            || feedFilter != nil
+    }
+
+    private var hasVisibleArticles: Bool {
+        visibleFeeds.contains { !articles(of: $0).isEmpty }
+    }
+
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
-                if feeds.isEmpty && bookmarks.isEmpty { discoveryEmptyState }
-                ForEach(feeds) { feed in
-                    Section {
-                        feedBody(feed)
-                    } header: {
-                        feedHeader(feed)
+                if feeds.isEmpty && bookmarks.isEmpty {
+                    discoveryEmptyState
+                } else if isFiltering && !hasVisibleArticles {
+                    noMatchesEmptyState
+                }
+                ForEach(visibleFeeds) { feed in
+                    // While filtering, a site with no matches is left out
+                    // rather than shown as an empty heading.
+                    if !isFiltering || !articles(of: feed).isEmpty {
+                        Section {
+                            feedBody(feed)
+                        } header: {
+                            feedHeader(feed)
+                        }
                     }
                 }
-                if !bookmarks.isEmpty { bookmarksSection }
+                if !bookmarks.isEmpty && !isFiltering { bookmarksSection }
             }
             .padding(.vertical)
         }
         .navigationTitle(String(localized: "Discover recipes"))
         .refreshable { await refresh(force: true) }
+        .searchable(
+            text: $search,
+            prompt: Text(String(localized: "Search recipes and sites"))
+        )
         .toolbar {
+            ToolbarItem(placement: .secondaryAction) { browsingMenu }
             if !appState.isGuest {
                 ToolbarItem(placement: .primaryAction) {
                     Menu {
@@ -94,18 +124,20 @@ struct RecipeDiscoveryView: View {
     @ViewBuilder
     private func feedBody(_ feed: RecipeFeed) -> some View {
         VStack(alignment: .leading, spacing: 12) {
-            if feed.sortedItems.isEmpty {
-                Text(String(localized: "No posts yet."))
+            if articles(of: feed).isEmpty {
+                Text(isFiltering
+                     ? String(localized: "Nothing here matches.")
+                     : String(localized: "No posts yet."))
                     .foregroundStyle(.secondary)
             } else {
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(feed.sortedItems.prefix(20)) { item in
-                        NavigationLink {
-                            RecipeArticleReaderView(item: item)
-                        } label: {
-                            RecipeArticleCard(item: item)
-                        }
-                        .buttonStyle(.plain)
+                RecipeArticleGrid(
+                    articles: articles(of: feed),
+                    onImageResolved: { article, url in
+                        record(imageURL: url, forArticle: article, in: feed)
+                    }
+                ) { article in
+                    RecipeArticleReaderView(article: article) { url in
+                        record(imageURL: url, forArticle: article, in: feed)
                     }
                 }
             }
@@ -194,6 +226,95 @@ struct RecipeDiscoveryView: View {
         }
     }
 
+    private var browsingMenu: some View {
+        Menu {
+            Picker(String(localized: "Show"), selection: $scope) {
+                ForEach(RecipeArticleScope.allCases) { scope in
+                    Text(scope.localizedName).tag(scope)
+                }
+            }
+            Picker(String(localized: "Sort by"), selection: $sort) {
+                ForEach(RecipeArticleSort.allCases) { sort in
+                    Text(sort.localizedName).tag(sort)
+                }
+            }
+            if feeds.count > 1 {
+                Picker(String(localized: "Site"), selection: $feedFilter) {
+                    Text(String(localized: "All sites")).tag(UUID?.none)
+                    ForEach(feeds) { feed in
+                        Text(feed.title).tag(UUID?.some(feed.uuid))
+                    }
+                }
+            }
+        } label: {
+            Label(
+                String(localized: "Sort and filter"),
+                systemImage: isFiltering
+                    ? "line.3.horizontal.decrease.circle.fill"
+                    : "line.3.horizontal.decrease.circle"
+            )
+        }
+    }
+
+    private var noMatchesEmptyState: some View {
+        ContentUnavailableView {
+            Label(String(localized: "Nothing matches"), systemImage: "magnifyingglass")
+        } description: {
+            Text(String(localized: "Try another word, or widen the filter to include older posts."))
+        } actions: {
+            Button(String(localized: "Clear filters")) {
+                search = ""
+                scope = .current
+                feedFilter = nil
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.top, 40)
+    }
+
+    /// The articles of one feed, after the search field, the scope and the sort
+    /// have had their say. Capped while simply browsing, uncapped once the
+    /// household is actually looking for something.
+    private func articles(of feed: RecipeFeed) -> [RecipeArticleContent] {
+        let matching = feed.sortedItems.filter { item in
+            RecipeArticleFilter.matches(
+                candidate(item, feedTitle: feed.title),
+                scope: scope,
+                search: search
+            )
+        }
+        let sorted = matching.sorted {
+            RecipeArticleFilter.areInOrder(
+                candidate($0, feedTitle: feed.title),
+                candidate($1, feedTitle: feed.title),
+                sort: sort
+            )
+        }
+        let limit = isFiltering ? 60 : 20
+        return sorted.prefix(limit).map(RecipeArticleContent.init)
+    }
+
+    private func candidate(_ item: RecipeFeedItem, feedTitle: String) -> RecipeArticleFilter.Candidate {
+        RecipeArticleFilter.Candidate(
+            title: item.title,
+            summary: item.summary,
+            author: item.author,
+            feedTitle: feedTitle,
+            date: item.publishedAt ?? item.fetchedAt,
+            isArchived: item.isArchived,
+            isRead: RecipeFeedReadState.isRead(item.stableID)
+        )
+    }
+
+    /// Writes a picture found on an article's own page back to its stored item,
+    /// so the lookup happens once and survives a relaunch.
+    private func record(imageURL: URL?, forArticle article: RecipeArticleContent, in feed: RecipeFeed) {
+        guard let item = feed.items?.first(where: { $0.stableID == article.id }) else { return }
+        if let imageURL { item.imageURLString = imageURL.absoluteString }
+        item.imageLookupAt = .now
+        try? context.save()
+    }
+
     private func refresh(force: Bool) async {
         guard !appState.isGuest else { return }
         refreshing = true
@@ -214,467 +335,4 @@ private struct BookmarkBrowserTarget: Identifiable {
     let id = UUID()
     let dish: Dish
     let url: URL
-}
-
-/// An article read as a recipe. When the page carries structured recipe data
-/// this lays it out the way a saved dish is laid out — photo, times, ingredient
-/// list, method — so the decision to keep it is made on the same information.
-/// Everything else falls back to the article's own prose.
-@MainActor
-private struct RecipeArticleReaderView: View {
-    let item: RecipeFeedItem
-
-    @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
-    @State private var articleText: String?
-    @State private var html: String?
-    @State private var recipe: ImportedRecipe?
-    @State private var loading = true
-    @State private var saving = false
-    @State private var savedDish: Dish?
-    @State private var noRecipeFound = false
-    @State private var showingPlanSheet = false
-    @State private var errorMessage: String?
-
-    private var canSave: Bool {
-        !loading && !saving && savedDish == nil && !noRecipeFound && recipe != nil && !appState.isGuest
-    }
-
-    /// Planning saves first when it has to, so the button stays live for an
-    /// unsaved recipe and for one that is already in the library.
-    private var canPlan: Bool {
-        savedDish != nil || canSave
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
-                heroImage
-                headline
-
-                if loading {
-                    ProgressView().frame(maxWidth: .infinity)
-                }
-
-                if let recipe {
-                    tagRow(recipe)
-                    timeRow(recipe)
-                    Divider()
-                    ingredientsSection(recipe)
-                    if let instructions = recipe.instructions?.trimmingCharacters(in: .whitespacesAndNewlines),
-                       !instructions.isEmpty {
-                        Divider()
-                        RecipeSection(String(localized: "How to make it")) {
-                            Text(instructions)
-                                .lineSpacing(5)
-                                .textSelection(.enabled)
-                        }
-                    }
-                } else if let articleText {
-                    Text(articleText)
-                        .font(.body)
-                        .lineSpacing(5)
-                        .textSelection(.enabled)
-                } else if let summary = item.summary {
-                    Text(summary).font(.body).lineSpacing(5)
-                }
-
-                if let url = item.url {
-                    Link(destination: url) {
-                        Label(url.host() ?? url.absoluteString, systemImage: "safari")
-                    }
-                }
-            }
-            .padding()
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
-        }
-        .navigationTitle(String(localized: "Recipe article"))
-        #if os(iOS)
-        .navigationBarTitleDisplayMode(.inline)
-        #endif
-        .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack {
-                    Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
-                        Task { await planRecipe() }
-                    }
-                    .disabled(!canPlan)
-
-                    Button {
-                        Task { await saveRecipe() }
-                    } label: {
-                        if saving { ProgressView() }
-                        else if savedDish != nil { Label(String(localized: "Saved"), systemImage: "checkmark.circle") }
-                        else if noRecipeFound { Label(String(localized: "No recipe found"), systemImage: "xmark.circle") }
-                        else { Label(String(localized: "Save recipe"), systemImage: "square.and.arrow.down") }
-                    }
-                    .disabled(!canSave)
-                }
-            }
-        }
-        .task { await load() }
-        .sheet(isPresented: $showingPlanSheet) {
-            if let savedDish {
-                NavigationStack {
-                    PlanDishSheet(dish: savedDish, defaultDate: appState.selectedDate)
-                }
-                .presentationDetents([.medium])
-                .dismissesOnOutsideClick()
-            }
-        }
-        .alert(String(localized: "Couldn’t read that page"), isPresented: Binding(
-            get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
-        )) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: { Text(errorMessage ?? "") }
-    }
-
-    // MARK: - Layout
-
-    /// The recipe's own photo once the page has been read, and the feed's
-    /// thumbnail until then — the picture is on screen while the article
-    /// downloads instead of appearing with it.
-    @ViewBuilder
-    private var heroImage: some View {
-        if let data = recipe?.imageData, let image = Image(data: data) {
-            image
-                .resizable()
-                .scaledToFill()
-                .frame(height: 220)
-                .frame(maxWidth: .infinity)
-                .clipped()
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-        } else if item.imageURL != nil {
-            GeometryReader { proxy in
-                RemoteRecipeImage(
-                    url: item.imageURL,
-                    tint: DishGlyph.tint(forName: item.title),
-                    cornerRadius: 20,
-                    width: proxy.size.width,
-                    height: 220
-                )
-            }
-            .frame(height: 220)
-        }
-    }
-
-    private var headline: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(item.title).font(.largeTitle.bold())
-            HStack(spacing: 8) {
-                if let author = item.author {
-                    Text(author)
-                }
-                if let date = item.publishedAt {
-                    Text(date, format: .dateTime.day().month().year())
-                }
-            }
-            .font(.subheadline)
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private func tagRow(_ recipe: ImportedRecipe) -> some View {
-        let tags = Array(recipe.tagNames.prefix(6))
-        let meals = Array(recipe.mealTypeTags).sorted { $0.rawValue < $1.rawValue }
-        if !tags.isEmpty || !meals.isEmpty || recipe.needsReview {
-            WrapHStack(spacing: 8) {
-                if recipe.needsReview {
-                    RecipeBadge(
-                        String(localized: "Read from the page"),
-                        systemImage: "exclamationmark.triangle.fill",
-                        tint: .orange
-                    )
-                }
-                ForEach(meals) { meal in
-                    RecipeBadge(meal.localizedName, systemImage: "circle.fill", tint: .accentColor)
-                }
-                ForEach(tags, id: \.self) { tag in
-                    RecipeBadge(tag, systemImage: "tag", tint: .teal)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func timeRow(_ recipe: ImportedRecipe) -> some View {
-        if recipe.prepTimeMinutes != nil || recipe.cookTimeMinutes != nil || recipe.servings != nil {
-            HStack(spacing: 20) {
-                if let prep = recipe.prepTimeMinutes {
-                    RecipeMetric(String(localized: "Prep"), "\(prep) min")
-                }
-                if let cook = recipe.cookTimeMinutes {
-                    RecipeMetric(String(localized: "Cook"), "\(cook) min")
-                }
-                if let servings = recipe.servings {
-                    RecipeMetric(String(localized: "Recipe"), String(localized: "\(servings) servings"))
-                }
-            }
-        }
-    }
-
-    /// Amounts are the source's own wording. Nothing is rescaled here: the
-    /// lines have not been through the unit parser yet, and that only happens
-    /// once the recipe is a dish.
-    private func ingredientsSection(_ recipe: ImportedRecipe) -> some View {
-        RecipeSection(String(localized: "Ingredients")) {
-            if recipe.ingredientLines.isEmpty {
-                Text(String(localized: "No ingredients added yet."))
-                    .foregroundStyle(.secondary)
-            } else {
-                ForEach(Array(recipe.ingredientLines.enumerated()), id: \.offset) { _, line in
-                    Text(line)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(.vertical, 2)
-                }
-            }
-        }
-    }
-
-    // MARK: - Actions
-
-    private func load() async {
-        RecipeFeedReadState.markRead(item.stableID)
-        guard let url = item.url else {
-            loading = false
-            return
-        }
-        do {
-            let loaded = try await RecipeArticleCache.shared.articleHTML(for: url)
-            html = loaded
-            articleText = RecipeArticleText.extract(fromHTML: loaded)
-            backfillImage(fromHTML: loaded, sourceURL: url)
-            // The page is parsed now rather than on the way out, so the reader
-            // can show the recipe itself instead of the prose around it.
-            if let parsed = try? await RecipeSchemaParser().importRecipe(fromHTML: loaded, sourceURL: url),
-               !parsed.ingredientLines.isEmpty || !(parsed.instructions ?? "").isEmpty {
-                recipe = parsed
-            } else {
-                noRecipeFound = true
-            }
-        } catch {
-            errorMessage = error.localizedDescription
-        }
-        loading = false
-    }
-
-    /// Opening an article pays for the page anyway, so the card it came from
-    /// gets its picture out of the same download.
-    private func backfillImage(fromHTML html: String, sourceURL: URL) {
-        guard item.imageURL == nil else { return }
-        if let found = RecipeFeedImageResolver.imageURL(inHTML: html, relativeTo: sourceURL) {
-            item.imageURLString = found.absoluteString
-        }
-        item.imageLookupAt = .now
-        try? context.save()
-    }
-
-    private func saveRecipe() async {
-        guard savedDish == nil, let recipe else { return }
-        saving = true
-        defer { saving = false }
-        let result = RecipeImportCommitter.importAll(
-            [recipe],
-            household: appState.currentHousehold,
-            createdByName: appState.currentMemberName,
-            context: context
-        )
-        // An article already in the library imports nothing, and planning it
-        // still has to reach the dish that is there.
-        savedDish = result.dishes.first ?? existingDish(for: recipe)
-        appState.importNotice = result.summary
-    }
-
-    private func planRecipe() async {
-        if savedDish == nil { await saveRecipe() }
-        guard savedDish != nil else { return }
-        showingPlanSheet = true
-    }
-
-    private func existingDish(for recipe: ImportedRecipe) -> Dish? {
-        let dishes = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
-        if let source = recipe.sourceURL?.absoluteString ?? item.url?.absoluteString,
-           let match = dishes.first(where: { $0.sourceURLString == source }) {
-            return match
-        }
-        return dishes.first { $0.name.localizedCaseInsensitiveCompare(recipe.name) == .orderedSame }
-    }
-}
-
-@MainActor
-private struct FeedSubscriptionSheet: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @Query private var allFeeds: [RecipeFeed]
-    @State private var address = ""
-    @State private var subscribing = false
-    @State private var pendingSuggestion: String?
-    @State private var errorMessage: String?
-
-    /// Sites already subscribed to drop out of the list, so the section shrinks
-    /// as the household works through it instead of offering duplicates.
-    private var suggestions: [RecipeFeedSuggestion] {
-        let subscribed = Set(allFeeds.flatMap { [$0.siteURL, $0.feedURL] }.compactMap(Self.host))
-        return RecipeFeedSuggestions.suggestions().filter {
-            guard let host = Self.host($0.url) else { return true }
-            return !subscribed.contains(host)
-        }
-    }
-
-    private static func host(_ url: URL?) -> String? {
-        guard let host = url?.host()?.lowercased() else { return nil }
-        return host.hasPrefix("www.") ? String(host.dropFirst(4)) : host
-    }
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                Section {
-                    TextField(String(localized: "Website address"), text: $address)
-                        .textContentType(.URL)
-                    #if os(iOS)
-                        .textInputAutocapitalization(.never)
-                        .keyboardType(.URL)
-                    #endif
-                } footer: {
-                    Text(String(localized: "MealPlan finds the site’s RSS, Atom or JSON feed automatically."))
-                }
-
-                if !suggestions.isEmpty {
-                    Section {
-                        ForEach(suggestions) { suggestion in
-                            suggestionRow(suggestion)
-                        }
-                    } header: {
-                        Text(String(localized: "Suggestions"))
-                    } footer: {
-                        Text(String(localized: "Recipe sites near you that publish a feed."))
-                    }
-                }
-            }
-            .navigationTitle(String(localized: "Subscribe to a site"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Subscribe")) { Task { await subscribeToTypedAddress() } }
-                        .disabled(address.trimmingCharacters(in: .whitespaces).isEmpty || subscribing)
-                }
-            }
-            .alert(String(localized: "Couldn’t subscribe"), isPresented: Binding(
-                get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }
-            )) {
-                Button(String(localized: "OK"), role: .cancel) {}
-            } message: { Text(errorMessage ?? "") }
-        }
-        .presentationDetents([.medium, .large])
-    }
-
-    private func suggestionRow(_ suggestion: RecipeFeedSuggestion) -> some View {
-        Button {
-            Task { await subscribe(to: suggestion) }
-        } label: {
-            HStack(alignment: .top, spacing: 12) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(suggestion.name).font(.headline)
-                    Text(suggestion.detail).font(.subheadline).foregroundStyle(.secondary)
-                    Text(suggestion.displayHost).font(.caption).foregroundStyle(.tertiary)
-                }
-                .multilineTextAlignment(.leading)
-                Spacer(minLength: 0)
-                if pendingSuggestion == suggestion.id {
-                    ProgressView()
-                } else {
-                    Image(systemName: "plus.circle")
-                        .foregroundStyle(Color.accentColor)
-                        .imageScale(.large)
-                }
-            }
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .disabled(subscribing)
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text(String(localized: "Subscribe to \(suggestion.name)")))
-        .accessibilityHint(Text(suggestion.detail))
-    }
-
-    private func subscribeToTypedAddress() async {
-        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed.contains("://") ? trimmed : "https://\(trimmed)") else {
-            errorMessage = RecipeFeedParserError.invalidURL.localizedDescription
-            return
-        }
-        if await subscribe(to: url) { dismiss() }
-    }
-
-    /// Stays open after a suggestion: the row disappears from the list, which is
-    /// confirmation enough, and most households add two or three in one sitting.
-    private func subscribe(to suggestion: RecipeFeedSuggestion) async {
-        guard let url = suggestion.url else { return }
-        pendingSuggestion = suggestion.id
-        _ = await subscribe(to: url)
-        pendingSuggestion = nil
-    }
-
-    @discardableResult
-    private func subscribe(to url: URL) async -> Bool {
-        subscribing = true
-        defer { subscribing = false }
-        do {
-            _ = try await RecipeFeedService.subscribe(to: url, household: appState.currentHousehold, context: context)
-            return true
-        } catch {
-            errorMessage = error.localizedDescription
-            return false
-        }
-    }
-}
-
-@MainActor
-private struct RecipeBookmarkSheet: View {
-    @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
-    @Environment(\.dismiss) private var dismiss
-    @State private var title = ""
-    @State private var address = ""
-
-    var body: some View {
-        NavigationStack {
-            Form {
-                TextField(String(localized: "Name"), text: $title)
-                TextField(String(localized: "Website address"), text: $address)
-                    .textContentType(.URL)
-                #if os(iOS)
-                    .textInputAutocapitalization(.never)
-                    .keyboardType(.URL)
-                #endif
-            }
-            .navigationTitle(String(localized: "Add recipe site"))
-            .toolbar {
-                ToolbarItem(placement: .cancellationAction) {
-                    Button(String(localized: "Cancel")) { dismiss() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Add")) { save() }
-                        .disabled(title.trimmingCharacters(in: .whitespaces).isEmpty || address.trimmingCharacters(in: .whitespaces).isEmpty)
-                }
-            }
-        }
-        .presentationDetents([.medium])
-    }
-
-    private func save() {
-        let trimmed = address.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard let url = URL(string: trimmed.contains("://") ? trimmed : "https://\(trimmed)") else { return }
-        let bookmark = RecipeBookmark(title: title.trimmingCharacters(in: .whitespacesAndNewlines), url: url)
-        bookmark.household = appState.currentHousehold
-        context.insert(bookmark)
-        try? context.save()
-        dismiss()
-    }
 }

@@ -76,7 +76,9 @@ actor RemoteRecipeImageLoader {
         if let running = inFlight[url] { return await running.value }
 
         let task = Task<Data?, Never> { [maxImageBytes] in
-            var request = URLRequest(url: url)
+            // A feed photo never changes at its URL, so a cached copy is
+            // always good — and it is what makes the grid work offline.
+            var request = URLRequest(url: url, cachePolicy: .returnCacheDataElseLoad)
             request.setValue("image/*", forHTTPHeaderField: "Accept")
             guard let (data, response) = try? await URLSession.shared.data(for: request),
                   let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode),

@@ -6,8 +6,11 @@ import Foundation
 actor RecipeArticleCache {
     static let shared = RecipeArticleCache()
 
-    private let byteLimit = 12 * 1_024 * 1_024
-    private let fileLimit = 40
+    // Sized to hold a few days of every subscribed feed: this is what the
+    // household reads from when there is no connection, not just a buffer for
+    // scrolling back a screen.
+    private let byteLimit = 40 * 1_024 * 1_024
+    private let fileLimit = 150
 
     func articleHTML(for url: URL) async throws -> String {
         let file = cacheFile(for: url)

@@ -23,6 +23,19 @@ struct HouseholdCloudSharingServiceTests {
         #expect(!HouseholdCloudSharingService.isShareURL(URL(string: "https://example.com/share/abc123")!))
     }
 
+    @Test func coalescesDuplicateShareDeliveriesButAllowsRetry() {
+        var gate = CloudShareDeliveryGate()
+
+        let firstDelivery = gate.shouldDeliver("container|owner|zone|share")
+        let duplicateDelivery = gate.shouldDeliver("container|owner|zone|share")
+        #expect(firstDelivery)
+        #expect(!duplicateDelivery)
+
+        gate.allowRedelivery("container|owner|zone|share")
+        let retryDelivery = gate.shouldDeliver("container|owner|zone|share")
+        #expect(retryDelivery)
+    }
+
     #if canImport(UIKit)
     @Test func windowScenesUseCloudSharingDelegate() {
         let configuration = AppDelegate.sceneConfiguration(for: .windowApplication)

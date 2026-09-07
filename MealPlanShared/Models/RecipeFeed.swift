@@ -40,6 +40,11 @@ final class RecipeFeed {
         }
     }
 
+    /// What the feed is publishing right now, newest first.
+    var currentItems: [RecipeFeedItem] {
+        sortedItems.filter { !$0.isArchived }
+    }
+
     var hasBeenMissingForFortnight: Bool {
         lastHTTPStatus == 404
             && firstFailureAt.map { Date.now.timeIntervalSince($0) >= 14 * 24 * 60 * 60 } == true
@@ -66,6 +71,12 @@ final class RecipeFeedItem {
     /// asked once rather than on every scroll. Stays nil if the page could not
     /// be reached, which leaves the lookup to be retried later.
     var imageLookupAt: Date?
+    /// When this article dropped off the end of its feed. Archived articles are
+    /// kept and stay readable — a feed that only publishes ten posts at a time
+    /// should not mean a recipe is gone if you didn't open the app that week.
+    var archivedAt: Date?
+
+    var isArchived: Bool { archivedAt != nil }
 
     var feed: RecipeFeed?
 
