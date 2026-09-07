@@ -159,16 +159,21 @@ enum HouseholdCloudSharingService {
     static func accept(_ metadata: CKShare.Metadata, mergeRecipes: Bool = false, context: ModelContext) async throws -> (household: Household, isGuest: Bool) {
         guard metadata.containerIdentifier == SharedStore.cloudKitContainerID else { throw HouseholdSharingError.invalidInvitation }
         let container = CKContainer(identifier: metadata.containerIdentifier)
-        _ = try await container.accept([metadata])
+        // Use the single-share overload so a per-share CloudKit failure is
+        // thrown directly. The array overload can finish successfully while
+        // returning the actual rejection nested in its result dictionary.
+        let acceptedShare = try await container.accept(metadata)
         let database = container.sharedCloudDatabase
-        let shareID = metadata.share.recordID
 
         var lastError: Error = HouseholdSharingError.missingRootRecord
         for attempt in 0..<6 {
             do {
-                guard let share = try await fetchRecord(shareID, from: database) as? CKShare else {
-                    throw HouseholdSharingError.missingRootRecord
-                }
+                // `accept` returns the authoritative share immediately, but
+                // CloudKit may still be making its zone records visible in
+                // the shared database. Reusing it avoids an unnecessary race
+                // on fetching the CKShare itself; only the root data record
+                // needs the bounded retry below.
+                let share = acceptedShare
                 let zoneID = share.recordID.zoneID
                 let householdRecord = try await fetchHouseholdRecord(from: share, zoneID: zoneID, database: database)
                 guard let identity = HouseholdRecordIdentity(recordType: householdRecord.recordType, recordName: householdRecord.recordID.recordName),

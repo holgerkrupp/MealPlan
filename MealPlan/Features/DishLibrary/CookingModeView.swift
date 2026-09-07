@@ -9,14 +9,25 @@ struct CookingModeView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.scenePhase) private var scenePhase
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @AppStorage("CookingMode.textScale") private var textScale = 1.0
+    /// Speak each step aloud as it becomes current. On by default — the whole
+    /// point of opening this screen at the stove is not having to look at it.
+    @AppStorage("CookingMode.speakSteps") private var speakSteps = true
+    /// Listen for spoken commands ("next", "repeat", "start timer"). Off until
+    /// the cook turns it on and grants microphone + speech permission.
+    @AppStorage("CookingMode.voiceControl") private var voiceControlEnabled = false
     @State private var didEnter = false
     @State private var holdsDisplayAwake = false
     @State private var showingResumePrompt = false
     @State private var showingDishPicker = false
     @State private var showingManualTimer = false
+    @State private var narrator = CookingNarrator()
+    @State private var voice = CookingVoiceController()
+    /// Set when permission was refused, so the toggle can explain itself.
+    @State private var micPermissionDenied = false
     /// Cooking follows the recipe view: a household that saved a translation
     /// cooks from it, and "Show original" is one tap away in the toolbar.
     @State private var showsTranslation = false
@@ -35,6 +46,17 @@ struct CookingModeView: View {
 
     private var steps: [CookingStep] {
         CookingRecipe.steps(from: currentDish.displayRecipeText(translated: showsTranslation))
+    }
+
+    private var currentStepText: String? {
+        let index = progress.currentStep
+        return steps.indices.contains(index) ? steps[index].text : nil
+    }
+
+    /// BCP-47 tag for the text currently on screen, so a German recipe isn't
+    /// read aloud with an English accent.
+    private var narrationLanguageCode: String? {
+        showsTranslation ? currentDish.translationLanguageCode : currentDish.recipeLanguageCode
     }
 
     private var scaler: ServingScaler {
@@ -64,14 +86,46 @@ struct CookingModeView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar { cookingToolbar }
+        .safeAreaInset(edge: .bottom) { listeningIndicator }
         .onAppear {
             enterCookingMode()
             showsTranslation = currentDish.prefersTranslation
+            voice.onCommand = { command in handle(command) }
+            if voiceControlEnabled { Task { await startVoiceControl(requesting: false) } }
+            speakCurrentStep(force: false)
         }
         .onChange(of: currentDish.uuid) { _, _ in
             showsTranslation = currentDish.prefersTranslation
+            speakCurrentStep(force: false)
         }
-        .onDisappear(perform: releaseDisplayAwake)
+        .onChange(of: progress.currentStep) { _, _ in
+            speakCurrentStep(force: false)
+        }
+        .onChange(of: voiceControlEnabled) { _, enabled in
+            if enabled {
+                Task { await startVoiceControl(requesting: true) }
+            } else {
+                voice.stop()
+            }
+        }
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active {
+                narrator.stop()
+                voice.stop()
+            } else if voiceControlEnabled, !voice.isListening {
+                Task { await startVoiceControl(requesting: false) }
+            }
+        }
+        .onDisappear {
+            releaseDisplayAwake()
+            narrator.stop()
+            voice.stop()
+        }
+        .alert(String(localized: "Microphone access is off"), isPresented: $micPermissionDenied) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "To use hands-free voice control, allow microphone and speech recognition for MealPlan in Settings."))
+        }
         .alert(String(localized: "Resume cooking session?"), isPresented: $showingResumePrompt) {
             Button(String(localized: "Resume")) {
                 if store.session?.dishes.contains(where: { $0.id == dish.uuid }) == true {
@@ -121,6 +175,27 @@ struct CookingModeView: View {
                 Label(String(localized: "Text size"), systemImage: "textformat.size")
             }
         }
+        ToolbarItem {
+            Menu {
+                Toggle(String(localized: "Read steps aloud"), isOn: $speakSteps)
+                Button(String(localized: "Repeat this step"), systemImage: "arrow.clockwise") {
+                    speakCurrentStep(force: true)
+                }
+                .disabled(currentStepText == nil)
+                if voice.isAvailable {
+                    Divider()
+                    Toggle(String(localized: "Hands-free voice control"), isOn: $voiceControlEnabled)
+                    if voiceControlEnabled {
+                        Text(String(localized: "Say “next”, “back”, “repeat” or “start timer”."))
+                    }
+                }
+            } label: {
+                Label(
+                    String(localized: "Voice"),
+                    systemImage: voice.isListening ? "waveform.circle.fill" : "speaker.wave.2"
+                )
+            }
+        }
         if currentDish.hasSavedTranslation {
             ToolbarItem {
                 Button(
@@ -135,6 +210,8 @@ struct CookingModeView: View {
         }
         ToolbarItem(placement: .confirmationAction) {
             Button(String(localized: "Finish session")) {
+                narrator.stop()
+                voice.stop()
                 store.finish()
                 dismiss()
             }
@@ -203,14 +280,16 @@ struct CookingModeView: View {
             } else {
                 ForEach(Array(currentDish.sortedIngredients.enumerated()), id: \.offset) { index, line in
                     let checked = progress.checkedIngredientIndexes.contains(index)
+                    let name = line.displayName(translated: showsTranslation) ?? "—"
+                    let amount = scaler.amountText(for: line)
                     Button { store.toggleIngredient(index, for: currentDish.uuid) } label: {
                         HStack(alignment: .firstTextBaseline, spacing: 12) {
                             Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                                 .foregroundStyle(checked ? .green : .secondary)
-                            Text(line.displayName(translated: showsTranslation) ?? "—")
+                            Text(name)
                                 .strikethrough(checked)
                             Spacer()
-                            if let amount = scaler.amountText(for: line) {
+                            if let amount {
                                 Text(amount).foregroundStyle(.secondary).monospacedDigit()
                             }
                         }
@@ -218,6 +297,13 @@ struct CookingModeView: View {
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityLabel(amount.map { "\(name), \($0)" } ?? name)
+                    .accessibilityValue(checked
+                        ? String(localized: "Checked off")
+                        : String(localized: "Not checked off"))
+                    .accessibilityHint(String(localized: "Double tap to check off"))
+                    .accessibilityAddTraits(checked ? .isSelected : [])
                     Divider()
                 }
             }
@@ -244,12 +330,20 @@ struct CookingModeView: View {
                     HStack(alignment: .top, spacing: 14) {
                         Text("\(step.id + 1)")
                             .font(.headline.monospacedDigit())
+                            .minimumScaleFactor(0.6)
+                            .lineLimit(1)
                             .frame(width: 38, height: 38)
                             .background(isCurrent ? Color.accentColor : Color.secondary.opacity(0.14), in: Circle())
                             .foregroundStyle(isCurrent ? .white : .secondary)
+                            .accessibilityHidden(true)
                         VStack(alignment: .leading, spacing: 12) {
                             Text(step.text)
-                                .font(.system(size: (isCurrent ? 25 : 20) * textScale, weight: isCurrent ? .semibold : .regular))
+                                // Scales with the system Dynamic Type setting
+                                // *and* the in-view text-size control.
+                                .font(.system(
+                                    size: (isCurrent ? 25 : 20) * textScale,
+                                    weight: isCurrent ? .semibold : .regular
+                                ))
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             if isCurrent, !step.timers.isEmpty {
                                 FlowLayout(spacing: 8) {
@@ -273,6 +367,12 @@ struct CookingModeView: View {
                     .onTapGesture {
                         store.setCurrentStep(step.id, for: currentDish.uuid, stepCount: steps.count)
                     }
+                    .accessibilityElement(children: .combine)
+                    .accessibilityLabel(String(localized: "Step \(step.id + 1). \(step.text)"))
+                    .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
+                    .accessibilityHint(isCurrent
+                        ? String(localized: "Current step")
+                        : String(localized: "Double tap to jump to this step"))
                 }
 
                 HStack {
@@ -342,6 +442,83 @@ struct CookingModeView: View {
             (candidate.entries ?? []).contains {
                 $0.date.startOfDay == day && mealKeys.contains($0.mealKey)
             }
+        }
+    }
+
+    // MARK: - Voice
+
+    /// A slim banner pinned above the home indicator while the recogniser is
+    /// armed, so a VoiceOver user (and everyone else) knows the mic is live.
+    @ViewBuilder
+    private var listeningIndicator: some View {
+        if voice.isListening {
+            HStack(spacing: 8) {
+                Image(systemName: "mic.fill")
+                    .foregroundStyle(.tint)
+                    .symbolEffect(.variableColor.iterative, isActive: true)
+                Text(voice.lastHeard.isEmpty
+                     ? String(localized: "Listening for “next”, “back”, “repeat”…")
+                     : voice.lastHeard)
+                    .font(.callout)
+                    .lineLimit(1)
+                    .foregroundStyle(.secondary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "Voice control is listening"))
+            .accessibilityAddTraits(.updatesFrequently)
+        }
+    }
+
+    /// Speaks the current step. `force` is the "repeat" affordance; otherwise it
+    /// respects the "Read steps aloud" switch.
+    private func speakCurrentStep(force: Bool) {
+        guard force || speakSteps else { return }
+        guard let text = currentStepText else {
+            if force { narrator.stop() }
+            return
+        }
+        narrator.languageCode = narrationLanguageCode
+        narrator.audioSessionManagedExternally = voice.isListening
+        let ordinal = String(localized: "Step \(progress.currentStep + 1)")
+        narrator.speak("\(ordinal). \(text)")
+    }
+
+    private func startVoiceControl(requesting: Bool) async {
+        if requesting {
+            let granted = await voice.requestAuthorization()
+            guard granted else {
+                voiceControlEnabled = false
+                micPermissionDenied = true
+                return
+            }
+        }
+        narrator.audioSessionManagedExternally = true
+        voice.start()
+        if !voice.isListening { voiceControlEnabled = false }
+    }
+
+    private func handle(_ command: CookingVoiceController.Command) {
+        switch command {
+        case .next, .markStepDone:
+            store.setCurrentStep(progress.currentStep + 1, for: currentDish.uuid, stepCount: steps.count)
+        case .back:
+            store.setCurrentStep(progress.currentStep - 1, for: currentDish.uuid, stepCount: steps.count)
+        case .repeatStep:
+            speakCurrentStep(force: true)
+        case .startTimer:
+            let index = progress.currentStep
+            if steps.indices.contains(index), let suggestion = steps[index].timers.first {
+                startTimer(suggestion, step: steps[index])
+            } else {
+                showingManualTimer = true
+            }
+        case .stop:
+            voiceControlEnabled = false
         }
     }
 

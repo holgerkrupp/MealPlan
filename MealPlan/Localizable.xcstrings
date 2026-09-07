@@ -46,6 +46,9 @@
         }
       }
     },
+    "%@ Meal Plan" : {
+
+    },
     "%@ per 100 g" : {
 
     },
@@ -362,6 +365,12 @@
       }
     },
     "1 person currently has access." : {
+
+    },
+    "2 weeks back, 4 weeks ahead" : {
+
+    },
+    "2 weeks back, 10 weeks ahead" : {
 
     },
     "8.5 × 11 in" : {
@@ -1182,6 +1191,9 @@
         }
       }
     },
+    "Calendar access is off for MealPlan. Turn it on in Settings to publish the plan." : {
+
+    },
     "Calendar access is turned off for MealPlan. You can allow it in Settings." : {
       "localizations" : {
         "de" : {
@@ -1302,6 +1314,12 @@
       }
     },
     "Check the split is right, then save. The dish opens for editing and is marked to review." : {
+
+    },
+    "Choose a calendar" : {
+
+    },
+    "Choose a calendar to publish to first." : {
 
     },
     "Choose a date range and rebuild the list; the same ingredient from several dishes is added up." : {
@@ -1695,6 +1713,9 @@
     "Copy Invitation Link" : {
 
     },
+    "Couldn’t build the calendar file." : {
+
+    },
     "Couldn’t export recipe" : {
 
     },
@@ -1718,6 +1739,9 @@
 
     },
     "Couldn’t import that recipe archive: %@" : {
+
+    },
+    "Couldn’t open that invitation: %@" : {
 
     },
     "Couldn’t prepare the printout" : {
@@ -2471,6 +2495,9 @@
     "Fit on one page" : {
 
     },
+    "Fitting squeezes the days onto one sheet, wrapping a span longer than a week into rows like a month calendar." : {
+
+    },
     "Flour" : {
       "localizations" : {
         "de" : {
@@ -2917,6 +2944,9 @@
     "Include photos" : {
 
     },
+    "Includes" : {
+
+    },
     "Ingredient" : {
 
     },
@@ -3092,6 +3122,9 @@
         }
       }
     },
+    "Last updated" : {
+
+    },
     "Let regular meals keep your future plan filled." : {
 
     },
@@ -3244,6 +3277,9 @@
         }
       }
     },
+    "MealPlan doesn’t have permission to add events to Calendar." : {
+
+    },
     "MealPlan doesn’t have permission to add to Reminders." : {
 
     },
@@ -3313,6 +3349,9 @@
         }
       }
     },
+    "MealPlan needs permission to add events before it can publish the plan." : {
+
+    },
     "MealPlan needs permission to read your calendars. It shows only whether people are busy around a meal — and never changes, adds or deletes anything in Calendar." : {
       "localizations" : {
         "de" : {
@@ -3344,6 +3383,9 @@
           }
         }
       }
+    },
+    "Merge Recipes" : {
+
     },
     "Method" : {
 
@@ -3478,6 +3520,9 @@
 
     },
     "Next week" : {
+
+    },
+    "No calendar on this device accepts new events. Add or unlock one in the Calendar app, then come back here." : {
 
     },
     "No calendars found." : {
@@ -3747,6 +3792,9 @@
     "Not Now" : {
 
     },
+    "Not published" : {
+
+    },
     "Note" : {
       "localizations" : {
         "de" : {
@@ -3929,6 +3977,9 @@
     "One-time purchase" : {
 
     },
+    "Only calendars that accept new events are listed. A calendar backed by a Google or Outlook account works best for sharing outside MealPlan." : {
+
+    },
     "Only events near a meal’s time are considered, so a day’s full calendar never lands in your plan." : {
       "localizations" : {
         "de" : {
@@ -3940,6 +3991,9 @@
       }
     },
     "Only the household owner can invite people." : {
+
+    },
+    "Only what's planned in this window is published. It updates automatically as the window rolls forward." : {
 
     },
     "Open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
@@ -4442,6 +4496,9 @@
         }
       }
     },
+    "Prepare a copy to share…" : {
+
+    },
     "Preparing a secure iCloud invitation…" : {
 
     },
@@ -4489,6 +4546,18 @@
 
     },
     "Protein, carbs and fat" : {
+
+    },
+    "Publish Calendar" : {
+
+    },
+    "Publish to a different calendar…" : {
+
+    },
+    "Published" : {
+
+    },
+    "Published to “%@”." : {
 
     },
     "Purchases could not be restored: %@" : {
@@ -4815,7 +4884,13 @@
     "Repeats" : {
 
     },
+    "Replace “%@”?" : {
+
+    },
     "Replace everything" : {
+
+    },
+    "Replace Everything" : {
 
     },
     "Replace everything on this device?" : {
@@ -5185,6 +5260,9 @@
         }
       }
     },
+    "Sends a one-time .ics snapshot of the same window over AirDrop, Mail or Messages. It won't stay in sync — for that, publish into a calendar above." : {
+
+    },
     "Serves %lld" : {
 
     },
@@ -5234,6 +5312,9 @@
 
     },
     "Share %@" : {
+
+    },
+    "Share a copy…" : {
 
     },
     "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
@@ -5583,6 +5664,12 @@
     "Steps, notes, anything…" : {
 
     },
+    "Stop publishing" : {
+
+    },
+    "Stopped publishing. The events MealPlan added were removed." : {
+
+    },
     "Subscribe" : {
       "localizations" : {
         "de" : {
@@ -5774,6 +5861,12 @@
         }
       }
     },
+    "That calendar doesn’t accept new events. Choose another." : {
+
+    },
+    "That calendar isn’t available anymore. Choose another." : {
+
+    },
     "That dish isn’t in your library." : {
 
     },
@@ -5832,6 +5925,9 @@
           }
         }
       }
+    },
+    "The plan's events are kept up to date in that calendar automatically. Stopping removes only the events MealPlan added — nothing else in the calendar is touched." : {
+
     },
     "The purchase could not be verified: %@" : {
 
@@ -5911,6 +6007,25 @@
 
     },
     "This and future meals" : {
+
+    },
+    "This calendar year" : {
+
+    },
+    "This device already has its own “%@” household with %lld dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "This device already has its own “%1$@” household with %2$lld dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way."
+          }
+        }
+      }
+    },
+    "This device already has its own “%@” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way." : {
+
+    },
+    "This device already has its own “%@” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device." : {
 
     },
     "This device can’t translate recipes on its own — Apple Intelligence isn’t available on it." : {
@@ -6382,6 +6497,12 @@
         }
       }
     },
+    "Up to date." : {
+
+    },
+    "Update now" : {
+
+    },
     "Updated %@" : {
       "localizations" : {
         "de" : {
@@ -6715,6 +6836,9 @@
     "Writes one file holding everything: dishes, ingredients, the plan, routines, cooked history, the shopping list, week templates and your settings. Save it somewhere you can reach from the other build — iCloud Drive or AirDrop." : {
 
     },
+    "Writes the plan into a calendar you pick. If that calendar is a Google or Outlook one added to this device, anyone signed into it — Android included — sees it in their own calendar app." : {
+
+    },
     "Written" : {
 
     },
@@ -6808,8 +6932,123 @@
     "Your week is ready as a PDF." : {
 
     },
-    "Fitting squeezes the days onto one sheet, wrapping a span longer than a week into rows like a month calendar." : {
+    "Microphone access is off" : {
 
+    },
+    "Voice control is listening" : {
+
+    },
+    "To use hands-free voice control, allow microphone and speech recognition for MealPlan in Settings." : {
+
+    },
+    "Read steps aloud" : {
+
+    },
+    "Repeat this step" : {
+
+    },
+    "Hands-free voice control" : {
+
+    },
+    "Say “next”, “back”, “repeat” or “start timer”." : {
+
+    },
+    "Voice" : {
+
+    },
+    "Checked off" : {
+
+    },
+    "Not checked off" : {
+
+    },
+    "Double tap to check off" : {
+
+    },
+    "Step %lld. %@" : {
+
+    },
+    "Current step" : {
+
+    },
+    "Double tap to jump to this step" : {
+
+    },
+    "Listening for “next”, “back”, “repeat”…" : {
+
+    },
+    "Added by hand" : {
+
+    },
+    "Options for %@" : {
+
+    },
+    "Needs review" : {
+
+    },
+    "Repeating meal" : {
+
+    },
+    "Prep reminder set" : {
+
+    },
+    "Disliked" : {
+
+    },
+    "Liked" : {
+
+    },
+    "Day options" : {
+
+    },
+    "Open website" : {
+
+    },
+    "Feed options" : {
+
+    },
+    "Remove photo" : {
+
+    },
+    "Recipe sites near you that publish a feed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezeptseiten aus deiner Region, die einen Feed anbieten."
+          }
+        }
+      }
+    },
+    "Subscribe to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ abonnieren"
+          }
+        }
+      }
+    },
+    "Unread" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungelesen"
+          }
+        }
+      }
+    },
+    "Read from the page" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Von der Seite gelesen"
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

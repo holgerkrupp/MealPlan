@@ -86,6 +86,9 @@ struct HouseholdPayload: Codable, Sendable {
     var localeIdentifier: String
     var dateCreated: Date
     var didSeedPantryStaples: Bool
+    /// Optional so household records written before the household unlock
+    /// existed still decode; `nil` reads back as "not unlocked".
+    var unlockedByPurchase: Bool?
     var bringListUuid: String?
     var bringListName: String?
     var bringShadowKeys: [String]
@@ -240,6 +243,7 @@ enum HouseholdRecordCodec {
             localeIdentifier: household.localeIdentifier,
             dateCreated: household.dateCreated,
             didSeedPantryStaples: household.didSeedPantryStaples,
+            unlockedByPurchase: household.unlockedByPurchase,
             bringListUuid: household.bringListUuid,
             bringListName: household.bringListName,
             bringShadowKeys: household.bringShadowKeys,

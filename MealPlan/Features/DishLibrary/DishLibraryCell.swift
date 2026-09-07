@@ -23,6 +23,7 @@ struct DishLibraryCell: View {
     let library: [Dish]
 
     @Environment(\.modelContext) private var context
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -37,8 +38,8 @@ struct DishLibraryCell: View {
                         .strokeBorder(Color.accentColor, lineWidth: 3)
                 }
             }
-            .scaleEffect(isTargeted ? 1.04 : 1)
-            .animation(.snappy(duration: 0.18), value: isTargeted)
+            .scaleEffect(isTargeted && !reduceMotion ? 1.04 : 1)
+            .animation(reduceMotion ? nil : .snappy(duration: 0.18), value: isTargeted)
             .dropDestination(for: DishReference.self) { references, _ in
                 guard acceptsDrops else { return false }
                 return joinVariants(references)

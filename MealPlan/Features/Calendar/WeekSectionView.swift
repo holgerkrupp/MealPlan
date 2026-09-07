@@ -428,7 +428,10 @@ private struct DayCard<Content: View>: View {
                 } label: {
                     Image(systemName: "ellipsis.circle")
                         .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel(String(localized: "Day options"))
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)

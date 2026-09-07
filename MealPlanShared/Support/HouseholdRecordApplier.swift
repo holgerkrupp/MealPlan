@@ -62,6 +62,7 @@ enum HouseholdRecordApplier {
             household.localeIdentifier = value.localeIdentifier
             household.dateCreated = value.dateCreated
             household.didSeedPantryStaples = value.didSeedPantryStaples
+            household.unlockedByPurchase = value.unlockedByPurchase ?? false
             household.bringListUuid = value.bringListUuid
             household.bringListName = value.bringListName
             household.bringShadowKeys = value.bringShadowKeys

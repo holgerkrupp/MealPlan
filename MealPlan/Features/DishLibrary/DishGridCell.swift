@@ -38,6 +38,19 @@ struct DishGridCell: View {
         // Without this the lift/drag preview falls back to the rectangular
         // bounds, so a long press draws sharp white corners around the card.
         .contentShape(previewShapeKinds, cellShape)
+        // The name sits on the photo and the review / favourite badges are
+        // colour-coded corner glyphs — fold all of it into one spoken element.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(displayName)
+        .accessibilityValue(statusValue)
+    }
+
+    private var statusValue: String {
+        guard variantGroupName == nil else { return "" }
+        var parts: [String] = []
+        if dish.isFavorite { parts.append(String(localized: "Favourite")) }
+        if dish.needsReview { parts.append(String(localized: "Needs review")) }
+        return parts.joined(separator: ", ")
     }
 
     // .contextMenuPreview is iOS-only, so macOS gets the drag preview alone.
@@ -64,11 +77,17 @@ struct DishGridCell: View {
     private var dishName: some View {
         Text(displayName)
             .font(.headline)
-            .lineLimit(2)
+            // No line limit: a recipe's name is how the cook picks it out of
+            // the grid, so the capsule grows up the card rather than ending in
+            // an ellipsis that hides which of two similar dishes this is.
             .foregroundStyle(.white)
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
-            .background(.black.opacity(0.56), in: Capsule())
+            // Sits over an arbitrary photo — a heavier scrim keeps the name
+            // readable on bright images (WCAG AA against white text). A capsule
+            // would round itself into a circle as soon as the name wraps, so
+            // the scrim is a rounded rectangle instead.
+            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private func statusIcon(_ systemName: String, tint: Color) -> some View {

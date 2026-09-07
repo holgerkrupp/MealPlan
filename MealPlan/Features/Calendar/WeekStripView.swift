@@ -36,6 +36,9 @@ struct WeekStripView: View {
     /// Pages the strip while a drag rests on one of the arrows.
     @State private var pagingTask: Task<Void, Never>?
 
+    @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     /// Space between two day cells; the pill's geometry is derived from it.
     private static let cellSpacing: CGFloat = 4
 
@@ -94,7 +97,7 @@ struct WeekStripView: View {
                 Spacer(minLength: 0)
                 Text(title)
                     .font(.subheadline.weight(.semibold))
-                    .contentTransition(.numericText())
+                    .contentTransition(reduceMotion ? .identity : .numericText())
                 Spacer(minLength: 0)
                 stepButton(weeks: 1, symbol: "chevron.right", label: String(localized: "Next week"))
             }
@@ -106,7 +109,7 @@ struct WeekStripView: View {
             }
             .background(alignment: .leading) { visiblePill }
         }
-        .animation(.snappy, value: weekStart)
+        .animation(reduceMotion ? nil : .snappy, value: weekStart)
     }
 
     /// The span of this week's days that the plan below is currently showing,
@@ -134,7 +137,7 @@ struct WeekStripView: View {
                     .offset(x: x - 4, y: -5)
             }
         }
-        .animation(.smooth(duration: 0.25), value: visibleSpan)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: visibleSpan)
         .allowsHitTesting(false)
     }
 
@@ -144,7 +147,7 @@ struct WeekStripView: View {
         } label: {
             Image(systemName: symbol)
                 .font(.subheadline.weight(.semibold))
-                .frame(width: 34, height: 34)
+                .frame(width: 44, height: 44)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -195,7 +198,9 @@ struct WeekStripView: View {
 
                     Circle()
                         .stroke(
-                            isSelected ? AnyShapeStyle(.white.opacity(0.3)) : AnyShapeStyle(.quaternary),
+                            isSelected
+                                ? AnyShapeStyle(.white.opacity(contrast == .increased ? 0.5 : 0.3))
+                                : AnyShapeStyle(contrast == .increased ? AnyShapeStyle(.tertiary) : AnyShapeStyle(.quaternary)),
                             lineWidth: 3
                         )
                     Circle()

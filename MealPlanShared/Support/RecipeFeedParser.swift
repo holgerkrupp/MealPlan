@@ -14,6 +14,11 @@ struct ParsedFeedArticle: Equatable, Sendable {
     var summary: String?
     var body: String?
     var publishedAt: Date?
+    /// The article's own photo, when the feed advertises one. Feeds are wildly
+    /// inconsistent about this, so it comes from whichever of `enclosure`,
+    /// `media:content`, `media:thumbnail` or the first `<img>` in the entry
+    /// body turns up first.
+    var imageURL: URL?
 }
 
 enum RecipeFeedParserError: LocalizedError {
@@ -70,7 +75,13 @@ enum RecipeFeedParser {
                 author: item.authors?.compactMap(\.name).first,
                 summary: clean(item.summary ?? item.contentText),
                 body: item.contentHTML ?? item.contentText,
-                publishedAt: published
+                publishedAt: published,
+                imageURL: imageURL(
+                    item.image ?? item.bannerImage
+                        ?? item.attachments?.first(where: { $0.mimeType?.hasPrefix("image/") == true })?.url,
+                    inHTML: item.contentHTML,
+                    relativeTo: url
+                )
             )
         }
         return ParsedRecipeFeed(
@@ -95,6 +106,30 @@ enum RecipeFeedParser {
             if let date = formatter.date(from: raw) { return date }
         }
         return nil
+    }
+
+    /// Resolves an article photo from an explicit URL if the feed gave one,
+    /// and otherwise from the first `<img src>` in the entry body. Data URIs
+    /// and tracking pixels dressed as images are left alone — anything that is
+    /// not an http(s) URL is discarded rather than handed to the image loader.
+    fileprivate static func imageURL(_ explicit: String?, inHTML html: String?, relativeTo base: URL) -> URL? {
+        for candidate in [explicit, html.flatMap(firstImageSource)] {
+            guard let candidate, !candidate.isEmpty,
+                  let url = URL(string: candidate, relativeTo: base)?.absoluteURL,
+                  url.scheme?.lowercased().hasPrefix("http") == true else { continue }
+            return url
+        }
+        return nil
+    }
+
+    private static func firstImageSource(_ html: String) -> String? {
+        let pattern = #"<img\b[^>]*?\bsrc\s*=\s*(["'])(.*?)\1"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
+              let match = regex.firstMatch(in: html, range: NSRange(html.startIndex..., in: html)),
+              let range = Range(match.range(at: 2), in: html) else { return nil }
+        return String(html[range])
+            .replacingOccurrences(of: "&amp;", with: "&")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     fileprivate static func clean(_ value: String?) -> String? {
@@ -128,9 +163,13 @@ enum RecipeFeedParser {
         var datePublished: String?
         var dateModified: String?
         var authors: [JSONAuthor]?
+        var image: String?
+        var bannerImage: String?
+        var attachments: [JSONAttachment]?
 
         enum CodingKeys: String, CodingKey {
-            case id, url, title, summary, authors
+            case id, url, title, summary, authors, image, attachments
+            case bannerImage = "banner_image"
             case externalURL = "external_url"
             case contentHTML = "content_html"
             case contentText = "content_text"
@@ -140,6 +179,16 @@ enum RecipeFeedParser {
     }
 
     private struct JSONAuthor: Decodable { var name: String? }
+
+    private struct JSONAttachment: Decodable {
+        var url: String?
+        var mimeType: String?
+
+        enum CodingKeys: String, CodingKey {
+            case url
+            case mimeType = "mime_type"
+        }
+    }
 }
 
 private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
@@ -170,6 +219,10 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
         if element == "item" || element == "entry" {
             insideItem = true
             item = [:]
+        }
+        if insideItem, let key = Self.imageKey(for: element, attributes: attributeDict),
+           let source = attributeDict["url"] ?? attributeDict["href"], item[key] == nil {
+            item[key] = source
         }
         guard element == "link", let href = attributeDict["href"],
               let url = URL(string: href, relativeTo: sourceURL)?.absoluteURL else { return }
@@ -214,6 +267,23 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
         currentText = ""
     }
 
+    /// `enclosure` is the RSS 2.0 way and is usually the full-size photo;
+    /// `media:content` is the Media RSS equivalent; `media:thumbnail` is a
+    /// deliberate last resort because it is often a 150px crop.
+    private static func imageKey(for element: String, attributes: [String: String]) -> String? {
+        let type = (attributes["type"] ?? attributes["medium"] ?? "").lowercased()
+        switch element {
+        case "enclosure" where type.hasPrefix("image"):
+            return "image:enclosure"
+        case "media:content" where type.hasPrefix("image") || type == "image":
+            return "image:media"
+        case "media:thumbnail":
+            return "image:thumbnail"
+        default:
+            return nil
+        }
+    }
+
     private func finishItem() {
         guard let rawURL = item["link"],
               let url = URL(string: rawURL, relativeTo: sourceURL)?.absoluteURL else { return }
@@ -227,7 +297,12 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
             author: RecipeFeedParser.clean(item["author"] ?? item["name"]),
             summary: RecipeFeedParser.clean(item["summary"] ?? item["description"]),
             body: body,
-            publishedAt: RecipeFeedParser.parseDate(item["pubdate"] ?? item["published"] ?? item["updated"])
+            publishedAt: RecipeFeedParser.parseDate(item["pubdate"] ?? item["published"] ?? item["updated"]),
+            imageURL: RecipeFeedParser.imageURL(
+                item["image:enclosure"] ?? item["image:media"],
+                inHTML: body,
+                relativeTo: url
+            ) ?? RecipeFeedParser.imageURL(item["image:thumbnail"], inHTML: nil, relativeTo: url)
         ))
     }
 }

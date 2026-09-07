@@ -290,7 +290,6 @@ struct DishPickerView: View {
             DishThumbnail(dish: result.dish, size: 44, cornerRadius: 10)
             VStack(alignment: .leading, spacing: 2) {
                 Text(result.dish.name)
-                    .lineLimit(2)
                 if let detail = detail(for: result) {
                     Text(detail.text)
                         .font(.caption)

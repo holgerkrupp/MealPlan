@@ -519,27 +519,15 @@ struct DishDetailView: View {
     // MARK: - Building blocks
 
     private func section(_ title: String, @ViewBuilder content: () -> some View) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.headline)
-            content()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        RecipeSection(title, content: content)
     }
 
     private func badge(_ text: String, system: String, tint: Color) -> some View {
-        Label(text, systemImage: system)
-            .font(.caption)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 5)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint)
+        RecipeBadge(text, systemImage: system, tint: tint)
     }
 
     private func metric(_ label: String, _ value: String) -> some View {
-        VStack(alignment: .leading) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(value).font(.body.weight(.medium))
-        }
+        RecipeMetric(label, value)
     }
 
     private func exportRecipe() {

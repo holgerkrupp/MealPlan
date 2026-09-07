@@ -114,6 +114,15 @@ struct RootView: View {
         .task(id: appState.currentHousehold?.uuid) {
             await synchronizeHousehold()
         }
+        .task(id: appState.currentHousehold?.uuid) {
+            await reconcileEntitlement()
+        }
+        .onChange(of: appState.currentHousehold?.unlockedByPurchase) {
+            Task { await reconcileEntitlement() }
+        }
+        .onChange(of: purchaseManager.ownsUnlock) {
+            Task { await reconcileEntitlement() }
+        }
         .alert(
             String(localized: "iCloud sharing needs attention"),
             isPresented: Binding(get: { sharingErrorMessage != nil }, set: { if !$0 { sharingErrorMessage = nil } })
@@ -247,6 +256,25 @@ struct RootView: View {
             // retries without interrupting the foreground UI.
         } catch {
             sharingErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// Keeps the App Store unlock and the household's shared unlock flag in
+    /// step. A device that owns the purchase stamps the household so every
+    /// member is unlocked; a device that has just switched households has
+    /// `PurchaseManager.reconcile` drop the inherited unlock and re-check its
+    /// own purchase.
+    @MainActor
+    private func reconcileEntitlement() async {
+        guard let household = appState.currentHousehold else { return }
+        await purchaseManager.reconcile(
+            householdID: household.uuid,
+            unlockedByPurchase: household.unlockedByPurchase
+        )
+        if purchaseManager.ownsUnlock, !household.unlockedByPurchase {
+            household.unlockedByPurchase = true
+            household.modifiedAt = .now
+            try? context.save()
         }
     }
 

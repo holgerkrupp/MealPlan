@@ -58,6 +58,14 @@ final class RecipeFeedItem {
     var summary: String?
     var publishedAt: Date?
     var fetchedAt: Date = Date.now
+    /// Where the article's photo lives. Only the address syncs — the bytes are
+    /// fetched on demand and cached locally, like the article bodies.
+    var imageURLString: String?
+    /// When the article's own page was searched for a picture the feed did not
+    /// carry. Set whether or not one was found, so a page with no photo is
+    /// asked once rather than on every scroll. Stays nil if the page could not
+    /// be reached, which leaves the lookup to be retried later.
+    var imageLookupAt: Date?
 
     var feed: RecipeFeed?
 
@@ -68,4 +76,5 @@ final class RecipeFeedItem {
     }
 
     var url: URL? { URL(string: urlString) }
+    var imageURL: URL? { imageURLString.flatMap(URL.init(string:)) }
 }

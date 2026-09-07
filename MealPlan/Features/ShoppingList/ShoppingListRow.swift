@@ -42,6 +42,13 @@ struct ShoppingListRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(accessibilityLabel)
+            .accessibilityValue(item.isChecked
+                ? String(localized: "Checked off")
+                : String(localized: "Not checked off"))
+            .accessibilityAddTraits(item.isChecked ? .isSelected : [])
+            .accessibilityHint(String(localized: "Double tap to check off"))
 
             if isStaple {
                 Image(systemName: "shippingbox")
@@ -52,6 +59,7 @@ struct ShoppingListRow: View {
                 Image(systemName: "hand.draw")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
+                    .accessibilityLabel(String(localized: "Added by hand"))
             }
             Menu {
                 Picker(String(localized: "Aisle"), selection: Binding(
@@ -81,9 +89,19 @@ struct ShoppingListRow: View {
             } label: {
                 Image(systemName: "ellipsis.circle")
                     .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "Options for \(item.name)"))
         }
+    }
+
+    private var accessibilityLabel: String {
+        var parts = [item.name]
+        if let amount = item.displayText, !amount.isEmpty { parts.append(amount) }
+        if isStaple { parts.append(String(localized: "Pantry staple")) }
+        return parts.joined(separator: ", ")
     }
 }
 

@@ -43,8 +43,13 @@ struct SeasonalSuggestionsStrip: View {
                                     DishThumbnail(dish: dish, size: 96, cornerRadius: 12)
                                     Text(dish.name)
                                         .font(.caption)
-                                        .lineLimit(1)
-                                        .frame(width: 96, alignment: .leading)
+                                        // A fixed caption box: two lines that
+                                        // shrink to fit, so a long name shows
+                                        // in full without making the strip
+                                        // taller than its neighbours.
+                                        .lineLimit(2)
+                                        .minimumScaleFactor(0.7)
+                                        .frame(width: 96, height: 28, alignment: .topLeading)
                                 }
                             }
                             .buttonStyle(.plain)

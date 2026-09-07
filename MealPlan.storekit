@@ -15,7 +15,7 @@
           "locale" : "en_US"
         }
       ],
-      "productID" : "de.holgerkrupp.mealplan.unlock",
+      "productID" : "de.holgerkrupp.mealplan.unloc",
       "referenceName" : "MealPlan Unlimited Planning",
       "type" : "NonConsumable"
     }

@@ -22,7 +22,10 @@ actor RecipeArticleCache {
         guard let html = String(data: data, encoding: .utf8) else {
             throw RecipeFeedParserError.unsupportedFormat
         }
-        try store(html, for: url)
+        // Caching is an optimisation, not a precondition: a page that was
+        // downloaded fine should still be readable when the cache directory
+        // cannot be written (disk full, protected data unavailable).
+        try? store(html, for: url)
         return html
     }
 

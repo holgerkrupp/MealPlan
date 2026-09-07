@@ -500,8 +500,10 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. If you choose to publish your plan, MealPlan also adds and updates events in a calendar you pick for that purpose. No other calendar or event is ever changed.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used only while hands-free voice control is on in Cooking Mode, to hear commands like \"next\" or \"repeat\". Audio is processed on your device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MealPlan recognises cooking commands like \"next step\" or \"start timer\" so you can follow a recipe without touching the screen. Speech is processed on your device and never leaves it.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;
@@ -567,8 +569,10 @@
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. If you choose to publish your plan, MealPlan also adds and updates events in a calendar you pick for that purpose. No other calendar or event is ever changed.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used only while hands-free voice control is on in Cooking Mode, to hear commands like \"next\" or \"repeat\". Audio is processed on your device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
 				INFOPLIST_KEY_NSRemindersFullAccessUsageDescription = "MealPlan can send your shopping list to Apple Reminders.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "MealPlan recognises cooking commands like \"next step\" or \"start timer\" so you can follow a recipe without touching the screen. Speech is processed on your device and never leaves it.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphoneos*]" = YES;
 				"INFOPLIST_KEY_UIApplicationSceneManifest_Generation[sdk=iphonesimulator*]" = YES;

@@ -41,6 +41,13 @@ final class Household {
     /// staples (salt, pepper, water, …). Seeded once, for a household created
     /// on this device; clearing a staple afterwards has to stick.
     var didSeedPantryStaples: Bool = false
+    /// `true` once any device in this household has completed the one-time
+    /// App Store unlock. Synced like every other household field, so a
+    /// purchase made by one member unlocks unlimited planning for everyone
+    /// in the household. A device that joins a *different* household drops
+    /// this inherited unlock and falls back to its own App Store purchase —
+    /// see `PurchaseManager.reconcile(with:)`.
+    var unlockedByPurchase: Bool = false
 
     // MARK: Bring!
 

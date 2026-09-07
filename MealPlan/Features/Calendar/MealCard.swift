@@ -20,6 +20,7 @@ struct MealCard: View {
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.colorSchemeContrast) private var contrast
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
@@ -170,8 +171,10 @@ struct MealCard: View {
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
                 .strokeBorder(
-                    isTargeted ? Color.accentColor : accent.opacity(showsBackdrop ? 0 : 0.35),
-                    lineWidth: isTargeted ? 2.5 : 1
+                    isTargeted
+                        ? Color.accentColor
+                        : accent.opacity(showsBackdrop ? 0 : (contrast == .increased ? 0.7 : 0.35)),
+                    lineWidth: isTargeted ? 2.5 : (contrast == .increased ? 1.5 : 1)
                 )
         )
         .contentShape(Rectangle())
@@ -237,7 +240,9 @@ struct MealCard: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(
                     LinearGradient(
-                        colors: [.black.opacity(0.15), .black.opacity(0.30), .black.opacity(0.70)],
+                        // Top stop deepened so the white meal title stays legible
+                        // over a bright photo; the bottom already covers the row.
+                        colors: [.black.opacity(0.30), .black.opacity(0.42), .black.opacity(0.72)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
@@ -429,28 +434,39 @@ struct MealCard: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(entry.displayTitle)
                     .font(.subheadline.weight(showsBackdrop ? .semibold : .regular))
+                    // This card's height follows its content, so an unbounded
+                    // name would resize the day's whole band. The name shrinks
+                    // into two lines instead of ending in an ellipsis.
                     .lineLimit(2)
+                    .minimumScaleFactor(0.75)
                     .strikethrough(entry.skipped)
                     .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white) : AnyShapeStyle(entry.skipped ? Color.secondary : Color.primary))
 
                 HStack(spacing: 6) {
                     if entry.routineUUID != nil {
                         Image(systemName: "repeat")
+                            .accessibilityLabel(String(localized: "Repeating meal"))
                     }
                     if entry.servingsOverride != nil {
                         Label(String(localized: "\(entry.effectiveServings)"), systemImage: "person.2")
                             .labelStyle(.titleAndIcon)
+                            .accessibilityLabel(String(localized: "\(entry.effectiveServings) servings"))
                     }
                     if entry.prepReminder {
                         Image(systemName: "bell")
+                            .accessibilityLabel(String(localized: "Prep reminder set"))
                     }
                     if let reaction = entry.reaction {
                         Image(systemName: reaction.symbolName)
                             .foregroundStyle(showsBackdrop ? .white : (reaction == .down ? .red : .yellow))
+                            .accessibilityLabel(reaction == .down
+                                ? String(localized: "Disliked")
+                                : String(localized: "Liked"))
                     }
                     if entry.dish?.needsReview == true {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(showsBackdrop ? .white : .orange)
+                            .accessibilityLabel(String(localized: "Needs review"))
                     }
                     // Reading the day's total is one thing; seeing which meal
                     // put it there is what makes tomorrow plannable.

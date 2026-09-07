@@ -124,12 +124,12 @@ struct MealPlanApp: App {
 }
 
 #if canImport(UIKit)
-/// Handles CloudKit share acceptance (opening a "join our household" link).
+/// Configures app and scene lifecycle hooks used by CloudKit sharing.
 ///
-/// Only queues the invitation — actually accepting it needs a `ModelContext`
-/// to merge the shared household into, and that only exists once SwiftUI has
-/// built the view hierarchy. See `HouseholdShareInvitationInbox` and
-/// `RootView`'s drain of it.
+/// The legacy application callback remains as a fallback. Scene-based iOS
+/// versions deliver invitations to `MealPlanSceneDelegate` below. Both only
+/// queue the invitation — actually accepting it needs the `ModelContext` that
+/// exists once SwiftUI has built the view hierarchy.
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -146,6 +146,29 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 
+    /// CloudKit invitations are scene events in a scene-based app. SwiftUI
+    /// doesn't install an app-owned scene delegate unless we explicitly
+    /// provide one, so without this configuration iOS opens MealPlan after
+    /// the system acceptance sheet but never delivers the share metadata.
+    func application(
+        _ application: UIApplication,
+        configurationForConnecting connectingSceneSession: UISceneSession,
+        options: UIScene.ConnectionOptions
+    ) -> UISceneConfiguration {
+        Self.sceneConfiguration(for: connectingSceneSession.role)
+    }
+
+    static func sceneConfiguration(for role: UISceneSession.Role) -> UISceneConfiguration {
+        let configuration = UISceneConfiguration(
+            name: nil,
+            sessionRole: role
+        )
+        if role == .windowApplication {
+            configuration.delegateClass = MealPlanSceneDelegate.self
+        }
+        return configuration
+    }
+
     func application(
         _ application: UIApplication,
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
@@ -155,6 +178,32 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
             await HouseholdRecordSyncService.shared.fetchChanges()
             completionHandler(.newData)
         }
+    }
+}
+
+/// Receives CloudKit invitations for SwiftUI's scene-based lifecycle.
+///
+/// UIKit uses two different paths: an already-connected window receives
+/// `windowScene(_:userDidAcceptCloudKitShareWith:)`, while an invitation that
+/// launches the app arrives in the new scene's connection options. Funnel
+/// both through the in-memory inbox so `RootView` can accept them once its
+/// SwiftData context is ready.
+final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
+    func scene(
+        _ scene: UIScene,
+        willConnectTo session: UISceneSession,
+        options connectionOptions: UIScene.ConnectionOptions
+    ) {
+        if let metadata = connectionOptions.cloudKitShareMetadata {
+            HouseholdShareInvitationInbox.shared.enqueue(metadata)
+        }
+    }
+
+    func windowScene(
+        _ windowScene: UIWindowScene,
+        userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
+    ) {
+        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 }
 #elseif os(macOS)

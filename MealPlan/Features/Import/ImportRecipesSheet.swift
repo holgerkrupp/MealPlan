@@ -101,7 +101,6 @@ struct ImportRecipesSheet: View {
     private func row(for item: PlannedRecipeImport) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(item.recipe.name)
-                .lineLimit(2)
             HStack(spacing: 6) {
                 Image(systemName: symbol(for: item.outcome))
                 Text(caption(for: item))

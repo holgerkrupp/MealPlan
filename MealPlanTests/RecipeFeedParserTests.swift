@@ -80,4 +80,78 @@ struct RecipeFeedParserTests {
         #expect(!text.contains("menu"))
         #expect(!text.contains("bad"))
     }
+
+    // MARK: - Article images
+
+    @Test func readsEnclosureImage() throws {
+        let xml = """
+        <rss version="2.0"><channel><title>Kitchen</title>
+        <item><guid>one</guid><title>Soup</title><link>https://example.com/soup</link>
+        <enclosure url="https://example.com/soup.jpg" type="image/jpeg" length="1000"/>
+        </item></channel></rss>
+        """
+        let feed = try RecipeFeedParser.parse(Data(xml.utf8), sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL?.absoluteString == "https://example.com/soup.jpg")
+    }
+
+    @Test func prefersMediaContentOverThumbnail() throws {
+        let xml = """
+        <rss version="2.0"><channel><title>Kitchen</title>
+        <item><guid>one</guid><title>Soup</title><link>https://example.com/soup</link>
+        <media:thumbnail url="https://example.com/tiny.jpg"/>
+        <media:content url="https://example.com/big.jpg" medium="image"/>
+        </item></channel></rss>
+        """
+        let feed = try RecipeFeedParser.parse(Data(xml.utf8), sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL?.absoluteString == "https://example.com/big.jpg")
+    }
+
+    @Test func fallsBackToTheThumbnailAlone() throws {
+        let xml = """
+        <rss version="2.0"><channel><title>Kitchen</title>
+        <item><guid>one</guid><title>Soup</title><link>https://example.com/soup</link>
+        <media:thumbnail url="https://example.com/tiny.jpg"/>
+        </item></channel></rss>
+        """
+        let feed = try RecipeFeedParser.parse(Data(xml.utf8), sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL?.absoluteString == "https://example.com/tiny.jpg")
+    }
+
+    @Test func fallsBackToTheFirstImageInTheBody() throws {
+        let xml = """
+        <rss version="2.0"><channel><title>Kitchen</title>
+        <item><guid>one</guid><title>Soup</title><link>https://example.com/soup</link>
+        <description><![CDATA[<p>Warm.</p><img src="/photos/soup.png" alt="Soup"><img src="/photos/second.png">]]></description>
+        </item></channel></rss>
+        """
+        let feed = try RecipeFeedParser.parse(Data(xml.utf8), sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL?.absoluteString == "https://example.com/photos/soup.png")
+    }
+
+    @Test func ignoresNonHTTPImageSources() throws {
+        let xml = """
+        <rss version="2.0"><channel><title>Kitchen</title>
+        <item><guid>one</guid><title>Soup</title><link>https://example.com/soup</link>
+        <description><![CDATA[<img src="data:image/gif;base64,R0lGOD">]]></description>
+        </item></channel></rss>
+        """
+        let feed = try RecipeFeedParser.parse(Data(xml.utf8), sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL == nil)
+    }
+
+    @Test func readsJSONFeedImages() throws {
+        let json = """
+        {"version":"https://jsonfeed.org/version/1.1","title":"Kitchen",
+         "items":[{"id":"one","url":"https://example.com/soup","title":"Soup",
+                   "image":"https://example.com/soup.jpg"}]}
+        """
+        let feed = try RecipeFeedParser.parse(Data(json.utf8), contentType: "application/json", sourceURL: source)
+
+        #expect(feed.articles.first?.imageURL?.absoluteString == "https://example.com/soup.jpg")
+    }
 }

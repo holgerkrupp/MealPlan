@@ -270,6 +270,7 @@ struct DishEditorView: View {
                             }
                             .buttonStyle(.plain)
                             .padding(4)
+                            .accessibilityLabel(String(localized: "Remove photo"))
                         }
                 }
 

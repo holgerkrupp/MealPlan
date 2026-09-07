@@ -104,6 +104,7 @@ enum RecipeFeedService {
             item.author = article.author
             item.summary = article.summary
             item.publishedAt = article.publishedAt
+            item.imageURLString = article.imageURL?.absoluteString ?? item.imageURLString
             item.fetchedAt = .now
             item.feed = feed
         }

@@ -228,7 +228,6 @@ struct DishSidebarView: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name)
                     .font(.subheadline.weight(.medium))
-                    .lineLimit(2)
                     .foregroundStyle(.primary)
 
                 HStack(spacing: 6) {
