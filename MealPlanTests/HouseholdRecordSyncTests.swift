@@ -89,6 +89,14 @@ struct HouseholdRecordSyncTests {
         #expect(HouseholdShareLocator.householdID(from: CKRecordZone.ID(zoneName: "Unrelated")) == nil)
     }
 
+    @Test func legacyShareResolvesRootDirectlyFromZone() {
+        let householdID = UUID()
+        let zoneID = HouseholdShareLocator.solo(householdID: householdID).zoneID
+
+        #expect(HouseholdCloudSharingService.resolvedHouseholdID(shareValue: nil, zoneID: zoneID) == householdID)
+        #expect(HouseholdCloudSharingService.resolvedHouseholdID(shareValue: "invalid", zoneID: zoneID) == householdID)
+    }
+
     @Test func cloudBootstrapPrefersSharedThenOldestHousehold() {
         let oldUnshared = CandidateSummary(zoneName: "old", isShared: false, dateCreated: Date(timeIntervalSince1970: 100))
         let newShared = CandidateSummary(zoneName: "shared", isShared: true, dateCreated: Date(timeIntervalSince1970: 300))

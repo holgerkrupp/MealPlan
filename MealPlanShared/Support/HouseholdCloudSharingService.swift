@@ -164,8 +164,12 @@ enum HouseholdCloudSharingService {
             share = CKShare(recordZoneID: locator.zoneID)
             share[CKShare.SystemFieldKey.title] = household.name as CKRecordValue
             share[CKShare.SystemFieldKey.shareType] = "de.holgerkrupp.mealplan.household" as CKRecordValue
-            share[householdIDKey] = household.uuid.uuidString as CKRecordValue
         }
+
+        // Older shares predate this locator field. Persist it whenever the
+        // invitation UI is opened so future participants can fetch the root
+        // record by ID without relying on any CloudKit query indexes.
+        share[householdIDKey] = household.uuid.uuidString as CKRecordValue
 
         // Anyone holding the link may join, at the permission the owner picked.
         // A `CKShare.Participant.oneTimeURLParticipant()` would be tighter, but
@@ -445,15 +449,21 @@ enum HouseholdCloudSharingService {
     }
 
     private static func fetchHouseholdRecord(from share: CKShare, zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> CKRecord {
-        if let raw = share[householdIDKey] as? String, let uuid = UUID(uuidString: raw) {
-            let identity = HouseholdRecordIdentity(type: .household, uuid: uuid)
-            return try await fetchRecord(CKRecord.ID(recordName: identity.recordName, zoneID: zoneID), from: database)
-        }
-        let result = try await database.records(matching: CKQuery(recordType: HouseholdRecordType.household.rawValue, predicate: NSPredicate(value: true)), inZoneWith: zoneID)
-        for (_, record) in result.matchResults {
-            if let record = try? record.get() { return record }
-        }
-        throw HouseholdSharingError.missingRootRecord
+        let householdID = resolvedHouseholdID(
+            shareValue: share[householdIDKey] as? String,
+            zoneID: zoneID
+        )
+        guard let householdID else { throw HouseholdSharingError.missingRootRecord }
+        let identity = HouseholdRecordIdentity(type: .household, uuid: householdID)
+        return try await fetchRecord(CKRecord.ID(recordName: identity.recordName, zoneID: zoneID), from: database)
+    }
+
+    /// Every MealPlan household zone embeds the same UUID as its root record.
+    /// That makes legacy shares — which have no `householdID` field — directly
+    /// addressable without a CKQuery or Production schema index.
+    static func resolvedHouseholdID(shareValue: String?, zoneID: CKRecordZone.ID) -> UUID? {
+        shareValue.flatMap(UUID.init(uuidString:))
+            ?? HouseholdShareLocator.householdID(from: zoneID)
     }
 
     private static func fetchRecord(_ id: CKRecord.ID, from database: CKDatabase) async throws -> CKRecord {
