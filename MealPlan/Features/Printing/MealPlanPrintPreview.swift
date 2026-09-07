@@ -70,6 +70,62 @@ enum MealPlanPrintPreview {
         )
     }
 
+    /// Thirty days starting on a Wednesday, for looking at the calendar block
+    /// — including the ragged first row a span that doesn't start on a Monday
+    /// produces.
+    static var monthDocument: MealPlanPrintDocument {
+        let dinners = [
+            "Pasta al limone", "Ofengemüse mit Halloumi", "Linsencurry", "Sonntagsbraten",
+            "Reste-Frittata", "Kürbissuppe", "Schnitzel", "Gnocchi mit Salbei",
+            "Chili sin Carne", "Lachs mit Brokkoli", "Pizza", "Bratkartoffeln",
+            "Ratatouille", "Hühnerfrikassee",
+        ]
+        let lunches = ["Linsensalat", "Suppe", "Bowl", "Reste"]
+
+        var document = self.document
+        document.days = (0..<30).map { offset in
+            // Starts on a Wednesday: weekday index 2.
+            let weekdayIndex = (2 + offset) % 7
+            return MealPlanPrintDocument.Day(
+                id: "month-\(offset)",
+                weekdayText: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"][weekdayIndex],
+                weekdayShortText: ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][weekdayIndex],
+                weekdayIndex: weekdayIndex,
+                dateText: "\((offset + 9) % 30 + 1) Sep",
+                dayNumberText: offset == 0 ? "9 Sep" : ((offset + 9) % 30 + 1 == 1 ? "1 Oct" : "\((offset + 9) % 30 + 1)"),
+                isToday: offset == 0,
+                isWeekend: weekdayIndex >= 5,
+                meals: [
+                    MealPlanPrintDocument.Meal(
+                        id: "breakfast",
+                        name: "Breakfast",
+                        symbolName: "sunrise",
+                        entries: offset % 4 == 0 ? [entry("Porridge", energy: nil)] : []
+                    ),
+                    MealPlanPrintDocument.Meal(
+                        id: "lunch",
+                        name: "Lunch",
+                        symbolName: "sun.max",
+                        entries: offset % 3 == 0 ? [entry(lunches[offset % lunches.count], energy: nil)] : []
+                    ),
+                    MealPlanPrintDocument.Meal(
+                        id: "dinner",
+                        name: "Dinner",
+                        symbolName: "sunset",
+                        entries: offset % 5 == 4 ? [] : [entry(dinners[offset % dinners.count], energy: nil)]
+                    ),
+                ],
+                energyText: offset % 5 == 4 ? nil : "≈ 2 140 kcal",
+                macrosText: nil,
+                standingSymbolName: nil,
+                standingText: nil
+            )
+        }
+        document.subtitle = "9 Sep 2026 – 8 Oct 2026"
+        document.shoppingList = nil
+        return document
+    }
+
     static var shoppingList: MealPlanPrintDocument.ShoppingList {
         let aisles: [(String, [(String, String?)])] = [
             ("Obst & Gemüse", [

@@ -1,0 +1,24 @@
+# macOS
+.DS_Store
+
+# Xcode - user-specific state (per-machine, should never be committed)
+xcuserdata/
+*.xcuserstate
+*.xcuserdatad/
+
+# Xcode - build products & derived data
+build/
+DerivedData/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.swiftpm/
+.build/
+
+# CocoaPods / Carthage (only if you use them)
+Pods/
+Carthage/Build/

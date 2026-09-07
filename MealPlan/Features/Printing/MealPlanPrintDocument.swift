@@ -35,7 +35,17 @@ struct MealPlanPrintDocument: Sendable, Equatable {
     struct Day: Identifiable, Sendable, Equatable {
         var id: String
         var weekdayText: String
+        /// The abbreviated form, for the calendar block's column headings —
+        /// "Wednesday" does not fit across a 76-point cell.
+        var weekdayShortText: String = ""
+        /// Position in its week, Monday 0 — what lets the calendar block put
+        /// every day in the column for its weekday.
+        var weekdayIndex: Int = 0
         var dateText: String
+        /// The short form for a calendar cell: the day number alone, with the
+        /// month added where it changes. "10 Sep" in all thirty cells is
+        /// width a month grid hasn't got to spare.
+        var dayNumberText: String = ""
         var isToday: Bool
         var isWeekend: Bool
         var meals: [Meal]
@@ -115,8 +125,13 @@ struct MealPlanPrintDocument: Sendable, Equatable {
 struct PrintPage: Identifiable, Sendable, Equatable {
 
     enum Body: Sendable, Equatable {
-        /// Indices into `MealPlanPrintDocument.days`.
+        /// Indices into `MealPlanPrintDocument.days`, as one band: meals down
+        /// the side, days across.
         case days(Range<Int>)
+        /// The same indices laid out as a month calendar — weekdays across,
+        /// weeks down. How a long span fits on one sheet; see
+        /// `CalendarBlockLayout`.
+        case calendar(Range<Int>)
         /// Aisle groups already flowed into this sheet's columns, left to
         /// right — see `ShoppingListLayout.flow`.
         case shopping([[MealPlanPrintDocument.ShoppingGroup]])
@@ -132,13 +147,17 @@ struct PrintPage: Identifiable, Sendable, Equatable {
     var id: String {
         switch body {
         case let .days(range): "days-\(range.lowerBound)-\(range.upperBound)-\(pageNumber)"
+        case let .calendar(range): "calendar-\(range.lowerBound)-\(range.upperBound)-\(pageNumber)"
         case .shopping: "shopping-\(pageNumber)"
         }
     }
 
+    /// The days this sheet carries, however they are laid out.
     var days: Range<Int>? {
-        guard case let .days(range) = body else { return nil }
-        return range
+        switch body {
+        case let .days(range), let .calendar(range): range
+        case .shopping: nil
+        }
     }
 }
 
@@ -234,6 +253,55 @@ enum PrintPagination {
         return result
     }
 
+    /// How the plan's days are cut into sheets.
+    ///
+    /// Three shapes, in order of preference: one band; a month calendar on one
+    /// sheet; and, failing both, several sheets. Which of the last two is used
+    /// depends on `compact` — the band is the better way to read a week, so it
+    /// is tried first and the calendar only steps in when a span is too long
+    /// for one.
+    static func planSheets(
+        for document: MealPlanPrintDocument,
+        geometry: PrintPageGeometry,
+        compact: Bool
+    ) -> [PrintPage.Body] {
+        let dayCount = document.days.count
+        guard dayCount > 0 else { return [] }
+
+        let columns = columnsPerPage(
+            contentWidth: geometry.contentSize.width,
+            textScale: geometry.textScale,
+            dayCount: dayCount,
+            compact: compact
+        )
+        if columns >= dayCount {
+            return [.days(0..<dayCount)]
+        }
+
+        guard compact else {
+            return chunks(dayCount: dayCount, columnsPerPage: columns).map { .days($0) }
+        }
+
+        // Too long for one band. Wrap it into week rows instead, which is what
+        // makes a fortnight or a month a single sheet.
+        let weekdayIndexes = document.days.map(\.weekdayIndex)
+        // Every row is as tall as its tallest cell, so the busiest day of the
+        // span sets the height. A meal with nothing planned still takes its
+        // line — that blank is what someone fills in with a pen.
+        let linesPerCell = document.days
+            .map { $0.meals.reduce(0) { $0 + max(1, $1.entries.count) } }
+            .max() ?? 1
+        let rows = CalendarBlockLayout.weekRows(weekdayIndexes: weekdayIndexes)
+        let perSheet = CalendarBlockLayout.rowsPerSheet(
+            bodyHeight: geometry.bodyHeight,
+            linesPerCell: linesPerCell
+        )
+        guard CalendarBlockLayout.fitsWidth(contentWidth: geometry.contentSize.width) else {
+            return chunks(dayCount: dayCount, columnsPerPage: columns).map { .days($0) }
+        }
+        return CalendarBlockLayout.sheets(rows: rows, rowsPerSheet: perSheet).map { .calendar($0) }
+    }
+
     /// Every sheet of a document, in order: the plan, then the shopping list.
     ///
     /// The summary never takes a sheet of its own: it is a band along the foot
@@ -244,13 +312,7 @@ enum PrintPagination {
         geometry: PrintPageGeometry,
         compact: Bool = true
     ) -> [PrintPage] {
-        let columns = columnsPerPage(
-            contentWidth: geometry.contentSize.width,
-            textScale: geometry.textScale,
-            dayCount: document.days.count,
-            compact: compact
-        )
-        let dayChunks = chunks(dayCount: document.days.count, columnsPerPage: columns)
+        let planBodies = planSheets(for: document, geometry: geometry, compact: compact)
 
         let shoppingSheets: [[[MealPlanPrintDocument.ShoppingGroup]]] = {
             guard let list = document.shoppingList, !list.isEmpty else { return [] }
@@ -265,19 +327,19 @@ enum PrintPagination {
             )
         }()
 
-        let total = dayChunks.count + shoppingSheets.count
-        var pages: [PrintPage] = dayChunks.enumerated().map { index, range in
+        let total = planBodies.count + shoppingSheets.count
+        var pages: [PrintPage] = planBodies.enumerated().map { index, body in
             PrintPage(
-                body: .days(range),
+                body: body,
                 pageNumber: index + 1,
                 pageCount: total,
-                includesSummary: document.summary != nil && index == dayChunks.count - 1
+                includesSummary: document.summary != nil && index == planBodies.count - 1
             )
         }
         for (index, sheet) in shoppingSheets.enumerated() {
             pages.append(PrintPage(
                 body: .shopping(sheet),
-                pageNumber: dayChunks.count + index + 1,
+                pageNumber: planBodies.count + index + 1,
                 pageCount: total,
                 includesSummary: false
             ))

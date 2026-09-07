@@ -77,6 +77,7 @@ enum MealPlanPrintBuilder {
         let nutrition = options.isAnythingOn ? WeekNutritionSummary(entries: entries) : nil
 
         let weekdayFormat = Date.FormatStyle.dateTime.weekday(.wide)
+        let weekdayShortFormat = Date.FormatStyle.dateTime.weekday(.abbreviated)
         let dateFormat = Date.FormatStyle.dateTime.day().month(.abbreviated)
         let calendar = Calendar.current
 
@@ -114,7 +115,10 @@ enum MealPlanPrintBuilder {
             return MealPlanPrintDocument.Day(
                 id: day.dayID,
                 weekdayText: day.formatted(weekdayFormat),
+                weekdayShortText: day.formatted(weekdayShortFormat),
+                weekdayIndex: weekdayIndex(of: day),
                 dateText: day.formatted(dateFormat),
+                dayNumberText: dayNumberText(for: day, isFirstOfRange: day == days.first, format: dateFormat),
                 isToday: day.isSameDay(as: now),
                 isWeekend: calendar.isDateInWeekend(day),
                 meals: meals,
@@ -191,6 +195,28 @@ enum MealPlanPrintBuilder {
     static func trustworthyFacts(_ estimate: NutritionEstimate?) -> NutritionFacts? {
         guard let estimate, estimate.isTrustworthy, estimate.facts.energyKcal > 0 else { return nil }
         return estimate.facts
+    }
+
+    /// The day number on its own, except where the month turns over — and on
+    /// the first cell printed, so a grid that opens mid-month says which.
+    static func dayNumberText(
+        for day: Date,
+        isFirstOfRange: Bool,
+        format: Date.FormatStyle
+    ) -> String {
+        let calendar = Calendar.current
+        let isFirstOfMonth = calendar.component(.day, from: day) == 1
+        return isFirstOfMonth || isFirstOfRange
+            ? day.formatted(format)
+            : day.formatted(Date.FormatStyle.dateTime.day())
+    }
+
+    /// Monday 0 … Sunday 6, whatever the locale's first weekday is. The
+    /// calendar block puts each day in the column for its weekday, and the
+    /// plan's own week sections are Monday-based, so this is too.
+    static func weekdayIndex(of day: Date) -> Int {
+        let weekday = Date.mondayCalendar.component(.weekday, from: day)
+        return (weekday + 5) % 7
     }
 
     /// "P 92 g · C 210 g · F 74 g" — initials, not words: this sits in a

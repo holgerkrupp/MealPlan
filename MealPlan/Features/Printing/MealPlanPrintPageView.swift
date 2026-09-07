@@ -37,6 +37,18 @@ struct MealPlanPrintPageView: View {
                     PrintSummaryBand(summary: summary, scale: scale, strokeScale: strokeScale)
                 }
 
+            case let .calendar(range):
+                PrintCalendarBlock(
+                    days: Array(document.days[range]),
+                    scale: scale,
+                    contentSize: geometry.contentSize,
+                    strokeScale: strokeScale
+                )
+
+                if page.includesSummary, let summary = document.summary {
+                    PrintSummaryBand(summary: summary, scale: scale, strokeScale: strokeScale)
+                }
+
             case let .shopping(columns):
                 PrintShoppingColumns(
                     columns: columns,
@@ -313,6 +325,210 @@ private struct PrintDayGrid: View {
         .overlay(alignment: .top) {
             Rectangle().frame(height: 0.75 * strokeScale).foregroundStyle(.black.opacity(0.5))
         }
+    }
+}
+
+/// A month calendar: weekdays across, weeks down, each day's meals inside its
+/// cell.
+///
+/// The meals are named by their symbol rather than in words — a cell 80 points
+/// wide has no room for "Breakfast" next to the dish — with a legend along the
+/// foot saying which is which. That legend is not optional decoration: without
+/// it the symbols are a guessing game for anyone who didn't set the meals up.
+@MainActor
+private struct PrintCalendarBlock: View {
+    let days: [MealPlanPrintDocument.Day]
+    let scale: CGFloat
+    let contentSize: CGSize
+    let strokeScale: CGFloat
+
+    /// Monday-based weekday names for the column headings, taken from the
+    /// days themselves so they are already localized.
+    private var weekdayNames: [String] {
+        var names = Array(repeating: "", count: CalendarBlockLayout.columns)
+        for day in days where names[day.weekdayIndex].isEmpty {
+            names[day.weekdayIndex] = day.weekdayShortText.isEmpty
+                ? day.weekdayText
+                : day.weekdayShortText
+        }
+        return names
+    }
+
+    private var rows: [Range<Int>] {
+        CalendarBlockLayout.weekRows(weekdayIndexes: days.map(\.weekdayIndex))
+    }
+
+    /// The tallest cell on the sheet, in lines — what every row is sized for.
+    private var linesPerCell: Int {
+        days.map { $0.meals.reduce(0) { $0 + max(1, $1.entries.count) } }.max() ?? 1
+    }
+
+    /// How the type is sized for the rows this sheet ended up carrying.
+    ///
+    /// Unlike the band grid's density this is allowed *above* 1: a fortnight
+    /// on an A4 sheet has room to spare, and a month grid set at week-grid
+    /// sizes leaves the cells half empty with meal symbols too small to tell
+    /// apart. It grows to fill the sheet, within reason.
+    private var density: CGFloat {
+        let available = (contentSize.height - legendHeight) / CGFloat(max(1, rows.count))
+        let preferred = CalendarBlockLayout.preferredRowHeight(
+            linesPerCell: linesPerCell,
+            textScale: scale
+        )
+        // Width has a vote too, and usually the deciding one: type sized only
+        // by the room above and below it truncates every dish name and wraps
+        // the weekday headings.
+        let columnWidth = contentSize.width / CGFloat(CalendarBlockLayout.columns)
+        let widthRatio = columnWidth / (CalendarBlockLayout.preferredColumnWidth * scale)
+        return min(1.5, max(0.55, min(available / preferred, widthRatio)))
+    }
+
+    private var s: CGFloat { scale * density }
+
+    private var legendHeight: CGFloat { 16 * scale }
+
+    /// Every meal that appears anywhere on this sheet, in the household's own
+    /// order — the same ordered union the band grid takes its rows from.
+    private var legend: [(symbol: String, name: String)] {
+        var seen: Set<String> = []
+        var result: [(String, String)] = []
+        for day in days {
+            for meal in day.meals where !seen.contains(meal.id) {
+                seen.insert(meal.id)
+                result.append((meal.symbolName, meal.name))
+            }
+        }
+        return result
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4 * scale) {
+            Grid(alignment: .topLeading, horizontalSpacing: 0, verticalSpacing: 0) {
+                GridRow {
+                    ForEach(Array(weekdayNames.enumerated()), id: \.offset) { _, name in
+                        Text(name)
+                            .font(.system(size: 7.5 * s, weight: .semibold))
+                            .textCase(.uppercase)
+                            .lineLimit(1)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 3 * s)
+                            .padding(.bottom, 2 * s)
+                    }
+                }
+                .overlay(alignment: .bottom) {
+                    Rectangle().frame(height: 0.5 * strokeScale).foregroundStyle(.black.opacity(0.5))
+                }
+
+                ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                    GridRow {
+                        ForEach(0..<CalendarBlockLayout.columns, id: \.self) { column in
+                            cell(days[row].first { $0.weekdayIndex == column })
+                        }
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .overlay { columnRules }
+
+            legendRow
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    /// The vertical rules, drawn once for the whole block — see the note on
+    /// `PrintDayGrid.columnRules`.
+    private var columnRules: some View {
+        GeometryReader { proxy in
+            let width = proxy.size.width / CGFloat(CalendarBlockLayout.columns)
+            ForEach(1..<CalendarBlockLayout.columns, id: \.self) { index in
+                Rectangle()
+                    .fill(.black.opacity(0.2))
+                    .frame(width: 0.5 * strokeScale)
+                    .offset(x: width * CGFloat(index))
+            }
+        }
+        .allowsHitTesting(false)
+    }
+
+    @ViewBuilder
+    private func cell(_ day: MealPlanPrintDocument.Day?) -> some View {
+        VStack(alignment: .leading, spacing: 1 * s) {
+            if let day {
+                HStack(alignment: .firstTextBaseline, spacing: 3 * s) {
+                    Text(day.dayNumberText.isEmpty ? day.dateText : day.dayNumberText)
+                        .font(.system(size: 7.5 * s, weight: day.isToday ? .heavy : .semibold))
+                    Spacer(minLength: 0)
+                    if let energy = day.energyText {
+                        Text(energy)
+                            .font(.system(size: 6 * s))
+                            .foregroundStyle(.secondary)
+                            .monospacedDigit()
+                            .lineLimit(1)
+                    }
+                }
+                ForEach(day.meals) { meal in
+                    if meal.entries.isEmpty {
+                        line(symbol: meal.symbolName, text: nil)
+                    } else {
+                        ForEach(meal.entries) { entry in
+                            line(symbol: meal.symbolName, text: entry.title)
+                        }
+                    }
+                }
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .padding(.horizontal, 3 * s)
+        .padding(.vertical, 2 * s)
+        .background((day?.isWeekend ?? false) ? Color.black.opacity(0.035) : .clear)
+        .overlay(alignment: .top) {
+            Rectangle().frame(height: 0.25 * strokeScale).foregroundStyle(.black.opacity(0.2))
+        }
+    }
+
+    /// One meal in a cell: its symbol, then the dish — or a rule to write on
+    /// when nothing is planned.
+    private func line(symbol: String, text: String?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 2.5 * s) {
+            Image(systemName: symbol)
+                .font(.system(size: 5.5 * s))
+                .foregroundStyle(.secondary)
+                .frame(width: 7 * s, alignment: .leading)
+            if let text {
+                Text(text)
+                    .font(.system(size: 7 * s))
+                    .lineLimit(1)
+                    // Shrink a little to save a long name, then truncate:
+                    // dropping much further makes one cell look like a
+                    // different typeface from its neighbours.
+                    .minimumScaleFactor(0.82)
+            } else {
+                Rectangle()
+                    .fill(.black.opacity(0.12))
+                    .frame(height: 0.5 * strokeScale)
+                    .padding(.trailing, 4 * s)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: CalendarBlockLayout.lineHeight * s, alignment: .center)
+    }
+
+    private var legendRow: some View {
+        HStack(spacing: 9 * s) {
+            ForEach(Array(legend.enumerated()), id: \.offset) { _, meal in
+                HStack(spacing: 3 * s) {
+                    Image(systemName: meal.symbol)
+                        .font(.system(size: 6.5 * s))
+                    Text(meal.name)
+                        .font(.system(size: 7 * s))
+                }
+                .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(height: legendHeight, alignment: .bottom)
     }
 }
 

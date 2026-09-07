@@ -260,7 +260,7 @@ struct PrintPlanSheet: View {
             Text(String(localized: "Details"))
         } footer: {
             Text(String(
-                localized: "Fitting squeezes the days onto one sheet, in smaller type, as far as the columns can take it."
+                localized: "Fitting squeezes the days onto one sheet, wrapping a span longer than a week into rows like a month calendar."
             ))
         }
     }

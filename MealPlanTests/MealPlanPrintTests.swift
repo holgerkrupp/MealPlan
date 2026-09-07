@@ -298,7 +298,8 @@ struct MealPlanPrintTests {
         }
     }
 
-    @Test func aMonthStillTakesSeveralSheetsHoweverHardItIsSqueezed() {
+    @Test func aMonthIsTooLongForOneBandHoweverHardItIsSqueezed() {
+        // Which is why it is laid out as a calendar block instead — see below.
         let geometry = PrintPageGeometry(paper: .a4, orientation: .landscape)
         let columns = PrintPagination.columnsPerPage(
             contentWidth: geometry.contentSize.width,
@@ -321,6 +322,169 @@ struct MealPlanPrintTests {
                 compact: compact
             ) == 5)
         }
+    }
+
+    // MARK: - The calendar block
+
+    /// A document of `dayCount` days starting on `startWeekday` (Monday 0),
+    /// with three meals a day and nothing else that matters to the layout.
+    private func spanDocument(dayCount: Int, startWeekday: Int = 0) -> MealPlanPrintDocument {
+        var document = MealPlanPrintDocument(
+            title: "Familie Krupp",
+            subtitle: "",
+            days: [],
+            summary: nil,
+            shoppingList: nil,
+            footnote: "",
+            showsNutrition: false
+        )
+        document.days = (0..<dayCount).map { offset in
+            let weekday = (startWeekday + offset) % 7
+            return MealPlanPrintDocument.Day(
+                id: "day-\(offset)",
+                weekdayText: "Day",
+                weekdayShortText: "Day",
+                weekdayIndex: weekday,
+                dateText: "\(offset)",
+                dayNumberText: "\(offset)",
+                isToday: false,
+                isWeekend: weekday >= 5,
+                meals: ["breakfast", "lunch", "dinner"].map {
+                    MealPlanPrintDocument.Meal(id: $0, name: $0, symbolName: "sun.max", entries: [])
+                }
+            )
+        }
+        return document
+    }
+
+    private func bodies(
+        _ document: MealPlanPrintDocument,
+        _ paper: PaperSize,
+        _ orientation: PrintOrientation,
+        compact: Bool = true
+    ) -> [PrintPage.Body] {
+        PrintPagination.planSheets(
+            for: document,
+            geometry: PrintPageGeometry(paper: paper, orientation: orientation),
+            compact: compact
+        )
+    }
+
+    @Test func weekRowsBreakOnMondays() {
+        // A span starting on a Thursday: 4 days, then whole weeks.
+        let indexes = (0..<18).map { (3 + $0) % 7 }
+        #expect(CalendarBlockLayout.weekRows(weekdayIndexes: indexes)
+            == [0..<4, 4..<11, 11..<18])
+        #expect(CalendarBlockLayout.weekRows(weekdayIndexes: []).isEmpty)
+        #expect(CalendarBlockLayout.weekRows(weekdayIndexes: [0]) == [0..<1])
+    }
+
+    @Test func sheetsTakeWholeRows() {
+        let rows = [0..<4, 4..<11, 11..<18, 18..<25]
+        #expect(CalendarBlockLayout.sheets(rows: rows, rowsPerSheet: 2) == [0..<11, 11..<25])
+        #expect(CalendarBlockLayout.sheets(rows: rows, rowsPerSheet: 9) == [0..<25])
+        #expect(CalendarBlockLayout.sheets(rows: [], rowsPerSheet: 3).isEmpty)
+    }
+
+    @Test func fittingPutsAWholeMonthOnOneSheet() throws {
+        for orientation in PrintOrientation.allCases {
+            let sheets = bodies(spanDocument(dayCount: 30, startWeekday: 2), .a4, orientation)
+            #expect(sheets.count == 1)
+            guard case let .calendar(range) = try #require(sheets.first) else {
+                Issue.record("a month should be laid out as a calendar block")
+                return
+            }
+            #expect(range == 0..<30)
+        }
+    }
+
+    @Test func fittingPutsAFortnightOnOneSheetToo() throws {
+        let sheets = bodies(spanDocument(dayCount: 14), .a4, .landscape)
+        #expect(sheets.count == 1)
+        guard case .calendar = try #require(sheets.first) else {
+            Issue.record("a fortnight should be laid out as a calendar block")
+            return
+        }
+    }
+
+    @Test func aWeekStaysABandBecauseThatReadsBetter() throws {
+        let sheets = bodies(spanDocument(dayCount: 7), .a4, .landscape)
+        #expect(sheets.count == 1)
+        guard case .days = try #require(sheets.first) else {
+            Issue.record("a week still belongs in one band, meals down the side")
+            return
+        }
+    }
+
+    @Test func withoutFittingALongSpanIsBandsAsBefore() {
+        let sheets = bodies(spanDocument(dayCount: 30), .a4, .landscape, compact: false)
+        #expect(sheets.count > 1)
+        #expect(sheets.allSatisfy { if case .days = $0 { true } else { false } })
+    }
+
+    @Test func aSheetTooNarrowForSevenColumnsFallsBackToBands() {
+        // A5 portrait gives 54 pt cells — under the width a dish name needs.
+        let geometry = PrintPageGeometry(paper: .a5, orientation: .portrait)
+        #expect(!CalendarBlockLayout.fitsWidth(contentWidth: geometry.contentSize.width))
+        let sheets = bodies(spanDocument(dayCount: 30), .a5, .portrait)
+        #expect(sheets.allSatisfy { if case .days = $0 { true } else { false } })
+    }
+
+    @Test func aSpanTooTallForOneSheetIsSplitByWholeWeeks() throws {
+        // Ninety days is thirteen rows; no sheet holds that many at a
+        // readable height, so it splits — but every sheet still starts on a
+        // Monday and every column is still one weekday.
+        let document = spanDocument(dayCount: 90)
+        let sheets = bodies(document, .a5, .landscape)
+        #expect(sheets.count > 1)
+        var covered: [Int] = []
+        for sheet in sheets {
+            guard case let .calendar(range) = sheet else {
+                Issue.record("a long span should stay a calendar block across sheets")
+                return
+            }
+            covered.append(contentsOf: range)
+            #expect(document.days[range.lowerBound].weekdayIndex == 0)
+        }
+        #expect(covered == Array(0..<90))
+    }
+
+    @Test func everyDayAppearsExactlyOnceHoweverTheSpanIsLaidOut() {
+        for dayCount in [1, 5, 7, 8, 14, 21, 30, 45] {
+            for startWeekday in 0..<7 {
+                let document = spanDocument(dayCount: dayCount, startWeekday: startWeekday)
+                for paper in PaperSize.allCases {
+                    let sheets = bodies(document, paper, .landscape)
+                    let covered = sheets.flatMap { body -> [Int] in
+                        switch body {
+                        case let .days(range), let .calendar(range): Array(range)
+                        case .shopping: []
+                        }
+                    }
+                    #expect(covered == Array(0..<dayCount))
+                }
+            }
+        }
+    }
+
+    @Test func theSummaryRidesOnACalendarSheetTheSameWay() throws {
+        var document = spanDocument(dayCount: 30, startWeekday: 2)
+        document.summary = MealPlanPrintDocument.Summary(
+            averageEnergyText: "≈ 2 140 kcal",
+            averageMacrosText: nil,
+            countedDaysText: "From 20 of 30 days",
+            lightestDayText: nil,
+            heaviestDayText: nil,
+            coverageNote: nil,
+            missingNote: nil
+        )
+        let pages = PrintPagination.pages(
+            for: document,
+            geometry: PrintPageGeometry(paper: .a4, orientation: .landscape)
+        )
+        #expect(pages.count == 1)
+        #expect(pages[0].includesSummary)
+        #expect(pages[0].days == 0..<30)
     }
 
     // MARK: - What lands on the page

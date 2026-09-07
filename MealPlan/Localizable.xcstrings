@@ -192,6 +192,16 @@
         }
       }
     },
+    "%lld days on %lld sheets of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld days on %2$lld sheets of %3$@"
+          }
+        }
+      }
+    },
     "%lld days or more" : {
       "localizations" : {
         "de" : {
@@ -275,6 +285,16 @@
         }
       }
     },
+    "%lld sheets of %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld sheets of %2$@"
+          }
+        }
+      }
+    },
     "%lld taken off Bring!" : {
       "localizations" : {
         "de" : {
@@ -284,6 +304,9 @@
           }
         }
       }
+    },
+    "%lld ticked items left out." : {
+
     },
     "%lld ticked off here" : {
       "localizations" : {
@@ -341,6 +364,24 @@
     "1 person currently has access." : {
 
     },
+    "8.5 × 11 in" : {
+
+    },
+    "8.5 × 14 in" : {
+
+    },
+    "11 × 17 in" : {
+
+    },
+    "148 × 210 mm" : {
+
+    },
+    "210 × 297 mm" : {
+
+    },
+    "297 × 420 mm" : {
+
+    },
     "A generic reference value for this ingredient, not a particular product." : {
 
     },
@@ -393,6 +434,15 @@
           }
         }
       }
+    },
+    "A3" : {
+
+    },
+    "A4" : {
+
+    },
+    "A5" : {
+
     },
     "About" : {
 
@@ -559,6 +609,16 @@
     },
     "Add Dish to MealPlan" : {
 
+    },
+    "Add ingredients or steps first — there is nothing to translate yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge zuerst Zutaten oder Schritte hinzu – es gibt noch nichts zu übersetzen."
+          }
+        }
+      }
     },
     "Add ingredients with amounts and MealPlan can estimate this dish." : {
 
@@ -800,8 +860,24 @@
         }
       }
     },
+    "Anyone who opens this link gets edit access, so only send it to someone you trust." : {
+
+    },
+    "Anyone who opens this link gets view-only access." : {
+
+    },
     "App version" : {
 
+    },
+    "Apple Intelligence is still getting ready. Try again in a little while." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Apple Intelligence ist noch nicht bereit. Versuche es in Kürze noch einmal."
+          }
+        }
+      }
     },
     "Apply a template…" : {
 
@@ -827,6 +903,9 @@
           }
         }
       }
+    },
+    "Average per day" : {
+
     },
     "Back" : {
 
@@ -1641,6 +1720,9 @@
     "Couldn’t import that recipe archive: %@" : {
 
     },
+    "Couldn’t prepare the printout" : {
+
+    },
     "Couldn’t reach that page." : {
 
     },
@@ -1685,6 +1767,16 @@
         }
       }
     },
+    "Couldn’t translate recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht übersetzt werden"
+          }
+        }
+      }
+    },
     "Create a backup…" : {
 
     },
@@ -1707,6 +1799,9 @@
     "Custom aisle…" : {
 
     },
+    "Custom dates" : {
+
+    },
     "Custom range" : {
       "localizations" : {
         "de" : {
@@ -1727,6 +1822,9 @@
 
     },
     "Day" : {
+
+    },
+    "Days" : {
 
     },
     "Declined" : {
@@ -2040,6 +2138,9 @@
     "Empty" : {
 
     },
+    "Empty meals" : {
+
+    },
     "Energy" : {
 
     },
@@ -2081,6 +2182,9 @@
 
     },
     "Estimated for one person across this day's meals." : {
+
+    },
+    "Estimates for one person, accurate to about ±20 %. Meals MealPlan can’t work out are left blank." : {
 
     },
     "Event notes, invitees, locations and links are never read, shown or stored." : {
@@ -2220,16 +2324,6 @@
         }
       }
     },
-    "Extra" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Extra"
-          }
-        }
-      }
-    },
     "Expand day" : {
 
     },
@@ -2242,15 +2336,22 @@
     "Export recipe" : {
 
     },
-    "Export week as PDF" : {
-
-    },
     "Export your recipes any time to hand them to someone else or keep a backup." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Exportiere deine Rezepte jederzeit, um sie weiterzugeben oder zu sichern."
+          }
+        }
+      }
+    },
+    "Extra" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Extra"
           }
         }
       }
@@ -2367,6 +2468,9 @@
         }
       }
     },
+    "Fit on one page" : {
+
+    },
     "Flour" : {
       "localizations" : {
         "de" : {
@@ -2389,6 +2493,9 @@
           }
         }
       }
+    },
+    "for %lld" : {
+
     },
     "For %lld servings: %@" : {
 
@@ -2431,6 +2538,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Von"
+          }
+        }
+      }
+    },
+    "From %lld of %lld days" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "From %1$lld of %2$lld days"
           }
         }
       }
@@ -2558,6 +2675,9 @@
 
     },
     "Heavier than this week" : {
+
+    },
+    "Heaviest: %@" : {
 
     },
     "Herbs & spices" : {
@@ -2923,6 +3043,19 @@
         }
       }
     },
+    "Landscape" : {
+
+    },
+    "Language" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprache"
+          }
+        }
+      }
+    },
     "Larger text" : {
       "localizations" : {
         "de" : {
@@ -2966,6 +3099,9 @@
 
     },
     "Lighter than this week" : {
+
+    },
+    "Lightest: %@" : {
 
     },
     "Liked it" : {
@@ -3064,6 +3200,12 @@
       }
     },
     "Meal name" : {
+
+    },
+    "Meal notes" : {
+
+    },
+    "Meal plan" : {
 
     },
     "Meal Plan" : {
@@ -3690,6 +3832,9 @@
     "Nutrition" : {
 
     },
+    "Nutrition figures are estimates per person, accurate to about ±20 %." : {
+
+    },
     "Nutrition values" : {
 
     },
@@ -3877,6 +4022,19 @@
     "Organization" : {
 
     },
+    "Orientation" : {
+
+    },
+    "Original recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Originalrezept"
+          }
+        }
+      }
+    },
     "Other" : {
 
     },
@@ -3892,6 +4050,26 @@
     },
     "Owner" : {
 
+    },
+    "P %@ · C %@ · F %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "P %1$@ · C %2$@ · F %3$@"
+          }
+        }
+      }
+    },
+    "Page %lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Page %1$lld of %2$lld"
+          }
+        }
+      }
     },
     "Pancakes" : {
 
@@ -3938,6 +4116,9 @@
         }
       }
     },
+    "Paper" : {
+
+    },
     "Partly planned" : {
 
     },
@@ -3981,6 +4162,15 @@
 
     },
     "per 100 ml" : {
+
+    },
+    "Per day" : {
+
+    },
+    "Per meal" : {
+
+    },
+    "Per person" : {
 
     },
     "per piece" : {
@@ -4094,6 +4284,9 @@
           }
         }
       }
+    },
+    "Plan and shopping list" : {
+
     },
     "Plan meal" : {
       "localizations" : {
@@ -4210,6 +4403,9 @@
         }
       }
     },
+    "Portrait" : {
+
+    },
     "Possible duplicate" : {
 
     },
@@ -4258,6 +4454,24 @@
     "Previous week" : {
 
     },
+    "Print" : {
+
+    },
+    "Print list…" : {
+
+    },
+    "Print plan" : {
+
+    },
+    "Print plan…" : {
+
+    },
+    "Print…" : {
+
+    },
+    "Printed %@ with MealPlan" : {
+
+    },
     "Privacy" : {
       "localizations" : {
         "de" : {
@@ -4272,6 +4486,9 @@
 
     },
     "Protein" : {
+
+    },
+    "Protein, carbs and fat" : {
 
     },
     "Purchases could not be restored: %@" : {
@@ -4439,6 +4656,16 @@
         }
       }
     },
+    "Recipes can’t be translated on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf diesem Gerät können Rezepte nicht übersetzt werden."
+          }
+        }
+      }
+    },
     "Recipes rarely start in MealPlan. Bring them in from the web, from other recipe apps, and from your iPhone." : {
       "localizations" : {
         "de" : {
@@ -4525,6 +4752,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aus Plan entfernen"
+          }
+        }
+      }
+    },
+    "Remove saved translation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gespeicherte Übersetzung entfernen"
           }
         }
       }
@@ -4724,6 +4961,9 @@
         }
       }
     },
+    "Save as PDF…" : {
+
+    },
     "Save as template" : {
 
     },
@@ -4768,6 +5008,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Saved %@ to your dishes."
+          }
+        }
+      }
+    },
+    "Saved in %@ as well. Changing the recipe here removes that translation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusätzlich auf %@ gespeichert. Wenn du das Rezept hier änderst, wird diese Übersetzung entfernt."
           }
         }
       }
@@ -5070,6 +5320,26 @@
     "Show nutrition estimates" : {
 
     },
+    "Show original" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Original anzeigen"
+          }
+        }
+      }
+    },
+    "Show translation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzung anzeigen"
+          }
+        }
+      }
+    },
     "Shows only when someone is busy, never what they are doing." : {
       "localizations" : {
         "de" : {
@@ -5099,6 +5369,9 @@
           }
         }
       }
+    },
+    "Size" : {
+
     },
     "Skip" : {
       "localizations" : {
@@ -5394,6 +5667,9 @@
         }
       }
     },
+    "Summary page" : {
+
+    },
     "Summer" : {
 
     },
@@ -5473,16 +5749,6 @@
     "Tap a slot to plan it" : {
 
     },
-    "The bottom row plans it as an extra on that day, without using one of your meals." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die unterste Reihe plant es als Extra an diesem Tag ein – ohne eine deiner Mahlzeiten zu belegen."
-          }
-        }
-      }
-    },
     "Template name" : {
 
     },
@@ -5526,6 +5792,16 @@
     "That planned meal no longer exists." : {
 
     },
+    "The bottom row plans it as an extra on that day, without using one of your meals." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die unterste Reihe plant es als Extra an diesem Tag ein – ohne eine deiner Mahlzeiten zu belegen."
+          }
+        }
+      }
+    },
     "The dish needs a name." : {
 
     },
@@ -5533,6 +5809,18 @@
 
     },
     "The invitation could not be prepared." : {
+
+    },
+    "The next 7 days" : {
+
+    },
+    "The next 14 days" : {
+
+    },
+    "The next 30 days" : {
+
+    },
+    "The plan couldn’t be rendered." : {
 
     },
     "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty." : {
@@ -5548,6 +5836,16 @@
     "The purchase could not be verified: %@" : {
 
     },
+    "The recipe keeps its own wording either way." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Rezept behält in jedem Fall seinen eigenen Wortlaut."
+          }
+        }
+      }
+    },
     "The shared household could not be found." : {
 
     },
@@ -5560,6 +5858,9 @@
           }
         }
       }
+    },
+    "The shopping list prints as it stands, ticked items left out. Rebuild it on the Shopping screen first if it is out of date." : {
+
     },
     "The site returned HTTP status %lld." : {
       "localizations" : {
@@ -5576,6 +5877,19 @@
           }
         }
       }
+    },
+    "The translation didn’t come back. Please try again." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Übersetzung kam nicht zurück. Bitte versuche es noch einmal."
+          }
+        }
+      }
+    },
+    "The week shown" : {
+
     },
     "These are the meals shown on every day of your plan. Removing one also deletes the meals already planned in it. For a one-off occasion, plan an extra from the day’s menu instead of adding a meal here." : {
 
@@ -5598,6 +5912,16 @@
     },
     "This and future meals" : {
 
+    },
+    "This device can’t translate recipes on its own — Apple Intelligence isn’t available on it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Gerät kann Rezepte nicht selbst übersetzen – Apple Intelligence ist darauf nicht verfügbar."
+          }
+        }
+      }
     },
     "This device only" : {
 
@@ -5649,14 +5973,28 @@
     "This month" : {
 
     },
-    "This one-time invitation grants edit access, so only send it to someone you trust." : {
-
-    },
-    "This one-time invitation grants view-only access." : {
-
-    },
     "This planned meal may have been removed." : {
 
+    },
+    "This recipe already reads as %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept ist bereits auf %@."
+          }
+        }
+      }
+    },
+    "This recipe has no ingredients or steps to translate yet." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept hat noch keine Zutaten oder Schritte zum Übersetzen."
+          }
+        }
+      }
     },
     "This recipe may have been deleted." : {
 
@@ -5687,6 +6025,9 @@
 
     },
     "Through" : {
+
+    },
+    "Time span" : {
 
     },
     "Time to cook" : {
@@ -5789,12 +6130,112 @@
     "Transcript:\n%@" : {
 
     },
+    "Translate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen"
+          }
+        }
+      }
+    },
+    "Translate again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut übersetzen"
+          }
+        }
+      }
+    },
+    "Translate into" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen in"
+          }
+        }
+      }
+    },
+    "Translate recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept übersetzen"
+          }
+        }
+      }
+    },
+    "Translate…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzen …"
+          }
+        }
+      }
+    },
+    "Translated to %@" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt nach %@"
+          }
+        }
+      }
+    },
+    "Translates the ingredients and steps from %@ to %@ on this device. The recipe keeps its original wording." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät von %1$@ nach %2$@. Das Rezept behält seinen ursprünglichen Wortlaut."
+          }
+        }
+      }
+    },
+    "Translates the ingredients and steps into %@ on this device. The recipe keeps its original wording." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät nach %@. Das Rezept behält seinen ursprünglichen Wortlaut."
+          }
+        }
+      }
+    },
+    "Translating on this device…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird auf diesem Gerät übersetzt …"
+          }
+        }
+      }
+    },
     "Turn off “Hide checked items” to show them again." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
             "value" : "Deaktiviere „Erledigte Artikel ausblenden“, um sie wieder anzuzeigen."
+          }
+        }
+      }
+    },
+    "Turn on Apple Intelligence in Settings to translate recipes on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktiviere Apple Intelligence in den Einstellungen, um Rezepte auf diesem Gerät zu übersetzen."
           }
         }
       }
@@ -5956,6 +6397,15 @@
           }
         }
       }
+    },
+    "US Legal" : {
+
+    },
+    "US Letter" : {
+
+    },
+    "US Tabloid" : {
+
     },
     "Use a template" : {
 
@@ -6144,8 +6594,15 @@
         }
       }
     },
-    "Week" : {
-
+    "Week %lld · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Week %1$lld · %2$@"
+          }
+        }
+      }
     },
     "Week %lld · %@ – %@" : {
       "localizations" : {
@@ -6351,479 +6808,7 @@
     "Your week is ready as a PDF." : {
 
     },
-    "Add ingredients or steps first — there is nothing to translate yet." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Füge zuerst Zutaten oder Schritte hinzu – es gibt noch nichts zu übersetzen."
-          }
-        }
-      }
-    },
-    "Apple Intelligence is still getting ready. Try again in a little while." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Apple Intelligence ist noch nicht bereit. Versuche es in Kürze noch einmal."
-          }
-        }
-      }
-    },
-    "Couldn’t translate recipe" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rezept konnte nicht übersetzt werden"
-          }
-        }
-      }
-    },
-    "Language" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Sprache"
-          }
-        }
-      }
-    },
-    "Original recipe" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Originalrezept"
-          }
-        }
-      }
-    },
-    "Recipes can’t be translated on this device." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Auf diesem Gerät können Rezepte nicht übersetzt werden."
-          }
-        }
-      }
-    },
-    "Remove saved translation" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gespeicherte Übersetzung entfernen"
-          }
-        }
-      }
-    },
-    "Saved in %@ as well. Changing the recipe here removes that translation." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zusätzlich auf %@ gespeichert. Wenn du das Rezept hier änderst, wird diese Übersetzung entfernt."
-          }
-        }
-      }
-    },
-    "Show original" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Original anzeigen"
-          }
-        }
-      }
-    },
-    "Show translation" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzung anzeigen"
-          }
-        }
-      }
-    },
-    "The recipe keeps its own wording either way." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Rezept behält in jedem Fall seinen eigenen Wortlaut."
-          }
-        }
-      }
-    },
-    "The translation didn’t come back. Please try again." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Übersetzung kam nicht zurück. Bitte versuche es noch einmal."
-          }
-        }
-      }
-    },
-    "This device can’t translate recipes on its own — Apple Intelligence isn’t available on it." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses Gerät kann Rezepte nicht selbst übersetzen – Apple Intelligence ist darauf nicht verfügbar."
-          }
-        }
-      }
-    },
-    "This recipe already reads as %@." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses Rezept ist bereits auf %@."
-          }
-        }
-      }
-    },
-    "This recipe has no ingredients or steps to translate yet." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses Rezept hat noch keine Zutaten oder Schritte zum Übersetzen."
-          }
-        }
-      }
-    },
-    "Translate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzen"
-          }
-        }
-      }
-    },
-    "Translate again" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erneut übersetzen"
-          }
-        }
-      }
-    },
-    "Translate into" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzen in"
-          }
-        }
-      }
-    },
-    "Translate recipe" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rezept übersetzen"
-          }
-        }
-      }
-    },
-    "Translate…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzen …"
-          }
-        }
-      }
-    },
-    "Translated to %@" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzt nach %@"
-          }
-        }
-      }
-    },
-    "Translates the ingredients and steps from %@ to %@ on this device. The recipe keeps its original wording." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät von %1$@ nach %2$@. Das Rezept behält seinen ursprünglichen Wortlaut."
-          }
-        }
-      }
-    },
-    "Translates the ingredients and steps into %@ on this device. The recipe keeps its original wording." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Übersetzt Zutaten und Schritte auf diesem Gerät nach %@. Das Rezept behält seinen ursprünglichen Wortlaut."
-          }
-        }
-      }
-    },
-    "Translating on this device…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wird auf diesem Gerät übersetzt …"
-          }
-        }
-      }
-    },
-    "Turn on Apple Intelligence in Settings to translate recipes on this device." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aktiviere Apple Intelligence in den Einstellungen, um Rezepte auf diesem Gerät zu übersetzen."
-          }
-        }
-      }
-    },
-    "Printed %@ with MealPlan" : {
-
-    },
-    "Nutrition figures are estimates per person, accurate to about ±20 %." : {
-
-    },
-    "for %lld" : {
-
-    },
-    "Lightest: %@" : {
-
-    },
-    "Heaviest: %@" : {
-
-    },
-    "Per person" : {
-
-    },
-    "Average per day" : {
-
-    },
-    "The week shown" : {
-
-    },
-    "The next 7 days" : {
-
-    },
-    "The next 14 days" : {
-
-    },
-    "The next 30 days" : {
-
-    },
-    "Custom dates" : {
-
-    },
-    "A3" : {
-
-    },
-    "A4" : {
-
-    },
-    "A5" : {
-
-    },
-    "US Letter" : {
-
-    },
-    "US Legal" : {
-
-    },
-    "US Tabloid" : {
-
-    },
-    "297 × 420 mm" : {
-
-    },
-    "210 × 297 mm" : {
-
-    },
-    "148 × 210 mm" : {
-
-    },
-    "8.5 × 11 in" : {
-
-    },
-    "8.5 × 14 in" : {
-
-    },
-    "11 × 17 in" : {
-
-    },
-    "Portrait" : {
-
-    },
-    "Landscape" : {
-
-    },
-    "Print plan" : {
-
-    },
-    "Couldn’t prepare the printout" : {
-
-    },
-    "Days" : {
-
-    },
-    "Paper" : {
-
-    },
-    "Print…" : {
-
-    },
-    "The plan couldn’t be rendered." : {
-
-    },
-    "Save as PDF…" : {
-
-    },
-    "%lld days" : {
-
-    },
-    "Time span" : {
-
-    },
-    "Size" : {
-
-    },
-    "Orientation" : {
-
-    },
-    "Per meal" : {
-
-    },
-    "Per day" : {
-
-    },
-    "Summary page" : {
-
-    },
-    "Protein, carbs and fat" : {
-
-    },
-    "Estimates for one person, accurate to about ±20 %. Meals MealPlan can’t work out are left blank." : {
-
-    },
-    "Meal notes" : {
-
-    },
-    "Empty meals" : {
-
-    },
-    "Print plan…" : {
-
-    },
-    "P %@ · C %@ · F %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "P %1$@ · C %2$@ · F %3$@"
-          }
-        }
-      }
-    },
-    "From %lld of %lld days" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "From %1$lld of %2$lld days"
-          }
-        }
-      }
-    },
-    "Week %lld · %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Week %1$lld · %2$@"
-          }
-        }
-      }
-    },
-    "Page %lld of %lld" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Page %1$lld of %2$lld"
-          }
-        }
-      }
-    },
-    "%lld days on %lld sheets of %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld days on %2$lld sheets of %3$@"
-          }
-        }
-      }
-    },
-    "Fit on one page" : {
-
-    },
-    "Fitting squeezes the days onto one sheet, in smaller type, as far as the columns can take it." : {
-
-    },
-    "%lld ticked items left out." : {
-
-    },
-    "Meal plan" : {
-
-    },
-    "Plan and shopping list" : {
-
-    },
-    "Print" : {
-
-    },
-    "Print list…" : {
-
-    },
-    "The shopping list prints as it stands, ticked items left out. Rebuild it on the Shopping screen first if it is out of date." : {
-
-    },
-    "%lld sheets of %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "%1$lld sheets of %2$@"
-          }
-        }
-      }
-    },
-    "Anyone who opens this link gets edit access, so only send it to someone you trust." : {
-
-    },
-    "Anyone who opens this link gets view-only access." : {
+    "Fitting squeezes the days onto one sheet, wrapping a span longer than a week into rows like a month calendar." : {
 
     }
   },

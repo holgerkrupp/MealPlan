@@ -7,8 +7,69 @@
       "layers" : [
         {
           "hidden" : false,
-          "image-name" : "Untitled.svg",
-          "name" : "Untitled",
+          "image-name" : "Layer-6-Spoon.svg",
+          "name" : "Spoon",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              49,
+              47
+            ]
+          }
+        },
+        {
+          "hidden" : false,
+          "image-name" : "Layer-5-BinderRingRight.svg",
+          "name" : "Binder Ring (Right)",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : false,
+          "image-name" : "Layer-4-BinderRingLeft.svg",
+          "name" : "Binder Ring (Left)",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "Layer-3-CalendarCard.svg",
+          "name" : "Calendar Card",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : false,
+          "image-name" : "Layer-2-Background.svg",
+          "name" : "Background Tile",
+          "position" : {
+            "scale" : 0.2,
+            "translation-in-points" : [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden" : false,
+          "image-name" : "Layer-1-Base.svg",
+          "name" : "Base Shadow",
           "position" : {
             "scale" : 0.2,
             "translation-in-points" : [
