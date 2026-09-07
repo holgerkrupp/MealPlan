@@ -3,11 +3,10 @@ import Foundation
 /// Builds a standards-compliant iCalendar (`.ics`) feed of a household's
 /// planned meals.
 ///
-/// This is what makes the plan readable outside MealPlan: anyone who can
-/// subscribe to a calendar URL — Google Calendar, Outlook, an Android phone's
-/// stock calendar app — can follow along with what's for dinner without ever
-/// installing the app. See `PublishedCalendarService`, which owns *where* the
-/// file this produces ends up; this type only knows how to render one.
+/// Used for the one-off snapshot someone can AirDrop, e-mail or message —
+/// the live "publish into a calendar" feature writes straight into EventKit
+/// instead (see `PublishedCalendarService`), but a plain file is still the
+/// simplest way to hand someone a copy of the plan once.
 enum MealPlanICSExporter {
 
     /// Renders the feed. `entries` should already be narrowed to the
@@ -47,14 +46,6 @@ enum MealPlanICSExporter {
         return lines.joined(separator: "\r\n") + "\r\n"
     }
 
-    /// What to call a meal in the feed. Falls back gracefully for the "Extra"
-    /// slot and for a meal key whose `MealType` was since deleted.
-    static func mealName(forKey key: String, mealTypesByKey: [String: MealType]) -> String {
-        if MealType.isExtra(key) { return MealType.extraName }
-        if let name = mealTypesByKey[key]?.name, !name.isEmpty { return name }
-        return String(localized: "Meal")
-    }
-
     // MARK: - One event
 
     private static func veventLines(
@@ -62,19 +53,7 @@ enum MealPlanICSExporter {
         mealTypesByKey: [String: MealType],
         generatedAt: Date
     ) -> [String] {
-        let title = entry.displayTitle
-        // An extra already says what it is ("Birthday cake"); naming its slot
-        // too would just repeat "Extra: Birthday cake" for no reason.
-        let summary = entry.isExtra ? title : "\(mealName(forKey: entry.mealSlotRaw, mealTypesByKey: mealTypesByKey)): \(title)"
-
-        var descriptionParts: [String] = []
-        if let note = entry.note, !note.isEmpty { descriptionParts.append(note) }
-        if entry.isEatingOut {
-            if let placeName = entry.placeName, !placeName.isEmpty, placeName != title {
-                descriptionParts.append(placeName)
-            }
-            if let address = entry.placeAddress, !address.isEmpty { descriptionParts.append(address) }
-        }
+        let summary = entry.publishedSummary(mealTypesByKey: mealTypesByKey)
 
         var out: [String] = ["BEGIN:VEVENT"]
         out.append("UID:\(entry.uuid.uuidString)@mealplan.app")
@@ -83,8 +62,8 @@ enum MealPlanICSExporter {
         out.append("DTSTART;VALUE=DATE:\(dateStamp(entry.date))")
         out.append("DTEND;VALUE=DATE:\(dateStamp(entry.date.adding(days: 1)))")
         out.append(fold("SUMMARY:\(escape(summary))"))
-        if !descriptionParts.isEmpty {
-            out.append(fold("DESCRIPTION:\(escape(descriptionParts.joined(separator: "\n")))"))
+        if let notes = entry.publishedNotes() {
+            out.append(fold("DESCRIPTION:\(escape(notes))"))
         }
         // All-day and informational — never shows as "busy" on someone's
         // calendar just because they're subscribed to see what's cooking.

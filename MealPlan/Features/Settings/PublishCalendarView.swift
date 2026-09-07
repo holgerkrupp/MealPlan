@@ -1,34 +1,39 @@
 import SwiftUI
 import SwiftData
-import UniformTypeIdentifiers
 
-/// Publishing the plan as a subscribable calendar.
+/// Publishing the plan into a calendar.
 ///
-/// MealPlan has no server, so "publish" doesn't mean MealPlan hosts anything —
-/// it means writing a plain `.ics` file somewhere the user controls (iCloud
-/// Drive, most naturally) and keeping it current there. Once that file has a
-/// public link — which the Files app can create for anything in iCloud
-/// Drive — that link *is* the subscribable calendar: Google Calendar, Outlook,
-/// an Android phone's stock calendar app, anything that understands "add
-/// calendar from URL" can follow along, no MealPlan install required.
+/// MealPlan has no server, so "publish" means writing straight into a
+/// calendar the user already has — their own iCloud calendar, a shared family
+/// one, or a Google or Outlook calendar added as an account on this device.
+/// That last case is the point: once the plan is mirrored into a calendar a
+/// Google or Microsoft account already syncs, anyone on that account — an
+/// Android phone included — sees it in their own calendar app, no MealPlan
+/// install required.
 @MainActor
 struct PublishCalendarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(PublishedCalendarSettings.self) private var settings
+    @Environment(\.calendarEventWriter) private var writer
 
+    @State private var authorization: CalendarAuthorization = .notDetermined
+    @State private var availableCalendars: [MealCalendarInfo] = []
     @State private var isWorking = false
+    @State private var isChoosingCalendar = false
     @State private var message: String?
     @State private var errorMessage: String?
-    @State private var showingLocationPicker = false
-    @State private var pendingDocument: ICSDocument?
     @State private var snapshot: URL?
 
     var body: some View {
         Form {
             explanationSection
-            rangeSection
-            statusSection
+            if settings.isPublishing, !isChoosingCalendar {
+                statusSection
+                rangeSection
+            } else {
+                calendarPickerSection
+            }
             shareCopySection
             if let message {
                 Section {
@@ -44,14 +49,7 @@ struct PublishCalendarView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .disabled(isWorking)
-        .fileExporter(
-            isPresented: $showingLocationPicker,
-            document: pendingDocument,
-            contentType: PublishedCalendarFileType.contentType,
-            defaultFilename: PublishedCalendarService.suggestedFilename(household: appState.currentHousehold)
-        ) { result in
-            handleLocationPicked(result)
-        }
+        .task { await refreshAuthorizationAndCalendars() }
         .alert(
             String(localized: "Something went wrong"),
             isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })
@@ -67,11 +65,114 @@ struct PublishCalendarView: View {
     private var explanationSection: some View {
         Section {
             Label {
-                Text("Anyone with the link can subscribe — in Google Calendar, Outlook, or an Android phone's built-in calendar app — and see the plan without installing MealPlan.")
+                Text("Writes the plan into a calendar you pick. If that calendar is a Google or Outlook one added to this device, anyone signed into it — Android included — sees it in their own calendar app.")
             } icon: {
                 Image(systemName: "calendar.badge.plus")
                     .foregroundStyle(.tint)
             }
+        }
+    }
+
+    @ViewBuilder
+    private var calendarPickerSection: some View {
+        switch authorization {
+        case .fullAccess, .writeOnly:
+            Section {
+                if availableCalendars.isEmpty {
+                    Text("No calendar on this device accepts new events. Add or unlock one in the Calendar app, then come back here.")
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(availableCalendars) { calendar in
+                        Button {
+                            Task { await choose(calendar) }
+                        } label: {
+                            HStack {
+                                CalendarColorDot(color: calendar.color)
+                                VStack(alignment: .leading) {
+                                    Text(calendar.title)
+                                        .foregroundStyle(.primary)
+                                    if !calendar.sourceTitle.isEmpty {
+                                        Text(calendar.sourceTitle)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer()
+                                if calendar.id == settings.destinationCalendarID {
+                                    Image(systemName: "checkmark")
+                                        .foregroundStyle(.tint)
+                                }
+                            }
+                        }
+                    }
+                }
+                if isChoosingCalendar {
+                    Button(String(localized: "Cancel")) { isChoosingCalendar = false }
+                }
+            } header: {
+                Text("Choose a calendar")
+            } footer: {
+                Text("Only calendars that accept new events are listed. A calendar backed by a Google or Outlook account works best for sharing outside MealPlan.")
+            }
+        case .notDetermined:
+            Section {
+                Button {
+                    Task { await requestAccess() }
+                } label: {
+                    HStack {
+                        Label(String(localized: "Allow Calendar access"), systemImage: "calendar.badge.plus")
+                        if isWorking {
+                            Spacer()
+                            ProgressView()
+                        }
+                    }
+                }
+            } footer: {
+                Text("MealPlan needs permission to add events before it can publish the plan.")
+            }
+        case .denied, .restricted, .unknown:
+            Section {
+                Text("Calendar access is off for MealPlan. Turn it on in Settings to publish the plan.")
+                    .foregroundStyle(.secondary)
+                if let url = CalendarSystemSettings.url {
+                    Link(String(localized: "Open Settings"), destination: url)
+                }
+            }
+        }
+    }
+
+    private var statusSection: some View {
+        Section {
+            LabeledContent(String(localized: "Calendar"), value: settings.destinationCalendarTitle ?? "—")
+            if let lastPublishedAt = settings.lastPublishedAt {
+                LabeledContent(String(localized: "Last updated"), value: lastPublishedAt.formatted(.relative(presentation: .named)))
+            }
+            Button {
+                Task { await updateNow() }
+            } label: {
+                HStack {
+                    Label(String(localized: "Update now"), systemImage: "arrow.clockwise")
+                    if isWorking {
+                        Spacer()
+                        ProgressView()
+                    }
+                }
+            }
+            Button {
+                isChoosingCalendar = true
+                Task { await refreshAuthorizationAndCalendars() }
+            } label: {
+                Label(String(localized: "Publish to a different calendar…"), systemImage: "calendar")
+            }
+            Button(role: .destructive) {
+                Task { await stopPublishing() }
+            } label: {
+                Label(String(localized: "Stop publishing"), systemImage: "xmark.circle")
+            }
+        } header: {
+            Text("Published")
+        } footer: {
+            Text("The plan's events are kept up to date in that calendar automatically. Stopping removes only the events MealPlan added — nothing else in the calendar is touched.")
         }
     }
 
@@ -83,61 +184,7 @@ struct PublishCalendarView: View {
                 }
             }
         } footer: {
-            Text("Only what's planned in this window is published. It updates automatically as the window rolls forward — no need to republish.")
-        }
-    }
-
-    @ViewBuilder
-    private var statusSection: some View {
-        if settings.isPublishing {
-            Section {
-                LabeledContent(String(localized: "File"), value: settings.filename ?? "—")
-                if let lastPublishedAt = settings.lastPublishedAt {
-                    LabeledContent(String(localized: "Last updated"), value: lastPublishedAt.formatted(.relative(presentation: .named)))
-                }
-                Button {
-                    Task { await updateNow() }
-                } label: {
-                    HStack {
-                        Label(String(localized: "Update now"), systemImage: "arrow.clockwise")
-                        if isWorking {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                }
-                Button {
-                    startChoosingLocation()
-                } label: {
-                    Label(String(localized: "Publish to a different file…"), systemImage: "folder")
-                }
-                Button(role: .destructive) {
-                    settings.stopPublishing()
-                    message = String(localized: "Stopped updating the file. The file itself — and any link to it — is untouched.")
-                } label: {
-                    Label(String(localized: "Stop publishing"), systemImage: "xmark.circle")
-                }
-            } header: {
-                Text("Published")
-            } footer: {
-                Text("To let someone subscribe: put this file in iCloud Drive, then in the Files app long‑press it and choose Share → “Anyone with the link” → Copy Link. Send them that link. In Google Calendar they add it under “Other calendars → From URL”; on an Android phone, the same link works in most calendar apps' “subscribe” option.")
-            }
-        } else {
-            Section {
-                Button {
-                    startChoosingLocation()
-                } label: {
-                    HStack {
-                        Label(String(localized: "Choose where to publish…"), systemImage: "square.and.arrow.up")
-                        if isWorking {
-                            Spacer()
-                            ProgressView()
-                        }
-                    }
-                }
-            } footer: {
-                Text("Pick a spot in iCloud Drive. MealPlan keeps the file there up to date as the plan changes; you turn it into a shareable link from the Files app.")
-            }
+            Text("Only what's planned in this window is published. It updates automatically as the window rolls forward.")
         }
     }
 
@@ -161,7 +208,7 @@ struct PublishCalendarView: View {
                 }
             }
         } footer: {
-            Text("Sends a one-time snapshot of the same window over AirDrop, Mail or Messages. It won't stay in sync — for that, publish above.")
+            Text("Sends a one-time .ics snapshot of the same window over AirDrop, Mail or Messages. It won't stay in sync — for that, publish into a calendar above.")
         }
     }
 
@@ -179,32 +226,40 @@ struct PublishCalendarView: View {
 
     // MARK: - Actions
 
-    private func startChoosingLocation() {
+    private func refreshAuthorizationAndCalendars() async {
+        authorization = await writer.authorization()
+        guard authorization.canWrite else { return }
         do {
-            let data = try PublishedCalendarService.makeData(
-                household: appState.currentHousehold, settings: settings, context: context
-            )
-            pendingDocument = ICSDocument(data: data)
-            showingLocationPicker = true
+            availableCalendars = try await writer.writableCalendars()
         } catch {
-            errorMessage = error.localizedDescription
+            availableCalendars = []
         }
     }
 
-    private func handleLocationPicked(_ result: Result<URL, Error>) {
-        switch result {
-        case .success(let url):
-            guard let data = pendingDocument?.data else { return }
-            do {
-                try PublishedCalendarService.confirmPublished(at: url, data: data, settings: settings)
-                message = String(localized: "Published. Create a public link to this file from the Files app to let others subscribe.")
-            } catch {
-                errorMessage = error.localizedDescription
-            }
-        case .failure(let error):
+    private func requestAccess() async {
+        isWorking = true
+        defer { isWorking = false }
+        authorization = await writer.requestAccess()
+        await refreshAuthorizationAndCalendars()
+    }
+
+    private func choose(_ calendar: MealCalendarInfo) async {
+        isWorking = true
+        defer { isWorking = false }
+        do {
+            try await PublishedCalendarService.publish(
+                calendarID: calendar.id,
+                calendarTitle: calendar.title,
+                household: appState.currentHousehold,
+                settings: settings,
+                context: context,
+                writer: writer
+            )
+            isChoosingCalendar = false
+            message = String(localized: "Published to “\(calendar.title)”.")
+        } catch {
             errorMessage = error.localizedDescription
         }
-        pendingDocument = nil
     }
 
     private func updateNow(silently: Bool = false) async {
@@ -212,11 +267,20 @@ struct PublishCalendarView: View {
         isWorking = true
         defer { isWorking = false }
         do {
-            try PublishedCalendarService.refresh(household: appState.currentHousehold, settings: settings, context: context)
+            try await PublishedCalendarService.refresh(
+                household: appState.currentHousehold, settings: settings, context: context, writer: writer
+            )
             if !silently { message = String(localized: "Up to date.") }
         } catch {
             errorMessage = error.localizedDescription
         }
+    }
+
+    private func stopPublishing() async {
+        isWorking = true
+        defer { isWorking = false }
+        await PublishedCalendarService.stopPublishing(settings: settings, writer: writer)
+        message = String(localized: "Stopped publishing. The events MealPlan added were removed.")
     }
 
     private func shareSnapshot() async {
@@ -229,27 +293,6 @@ struct PublishCalendarView: View {
         } catch {
             errorMessage = error.localizedDescription
         }
-    }
-}
-
-/// Wraps the encoded feed so `.fileExporter` can write it wherever the user
-/// points, the same way `BackupDocument` does for the whole-store backup.
-struct ICSDocument: FileDocument {
-    static var readableContentTypes: [UTType] { [PublishedCalendarFileType.contentType] }
-
-    let data: Data
-
-    init(data: Data) { self.data = data }
-
-    init(configuration: ReadConfiguration) throws {
-        guard let contents = configuration.file.regularFileContents else {
-            throw CocoaError(.fileReadCorruptFile)
-        }
-        data = contents
-    }
-
-    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper {
-        FileWrapper(regularFileWithContents: data)
     }
 }
 

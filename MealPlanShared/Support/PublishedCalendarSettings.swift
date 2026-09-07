@@ -40,42 +40,53 @@ enum PublishedCalendarRange: String, CaseIterable, Identifiable, Sendable, Codab
     }
 }
 
-/// Everything the "publish a subscribable calendar" feature remembers.
+/// Everything the "publish the plan into a calendar" feature remembers.
 ///
 /// Stored in `UserDefaults` on this device only, the same way
-/// `CalendarIntegrationSettings` keeps calendar choices local: the file this
-/// publishes to lives wherever this device put it (typically iCloud Drive),
-/// and the bookmark that lets MealPlan write to it again is meaningless on
-/// another family member's device.
+/// `CalendarIntegrationSettings` keeps calendar choices local: which calendar
+/// this device writes into, and this feature's own record of which
+/// `EKEvent` mirrors which `MealPlanEntry` — both meaningless on another
+/// family member's device, which has its own `EKEventStore`.
 @MainActor
 @Observable
 final class PublishedCalendarSettings {
 
     enum Keys {
-        static let bookmark = "publishedCalendar.bookmark"
-        static let filename = "publishedCalendar.filename"
+        static let calendarID = "publishedCalendar.destinationCalendarID"
+        static let calendarTitle = "publishedCalendar.destinationCalendarTitle"
         static let range = "publishedCalendar.range"
         static let lastPublishedAt = "publishedCalendar.lastPublishedAt"
+        static let eventMap = "publishedCalendar.eventMap"
     }
 
     private let defaults: UserDefaults
 
-    private var bookmarkValue: Data?
-    private var filenameValue: String?
+    private var calendarIDValue: String?
+    private var calendarTitleValue: String?
     private var rangeValue: PublishedCalendarRange
     private var lastPublishedAtValue: Date?
+    private var eventMapValue: [String: String]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-        bookmarkValue = defaults.data(forKey: Keys.bookmark)
-        filenameValue = defaults.string(forKey: Keys.filename)
+        calendarIDValue = defaults.string(forKey: Keys.calendarID)
+        calendarTitleValue = defaults.string(forKey: Keys.calendarTitle)
         rangeValue = defaults.string(forKey: Keys.range).flatMap(PublishedCalendarRange.init(rawValue:)) ?? .tenWeeks
         lastPublishedAtValue = defaults.object(forKey: Keys.lastPublishedAt) as? Date
+        eventMapValue = Self.load([String: String].self, from: defaults, key: Keys.eventMap) ?? [:]
     }
 
-    /// Whether a location has been chosen — the feature is "on" exactly when
-    /// this is true, there is no separate switch to forget to flip.
-    var isPublishing: Bool { bookmarkValue != nil }
+    /// Whether a destination calendar has been chosen — the feature is "on"
+    /// exactly when this is true, there is no separate switch to forget.
+    var isPublishing: Bool { calendarIDValue != nil }
+
+    /// `EKCalendar.calendarIdentifier` of the calendar entries are written
+    /// into.
+    var destinationCalendarID: String? { calendarIDValue }
+
+    /// Cached display name of that calendar, so Settings has something to
+    /// show without asking EventKit again.
+    var destinationCalendarTitle: String? { calendarTitleValue }
 
     var range: PublishedCalendarRange {
         get { rangeValue }
@@ -85,33 +96,58 @@ final class PublishedCalendarSettings {
         }
     }
 
-    /// Display name of the published file, for the settings screen.
-    var filename: String? { filenameValue }
-
     var lastPublishedAt: Date? { lastPublishedAtValue }
 
-    func bookmark() -> Data? { bookmarkValue }
-
-    func setPublishedLocation(bookmark: Data, filename: String) {
-        bookmarkValue = bookmark
-        filenameValue = filename
-        defaults.set(bookmark, forKey: Keys.bookmark)
-        defaults.set(filename, forKey: Keys.filename)
+    func setDestination(calendarID: String, title: String) {
+        calendarIDValue = calendarID
+        calendarTitleValue = title
+        defaults.set(calendarID, forKey: Keys.calendarID)
+        defaults.set(title, forKey: Keys.calendarTitle)
     }
 
-    /// Stops updating the file. Leaves the file itself (and whatever public
-    /// link points at it) alone — MealPlan just forgets where it was.
-    func stopPublishing() {
-        bookmarkValue = nil
-        filenameValue = nil
+    /// Forgets the destination and this feature's record of which event
+    /// belongs to which entry. Does not itself remove anything from
+    /// Calendar — the caller does that first, while the map that says what
+    /// to remove still exists.
+    func clearDestination() {
+        calendarIDValue = nil
+        calendarTitleValue = nil
         lastPublishedAtValue = nil
-        defaults.removeObject(forKey: Keys.bookmark)
-        defaults.removeObject(forKey: Keys.filename)
+        eventMapValue = [:]
+        defaults.removeObject(forKey: Keys.calendarID)
+        defaults.removeObject(forKey: Keys.calendarTitle)
         defaults.removeObject(forKey: Keys.lastPublishedAt)
+        defaults.removeObject(forKey: Keys.eventMap)
     }
 
     func markPublished(at date: Date) {
         lastPublishedAtValue = date
         defaults.set(date, forKey: Keys.lastPublishedAt)
+    }
+
+    // MARK: - Entry → event mapping
+
+    /// This feature's own record of which `EKEvent` mirrors which
+    /// `MealPlanEntry`, so the next sync updates or removes the right event
+    /// instead of guessing or duplicating.
+    var eventMap: [UUID: String] {
+        get { Dictionary(uniqueKeysWithValues: eventMapValue.compactMap { key, value in UUID(uuidString: key).map { ($0, value) } }) }
+        set {
+            eventMapValue = Dictionary(uniqueKeysWithValues: newValue.map { ($0.key.uuidString, $0.value) })
+            store(eventMapValue, forKey: Keys.eventMap)
+        }
+    }
+
+    // MARK: - Storage helpers
+
+    private func store<T: Encodable>(_ value: T, forKey key: String) {
+        if let data = try? JSONEncoder().encode(value) {
+            defaults.set(data, forKey: key)
+        }
+    }
+
+    private static func load<T: Decodable>(_ type: T.Type, from defaults: UserDefaults, key: String) -> T? {
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(T.self, from: data)
     }
 }
