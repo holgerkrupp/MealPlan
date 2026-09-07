@@ -22,6 +22,11 @@ enum CalendarAuthorization: String, Sendable, Equatable, CaseIterable {
     /// Whether calendar context can be produced at all.
     var canReadEvents: Bool { self == .fullAccess }
 
+    /// Whether events can be created, updated or removed. Used only by the
+    /// "publish the plan into a calendar" feature, which needs no read
+    /// access at all — unlike `canReadEvents`, `writeOnly` counts here.
+    var canWrite: Bool { self == .fullAccess || self == .writeOnly }
+
     /// Whether asking again could still show the system dialog. Anything else
     /// must be resolved by the user in system Settings — the app must never
     /// re-trigger the request.

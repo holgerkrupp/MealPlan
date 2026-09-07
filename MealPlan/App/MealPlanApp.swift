@@ -15,10 +15,13 @@ struct MealPlanApp: App {
     /// Calendar integration. Creating it touches no calendar data and never
     /// asks for permission — it only reads the (off by default) preference.
     @State private var calendarStore = CalendarContextStore()
-    /// Where (if anywhere) the plan is being published as a subscribable
-    /// `.ics` file. Created eagerly like the other stores above; it only acts
-    /// once a location has actually been chosen in Settings.
+    /// Where (if anywhere) the plan is published into a calendar. Created
+    /// eagerly like the other stores above; it only acts once a destination
+    /// has actually been chosen in Settings.
     @State private var publishedCalendarSettings = PublishedCalendarSettings()
+    /// Writes the plan into that calendar via EventKit. A single shared
+    /// instance so the whole app talks to the same `EKEventStore`.
+    @State private var calendarEventWriter: any CalendarEventWriting = EventKitCalendarWriter()
 
     @Environment(\.scenePhase) private var scenePhase
 
@@ -38,6 +41,7 @@ struct MealPlanApp: App {
                     .environment(calendarStore)
                     .environment(purchaseManager)
                     .environment(publishedCalendarSettings)
+                    .environment(\.calendarEventWriter, calendarEventWriter)
                     .task {
                         await purchaseManager.prepareForLaunch()
                         appState.bootstrap(
@@ -53,7 +57,8 @@ struct MealPlanApp: App {
                         PublishedCalendarService.scheduleRefreshIfNeeded(
                             household: appState.currentHousehold,
                             settings: publishedCalendarSettings,
-                            context: container.mainContext
+                            context: container.mainContext,
+                            writer: calendarEventWriter
                         )
                     }
                     .onChange(of: scenePhase) { _, phase in
@@ -69,7 +74,8 @@ struct MealPlanApp: App {
                         PublishedCalendarService.scheduleRefreshIfNeeded(
                             household: appState.currentHousehold,
                             settings: publishedCalendarSettings,
-                            context: container.mainContext
+                            context: container.mainContext,
+                            writer: calendarEventWriter
                         )
                     }
                     .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
@@ -95,6 +101,7 @@ struct MealPlanApp: App {
                     .environment(calendarStore)
                     .environment(purchaseManager)
                     .environment(publishedCalendarSettings)
+                    .environment(\.calendarEventWriter, calendarEventWriter)
             }
         }
         .defaultSize(width: 720, height: 760)
@@ -109,6 +116,7 @@ struct MealPlanApp: App {
                 .environment(calendarStore)
                 .environment(purchaseManager)
                 .environment(publishedCalendarSettings)
+                .environment(\.calendarEventWriter, calendarEventWriter)
                 .modelContainer(container)
         }
         #endif
