@@ -27,9 +27,12 @@ struct WeekStripView: View {
     var onDropDish: ([DishReference], Date) -> Bool = { _, _ in false }
     var onSelect: (Date) -> Void
 
-    @Query private var entries: [MealPlanEntry]
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
+    /// This week's planned meals, and the household's meals. Both are handed
+    /// down from the calendar rather than queried here: a `@Query` whose
+    /// predicate follows `weekStart` needed the whole strip to be rebuilt —
+    /// and refetched — every time the plan scrolled across a week boundary.
+    let entries: [MealPlanEntry]
+    let mealTypes: [MealType]
 
     /// The `dayID` a drag is currently hovering over, if any.
     @State private var targetedDayID: String?
@@ -46,38 +49,54 @@ struct WeekStripView: View {
         weekStart: Binding<Date>,
         selectedDate: Date,
         visibleDayIDs: Set<String>,
+        entries: [MealPlanEntry],
+        mealTypes: [MealType],
         onDropDish: @escaping ([DishReference], Date) -> Bool = { _, _ in false },
         onSelect: @escaping (Date) -> Void
     ) {
         _weekStart = weekStart
         self.selectedDate = selectedDate
         self.visibleDayIDs = visibleDayIDs
+        self.entries = entries
+        self.mealTypes = mealTypes
         self.onDropDish = onDropDish
         self.onSelect = onSelect
-        let start = weekStart.wrappedValue
-        let end = start.adding(weeks: 1)
-        _entries = Query(
-            filter: #Predicate<MealPlanEntry> { $0.date >= start && $0.date < end },
-            sort: \MealPlanEntry.date
-        )
     }
 
-    private var days: [Date] {
-        (0..<7).map { weekStart.adding(days: $0) }
+    /// One cell's worth of resolved state. Built for all seven days in a single
+    /// pass: the strip redraws on every visibility change the plan reports, so
+    /// each day re-filtering the week's entries for its own ring was seven
+    /// passes over the array per scrolled frame.
+    private struct DayCellModel: Identifiable {
+        /// Position in the week, and the cell's identity. Deliberately not the
+        /// date: a cell that keeps its identity across a week change updates
+        /// its number and ring in place, rather than seven cells being torn
+        /// out and seven new ones animated in as the plan scrolls past a week.
+        let id: Int
+        let date: Date
+        let dayID: String
+        /// How much of the day is planned, 0…1 — the share of the household's
+        /// meals that have at least one un-skipped entry.
+        let fraction: Double
     }
 
-    /// How much of `day` is planned, 0…1 — the share of the household's meals
-    /// that have at least one un-skipped entry. Drives the ring around the
-    /// day number.
-    private func mealFraction(on day: Date) -> Double {
-        guard !mealTypes.isEmpty else { return 0 }
-        let planned = Set(
-            entries
-                .filter { $0.date.isSameDay(as: day) && !$0.skipped }
-                .map(\.mealKey)
-        )
-        let covered = mealTypes.filter { planned.contains($0.key) }.count
-        return Double(covered) / Double(mealTypes.count)
+    private var dayCells: [DayCellModel] {
+        var planned: [String: Set<String>] = [:]
+        for entry in entries where !entry.skipped {
+            planned[entry.date.dayID, default: []].insert(entry.mealKey)
+        }
+        let keys = Set(mealTypes.map(\.key))
+        return (0..<7).map { offset in
+            let day = weekStart.adding(days: offset)
+            let dayID = day.dayID
+            let covered = planned[dayID]?.intersection(keys).count ?? 0
+            return DayCellModel(
+                id: offset,
+                date: day,
+                dayID: dayID,
+                fraction: keys.isEmpty ? 0 : Double(covered) / Double(keys.count)
+            )
+        }
     }
 
     /// Month (and year, when the week straddles two) for the shown week.
@@ -91,7 +110,10 @@ struct WeekStripView: View {
     }
 
     var body: some View {
-        VStack(spacing: 8) {
+        let cells = dayCells
+        let span = visibleSpan(in: cells)
+
+        return VStack(spacing: 8) {
             HStack {
                 stepButton(weeks: -1, symbol: "chevron.left", label: String(localized: "Previous week"))
                 Spacer(minLength: 0)
@@ -103,19 +125,19 @@ struct WeekStripView: View {
             }
 
             HStack(spacing: Self.cellSpacing) {
-                ForEach(days, id: \.self) { day in
-                    dayCell(day)
+                ForEach(cells) { cell in
+                    dayCell(cell)
                 }
             }
-            .background(alignment: .leading) { visiblePill }
+            .background(alignment: .leading) { visiblePill(span: span) }
         }
         .animation(reduceMotion ? nil : .snappy, value: weekStart)
     }
 
     /// The span of this week's days that the plan below is currently showing,
-    /// as indices into `days`. Nil when the strip is parked on another week.
-    private var visibleSpan: ClosedRange<Int>? {
-        let indices = days.indices.filter { visibleDayIDs.contains(days[$0].dayID) }
+    /// as indices into `cells`. Nil when the strip is parked on another week.
+    private func visibleSpan(in cells: [DayCellModel]) -> ClosedRange<Int>? {
+        let indices = cells.indices.filter { visibleDayIDs.contains(cells[$0].dayID) }
         guard let first = indices.first, let last = indices.last else { return nil }
         return first...last
     }
@@ -123,9 +145,9 @@ struct WeekStripView: View {
     /// A Liquid Glass pill laid over the days that are on screen in the plan,
     /// so the strip shows at a glance where the scroll position is.
     @ViewBuilder
-    private var visiblePill: some View {
+    private func visiblePill(span: ClosedRange<Int>?) -> some View {
         GeometryReader { proxy in
-            if let span = visibleSpan {
+            if let span {
                 let spacing = Self.cellSpacing
                 let cell = (proxy.size.width - spacing * 6) / 7
                 let width = CGFloat(span.count) * cell + CGFloat(span.count - 1) * spacing
@@ -137,7 +159,7 @@ struct WeekStripView: View {
                     .offset(x: x - 4, y: -5)
             }
         }
-        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: visibleSpan)
+        .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: span)
         .allowsHitTesting(false)
     }
 
@@ -177,12 +199,13 @@ struct WeekStripView: View {
         }
     }
 
-    private func dayCell(_ day: Date) -> some View {
+    private func dayCell(_ cell: DayCellModel) -> some View {
+        let day = cell.date
         let isSelected = day.isSameDay(as: selectedDate)
         let isToday = day.isSameDay(as: .now)
-        let fraction = mealFraction(on: day)
+        let fraction = cell.fraction
         let fullyPlanned = fraction >= 1
-        let isDropTarget = targetedDayID == day.dayID
+        let isDropTarget = targetedDayID == cell.dayID
 
         return Button {
             onSelect(day)
@@ -280,6 +303,8 @@ struct WeekStripView: View {
         weekStart: $weekStart,
         selectedDate: .now,
         visibleDayIDs: [Date.now.dayID],
+        entries: [],
+        mealTypes: [],
         onSelect: { _ in }
     )
     .padding(.vertical)

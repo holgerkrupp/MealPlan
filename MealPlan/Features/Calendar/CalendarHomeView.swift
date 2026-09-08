@@ -12,9 +12,11 @@ struct CalendarHomeView: View {
     private var mealTypes: [MealType]
     @Query(sort: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)])
     private var planEntries: [MealPlanEntry]
-    @State private var paginator = CalendarPaginator()
-    @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
-    @State private var didSettle = false
+    /// The Monday-based week sitting at the top of the plan. Written by the
+    /// scroll view only when it actually changes weeks, so ordinary scrolling
+    /// no longer re-runs this body — and with it the week grouping over every
+    /// planned meal in the store.
+    @State private var focusWeek = CalendarPaginator.normalizedWeek(of: .now)
     @State private var showingDatePicker = false
     @State private var jumpDate = Date.now
     @State private var jumpTarget: Date?
@@ -31,19 +33,22 @@ struct CalendarHomeView: View {
     /// user's locale, unlike the Monday-based week sections below it.
     @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
 
-    private var focusWeek: Date { anchorWeek ?? CalendarPaginator.normalizedWeek(of: .now) }
-
     var body: some View {
         VStack(spacing: 0) {
+            // No `.id(stripWeekStart)` here: it used to force a full teardown
+            // and refetch of the strip on every week the plan scrolled past.
+            // The strip now takes its week's meals as a plain value instead of
+            // querying them itself, so it simply updates — and animates.
             TrackedWeekStrip(
                 weekStart: $stripWeekStart,
                 selectedDate: appState.selectedDate,
                 visibilityTracker: visibilityTracker,
+                entries: stripEntries,
+                mealTypes: mealTypes,
                 onDropDish: { references, day in drop(references, on: day) }
             ) { day in
                 goTo(day)
             }
-            .id(stripWeekStart)
             .padding(.horizontal, 12)
             .padding(.top, 4)
             .padding(.bottom, 8)
@@ -91,69 +96,28 @@ struct CalendarHomeView: View {
         // One live query feeds the whole lazy calendar. A query in every week
         // makes SwiftData install and update many fetch observers while the
         // scroll view is creating and recycling sections.
+        //
+        // The grouping happens here, above `PlanScrollView`, on purpose: the
+        // scroll position changes many times a second and lives inside that
+        // child, so it no longer drags a pass over every planned meal in the
+        // store along with it.
         let entriesByWeek = Dictionary(grouping: planEntries) {
             CalendarPaginator.normalizedWeek(of: $0.date)
         }
 
-        return ScrollViewReader { proxy in
-            ScrollView {
-                LazyVStack(spacing: 16) {
-                    Color.clear.frame(height: 1)
-                        .onAppear {
-                            guard didSettle, let top = anchorWeek else { return }
-                            // Prepending weeks changes every existing view's
-                            // vertical position. Wait for that layout update,
-                            // then restore the old first week without an
-                            // animation so the content under the finger stays
-                            // put instead of snapping to a new position.
-                            withTransaction(Transaction(animation: nil)) {
-                                paginator.extendPast()
-                            }
-                            Task { @MainActor in
-                                await Task.yield()
-                                withTransaction(Transaction(animation: nil)) {
-                                    proxy.scrollTo(top, anchor: .top)
-                                }
-                            }
-                        }
-
-                    ForEach(paginator.weekStarts, id: \.self) { weekStart in
-                        WeekSectionView(
-                            weekStart: weekStart,
-                            style: .week,
-                            mealTypes: mealTypes,
-                            entries: entriesByWeek[weekStart] ?? [],
-                            onDayVisibilityChange: { visible, dayID in
-                                visibilityTracker.setDayVisible(visible, id: dayID)
-                            }
-                        )
-                            .id(weekStart)
-                    }
-
-                    Color.clear.frame(height: 1)
-                        .onAppear { if didSettle { paginator.extendFuture() } }
-                }
-                .scrollTargetLayout()
-            }
-            .scrollPosition(id: $anchorWeek, anchor: .top)
-            .task {
-                try? await Task.sleep(for: .milliseconds(350))
-                await scrollToDay(.now, proxy: proxy)
-                try? await Task.sleep(for: .milliseconds(250))
-                didSettle = true
-            }
-            .onChange(of: jumpTarget) { _, target in
-                guard let target else { return }
-                jumpTarget = nil
-                Task { await scrollToDay(target, proxy: proxy) }
-            }
-            // Keep the strip on the week the user scrolled the plan to.
-            .onChange(of: anchorWeek) { _, week in
-                guard let week else { return }
+        return PlanScrollView(
+            entriesByWeek: entriesByWeek,
+            mealTypes: mealTypes,
+            jumpTarget: $jumpTarget,
+            onDayVisibilityChange: { visible, dayID in
+                visibilityTracker.setDayVisible(visible, id: dayID)
+            },
+            onFocusWeekChange: { week in
+                focusWeek = week
                 let localeWeek = week.startOfWeek(calendar: .current)
                 if localeWeek != stripWeekStart { stripWeekStart = localeWeek }
             }
-        }
+        )
         .navigationTitle(appState.currentHousehold?.name ?? "MealPlan")
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
@@ -281,8 +245,112 @@ struct CalendarHomeView: View {
         let day = date.startOfDay
         appState.selectedDate = day
         stripWeekStart = day.startOfWeek(calendar: .current)
-        anchorWeek = paginator.ensureLoaded(day)
+        focusWeek = CalendarPaginator.normalizedWeek(of: day)
+        // `PlanScrollView` owns the paginator, so it loads the week and does
+        // the scrolling; this only says where to go.
         jumpTarget = day
+    }
+
+    /// The strip's own week, cut out of the one store-wide query. The plan's
+    /// sections are Monday-based while the strip follows the user's locale, so
+    /// this is a separate slice rather than one of the week buckets.
+    private var stripEntries: [MealPlanEntry] {
+        let end = stripWeekStart.adding(days: 7)
+        return planEntries.filter { $0.date >= stripWeekStart && $0.date < end }
+    }
+}
+
+/// The plan's lazy, endlessly-growing list of weeks.
+///
+/// Kept apart from `CalendarHomeView` so that the scroll position — which is
+/// written on nearly every frame the user drags — only invalidates this view.
+/// Living on the calendar itself, it re-ran the week strip, the toolbar, every
+/// sheet modifier and a grouping pass over the whole plan on each of those
+/// writes.
+@MainActor
+private struct PlanScrollView: View {
+    let entriesByWeek: [Date: [MealPlanEntry]]
+    let mealTypes: [MealType]
+    /// A day the calendar wants brought into view; cleared once handled.
+    @Binding var jumpTarget: Date?
+    var onDayVisibilityChange: (Bool, String) -> Void
+    /// Reports the Monday-based week at the top, only when it changes.
+    var onFocusWeekChange: (Date) -> Void
+
+    @State private var paginator = CalendarPaginator()
+    @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
+    @State private var didSettle = false
+
+    /// How close to either end of the loaded window the top week may come
+    /// before more weeks are loaded. Growing this early is the point: the
+    /// window used to be extended by a one-point spacer that only appeared
+    /// once the user had already scrolled onto it, so every few weeks the plan
+    /// ran into a wall and waited for a batch of sections to be built.
+    private static let prefetchDistance = 3
+
+    var body: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                LazyVStack(spacing: 16) {
+                    ForEach(paginator.weekStarts, id: \.self) { weekStart in
+                        WeekSectionView(
+                            weekStart: weekStart,
+                            style: .week,
+                            mealTypes: mealTypes,
+                            entries: entriesByWeek[weekStart] ?? [],
+                            onDayVisibilityChange: onDayVisibilityChange
+                        )
+                            .id(weekStart)
+                    }
+                }
+                .scrollTargetLayout()
+            }
+            .scrollPosition(id: $anchorWeek, anchor: .top)
+            .task {
+                try? await Task.sleep(for: .milliseconds(350))
+                await scrollToDay(.now, proxy: proxy)
+                try? await Task.sleep(for: .milliseconds(250))
+                didSettle = true
+            }
+            .onChange(of: jumpTarget) { _, target in
+                guard let target else { return }
+                jumpTarget = nil
+                Task { await scrollToDay(target, proxy: proxy) }
+            }
+            .onChange(of: anchorWeek) { _, week in
+                guard let week else { return }
+                onFocusWeekChange(week)
+                guard didSettle else { return }
+                extendWindow(around: week, proxy: proxy)
+            }
+        }
+    }
+
+    /// Loads more weeks while the user is still a few sections away from the
+    /// end of the window, so the plan never stalls at a boundary.
+    private func extendWindow(around week: Date, proxy: ScrollViewProxy) {
+        guard let index = paginator.weekStarts.firstIndex(of: week) else { return }
+
+        if index >= paginator.weekStarts.count - Self.prefetchDistance {
+            // Appending leaves everything already laid out where it is.
+            paginator.extendFuture()
+        }
+
+        if index < Self.prefetchDistance {
+            // Prepending changes every existing view's vertical position. Wait
+            // for that layout update, then restore the week that was at the
+            // top without an animation, so the content under the finger stays
+            // put instead of snapping to a new position.
+            withTransaction(Transaction(animation: nil)) {
+                paginator.extendPast()
+            }
+            Task { @MainActor in
+                await Task.yield()
+                withTransaction(Transaction(animation: nil)) {
+                    proxy.scrollTo(week, anchor: .top)
+                }
+            }
+        }
     }
 
     /// Puts `date`'s day card at the very top of the scroll view. The week
@@ -290,11 +358,15 @@ struct CalendarHomeView: View {
     /// ids only exist once their section is built.
     private func scrollToDay(_ date: Date, proxy: ScrollViewProxy) async {
         let day = date.startOfDay
-        proxy.scrollTo(CalendarPaginator.normalizedWeek(of: day), anchor: .top)
+        let week = paginator.ensureLoaded(day)
+        // Writing the bound scroll position is itself a scroll: it is what
+        // reaches a week that was only just added to the window, which
+        // `scrollTo` alone cannot do while the section has yet to be built.
+        anchorWeek = week
+        proxy.scrollTo(week, anchor: .top)
         try? await Task.sleep(for: .milliseconds(50))
         proxy.scrollTo(day.dayID, anchor: .top)
     }
-
 }
 
 /// The rapidly changing scroll visibility state is observed only here. This
@@ -319,6 +391,8 @@ private struct TrackedWeekStrip: View {
     @Binding var weekStart: Date
     let selectedDate: Date
     let visibilityTracker: PlanVisibilityTracker
+    let entries: [MealPlanEntry]
+    let mealTypes: [MealType]
     var onDropDish: ([DishReference], Date) -> Bool
     var onSelect: (Date) -> Void
 
@@ -327,6 +401,8 @@ private struct TrackedWeekStrip: View {
             weekStart: $weekStart,
             selectedDate: selectedDate,
             visibleDayIDs: visibilityTracker.visibleDayIDs,
+            entries: entries,
+            mealTypes: mealTypes,
             onDropDish: onDropDish,
             onSelect: onSelect
         )

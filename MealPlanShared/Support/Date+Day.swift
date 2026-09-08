@@ -24,17 +24,34 @@ extension Date {
     }
 
     /// A stable identifier for a calendar day, e.g. "2026-08-28".
+    ///
+    /// This is the plan's scroll and visibility identity, so it is asked for
+    /// many times per frame while the calendar moves. `String(format:)` bridges
+    /// through `NSString` and is far too slow for that; the digits are laid out
+    /// by hand instead.
     var dayID: String {
         let c = Calendar.current.dateComponents([.year, .month, .day], from: self)
-        return String(format: "%04d-%02d-%02d", c.year ?? 0, c.month ?? 0, c.day ?? 0)
+        return Self.dayID(year: c.year ?? 0, month: c.month ?? 0, day: c.day ?? 0)
     }
 
-    static var mondayCalendar: Calendar {
+    static func dayID(year: Int, month: Int, day: Int) -> String {
+        func pad(_ value: Int, _ width: Int) -> String {
+            let digits = String(value)
+            guard digits.count < width else { return digits }
+            return String(repeating: "0", count: width - digits.count) + digits
+        }
+        return "\(pad(year, 4))-\(pad(month, 2))-\(pad(day, 2))"
+    }
+
+    /// Built once: the calendar is fixed (Gregorian, Monday-first) and does not
+    /// follow the user's locale, and rebuilding one per call showed up in the
+    /// plan's scrolling — every week grouping asked for it once per entry.
+    static let mondayCalendar: Calendar = {
         var cal = Calendar(identifier: .gregorian)
         cal.firstWeekday = 2 // Monday
         cal.minimumDaysInFirstWeek = 4
         return cal
-    }
+    }()
 }
 
 /// A half-open range of days [start, end).

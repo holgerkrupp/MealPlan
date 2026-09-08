@@ -50,12 +50,6 @@ struct WeekSectionView: View {
         (0..<7).map { weekStart.adding(days: $0) }
     }
 
-    private func entries(on day: Date, mealKey: String) -> [MealPlanEntry] {
-        entries
-            .filter { $0.date.isSameDay(as: day) && $0.mealKey == mealKey }
-            .sorted { $0.sortIndex < $1.sortIndex }
-    }
-
     /// The queried meals with duplicate `key`s collapsed.
     ///
     /// CloudKit has no unique constraint, so a store can hold two "lunch"
@@ -80,18 +74,15 @@ struct WeekSectionView: View {
         return order.compactMap { winners[$0] }
     }
 
-    /// The meals to show for a given day. See `DayMeal.forDay`.
-    private func meals(on day: Date) -> [DayMeal] {
-        DayMeal.forDay(
-            mealTypes: uniqueMealTypes,
-            plannedKeys: Set(entries.filter { $0.date.isSameDay(as: day) }.map(\.mealKey))
-        )
-    }
-
     var body: some View {
-        // Built once per redraw rather than per day: a day's standing is
-        // relative to the whole week, so every card needs the same summary.
+        // All built once per redraw rather than once per day or per card: a
+        // day's standing is relative to the whole week, and the seven days,
+        // the de-duplicated meals and the bucketed entries are the same for
+        // every card in this section.
         let nutrition = nutritionSummary
+        let days = self.days
+        let meals = uniqueMealTypes
+        let buckets = WeekEntryBuckets(entries: entries)
 
         return VStack(alignment: .leading, spacing: 10) {
             if style == .week {
@@ -102,6 +93,7 @@ struct WeekSectionView: View {
             }
 
             ForEach(days, id: \.self) { day in
+                let dayID = day.dayID
                 if !purchaseManager.isUnlocked,
                    day.isSameDay(as: PlanningAccess.latestFreeDate().adding(days: 1)) {
                     Button { showingPaywall = true } label: {
@@ -130,7 +122,10 @@ struct WeekSectionView: View {
                     onAddExtra: addExtraAction(for: day),
                     onDropDish: { handleDrop($0, on: day) }
                 ) {
-                    let dayMeals = meals(on: day)
+                    let dayMeals = DayMeal.forDay(
+                        mealTypes: meals,
+                        plannedKeys: buckets.plannedKeys(on: dayID)
+                    )
                     if dayMeals.isEmpty {
                         Text(String(localized: "Add meals in Settings to start planning."))
                             .font(.subheadline)
@@ -156,7 +151,7 @@ struct WeekSectionView: View {
                                         mealKey: meal.key,
                                         title: meal.name,
                                         symbolName: meal.symbolName,
-                                        entries: entries(on: day, mealKey: meal.key),
+                                        entries: buckets.entries(on: dayID, mealKey: meal.key),
                                         nutritionSummary: nutrition
                                     )
                                 }
@@ -164,14 +159,14 @@ struct WeekSectionView: View {
                         }
                     }
                 }
-                .id(day.dayID)
+                .id(dayID)
                 // Feeds the week strip's glass pill. `onDisappear` matters:
                 // the lazy stack can tear a card down without a final
                 // visibility callback.
                 .onScrollVisibilityChange(threshold: 0.05) { visible in
-                    onDayVisibilityChange(visible, day.dayID)
+                    onDayVisibilityChange(visible, dayID)
                 }
-                .onDisappear { onDayVisibilityChange(false, day.dayID) }
+                .onDisappear { onDayVisibilityChange(false, dayID) }
             }
         }
         .padding(.vertical, 8)
@@ -288,6 +283,32 @@ struct WeekSectionView: View {
         df.locale = .current
         df.setLocalizedDateFormatFromTemplate("dMMM")
         return String(localized: "Week \(week) · \(df.string(from: weekStart)) – \(df.string(from: end))")
+    }
+}
+
+/// One week's planned meals, bucketed by day and meal in a single pass.
+///
+/// The day cards used to filter the week's entries again for every meal on
+/// every day — twenty-eight passes over the array per redraw, each comparing
+/// dates through `Calendar` — which is far too much to repeat while the plan
+/// is scrolling. Order inside a bucket is the query's own
+/// (`date`, `sortIndex`), so the cards need no further sorting.
+private struct WeekEntryBuckets {
+    private var byDay: [String: [String: [MealPlanEntry]]] = [:]
+
+    init(entries: [MealPlanEntry]) {
+        for entry in entries {
+            byDay[entry.date.dayID, default: [:]][entry.mealKey, default: []].append(entry)
+        }
+    }
+
+    func entries(on dayID: String, mealKey: String) -> [MealPlanEntry] {
+        byDay[dayID]?[mealKey] ?? []
+    }
+
+    func plannedKeys(on dayID: String) -> Set<String> {
+        guard let meals = byDay[dayID] else { return [] }
+        return Set(meals.keys)
     }
 }
 
