@@ -6,7 +6,89 @@
     {
       "layers" : [
         {
+          "glass" : true,
+          "image-name" : "Image 4.png",
+          "name" : "Image 4",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              266.37206030080006,
+              -395.13006164
+            ]
+          }
+        },
+        {
+          "glass" : true,
+          "image-name" : "Image 4.png",
+          "name" : "Image 4",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              -255.62603090720006,
+              -395.13006164
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "image-name" : "Image 3.png",
+          "name" : "Image 3",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              261.0050000000001,
+              -324.13006164
+            ]
+          }
+        },
+        {
+          "glass" : false,
+          "image-name" : "Image 3.png",
+          "name" : "Image 3",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              -261.00500000000005,
+              -324.13006164
+            ]
+          }
+        },
+        {
+          "image-name" : "01c23510-45cf-4e8f-9f53-74e712e5cd94.png",
+          "name" : "01c23510-45cf-4e8f-9f53-74e712e5cd94",
+          "position" : {
+            "scale" : 0.8,
+            "translation-in-points" : [
+              -154.39999999999998,
+              326.66993836000006
+            ]
+          }
+        },
+        {
+          "image-name" : "429ff895-18b8-4064-9274-bec2c8d672a4.png",
+          "name" : "429ff895-18b8-4064-9274-bec2c8d672a4",
+          "position" : {
+            "scale" : 0.4,
+            "translation-in-points" : [
+              250.80000000000007,
+              -40
+            ]
+          }
+        },
+        {
           "hidden" : false,
+          "image-name" : "Image.png",
+          "name" : "Image",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              0,
+              131
+            ]
+          }
+        },
+        {
+          "hidden" : true,
           "image-name" : "Layer-6-Spoon.svg",
           "name" : "Spoon",
           "position" : {
@@ -18,7 +100,7 @@
           }
         },
         {
-          "hidden" : false,
+          "hidden" : true,
           "image-name" : "Layer-5-BinderRingRight.svg",
           "name" : "Binder Ring (Right)",
           "position" : {
@@ -30,7 +112,7 @@
           }
         },
         {
-          "hidden" : false,
+          "hidden" : true,
           "image-name" : "Layer-4-BinderRingLeft.svg",
           "name" : "Binder Ring (Left)",
           "position" : {
@@ -42,8 +124,19 @@
           }
         },
         {
+          "image-name" : "Image 2.png",
+          "name" : "Image 2",
+          "position" : {
+            "scale" : 0.5,
+            "translation-in-points" : [
+              0,
+              -309.5
+            ]
+          }
+        },
+        {
           "glass" : true,
-          "hidden" : false,
+          "hidden" : true,
           "image-name" : "Layer-3-CalendarCard.svg",
           "name" : "Calendar Card",
           "position" : {
@@ -55,6 +148,9 @@
           }
         },
         {
+          "fill" : {
+            "automatic-gradient" : "display-p3:0.81348,0.28467,0.27124,1.00000"
+          },
           "hidden" : false,
           "image-name" : "Layer-2-Background.svg",
           "name" : "Background Tile",

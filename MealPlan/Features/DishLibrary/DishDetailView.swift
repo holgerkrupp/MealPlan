@@ -18,8 +18,7 @@ struct DishDetailView: View {
     @State private var showingPlanSheet = false
     @State private var showingRecipeFinder = false
     @State private var showingCookingMode = false
-    @State private var exportedArchive: ExportedRecipeArchive?
-    @State private var exportError: String?
+    @State private var showingShareSheet = false
     @State private var confirmingDelete = false
     @State private var showingVariantPicker = false
     @State private var editingVariant: Dish?
@@ -91,7 +90,7 @@ struct DishDetailView: View {
                 variantsSection
                 statsSection
             }
-            .padding()
+            .padding(MacLayout.gutter)
         }
     }
 
@@ -124,6 +123,11 @@ struct DishDetailView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
+                Button(String(localized: "Share recipe…"), systemImage: "square.and.arrow.up") {
+                    showingShareSheet = true
+                }
+            }
+            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Edit"), systemImage: "pencil") { showingEditor = true }
             }
             if !appState.isGuest {
@@ -144,11 +148,6 @@ struct DishDetailView: View {
                 }
             }
             ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Export recipe"), systemImage: "square.and.arrow.up") {
-                    exportRecipe()
-                }
-            }
-            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Delete recipe"), systemImage: "trash", role: .destructive) {
                     confirmingDelete = true
                 }
@@ -165,34 +164,40 @@ struct DishDetailView: View {
 
     private var detailWithSheets: some View {
         configuredDetail
-        .sheet(isPresented: $showingEditor) {
+        .detailPresentation(isPresented: $showingEditor, route: .editRecipe(dish.uuid)) {
             NavigationStack { DishEditorView(dish: dish, isNew: false) }
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingPlanSheet) {
+        .detailPresentation(isPresented: $showingPlanSheet, route: .planRecipe(dish.uuid)) {
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
             .presentationDetents([.medium])
             .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingRecipeFinder) {
+        .detailPresentation(isPresented: $showingRecipeFinder, route: .findRecipe(dish.uuid)) {
             NavigationStack { RecipeFinderView(dish: dish) }
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingCookingMode) {
+        .detailPresentation(isPresented: $showingCookingMode, route: .cookRecipe(dish.uuid)) {
             NavigationStack { CookingModeView(dish: dish) }
                 .environment(appState)
                 .dismissesOnOutsideClick()
         }
-        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
-        .sheet(isPresented: $showingVariantPicker) {
+        .sheet(isPresented: $showingShareSheet) {
+            // The PDF and text start from what is on screen: the servings the
+            // stepper is set to, in the language the recipe is shown in.
+            RecipeShareSheet(dish: dish, servings: max(1, targetServings), translated: showsTranslation)
+                .environment(appState)
+                .dismissesOnOutsideClick()
+        }
+        .detailPresentation(isPresented: $showingVariantPicker, route: .groupVariants(dish.uuid)) {
             NavigationStack {
                 DishVariantPickerView(dish: dish)
             }
             .dismissesOnOutsideClick()
         }
-        .sheet(item: $editingVariant) { variant in
+        .detailPresentation(item: $editingVariant, route: { .newRecipe($0.uuid) }) { variant in
             NavigationStack { DishEditorView(dish: variant, isNew: true) }
                 .dismissesOnOutsideClick()
         }
@@ -200,7 +205,7 @@ struct DishDetailView: View {
             NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingTranslation) {
+        .detailPresentation(isPresented: $showingTranslation, route: .translateRecipe(dish.uuid)) {
             NavigationStack { RecipeTranslationSheet(dish: dish) }
                 .environment(appState)
                 .dismissesOnOutsideClick()
@@ -214,14 +219,6 @@ struct DishDetailView: View {
 
     private var detailWithDialogs: some View {
         detailWithSheets
-        .alert(
-            String(localized: "Couldn’t export recipe"),
-            isPresented: Binding(get: { exportError != nil }, set: { if !$0 { exportError = nil } })
-        ) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: {
-            Text(exportError ?? "")
-        }
         .confirmationDialog(
             String(localized: "Delete “\(dish.name)”?"),
             isPresented: $confirmingDelete,
@@ -244,7 +241,7 @@ struct DishDetailView: View {
             plan: { showingPlanSheet = true },
             edit: { showingEditor = true },
             translate: { showingTranslation = true },
-            exportRecipe: { exportRecipe() },
+            shareRecipe: { showingShareSheet = true },
             delete: { confirmingDelete = true }
         )
         if !dish.sortedIngredients.isEmpty || !(dish.recipeText ?? "").isEmpty {
@@ -528,14 +525,6 @@ struct DishDetailView: View {
 
     private func metric(_ label: String, _ value: String) -> some View {
         RecipeMetric(label, value)
-    }
-
-    private func exportRecipe() {
-        do {
-            exportedArchive = ExportedRecipeArchive(url: try MealPlanRecipeArchive.temporaryFile(for: [dish]))
-        } catch {
-            exportError = error.localizedDescription
-        }
     }
 
     /// Copies this dish so the cook can change the copy freely. Both end up in

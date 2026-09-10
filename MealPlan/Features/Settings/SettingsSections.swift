@@ -25,7 +25,7 @@ struct UnlockSettingsSection: View {
             } footer: {
                 Text("Unlock unlimited planning with a one-time purchase.")
             }
-            .sheet(isPresented: $showingPaywall) {
+            .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
                 PaywallView()
                     .dismissesOnOutsideClick()
             }
@@ -409,7 +409,7 @@ struct AboutSettingsSection: View {
                     .frame(maxWidth: .infinity)
             }
         }
-        .sheet(isPresented: $showingOnboarding) {
+        .detailPresentation(isPresented: $showingOnboarding, route: .gettingStarted) {
             OnboardingView()
                 .dismissesOnOutsideClick()
         }

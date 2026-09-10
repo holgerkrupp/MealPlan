@@ -98,6 +98,7 @@ struct MealPlanWidgetEntry: TimelineEntry {
 
 enum WidgetLink {
     static let today = DeepLink.today.url
+    static let shopping = DeepLink.shoppingList.url
 
     static func day(_ date: Date) -> URL { DeepLink.date(date).url }
 }

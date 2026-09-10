@@ -16,6 +16,82 @@ struct RecipeArticleFilterTests {
               date: date, isArchived: archived, isRead: read)
     }
 
+    // MARK: - Discovery categories
+
+    @Test func categorizesUsingTitlesAndSummaries() {
+        let soup = RecipeDiscoveryCategory.categories(
+            title: "Slow-roasted tomato soup",
+            summary: "A warming vegetarian dinner",
+            providerTags: []
+        )
+
+        #expect(soup.contains(.soups))
+        #expect(soup.contains(.vegetarian))
+        #expect(soup.contains(.mainDishes))
+    }
+
+    @Test func categorizesUsingProviderTags() {
+        let cake = RecipeDiscoveryCategory.categories(
+            title: "Grandma's favorite",
+            summary: nil,
+            providerTags: ["baking", "dessert", "sweet"]
+        )
+
+        #expect(cake.contains(.baking))
+        #expect(cake.contains(.desserts))
+    }
+
+    @Test func oneRecipeCanAppearInSeveralCategories() {
+        let pizza = RecipeDiscoveryCategory.categories(
+            title: "Vegetarian pizza",
+            summary: nil,
+            providerTags: []
+        )
+
+        #expect(pizza.contains(.vegetarian))
+        #expect(pizza.contains(.baking))
+        #expect(pizza.contains(.mainDishes))
+    }
+
+    @Test func hidesTheNonRecipePostFromTheScreenshot() {
+        let visible = RecipeArticleClassifier.isLikelyRecipe(
+            title: "Mein Glycin-Erfahrungsbericht – so überraschend hat es auf Haut, Haare & mehr gewirkt",
+            summary: "Bessere Haut, starke Nägel und glänzende Haare.",
+            url: URL(string: "https://www.kochtrotz.de/glycin-mein-erfahrungsbericht-haut-haare-naegel/"),
+            providerTags: ["Blog", "Magazin", "Erfahrungsbericht", "Glycin"]
+        )
+
+        #expect(!visible)
+    }
+
+    @Test func hidesExplicitAdvertisementsEvenWhenTheyMentionFood() {
+        #expect(!RecipeArticleClassifier.isLikelyRecipe(
+            title: "Anzeige: Unser neuer Pizzaofen im Test",
+            summary: "Pizza und Brot zu Hause backen",
+            url: URL(string: "https://example.com/pizzaofen")
+        ))
+    }
+
+    @Test func keepsRecipesFromMetadataAndStructuredFeeds() {
+        #expect(RecipeArticleClassifier.isLikelyRecipe(
+            title: "Orientalischer Couscous-Salat",
+            summary: "In 15 Minuten fertig",
+            url: URL(string: "https://example.com/food/couscous")
+        ))
+        #expect(RecipeArticleClassifier.isLikelyRecipe(
+            title: "Omas Liebling",
+            summary: nil,
+            url: URL(string: "https://example.com/post/42"),
+            providerTags: ["Rezepte"]
+        ))
+        #expect(RecipeArticleClassifier.isLikelyRecipe(
+            title: "Sunday special",
+            summary: nil,
+            url: URL(string: "https://example.com/post/43"),
+            body: #"<script type="application/ld+json">{"@type":"Recipe"}</script>"#
+        ))
+    }
+
     // MARK: - Scope
 
     @Test func recentHidesArchivedPosts() {
@@ -78,5 +154,15 @@ struct RecipeArticleFilterTests {
     @Test func sortsByTitleIgnoringCase() {
         #expect(RecipeArticleFilter.areInOrder(candidate("apple"), candidate("Banana"), sort: .title))
         #expect(!RecipeArticleFilter.areInOrder(candidate("Banana"), candidate("apple"), sort: .title))
+    }
+
+    @Test func interleavesSourcesWithoutDroppingShorterGroups() {
+        let result = RecipeArticleFilter.interleave([
+            ["a1", "a2", "a3"],
+            ["b1"],
+            ["c1", "c2"],
+        ])
+
+        #expect(result == ["a1", "b1", "c1", "a2", "c2", "a3"])
     }
 }

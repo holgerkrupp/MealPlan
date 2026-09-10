@@ -18,13 +18,13 @@ struct CalendarHomeView: View {
     /// planned meal in the store.
     @State private var focusWeek = CalendarPaginator.normalizedWeek(of: .now)
     @State private var showingDatePicker = false
-    @State private var jumpDate = Date.now
     @State private var jumpTarget: Date?
     @State private var savingTemplateWeek: Date?
     @State private var applyingTemplateWeek: Date?
     @State private var printingWeek: Date?
     @State private var showingPaywall = false
     @State private var showingMealsSettings = false
+    @State private var showingShareImages = false
     /// Kept separate from `AppState`: day visibility changes rapidly during a
     /// scroll and only the small week strip needs to observe them. If this
     /// lives on the app state, every change invalidates the whole calendar.
@@ -45,11 +45,13 @@ struct CalendarHomeView: View {
                 visibilityTracker: visibilityTracker,
                 entries: stripEntries,
                 mealTypes: mealTypes,
-                onDropDish: { references, day in drop(references, on: day) }
+                onDropDish: { references, day in drop(references, on: day) },
+                isPickingDate: $showingDatePicker,
+                onJumpToDate: { goTo($0) }
             ) { day in
                 goTo(day)
             }
-            .padding(.horizontal, 12)
+            .padding(.horizontal, MacLayout.gutter)
             .padding(.top, 4)
             .padding(.bottom, 8)
             .background(.bar)
@@ -65,7 +67,7 @@ struct CalendarHomeView: View {
                     }
                     .font(.caption)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 12)
+                    .padding(.horizontal, MacLayout.gutter)
                     .padding(.vertical, 7)
                 }
                 .buttonStyle(.plain)
@@ -79,10 +81,7 @@ struct CalendarHomeView: View {
         // to another section drops this value and greys the menu out.
         .focusedSceneValue(\.planCommands, PlanCommands(
             goToToday: { goTo(.now) },
-            jumpToDate: {
-                jumpDate = appState.selectedDate
-                showingDatePicker = true
-            },
+            jumpToDate: { showingDatePicker = true },
             goToPreviousWeek: { goTo(appState.selectedDate.adding(days: -7)) },
             goToNextWeek: { goTo(appState.selectedDate.adding(days: 7)) },
             saveWeekAsTemplate: { savingTemplateWeek = focusWeek },
@@ -126,11 +125,13 @@ struct CalendarHomeView: View {
             ToolbarItem(placement: .primaryAction) {
                 Button(String(localized: "Today")) { goTo(.now) }
             }
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Jump to date…"), systemImage: "calendar") {
-                    jumpDate = appState.selectedDate
-                    showingDatePicker = true
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingShareImages = true
+                } label: {
+                    Label(String(localized: "Share Images"), systemImage: "photo.stack")
                 }
+                .help(String(localized: "Share Images"))
             }
             ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
@@ -153,26 +154,35 @@ struct CalendarHomeView: View {
                 }
             }
         }
-        .sheet(item: Binding(get: { savingTemplateWeek.map { IdentifiableDate(date: $0) } },
-                             set: { savingTemplateWeek = $0?.date })) { wrapper in
+        .detailPresentation(
+            item: Binding(get: { savingTemplateWeek.map { IdentifiableDate(date: $0) } },
+                          set: { savingTemplateWeek = $0?.date }),
+            route: { .saveWeekTemplate($0.date) }
+        ) { wrapper in
             SaveTemplateSheet(weekStart: wrapper.date)
                 .dismissesOnOutsideClick()
         }
-        .sheet(item: Binding(get: { applyingTemplateWeek.map { IdentifiableDate(date: $0) } },
-                             set: { applyingTemplateWeek = $0?.date })) { wrapper in
+        .detailPresentation(
+            item: Binding(get: { applyingTemplateWeek.map { IdentifiableDate(date: $0) } },
+                          set: { applyingTemplateWeek = $0?.date }),
+            route: { .applyWeekTemplate($0.date) }
+        ) { wrapper in
             ApplyTemplateSheet(targetWeekStart: wrapper.date)
                 .dismissesOnOutsideClick()
         }
-        .sheet(item: Binding(get: { printingWeek.map { IdentifiableDate(date: $0) } },
-                             set: { printingWeek = $0?.date })) { wrapper in
+        .detailPresentation(
+            item: Binding(get: { printingWeek.map { IdentifiableDate(date: $0) } },
+                          set: { printingWeek = $0?.date }),
+            route: { .printPlan($0.date) }
+        ) { wrapper in
             PrintPlanSheet(referenceWeek: wrapper.date)
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingPaywall) {
+        .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingMealsSettings) {
+        .detailPresentation(isPresented: $showingMealsSettings, route: .configureMeals) {
             NavigationStack {
                 MealsSettingsView()
                     .toolbar {
@@ -183,32 +193,10 @@ struct CalendarHomeView: View {
             }
             .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingDatePicker) {
+        .sheet(isPresented: $showingShareImages) {
             NavigationStack {
-                DatePicker(
-                    String(localized: "Jump to date"),
-                    selection: $jumpDate,
-                    displayedComponents: .date
-                )
-                .datePickerStyle(.graphical)
-                .padding()
-                .navigationTitle(String(localized: "Jump to date"))
-                #if os(iOS)
-                .navigationBarTitleDisplayMode(.inline)
-                #endif
-                .toolbar {
-                    ToolbarItem(placement: .confirmationAction) {
-                        Button(String(localized: "Go")) {
-                            showingDatePicker = false
-                            goTo(jumpDate)
-                        }
-                    }
-                    ToolbarItem(placement: .cancellationAction) {
-                        Button(String(localized: "Cancel")) { showingDatePicker = false }
-                    }
-                }
+                MealShareGalleryView(initialDate: appState.selectedDate)
             }
-            .presentationDetents([.medium])
             .dismissesOnOutsideClick()
         }
         .overlay(alignment: .bottom) {
@@ -394,6 +382,8 @@ private struct TrackedWeekStrip: View {
     let entries: [MealPlanEntry]
     let mealTypes: [MealType]
     var onDropDish: ([DishReference], Date) -> Bool
+    @Binding var isPickingDate: Bool
+    var onJumpToDate: (Date) -> Void
     var onSelect: (Date) -> Void
 
     var body: some View {
@@ -404,12 +394,25 @@ private struct TrackedWeekStrip: View {
             entries: entries,
             mealTypes: mealTypes,
             onDropDish: onDropDish,
+            isPickingDate: $isPickingDate,
+            onJumpToDate: onJumpToDate,
             onSelect: onSelect
         )
     }
 }
 
-struct IdentifiableDate: Identifiable { let id = UUID(); let date: Date }
+/// A date that can drive `.sheet(item:)`.
+///
+/// Its identity *is* the date. It used to be a fresh `UUID()`, and the calendar
+/// builds these inside a `Binding(get:)` — so every redraw produced a
+/// different item, and `.sheet(item:)` dismissed the sheet it had just shown.
+/// On an iPad, where the calendar stays live beside a form sheet and redraws
+/// almost at once, the print, save-template and apply-template sheets
+/// appeared and vanished before they could be touched.
+struct IdentifiableDate: Identifiable {
+    let date: Date
+    var id: Date { date }
+}
 
 @MainActor
 struct PDFShareSheet: View {

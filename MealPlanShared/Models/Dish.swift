@@ -207,6 +207,32 @@ final class Dish {
         statedFatGramsPerServing = facts?.fatGrams
     }
 
+    /// True while the dish holds nothing anybody typed: no name, and no
+    /// recipe of any kind behind it. That is what the editor's freshly
+    /// inserted draft looks like before the first keystroke, and what a
+    /// record left behind by a closed window or a crash looks like
+    /// afterwards. Anything the cook actually put in — one ingredient, a
+    /// photo, a link, a tag, a plan entry — makes it false, so a dish with
+    /// content is never treated as disposable just because it is unnamed.
+    var isBlankDraft: Bool {
+        guard name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              (recipeText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              sourceURLString == nil, deepLinkURLString == nil, importedSourceID == nil,
+              variantGroupID == nil, seasonRaw == nil, translatedName == nil,
+              prepTimeMinutes == nil, cookTimeMinutes == nil,
+              statedEnergyKcalPerServing == nil,
+              !isFavorite, rating == 0,
+              tagNames.isEmpty, collectionNames.isEmpty,
+              mealTypeTagsRaw.isEmpty, dietaryTagsRaw.isEmpty
+        else { return false }
+        return (ingredients ?? []).isEmpty
+            && (images ?? []).isEmpty
+            && (entries ?? []).isEmpty
+            && (cookedLogs ?? []).isEmpty
+            && (templateEntries ?? []).isEmpty
+            && (routines ?? []).isEmpty
+    }
+
     var sortedIngredients: [DishIngredient] {
         (ingredients ?? []).sorted { $0.sortIndex < $1.sortIndex }
     }

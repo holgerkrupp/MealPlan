@@ -16,6 +16,9 @@ struct MealPlanCommands: Commands {
     @FocusedValue(\.dishLibraryCommands) private var library
     @FocusedValue(\.dishCommands) private var dish
     @FocusedValue(\.shoppingCommands) private var shopping
+    /// Menu items that open a screen of their own rather than acting on what
+    /// is on screen — they need no focused value and are never greyed out.
+    @Environment(\.openWindow) private var openWindow
 
     var body: some Commands {
         newItemCommands
@@ -65,9 +68,9 @@ struct MealPlanCommands: Commands {
             .disabled(library?.importRecipes == nil)
 
             Button {
-                dish?.exportRecipe()
+                dish?.shareRecipe()
             } label: {
-                Label(String(localized: "Export recipe"), systemImage: "square.and.arrow.up")
+                Label(String(localized: "Share recipe…"), systemImage: "square.and.arrow.up")
             }
             .keyboardShortcut("e", modifiers: [.option, .command])
             .disabled(dish == nil)
@@ -290,6 +293,12 @@ struct MealPlanCommands: Commands {
             .keyboardShortcut("d", modifiers: .command)
             .disabled(dish == nil)
 
+            Button {
+                openWindow(value: DetailWindowRoute.discoverRecipes)
+            } label: {
+                Label(String(localized: "Discover recipes"), systemImage: "newspaper")
+            }
+
             Divider()
 
             Button {
@@ -491,7 +500,7 @@ struct DishCommands {
     var plan: @MainActor () -> Void
     var edit: @MainActor () -> Void
     var translate: @MainActor () -> Void
-    var exportRecipe: @MainActor () -> Void
+    var shareRecipe: @MainActor () -> Void
     var delete: @MainActor () -> Void
     /// Nil when there's nothing to cook from yet.
     var cook: (@MainActor () -> Void)?

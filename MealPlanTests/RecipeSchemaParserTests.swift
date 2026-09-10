@@ -176,6 +176,21 @@ struct RecipeSchemaParserTests {
         #expect(recipe?.needsReview == true)
     }
 
+    @Test func genericFallbackIgnoresMultilineWordPressStyleNoise() {
+        let html = """
+        <html><head><title>Personal report</title>
+        <style>
+          .recipe-instructions { --wp--preset--spacing--20: 20px; }
+          #sourceURL=ugb-style-css-nodep-inline-css
+        </style></head><body>
+          <form><div class="recipe-instructions">Thank you for signing up</div></form>
+          <article><p>This is a personal experience report.</p></article>
+        </body></html>
+        """
+
+        #expect(parser.parseGenericHTML(html: html, sourceURL: url) == nil)
+    }
+
     // MARK: - Tags
 
     @Test func keywordsAndCategoriesBecomeTags() {

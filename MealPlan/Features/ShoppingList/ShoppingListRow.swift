@@ -48,7 +48,7 @@ struct ShoppingListRow: View {
                 ? String(localized: "Checked off")
                 : String(localized: "Not checked off"))
             .accessibilityAddTraits(item.isChecked ? .isSelected : [])
-            .accessibilityHint(String(localized: "Double tap to check off"))
+            .accessibilityHint(InteractionWording.checkOffHint)
 
             if isStaple {
                 Image(systemName: "shippingbox")

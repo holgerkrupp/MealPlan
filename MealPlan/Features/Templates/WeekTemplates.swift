@@ -112,6 +112,7 @@ struct SaveTemplateSheet: View {
                     )
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(String(localized: "Save as template"))
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
@@ -208,7 +209,7 @@ struct ApplyTemplateSheet: View {
             }
         }
         .presentationDetents([.medium, .large])
-        .sheet(isPresented: $showingPaywall) {
+        .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }

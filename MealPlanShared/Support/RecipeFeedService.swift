@@ -133,7 +133,7 @@ enum RecipeFeedService {
 
     private static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) async throws {
         var existing = Dictionary(uniqueKeysWithValues: (feed.items ?? []).map { ($0.stableID, $0) })
-        for article in parsed.articles.prefix(100) {
+        for article in parsed.articles.prefix(100) where RecipeArticleClassifier.isLikelyRecipe(article) {
             let item = existing.removeValue(forKey: article.id)
                 ?? RecipeFeedItem(stableID: article.id, title: article.title, url: article.url)
             if item.feed == nil { context.insert(item) }

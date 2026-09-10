@@ -105,7 +105,7 @@ struct MealPlannerStrip: View {
                 ? String(localized: "Moves this meal here")
                 : String(localized: "Plans this dish here")
         )
-        .sheet(isPresented: $showingPaywall) {
+        .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }

@@ -50,11 +50,11 @@ struct DishVariantGroupView: View {
                         #if os(macOS)
                         DishGridCell(dish: dish)
                             .onTapGesture {
-                                openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                                openWindow(value: DetailWindowRoute.recipe(dish.uuid))
                             }
                             .accessibilityAddTraits(.isButton)
                             .accessibilityAction {
-                                openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                                openWindow(value: DetailWindowRoute.recipe(dish.uuid))
                             }
                             .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
                             .contextMenu {
@@ -69,6 +69,7 @@ struct DishVariantGroupView: View {
                         .buttonStyle(.plain)
                         .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
                         .contextMenu {
+                            OpenInNewWindowButton(route: .recipe(dish.uuid))
                             Button(String(localized: "Remove from group"), systemImage: "minus.circle") {
                                 removeFromGroup(dish)
                             }

@@ -54,6 +54,7 @@ struct MealsSettingsView: View {
                 }
             }
         }
+        .formStyle(.grouped)
         .navigationTitle(String(localized: "Meals"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)

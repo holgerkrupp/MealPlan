@@ -56,8 +56,8 @@ struct HouseholdRecordSyncTests {
         let secondID = second.persistentModelID
         let loader = DishPhotoDataActor(modelContainer: container)
 
-        #expect(await loader.data(for: firstID) == Data([1, 2, 3]))
-        #expect(await loader.data(for: secondID) == Data([7, 8, 9]))
+        #expect(await loader.data(for: firstID, uuid: duplicateUUID) == Data([1, 2, 3]))
+        #expect(await loader.data(for: secondID, uuid: duplicateUUID) == Data([7, 8, 9]))
     }
 
     @Test func stableIdentityRoundTripsFromCloudKitName() throws {

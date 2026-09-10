@@ -8,12 +8,12 @@ struct DishLibraryView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
+    /// The freshly created dish whose editor is open. Setting it is what
+    /// opens the editor — in a window where the platform has them, else a sheet.
     @State private var newDish: Dish?
-    @State private var editingNewDish = false
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
     @State private var showingFilePicker = false
-    @State private var showingScanner = false
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
     /// Driven by the menu bar's Find command so ⌘F lands in the search field.
@@ -74,8 +74,12 @@ struct DishLibraryView: View {
         @Bindable var appState = appState
 
         ScrollView {
-            TagFilterStrip(filter: $appState.dishFilter, tags: popularTags)
-                .padding(.top, 8)
+            TagFilterStrip(
+                filter: $appState.dishFilter,
+                tags: popularTags,
+                horizontalPadding: MacLayout.gutter
+            )
+            .padding(.top, 8)
 
             SeasonalSuggestionsStrip()
 
@@ -103,7 +107,7 @@ struct DishLibraryView: View {
                         }
                     }
                 }
-                .padding()
+                .padding(MacLayout.gutter)
             }
         }
         .navigationTitle(AppSection.dishes.title)
@@ -116,12 +120,8 @@ struct DishLibraryView: View {
         )
         .focusedSceneValue(\.dishLibraryCommands, libraryCommands)
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                NavigationLink {
-                    RecipeDiscoveryView()
-                } label: {
-                    Label(String(localized: "Discover recipes"), systemImage: "newspaper")
-                }
+            ToolbarItem(placement: .navigation) {
+                DiscoverRecipesButton()
             }
             if !appState.isGuest {
                 ToolbarItem(placement: .primaryAction) {
@@ -138,11 +138,6 @@ struct DishLibraryView: View {
             }
             if !appState.isGuest {
                 ToolbarItem(placement: .secondaryAction) {
-                    Button(String(localized: "Scan a recipe"), systemImage: "camera.viewfinder") {
-                        showingScanner = true
-                    }
-                }
-                ToolbarItem(placement: .secondaryAction) {
                     Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
                         showingFilePicker = true
                     }
@@ -155,22 +150,15 @@ struct DishLibraryView: View {
                 .disabled(allDishes.isEmpty)
             }
         }
-        .sheet(isPresented: $editingNewDish) {
-            if let newDish {
-                NavigationStack {
-                    DishEditorView(dish: newDish, isNew: true)
-                }
-                .dismissesOnOutsideClick()
-            }
-        }
-        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
-        .sheet(item: $importingFile) { ImportRecipesSheet(fileURL: $0.url).dismissesOnOutsideClick() }
-        .sheet(isPresented: $showingScanner) {
-            ScanRecipeSheet { dish in
-                newDish = dish
-                editingNewDish = true
+        .detailPresentation(item: $newDish, route: { .newRecipe($0.uuid) }) { dish in
+            NavigationStack {
+                DishEditorView(dish: dish, isNew: true)
             }
             .dismissesOnOutsideClick()
+        }
+        .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
+        .detailPresentation(item: $importingFile, route: { .importRecipes($0.url) }) {
+            ImportRecipesSheet(fileURL: $0.url).dismissesOnOutsideClick()
         }
         .fileImporter(
             isPresented: $showingFilePicker,
@@ -213,7 +201,6 @@ struct DishLibraryView: View {
                 createdByName: appState.currentMemberName, context: context
             )
             newDish = dish
-            editingNewDish = true
         } else {
             let dish = Dish(name: request.name ?? "")
             dish.household = appState.currentHousehold
@@ -221,7 +208,6 @@ struct DishLibraryView: View {
             dish.refreshAutoGlyph()
             context.insert(dish)
             newDish = dish
-            editingNewDish = true
         }
     }
 
@@ -303,7 +289,6 @@ struct DishLibraryView: View {
         dish.refreshAutoGlyph()
         context.insert(dish)
         newDish = dish
-        editingNewDish = true
     }
 }
 
@@ -317,4 +302,26 @@ struct ImportableRecipeFile: Identifiable {
     NavigationStack { DishLibraryView() }
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
+}
+
+/// Opens the reading list of subscribed sites. It is a place of its own, not a
+/// step inside the library, so on the Mac and on a multi-window iPad it gets a
+/// window; elsewhere it pushes onto the library's stack.
+@MainActor
+struct DiscoverRecipesButton: View {
+    @Environment(\.openWindow) private var openWindow
+
+    var body: some View {
+        if DetailWindowSupport.prefersWindowsOverSheets {
+            Button(String(localized: "Discover recipes"), systemImage: "newspaper") {
+                openWindow(value: DetailWindowRoute.discoverRecipes)
+            }
+        } else {
+            NavigationLink {
+                RecipeDiscoveryView()
+            } label: {
+                Label(String(localized: "Discover recipes"), systemImage: "newspaper")
+            }
+        }
+    }
 }

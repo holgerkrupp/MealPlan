@@ -12,9 +12,7 @@ struct EntryQuickActionsSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    #if os(macOS)
     @Environment(\.openWindow) private var openWindow
-    #endif
 
     @State private var date: Date = .now
     @State private var mealKey: String = ""
@@ -28,20 +26,23 @@ struct EntryQuickActionsSheet: View {
             Form {
                 Section {
                     if let dish = entry.dish {
-                        #if os(macOS)
-                        Button {
-                            openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
-                        } label: {
-                            dishHeader(dish)
+                        // This screen is itself a window on the Mac, so the
+                        // recipe opens beside it rather than pushing the plan
+                        // out of the way.
+                        if DetailWindowSupport.prefersWindowsOverSheets {
+                            Button {
+                                openWindow(value: DetailWindowRoute.recipe(dish.uuid))
+                            } label: {
+                                dishHeader(dish)
+                            }
+                            .buttonStyle(.plain)
+                        } else {
+                            NavigationLink {
+                                DishDetailView(dish: dish)
+                            } label: {
+                                dishHeader(dish)
+                            }
                         }
-                        .buttonStyle(.plain)
-                        #else
-                        NavigationLink {
-                            DishDetailView(dish: dish)
-                        } label: {
-                            dishHeader(dish)
-                        }
-                        #endif
                     } else if entry.isEatingOut {
                         eatingOutHeader
                     }
@@ -57,7 +58,7 @@ struct EntryQuickActionsSheet: View {
                 } header: {
                     Text(String(localized: "When"))
                 } footer: {
-                    Text(String(localized: "Tap a slot to move this meal. The bottom row makes it an extra on that day, outside your usual meals."))
+                    Text(InteractionWording.pickASlotToMove)
                 }
 
                 Section(String(localized: "For this meal")) {
@@ -114,6 +115,7 @@ struct EntryQuickActionsSheet: View {
                     }
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(entry.displayTitle)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)

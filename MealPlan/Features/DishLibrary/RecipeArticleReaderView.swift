@@ -113,7 +113,7 @@ struct RecipeArticleReaderView: View {
             }
         }
         .task { await load() }
-        .sheet(item: $planningDish) { dish in
+        .detailPresentation(item: $planningDish, route: { .planRecipe($0.uuid) }) { dish in
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
@@ -160,6 +160,9 @@ struct RecipeArticleReaderView: View {
         VStack(alignment: .leading, spacing: 6) {
             Text(article.title).font(.largeTitle.bold())
             HStack(spacing: 8) {
+                if let sourceName = article.sourceName {
+                    Text(sourceName)
+                }
                 if let author = article.author {
                     Text(author)
                 }
@@ -246,7 +249,7 @@ struct RecipeArticleReaderView: View {
             // The page is parsed now rather than on the way out, so the reader
             // can show the recipe itself instead of the prose around it.
             if let parsed = try? await RecipeSchemaParser().importRecipe(fromHTML: loaded, sourceURL: url),
-               !parsed.ingredientLines.isEmpty || !(parsed.instructions ?? "").isEmpty {
+               isUsableRecipe(parsed) {
                 recipe = parsed
             } else {
                 noRecipeFound = true
@@ -255,6 +258,18 @@ struct RecipeArticleReaderView: View {
             errorMessage = error.localizedDescription
         }
         loading = false
+    }
+
+    /// Heuristic HTML is allowed to supplement ingredients, but instructions
+    /// alone are too easy to confuse with CSS, signup forms or page chrome.
+    /// Structured recipes (`needsReview == false`) remain trusted when a site
+    /// legitimately publishes steps without an ingredient list.
+    private func isUsableRecipe(_ recipe: ImportedRecipe) -> Bool {
+        if !recipe.ingredientLines.isEmpty { return true }
+        let hasInstructions = recipe.instructions?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty == false
+        return !recipe.needsReview && hasInstructions
     }
 
     /// Opening an article pays for the page anyway, so the card it came from

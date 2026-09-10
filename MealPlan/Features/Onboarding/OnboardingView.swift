@@ -35,7 +35,7 @@ struct OnboardingView: View {
                 systemImage: "calendar",
                 tint: .blue,
                 bullets: [
-                    String(localized: "Tap a meal to pick a dish, or drag a dish over from the list beside the plan."),
+                    InteractionWording.fillAMealCard,
                     String(localized: "Set up regular meals like Taco Tuesday — they plan themselves weeks ahead."),
                     String(localized: "Save a good week as a template and reuse it when you run out of ideas."),
                     String(localized: "Rename, add, or reorder your meals in Settings.")

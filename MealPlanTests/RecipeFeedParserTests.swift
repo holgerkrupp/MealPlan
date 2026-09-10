@@ -81,6 +81,22 @@ struct RecipeFeedParserTests {
         #expect(!text.contains("bad"))
     }
 
+    @Test func multilineStylesCannotBecomeRecipeInstructions() {
+        let html = """
+        <style>
+        .recipe-instructions { --wp--preset--spacing--20: 20px; }
+        #sourceURL=ugb-style-css-nodep-inline-css
+        </style>
+        <section class="recipe-instructions"><ol><li>Stir the soup.</li></ol></section>
+        """
+
+        let cleaned = html.removingScriptsAndStyles
+
+        #expect(!cleaned.contains("--wp--preset"))
+        #expect(!cleaned.contains("sourceURL"))
+        #expect(cleaned.contains("Stir the soup."))
+    }
+
     // MARK: - Article images
 
     @Test func readsEnclosureImage() throws {

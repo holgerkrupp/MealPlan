@@ -9,11 +9,19 @@
 /* Begin PBXBuildFile section */
 		483FD9E0304AECEB000857EF /* SFSymbolSelector in Frameworks */ = {isa = PBXBuildFile; productRef = 483FD9DF304AECEB000857EF /* SFSymbolSelector */; };
 		489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */ = {isa = PBXBuildFile; productRef = 489FB59E3044985000B8D666 /* ESADesignKit */; };
+		BB000000000000000000000C /* MealPlanWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* MealPlanWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DD000000000000000000000C /* MealPlanWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MealPlanWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EE000000000000000000000C /* MealPlanShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000008 /* MealPlanShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		BB000000000000000000000B /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 000000000000000000000000 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = BB0000000000000000000001;
+			remoteInfo = MealPlanWatch;
+		};
 		DD000000000000000000000B /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 000000000000000000000000 /* Project object */;
@@ -48,10 +56,20 @@
 			);
 			name = "Embed App Extensions";
 		};
+		CC0000000000000000000002 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolder = Product;
+			files = (
+				BB000000000000000000000C /* MealPlanWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* MealPlan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MealPlan.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		BB0000000000000000000008 /* MealPlanWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MealPlanWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD0000000000000000000008 /* MealPlanWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MealPlanWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE0000000000000000000008 /* MealPlanShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MealPlanShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		FF0000000000000000000008 /* MealPlanTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = MealPlanTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -95,6 +113,16 @@
 			path = MealPlanShared;
 			sourceTree = "<group>";
 		};
+		AA00000000000000000000B0 /* MealPlanWatchShared */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MealPlanWatchShared;
+			sourceTree = "<group>";
+		};
+		BB0000000000000000000009 /* MealPlanWatch */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = MealPlanWatch;
+			sourceTree = "<group>";
+		};
 		DD0000000000000000000009 /* MealPlanWidgets */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
@@ -126,6 +154,11 @@
 				489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */,
 			);
 		};
+		BB0000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			files = (
+			);
+		};
 		DD0000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
@@ -149,6 +182,8 @@
 			children = (
 				000000000000000000000010 /* MealPlan */,
 				AA00000000000000000000A0 /* MealPlanShared */,
+				AA00000000000000000000B0 /* MealPlanWatchShared */,
+				BB0000000000000000000009 /* MealPlanWatch */,
 				EE0000000000000000000009 /* MealPlanShareExtension */,
 				DD0000000000000000000009 /* MealPlanWidgets */,
 				FF0000000000000000000009 /* MealPlanTests */,
@@ -160,6 +195,7 @@
 			isa = PBXGroup;
 			children = (
 				000000000000000000000120 /* MealPlan.app */,
+				BB0000000000000000000008 /* MealPlanWatch.app */,
 				FF0000000000000000000008 /* MealPlanTests.xctest */,
 				EE0000000000000000000008 /* MealPlanShareExtension.appex */,
 				DD0000000000000000000008 /* MealPlanWidgets.appex */,
@@ -178,16 +214,19 @@
 				000000000000000130000000 /* Frameworks */,
 				000000000000000140000000 /* Resources */,
 				CC0000000000000000000001 /* Embed App Extensions */,
+				CC0000000000000000000002 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				EE000000000000000000000A /* PBXTargetDependency */,
 				DD000000000000000000000A /* PBXTargetDependency */,
+				BB000000000000000000000A /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				000000000000000000000010 /* MealPlan */,
 				AA00000000000000000000A0 /* MealPlanShared */,
+				AA00000000000000000000B0 /* MealPlanWatchShared */,
 			);
 			name = MealPlan;
 			packageProductDependencies = (
@@ -196,6 +235,25 @@
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* MealPlan.app */;
+			productType = "com.apple.product-type.application";
+		};
+		BB0000000000000000000001 /* MealPlanWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = BB0000000000000000000005 /* Build configuration list for PBXNativeTarget "MealPlanWatch" */;
+			buildPhases = (
+				BB0000000000000000000002 /* Sources */,
+				BB0000000000000000000003 /* Frameworks */,
+				BB0000000000000000000004 /* Resources */,
+			);
+			buildRules = (
+			);
+			fileSystemSynchronizedGroups = (
+				AA00000000000000000000B0 /* MealPlanWatchShared */,
+				BB0000000000000000000009 /* MealPlanWatch */,
+			);
+			name = MealPlanWatch;
+			productName = MealPlanWatch;
+			productReference = BB0000000000000000000008 /* MealPlanWatch.app */;
 			productType = "com.apple.product-type.application";
 		};
 		DD0000000000000000000001 /* MealPlanWidgets */ = {
@@ -270,6 +328,9 @@
 					000000000000000100000000 = {
 						CreatedOnToolsVersion = 26.3;
 					};
+					BB0000000000000000000001 = {
+						CreatedOnToolsVersion = 26.3;
+					};
 					DD0000000000000000000001 = {
 						CreatedOnToolsVersion = 26.3;
 					};
@@ -302,6 +363,7 @@
 			projectRoot = "";
 			targets = (
 				000000000000000100000000 /* MealPlan */,
+				BB0000000000000000000001 /* MealPlanWatch */,
 				EE0000000000000000000001 /* MealPlanShareExtension */,
 				FF0000000000000000000001 /* MealPlanTests */,
 				DD0000000000000000000001 /* MealPlanWidgets */,
@@ -311,6 +373,11 @@
 
 /* Begin PBXResourcesBuildPhase section */
 		000000000000000140000000 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			files = (
+			);
+		};
+		BB0000000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
 			);
@@ -338,6 +405,11 @@
 			files = (
 			);
 		};
+		BB0000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			files = (
+			);
+		};
 		DD0000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			files = (
@@ -356,6 +428,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		BB000000000000000000000A /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			platformFilter = ios;
+			target = BB0000000000000000000001 /* MealPlanWatch */;
+			targetProxy = BB000000000000000000000B /* PBXContainerItemProxy */;
+		};
 		DD000000000000000000000A /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			platformFilter = ios;
@@ -609,6 +687,70 @@
 			};
 			name = Release;
 		};
+		BB0000000000000000000006 /* Debug configuration for PBXNativeTarget "MealPlanWatch" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_TEAM = 46D3VYP253;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MealPlan;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = de.holgerkrupp.mealplan;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 2026.1;
+				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		BB0000000000000000000007 /* Release configuration for PBXNativeTarget "MealPlanWatch" */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 9;
+				DEVELOPMENT_TEAM = 46D3VYP253;
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = MealPlan;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
+				INFOPLIST_KEY_WKApplication = YES;
+				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = de.holgerkrupp.mealplan;
+				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
+				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
+				MARKETING_VERSION = 2026.1;
+				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.watchkitapp;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "watchos watchsimulator";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 6.0;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
 		DD0000000000000000000006 /* Debug configuration for PBXNativeTarget "MealPlanWidgets" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -796,6 +938,14 @@
 			buildConfigurations = (
 				000000000000000111000000 /* Debug configuration for PBXNativeTarget "MealPlan" */,
 				000000000000000112000000 /* Release configuration for PBXNativeTarget "MealPlan" */,
+			);
+			defaultConfigurationName = Release;
+		};
+		BB0000000000000000000005 /* Build configuration list for PBXNativeTarget "MealPlanWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				BB0000000000000000000006 /* Debug configuration for PBXNativeTarget "MealPlanWatch" */,
+				BB0000000000000000000007 /* Release configuration for PBXNativeTarget "MealPlanWatch" */,
 			);
 			defaultConfigurationName = Release;
 		};

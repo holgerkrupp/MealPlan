@@ -5,14 +5,17 @@ import SwiftUI
 /// has not subscribed to. Keeping this a plain value is what lets the card and
 /// the reader serve both cases without knowing about SwiftData.
 struct RecipeArticleContent: Identifiable, Hashable, Sendable {
-    /// The feed's own stable id, which is also the key read state is kept under.
+    /// Unique across sources so a single mixed grid can safely contain feeds
+    /// that happen to use the same article id.
     let id: String
+    let readStateID: String
     var title: String
     var articleURL: URL?
     var imageURL: URL?
     var author: String?
     var summary: String?
     var publishedAt: Date?
+    var sourceName: String?
     /// False once the article's own page has already been searched for a photo,
     /// so a page that has none is not fetched again on every scroll.
     var mayLookUpImage: Bool = true
@@ -20,32 +23,38 @@ struct RecipeArticleContent: Identifiable, Hashable, Sendable {
     /// Read state lives in the iCloud key-value store, which is main-actor
     /// bound, so this is asked for on the main actor by the views that draw it.
     @MainActor
-    var isRead: Bool { RecipeFeedReadState.isRead(id) }
+    var isRead: Bool { RecipeFeedReadState.isRead(readStateID) }
 }
 
 extension RecipeArticleContent {
     /// An article belonging to a subscribed feed.
     @MainActor
-    init(_ item: RecipeFeedItem) {
-        id = item.stableID
+    init(_ item: RecipeFeedItem, sourceName: String? = nil, sourceID: String? = nil) {
+        let resolvedSourceID = sourceID ?? item.feed.map { "feed:\($0.uuid.uuidString)" } ?? "feed"
+        id = "\(resolvedSourceID):\(item.stableID)"
+        readStateID = item.stableID
         title = item.title
         articleURL = item.url
         imageURL = item.imageURL
         author = item.author
         summary = item.summary
         publishedAt = item.publishedAt
+        self.sourceName = sourceName ?? item.feed?.title
         mayLookUpImage = item.imageLookupAt == nil
     }
 
     /// An article from a feed that has only been fetched to look at.
-    init(_ article: ParsedFeedArticle) {
-        id = article.id
+    init(_ article: ParsedFeedArticle, sourceName: String? = nil, sourceID: String? = nil) {
+        let resolvedSourceID = sourceID ?? "preview"
+        id = "\(resolvedSourceID):\(article.id)"
+        readStateID = id
         title = article.title
         articleURL = article.url
         imageURL = article.imageURL
         author = article.author
         summary = article.summary
         publishedAt = article.publishedAt
+        self.sourceName = sourceName
     }
 }
 
@@ -115,13 +124,21 @@ struct RecipeArticleCard: View {
     }
 
     private var title: some View {
-        Text(article.title)
-            .font(.headline)
-            .multilineTextAlignment(.leading)
-            .foregroundStyle(.white)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        VStack(alignment: .leading, spacing: 2) {
+            if let sourceName = article.sourceName {
+                Text(sourceName)
+                    .font(.caption.weight(.semibold))
+                    .lineLimit(1)
+                    .opacity(0.82)
+            }
+            Text(article.title)
+                .font(.headline)
+                .multilineTextAlignment(.leading)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
     }
 
     private var cellShape: RoundedRectangle {

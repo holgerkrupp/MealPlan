@@ -687,18 +687,17 @@ extension String {
 
     /// Script and style contents often contain strings such as "ingredient"
     /// and "step". Excluding them before the generic fallback avoids treating
-    /// CSS or embedded application state as recipe content.
+    /// CSS, embedded application state or signup chrome as recipe content.
     var removingScriptsAndStyles: String {
-        let withoutScripts = replacingOccurrences(
-            of: #"<script[^>]*>.*?</script>"#,
-            with: " ",
-            options: [.regularExpression, .caseInsensitive]
-        )
-        return withoutScripts.replacingOccurrences(
-            of: #"<style[^>]*>.*?</style>"#,
-            with: " ",
-            options: [.regularExpression, .caseInsensitive]
-        )
+        var result = self
+        for element in ["script", "style", "form", "nav", "footer", "aside", "template", "noscript"] {
+            result = result.replacingOccurrences(
+                of: "<\(element)\\b[^>]*>[\\s\\S]*?</\(element)>",
+                with: " ",
+                options: [.regularExpression, .caseInsensitive]
+            )
+        }
+        return result
     }
 
     var nilIfEmpty: String? { isEmpty ? nil : self }

@@ -189,6 +189,7 @@ private actor DishPhotoDecoder {
 
 struct CachedDishPhoto: View {
     private let imageID: PersistentIdentifier?
+    private let imageUUID: UUID?
     private let rawData: Data?
     let cacheKey: String
     let maxPixelSize: CGFloat
@@ -204,12 +205,14 @@ struct CachedDishPhoto: View {
     init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
         if let persistentID = DishPhotoLoading.persistentID(for: image) {
             self.imageID = persistentID
+            self.imageUUID = image.uuid
             self.rawData = nil
         } else {
             // Image Playground and PhotosPicker insert a temporary model that
             // is not visible to another ModelContext until the editor saves.
             // Its bytes are already in memory and must stay in this context.
             self.imageID = nil
+            self.imageUUID = nil
             self.rawData = image.data
         }
         self.cacheKey = cacheKey
@@ -218,6 +221,7 @@ struct CachedDishPhoto: View {
 
     init(data: Data, cacheKey: String, maxPixelSize: CGFloat) {
         self.imageID = nil
+        self.imageUUID = nil
         self.rawData = data
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
@@ -244,9 +248,9 @@ struct CachedDishPhoto: View {
                 return
             }
             let sourceData: Data?
-            if let imageID {
+            if let imageID, let imageUUID {
                 let loader = DishPhotoDataActor(modelContainer: modelContext.container)
-                sourceData = await loader.data(for: imageID)
+                sourceData = await loader.data(for: imageID, uuid: imageUUID)
             } else {
                 sourceData = rawData
             }
@@ -277,8 +281,24 @@ enum DishPhotoLoading {
 /// main-actor task.
 @ModelActor
 actor DishPhotoDataActor {
-    func data(for imageID: PersistentIdentifier) -> Data? {
-        (modelContext.model(for: imageID) as? DishImage)?.data
+    func data(for imageID: PersistentIdentifier, uuid: UUID) -> Data? {
+        // `model(for:)` traps when a thumbnail outlives a deleted/replaced
+        // image. A drag preview makes that race especially easy to hit because
+        // SwiftUI creates and tears down an additional thumbnail while the
+        // calendar save is being propagated.
+        if let registered: DishImage = modelContext.registeredModel(for: imageID) {
+            return registered.data
+        }
+
+        // Persistent IDs are the precise identity, while UUID is the safe
+        // store query key. Check both so duplicate UUIDs cannot return the
+        // wrong image, and let a missing row simply produce nil.
+        let descriptor = FetchDescriptor<DishImage>(
+            predicate: #Predicate<DishImage> { $0.uuid == uuid }
+        )
+        return (try? modelContext.fetch(descriptor))?
+            .first(where: { $0.persistentModelID == imageID })?
+            .data
     }
 }
 

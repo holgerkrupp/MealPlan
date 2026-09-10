@@ -31,7 +31,7 @@ struct SeasonalSuggestionsStrip: View {
                 Label(String(localized: "In season now"), systemImage: "leaf")
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal)
+                    .padding(.horizontal, MacLayout.gutter)
 
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: 12) {
@@ -55,11 +55,11 @@ struct SeasonalSuggestionsStrip: View {
                             .buttonStyle(.plain)
                         }
                     }
-                    .padding(.horizontal)
+                    .padding(.horizontal, MacLayout.gutter)
                 }
             }
             .padding(.top, 8)
-            .sheet(item: $planning) { dish in
+            .detailPresentation(item: $planning, route: { .planRecipe($0.uuid) }) { dish in
                 NavigationStack { PlanDishSheet(dish: dish, defaultDate: appState.selectedDate) }
                     .presentationDetents([.medium])
                     .dismissesOnOutsideClick()

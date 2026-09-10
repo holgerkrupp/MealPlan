@@ -89,7 +89,7 @@ struct WeekSectionView: View {
                 Text(weekHeader)
                     .font(.headline)
                     .foregroundStyle(.secondary)
-                    .padding(.horizontal)
+                    .padding(.horizontal, MacLayout.gutter)
             }
 
             ForEach(days, id: \.self) { day in
@@ -106,7 +106,7 @@ struct WeekSectionView: View {
                         .padding(.vertical, 9)
                     }
                     .buttonStyle(.bordered)
-                    .padding(.horizontal)
+                    .padding(.horizontal, MacLayout.gutter)
                     .accessibilityHint(String(localized: "Unlock to plan this day and later dates."))
                 }
                 DayCard(
@@ -187,7 +187,7 @@ struct WeekSectionView: View {
             guard !Task.isCancelled else { return }
             nutritionSummary = WeekNutritionSummary(entries: entries)
         }
-        .sheet(isPresented: $showingPaywall) {
+        .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
@@ -201,7 +201,7 @@ struct WeekSectionView: View {
             )
             .dismissesOnOutsideClick()
         }
-        .sheet(item: $newDishToEdit) { dish in
+        .detailPresentation(item: $newDishToEdit, route: { .newRecipe($0.uuid) }) { dish in
             NavigationStack { DishEditorView(dish: dish, isNew: true) }
                 .dismissesOnOutsideClick()
         }
@@ -487,7 +487,7 @@ private struct DayCard<Content: View>: View {
                     lineWidth: isDropTargeted ? 3 : 2
                 )
         )
-        .padding(.horizontal)
+        .padding(.horizontal, MacLayout.gutter)
     }
 }
 

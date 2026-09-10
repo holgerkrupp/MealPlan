@@ -86,14 +86,19 @@ struct RootView: View {
         } message: {
             Text(appState.importNotice ?? "")
         }
-        .sheet(isPresented: $showOnboarding, onDismiss: { didCompleteOnboarding = true }) {
+        .detailPresentation(isPresented: $showOnboarding, route: .gettingStarted) {
             OnboardingView()
                 .dismissesOnOutsideClick()
                 #if os(iOS)
                 .interactiveDismissDisabled()
                 #endif
         }
-        .sheet(item: $rootSheet) { sheet in
+        .onChange(of: showOnboarding) { _, showing in
+            // A window carries the tour on the Mac, so nothing comes back to
+            // set this the way a sheet's `onDismiss` would.
+            if !showing { didCompleteOnboarding = true }
+        }
+        .detailPresentation(item: $rootSheet, route: \.route) { sheet in
             NavigationStack {
                 sheet.content
                     .toolbar {
@@ -102,9 +107,6 @@ struct RootView: View {
                         }
                     }
             }
-            #if os(macOS)
-            .frame(minWidth: 520, minHeight: 460)
-            #endif
             .dismissesOnOutsideClick()
         }
         .task { await evaluateOnboarding() }
@@ -455,6 +457,15 @@ enum RootSheet: String, Identifiable {
     case regularMeals, pantryStaples, dataTransfer
 
     var id: String { rawValue }
+
+    /// The window this screen gets where the platform has windows.
+    var route: DetailWindowRoute {
+        switch self {
+        case .regularMeals: .regularMeals
+        case .pantryStaples: .pantryStaples
+        case .dataTransfer: .dataTransfer
+        }
+    }
 
     @MainActor
     @ViewBuilder

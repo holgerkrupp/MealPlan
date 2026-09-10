@@ -89,7 +89,7 @@ struct ShareRootView: View {
                 Toggle(String(localized: "Also plan it"), isOn: $plan.animation(.snappy))
                 if plan {
                     MealPlannerStripCore(
-                        slots: meals.map { MealStripSlot(key: $0.key, name: $0.name, symbolName: $0.symbol) },
+                        slots: stripSlots,
                         plannedKeys: { plannedByDay[$0.dayID] ?? [] },
                         selectedDate: $date,
                         selectedMealKey: $mealKey,
@@ -109,10 +109,23 @@ struct ShareRootView: View {
                 }
             } footer: {
                 if plan {
-                    Text(String(localized: "Tap a slot to choose the day and meal."))
+                    Text(String(localized: "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day, without using one of your meals."))
                 }
             }
         }
+    }
+
+    /// The household's meals and, below them, the extras row — the same
+    /// complete set of slots the app's plan stripe offers, so a shared recipe
+    /// can land on a day without using up one of the meals.
+    private var stripSlots: [MealStripSlot] {
+        meals.map { MealStripSlot(key: $0.key, name: $0.name, symbolName: $0.symbol) }
+            + [MealStripSlot(
+                key: MealType.extraKey,
+                name: MealType.extraName,
+                symbolName: MealType.extraSymbolName,
+                countsTowardCompletion: false
+            )]
     }
 
     // MARK: - Work

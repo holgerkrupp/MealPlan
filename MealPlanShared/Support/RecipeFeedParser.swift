@@ -19,6 +19,9 @@ struct ParsedFeedArticle: Equatable, Sendable {
     /// `media:content`, `media:thumbnail` or the first `<img>` in the entry
     /// body turns up first.
     var imageURL: URL?
+    /// Provider taxonomy used while browsing. Feed subscriptions intentionally
+    /// do not persist this presentation-only metadata.
+    var categories: [String] = []
 }
 
 enum RecipeFeedParserError: LocalizedError {
@@ -81,7 +84,8 @@ enum RecipeFeedParser {
                         ?? item.attachments?.first(where: { $0.mimeType?.hasPrefix("image/") == true })?.url,
                     inHTML: item.contentHTML,
                     relativeTo: url
-                )
+                ),
+                categories: item.tags ?? []
             )
         }
         return ParsedRecipeFeed(
@@ -166,9 +170,10 @@ enum RecipeFeedParser {
         var image: String?
         var bannerImage: String?
         var attachments: [JSONAttachment]?
+        var tags: [String]?
 
         enum CodingKeys: String, CodingKey {
-            case id, url, title, summary, authors, image, attachments
+            case id, url, title, summary, authors, image, attachments, tags
             case bannerImage = "banner_image"
             case externalURL = "external_url"
             case contentHTML = "content_html"
@@ -201,6 +206,7 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
     private var insideItem = false
     private var currentText = ""
     private var item: [String: String] = [:]
+    private var itemCategories: [String] = []
 
     init(sourceURL: URL) {
         self.sourceURL = sourceURL
@@ -219,6 +225,7 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
         if element == "item" || element == "entry" {
             insideItem = true
             item = [:]
+            itemCategories = []
         }
         if insideItem, let key = Self.imageKey(for: element, attributes: attributeDict),
            let source = attributeDict["url"] ?? attributeDict["href"], item[key] == nil {
@@ -253,6 +260,11 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
         }
         guard !text.isEmpty else { return }
         if insideItem {
+            if element == "category" {
+                itemCategories.append(text)
+                currentText = ""
+                return
+            }
             switch element {
             case "title", "link", "guid", "id", "author", "name", "description", "summary", "content", "content:encoded", "pubdate", "published", "updated":
                 if item[element] == nil { item[element] = text }
@@ -302,7 +314,8 @@ private final class XMLFeedDelegate: NSObject, XMLParserDelegate {
                 item["image:enclosure"] ?? item["image:media"],
                 inHTML: body,
                 relativeTo: url
-            ) ?? RecipeFeedParser.imageURL(item["image:thumbnail"], inHTML: nil, relativeTo: url)
+            ) ?? RecipeFeedParser.imageURL(item["image:thumbnail"], inHTML: nil, relativeTo: url),
+            categories: itemCategories
         ))
     }
 }

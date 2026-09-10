@@ -51,6 +51,14 @@ struct MealPlanApp: App {
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
                         await calendarStore.start()
+                        #if os(iOS)
+                        // The watch shows a flattened copy of the plan and the
+                        // shopping list; from here on every save is pushed to
+                        // it. Nothing depends on the link working.
+                        PhoneWatchSyncService.shared.start(context: container.mainContext) {
+                            appState.shoppingRange.localizedName
+                        }
+                        #endif
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
@@ -104,9 +112,18 @@ struct MealPlanApp: App {
         #endif
         .commands { MealPlanCommands() }
         #if os(macOS)
-        WindowGroup("MealPlan", for: MacDetailWindowRoute.self) { $route in
+        .defaultSize(width: 1180, height: 820)
+        #endif
+
+        #if os(macOS) || os(iOS)
+        // Recipes, planning, subscribing and the rest of the auxiliary screens
+        // open here rather than in a sheet over the main window — on the Mac
+        // always, on an iPad whenever the system offers more than one scene.
+        // Everywhere else `detailPresentation` keeps its sheet and this group
+        // simply never has a window in it.
+        WindowGroup("MealPlan", for: DetailWindowRoute.self) { $route in
             if let route {
-                MacDetailWindow(route: route)
+                DetailWindow(route: route)
                     .environment(appState)
                     .environment(calendarStore)
                     .environment(purchaseManager)
@@ -114,10 +131,19 @@ struct MealPlanApp: App {
                     .environment(\.calendarEventWriter, calendarEventWriter)
             }
         }
-        .defaultSize(width: 720, height: 760)
+        .defaultSize(width: 760, height: 780)
         .modelContainer(container)
-        .commands { MealPlanCommands() }
+        // No `.commands` here on purpose: menus declared on a scene are
+        // app-wide, and declaring the same set twice puts a second copy of
+        // Plan / Dishes / Shopping list in the menu bar.
+        #if os(macOS)
+        // These windows are one screen each, not documents with a sidebar, so
+        // the toolbar sits in the title bar rather than under it.
+        .windowToolbarStyle(.unified)
+        #endif
+        #endif
 
+        #if os(macOS)
         Settings {
             // SettingsView sizes its own window: it is a sidebar of panes, the
             // shape people expect from a macOS Settings window.
@@ -129,6 +155,9 @@ struct MealPlanApp: App {
                 .environment(\.calendarEventWriter, calendarEventWriter)
                 .modelContainer(container)
         }
+        // `SettingsView` gives itself the fixed size a System Settings window
+        // has; without this the frame is a suggestion the window ignores.
+        .windowResizability(.contentSize)
         #endif
     }
 }

@@ -168,6 +168,7 @@ final class AppState {
             try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
         DishGlyphMaintenance.run(context: context)
+        BlankDishMaintenance.run(context: context)
         cloudBootstrapState = .ready
     }
 

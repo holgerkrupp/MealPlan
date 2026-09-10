@@ -18,9 +18,9 @@ struct AppLaunchContainerView<Content: View>: View {
     @State private var phase: Phase = .holding
 
     private enum Phase {
-        /// Showing the awning, waiting for the app to actually be on screen.
+        /// Showing the launch mark, waiting for the app to actually be on screen.
         case holding
-        /// The awning is on its way out.
+        /// The launch cover is fading away.
         case lifting
         /// Gone; the curtain is no longer in the hierarchy.
         case gone
@@ -137,7 +137,7 @@ private final class SteadyFrameWatcher {
 
 #endif
 
-// MARK: - The awning
+// MARK: - The launch mark
 
 /// The launch screen, and the animation that takes it away.
 ///
@@ -155,68 +155,26 @@ struct AnimatedLaunchView: View {
             let markWidth = LaunchTheme.markWidth(in: size)
 
             ZStack {
-                awning(in: size)
+                LaunchTheme.background
+                    .ignoresSafeArea()
 
                 Image("LaunchMark")
                     .resizable()
-                    .renderingMode(.template)
-                    .foregroundStyle(LaunchTheme.markTint)
                     .aspectRatio(contentMode: .fit)
                     .frame(width: markWidth, height: markWidth * LaunchTheme.markAspectRatio)
-                    // The mark clears out before the bands part, so it never
-                    // appears to float over the app underneath.
-                    .opacity(isFinishing ? 0 : 1)
-                    .scaleEffect(isFinishing ? 0.96 : 1)
+                    // Let the icon breathe as the matching background fades
+                    // away, while keeping Reduce Motion to a simple fade.
+                    .scaleEffect(isFinishing && !reduceMotion ? 1.06 : 1)
                     .animation(.easeOut(duration: LaunchTheme.Motion.markFade), value: isFinishing)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .opacity(isFinishing ? 0 : 1)
+            .animation(
+                reduceMotion ? .easeOut(duration: LaunchTheme.Motion.reducedFade) : .easeInOut(duration: LaunchTheme.Motion.markFade),
+                value: isFinishing
+            )
         }
-        // Deliberately no background: the bands are the only thing covering the
-        // app, so lifting them is what reveals it. They are sized to overlap
-        // rather than tile, which is what keeps a hairline from ever showing
-        // through while they are down.
-        //
-        // Reduce Motion gets a plain cross-fade instead of the lift.
-        .opacity(reduceMotion && isFinishing ? 0 : 1)
-        .animation(
-            reduceMotion ? .easeOut(duration: LaunchTheme.Motion.reducedFade) : nil,
-            value: isFinishing
-        )
         .ignoresSafeArea()
-    }
-
-    private func awning(in size: CGSize) -> some View {
-        let count = LaunchTheme.stripeCount
-        let seam = size.height / CGFloat(count)
-        // Round the band up so neighbours overlap by a fraction of a point
-        // rather than leaving a hairline of background between them.
-        let bandHeight = seam.rounded(.up)
-
-        return ZStack(alignment: .top) {
-            ForEach(0..<count, id: \.self) { index in
-                Rectangle()
-                    .fill(LaunchTheme.color(atStripe: index))
-                    .frame(width: size.width, height: bandHeight)
-                    .offset(y: CGFloat(index) * seam + travel(for: index, in: size))
-                    .animation(
-                        reduceMotion
-                            ? nil
-                            : .easeIn(duration: LaunchTheme.Motion.bandTravel)
-                                .delay(Double(index) * LaunchTheme.Motion.bandStagger),
-                        value: isFinishing
-                    )
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .clipped()
-    }
-
-    /// How far a band has to travel to clear the top of the screen. Later bands
-    /// go a little further, which spreads the awning out on the way up instead
-    /// of letting it leave as one slab.
-    private func travel(for index: Int, in size: CGSize) -> CGFloat {
-        guard isFinishing, !reduceMotion else { return 0 }
-        return -size.height - CGFloat(index) * LaunchTheme.Motion.bandTravelSpread
     }
 }
 

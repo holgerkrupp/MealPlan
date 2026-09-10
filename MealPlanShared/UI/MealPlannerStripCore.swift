@@ -48,12 +48,29 @@ struct MealPlannerStripCore: View {
     private let today = Date.now.startOfDay
     private let squareSize: CGFloat = 40
     private let columnWidth: CGFloat = 48
+    private let squareSpacing: CGFloat = 6
+    private let bandPadding: CGFloat = 6
+    /// Height of a single day column, measured off-screen. The band is a
+    /// horizontal scroll view, so it has to be given a height; deriving that
+    /// from the real layout is what keeps the last row of squares whole at any
+    /// Dynamic Type size and on both platforms.
+    @State private var measuredColumnHeight: CGFloat?
 
     private var days: [Date] {
         (-Self.pastDays...futureDays).map { today.adding(days: $0) }
     }
 
     var body: some View {
+        // The probe is one column laid out at its ideal size and hidden; the
+        // ZStack therefore never shrinks the band below a full column.
+        ZStack(alignment: .top) {
+            heightProbe
+            band
+        }
+        .sensoryFeedback(.success, trigger: tapTick)
+    }
+
+    private var band: some View {
         ScrollViewReader { proxy in
             ScrollView(.horizontal, showsIndicators: false) {
                 LazyHStack(alignment: .top, spacing: 6) {
@@ -66,7 +83,7 @@ struct MealPlannerStripCore: View {
                         .onAppear { futureDays += 21 }
                 }
                 .padding(.horizontal, 4)
-                .padding(.vertical, 6)
+                .padding(.vertical, bandPadding)
                 .scrollTargetLayout()
             }
             .onAppear {
@@ -80,13 +97,33 @@ struct MealPlannerStripCore: View {
                 withAnimation(.snappy) { proxy.scrollTo(newValue.dayID, anchor: .center) }
             }
         }
-        .frame(height: columnHeight)
-        .sensoryFeedback(.success, trigger: tapTick)
+        .frame(height: bandHeight)
     }
 
-    private var columnHeight: CGFloat {
-        // Header (30) + spacing + one square per meal.
-        30 + 8 + CGFloat(max(slots.count, 1)) * (squareSize + 6) + 12
+    /// An off-screen column at its ideal size, purely to measure how tall the
+    /// band must be. Guessing that height in points cut the bottom row of
+    /// squares in half, and the guess would break again with every font change.
+    private var heightProbe: some View {
+        dayColumn(today)
+            .fixedSize()
+            .hidden()
+            .allowsHitTesting(false)
+            .accessibilityHidden(true)
+            .onGeometryChange(for: CGFloat.self) { $0.size.height } action: { height in
+                guard height > 0 else { return }
+                measuredColumnHeight = height
+            }
+    }
+
+    private var bandHeight: CGFloat {
+        (measuredColumnHeight ?? estimatedColumnHeight) + bandPadding * 2
+    }
+
+    /// Stand-in until the probe reports: weekday caption, the date ring, and
+    /// one square per meal, plus the column's own vertical padding.
+    private var estimatedColumnHeight: CGFloat {
+        let rows = CGFloat(max(slots.count, 1))
+        return 16 + 2 + 30 + 8 + rows * squareSize + (rows - 1) * squareSpacing + 8
     }
 
     // MARK: - Day column
@@ -102,7 +139,7 @@ struct MealPlannerStripCore: View {
         VStack(spacing: 8) {
             dayHeader(day, fraction: fraction)
 
-            VStack(spacing: 6) {
+            VStack(spacing: squareSpacing) {
                 ForEach(slots) { slot in
                     mealSquare(day: day, slot: slot, isFilled: planned.contains(slot.key))
                 }

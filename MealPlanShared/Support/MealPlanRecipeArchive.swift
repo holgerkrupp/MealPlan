@@ -194,12 +194,16 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         }
     }
 
+    /// Named after the recipe when there is one, because this is also what
+    /// someone sees in their AirDrop sheet when a single dish is sent to them.
     @MainActor
     static func temporaryFile(for dishes: [Dish]) throws -> URL {
         let base = dishes.count == 1 ? dishes[0].name : "MealPlan Recipes"
-        let safe = base.replacingOccurrences(of: #"[^A-Za-z0-9À-ž _-]"#, with: "", options: .regularExpression)
-        let url = FileManager.default.temporaryDirectory
-            .appending(path: "\(safe.isEmpty ? "Recipes" : safe)-\(UUID().uuidString.prefix(8)).mealplanrecipes")
+        let url = try ShareFileName.stagingURL(
+            for: base,
+            fallback: "Recipes",
+            pathExtension: RecipeFileType.mealPlanExtension
+        )
         try data(from: dishes).write(to: url, options: .atomic)
         return url
     }

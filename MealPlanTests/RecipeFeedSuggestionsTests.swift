@@ -57,4 +57,41 @@ struct RecipeFeedSuggestionsTests {
             #expect(Set(hosts).count == hosts.count, "\(identifier) repeats a host")
         }
     }
+
+    // MARK: - Switching region by hand
+
+    @Test func everyRegionIsReachableFromThePicker() {
+        // The picker lists every case, so each one must have sites behind it.
+        for region in RecipeSuggestionRegion.allCases {
+            #expect(region.sites.count >= 3, "\(region.rawValue) has too few sites")
+            #expect(!region.localizedName.isEmpty)
+            #expect(!region.flag.isEmpty)
+        }
+    }
+
+    @Test func theDevicesOwnRegionIsListedFirst() {
+        let ordered = RecipeSuggestionRegion.ordered(startingWith: .italy)
+
+        #expect(ordered.first == .italy)
+        // Listed once, and nothing dropped.
+        #expect(ordered.count == RecipeSuggestionRegion.allCases.count)
+        #expect(Set(ordered) == Set(RecipeSuggestionRegion.allCases))
+    }
+
+    @Test func regionLookupAgreesWithTheSuggestionsItReturns() {
+        for identifier in ["en_US", "en_GB", "de_DE", "fr_FR", "it_IT", "es_ES", "nl_NL", "ja_JP"] {
+            let locale = Locale(identifier: identifier)
+            #expect(RecipeFeedSuggestions.region(for: locale).sites
+                    == RecipeFeedSuggestions.suggestions(for: locale))
+        }
+    }
+
+    @Test func eachRegionOffersADifferentSelection() {
+        // Two regions sharing a list would make the picker pointless.
+        for region in RecipeSuggestionRegion.allCases {
+            for other in RecipeSuggestionRegion.allCases where other != region {
+                #expect(region.sites != other.sites, "\(region.rawValue) duplicates \(other.rawValue)")
+            }
+        }
+    }
 }

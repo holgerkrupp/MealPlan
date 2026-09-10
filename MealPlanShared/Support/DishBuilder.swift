@@ -13,7 +13,12 @@ enum DishBuilder {
         createdByName: String?,
         context: ModelContext
     ) -> Dish {
-        let dish = Dish(name: recipe.name.isEmpty ? String(localized: "New dish") : recipe.name)
+        // A parse that came back without a title still has to arrive under a
+        // name — an untitled recipe is unfindable. The site it came from is a
+        // better placeholder than "New dish", and either way the import is
+        // flagged for review so the cook is asked to name it properly.
+        let importedName = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let dish = Dish(name: importedName.isEmpty ? fallbackName(for: recipe) : importedName)
         dish.household = household
         dish.createdByName = createdByName
         dish.sourceURL = recipe.sourceURL
@@ -26,7 +31,7 @@ enum DishBuilder {
         dish.servings = recipe.servings ?? 2
         dish.prepTimeMinutes = recipe.prepTimeMinutes
         dish.cookTimeMinutes = recipe.cookTimeMinutes
-        dish.needsReview = recipe.needsReview
+        dish.needsReview = recipe.needsReview || importedName.isEmpty
         dish.isFavorite = recipe.isFavorite
         dish.rating = min(max(recipe.rating, 0), 5)
         dish.tagNames = DishLabelConsolidation.tags(
@@ -101,6 +106,16 @@ enum DishBuilder {
 
         try? context.save()
         return dish
+    }
+
+    /// What an untitled import is called until someone renames it: the site
+    /// it came from, or a plain placeholder when there is not even that.
+    private static func fallbackName(for recipe: ImportedRecipe) -> String {
+        if let host = recipe.sourceURL?.host()?.replacingOccurrences(of: "www.", with: ""),
+           !host.isEmpty {
+            return String(localized: "Recipe from \(host)")
+        }
+        return String(localized: "New dish")
     }
 
     /// Fills an existing dish in from an imported recipe, for "find a recipe on

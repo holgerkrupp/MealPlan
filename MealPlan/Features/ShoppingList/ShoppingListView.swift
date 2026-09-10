@@ -135,69 +135,65 @@ struct ShoppingListView: View {
                 }
                 .disabled(items.isEmpty)
             }
-            ToolbarItem(placement: .secondaryAction) {
-                Menu {
-                    Button {
-                        showingPantryStaples = true
-                    } label: {
-                        Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
-                    }
-                    Divider()
-                    Button {
-                        showingPrint = true
-                    } label: {
-                        Label(String(localized: "Print list…"), systemImage: "printer")
-                    }
-                    .disabled(items.isEmpty)
-                    #if os(iOS)
-                    Button {
-                        Task { await exportToReminders() }
-                    } label: {
-                        Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
-                    }
-                    .disabled(isExporting || items.isEmpty)
-                    #endif
-                    Toggle(isOn: $hideCheckedItems) {
-                        Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
-                    }
-                    Divider()
-                    Button(String(localized: "Clear ticked items"), role: .destructive) {
-                        clearChecked()
-                    }
-                    .disabled(!items.contains(where: \.isChecked))
-                    Button(String(localized: "Clear the whole list"), role: .destructive) {
-                        confirmingClearAll = true
-                    }
-                    .disabled(items.isEmpty)
-
-                    Divider()
-
-                    if isConnectedToBring {
-                        Button {
-                            Task { await sendToBring() }
-                        } label: {
-                            Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
-                        }
-                        .disabled(items.isEmpty || bringService.isSyncing)
-                        Button {
-                            Task { await syncWithBring() }
-                        } label: {
-                            Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
-                        }
-                        .disabled(bringService.isSyncing)
-                    }
-                    Button {
-                        showingBringSetup = true
-                    } label: {
-                        Label(
-                            isConnectedToBring
-                                ? String(localized: "Bring! settings…")
-                                : String(localized: "Connect to Bring!…"),
-                            systemImage: "cart.badge.plus"
-                        )
-                    }
+            ToolbarItemGroup(placement: .secondaryAction) {
+                Button {
+                    showingPantryStaples = true
                 } label: {
-                    Label(String(localized: "More"), systemImage: "ellipsis.circle")
+                    Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
+                }
+                Divider()
+                Button {
+                    showingPrint = true
+                } label: {
+                    Label(String(localized: "Print list…"), systemImage: "printer")
+                }
+                .disabled(items.isEmpty)
+                #if os(iOS)
+                Button {
+                    Task { await exportToReminders() }
+                } label: {
+                    Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
+                }
+                .disabled(isExporting || items.isEmpty)
+                #endif
+                Toggle(isOn: $hideCheckedItems) {
+                    Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
+                }
+                Divider()
+                Button(String(localized: "Clear ticked items"), role: .destructive) {
+                    clearChecked()
+                }
+                .disabled(!items.contains(where: \.isChecked))
+                Button(String(localized: "Clear the whole list"), role: .destructive) {
+                    confirmingClearAll = true
+                }
+                .disabled(items.isEmpty)
+
+                Divider()
+
+                if isConnectedToBring {
+                    Button {
+                        Task { await sendToBring() }
+                    } label: {
+                        Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+                    }
+                    .disabled(items.isEmpty || bringService.isSyncing)
+                    Button {
+                        Task { await syncWithBring() }
+                    } label: {
+                        Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+                    }
+                    .disabled(bringService.isSyncing)
+                }
+                Button {
+                    showingBringSetup = true
+                } label: {
+                    Label(
+                        isConnectedToBring
+                            ? String(localized: "Bring! settings…")
+                            : String(localized: "Connect to Bring!…"),
+                        systemImage: "cart.badge.plus"
+                    )
                 }
             }
         }
@@ -210,9 +206,10 @@ struct ShoppingListView: View {
             guard !Task.isCancelled else { return }
             await autoSyncWithBring()
         }
+        .macWindowMargins()
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
-        .sheet(isPresented: $showingBringSetup) {
+        .detailPresentation(isPresented: $showingBringSetup, route: .bringSettings) {
             NavigationStack {
                 BringSettingsView()
                     .toolbar {
@@ -221,15 +218,12 @@ struct ShoppingListView: View {
                         }
                     }
             }
-            #if os(macOS)
-            .frame(minWidth: 520, minHeight: 460)
-            #endif
         }
-        .sheet(isPresented: $showingPrint) {
+        .detailPresentation(isPresented: $showingPrint, route: .printShoppingList) {
             PrintPlanSheet(referenceWeek: .now, initialContent: .shoppingList)
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingPantryStaples) {
+        .detailPresentation(isPresented: $showingPantryStaples, route: .pantryStaples) {
             NavigationStack {
                 PantryStaplesView()
                     .toolbar {

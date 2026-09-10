@@ -11,12 +11,23 @@ struct FeedSubscriptionSheet: View {
     @State private var subscribing = false
     @State private var pendingSuggestion: String?
     @State private var errorMessage: String?
+    /// The region whose sites are on offer. Empty means "whatever the device
+    /// says", which is what almost everyone leaves it at; a deliberate choice
+    /// is remembered, because someone who cooks from French blogs will want
+    /// them again next time.
+    @AppStorage("RecipeSuggestions.region") private var storedRegion = ""
+
+    private var deviceRegion: RecipeSuggestionRegion { RecipeFeedSuggestions.region() }
+
+    private var region: RecipeSuggestionRegion {
+        RecipeSuggestionRegion(rawValue: storedRegion) ?? deviceRegion
+    }
 
     /// Sites already subscribed to drop out of the list, so the section shrinks
     /// as the household works through it instead of offering duplicates.
     private var suggestions: [RecipeFeedSuggestion] {
         let subscribed = Set(allFeeds.flatMap { [$0.siteURL, $0.feedURL] }.compactMap(Self.host))
-        return RecipeFeedSuggestions.suggestions().filter {
+        return region.sites.filter {
             guard let host = Self.host($0.url) else { return true }
             return !subscribed.contains(host)
         }
@@ -41,18 +52,22 @@ struct FeedSubscriptionSheet: View {
                     Text(String(localized: "MealPlan finds the site’s RSS, Atom or JSON feed automatically."))
                 }
 
-                if !suggestions.isEmpty {
-                    Section {
-                        ForEach(suggestions) { suggestion in
-                            suggestionRow(suggestion)
-                        }
-                    } header: {
-                        Text(String(localized: "Suggestions"))
-                    } footer: {
-                        Text(String(localized: "Recipe sites near you that publish a feed."))
+                Section {
+                    regionPicker
+                    ForEach(suggestions) { suggestion in
+                        suggestionRow(suggestion)
                     }
+                    if suggestions.isEmpty {
+                        Text(String(localized: "You’re subscribed to all of these already."))
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text(String(localized: "Suggestions"))
+                } footer: {
+                    Text(String(localized: "Recipe sites that publish a feed. Tap one to see what it has been cooking."))
                 }
             }
+            .formStyle(.grouped)
             .navigationTitle(String(localized: "Subscribe to a site"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -70,6 +85,21 @@ struct FeedSubscriptionSheet: View {
             } message: { Text(errorMessage ?? "") }
         }
         .presentationDetents([.medium, .large])
+    }
+
+    private var regionPicker: some View {
+        Picker(
+            String(localized: "Region"),
+            selection: Binding(
+                get: { region },
+                set: { storedRegion = $0 == deviceRegion ? "" : $0.rawValue }
+            )
+        ) {
+            ForEach(RecipeSuggestionRegion.ordered(startingWith: deviceRegion)) { option in
+                Text(verbatim: "\(option.flag)  \(option.localizedName)").tag(option)
+            }
+        }
+        .pickerStyle(.menu)
     }
 
     /// Tapping the row looks at what the site has been publishing; the plus is
@@ -158,6 +188,7 @@ struct RecipeBookmarkSheet: View {
                     .keyboardType(.URL)
                 #endif
             }
+            .formStyle(.grouped)
             .navigationTitle(String(localized: "Add recipe site"))
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -203,7 +234,12 @@ private struct FeedPreviewView: View {
     @State private var errorMessage: String?
 
     private var articles: [RecipeArticleContent] {
-        (resolved?.parsed.articles ?? []).prefix(20).map(RecipeArticleContent.init)
+        (resolved?.parsed.articles ?? [])
+            .filter(RecipeArticleClassifier.isLikelyRecipe)
+            .prefix(20)
+            .map {
+                RecipeArticleContent($0, sourceName: resolved?.parsed.title, sourceID: "preview")
+            }
     }
 
     var body: some View {

@@ -17,6 +17,12 @@ enum RecipeImportCommitter {
         /// A sentence for the alert / confirmation the user sees.
         var summary: String {
             switch (imported, variants, skipped) {
+            // One recipe is what arrives when somebody shares a dish, and
+            // "Imported 1 recipes." is no way to say thank you for it.
+            case (1, 0, 0) where dishes.count == 1:
+                String(localized: "Added “\(dishes[0].name)” to your recipes.")
+            case (1, 1, 0) where dishes.count == 1:
+                String(localized: "Added “\(dishes[0].name)” to your recipes, next to your own version of it.")
             case (0, _, let skipped) where skipped > 0:
                 String(localized: "Everything in that file is already in your library.")
             case (0, _, _):

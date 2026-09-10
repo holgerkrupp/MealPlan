@@ -21,9 +21,6 @@ struct MealCard: View {
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
-    #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
-    #endif
 
     @State private var showingPicker = false
     @State private var selectedEntry: MealPlanEntry?
@@ -193,28 +190,24 @@ struct MealCard: View {
         #else
         .sheet(isPresented: $showingPicker) { picker }
         #endif
-        #if !os(macOS)
-        .sheet(item: $selectedEntry) { entry in
+        // A planned meal is a place you come back to, so where the platform
+        // has windows it gets one of its own instead of a sheet over the plan.
+        .detailPresentation(item: $selectedEntry, route: { .plannedMeal($0.uuid) }) { entry in
             EntryQuickActionsSheet(entry: entry)
                 .dismissesOnOutsideClick()
         }
-        #endif
-        .sheet(item: $newDishToEdit) { dish in
+        .detailPresentation(item: $newDishToEdit, route: { .newRecipe($0.uuid) }) { dish in
             NavigationStack { DishEditorView(dish: dish, isNew: true) }
                 .dismissesOnOutsideClick()
         }
-        .sheet(isPresented: $showingPaywall) {
+        .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
     }
 
     private func showDetails(for entry: MealPlanEntry) {
-        #if os(macOS)
-        openWindow(value: MacDetailWindowRoute.plannedMeal(entry.uuid))
-        #else
         selectedEntry = entry
-        #endif
     }
 
     private var picker: some View {
@@ -360,6 +353,7 @@ struct MealCard: View {
         } label: {
             Label(String(localized: "Edit / reschedule…"), systemImage: "slider.horizontal.3")
         }
+        OpenInNewWindowButton(route: .plannedMeal(entry.uuid))
         Button(role: .destructive) {
             remove(entry)
         } label: {

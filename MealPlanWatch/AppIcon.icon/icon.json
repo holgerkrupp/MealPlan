@@ -1,0 +1,98 @@
+{
+  "fill": {
+    "automatic-gradient": "srgb:0.93607,0.42824,0.74521,1.00000"
+  },
+  "groups": [
+    {
+      "layers": [
+        {
+          "hidden": false,
+          "image-name": "Layer-6-Spoon.svg",
+          "name": "Spoon",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              49,
+              47
+            ]
+          }
+        },
+        {
+          "hidden": false,
+          "image-name": "Layer-5-BinderRingRight.svg",
+          "name": "Binder Ring (Right)",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden": false,
+          "image-name": "Layer-4-BinderRingLeft.svg",
+          "name": "Binder Ring (Left)",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "glass": true,
+          "hidden": false,
+          "image-name": "Layer-3-CalendarCard.svg",
+          "name": "Calendar Card",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden": false,
+          "image-name": "Layer-2-Background.svg",
+          "name": "Background Tile",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        },
+        {
+          "hidden": false,
+          "image-name": "Layer-1-Base.svg",
+          "name": "Base Shadow",
+          "position": {
+            "scale": 0.2,
+            "translation-in-points": [
+              0,
+              0
+            ]
+          }
+        }
+      ],
+      "lighting": "individual",
+      "shadow": {
+        "kind": "neutral",
+        "opacity": 0.5
+      },
+      "translucency": {
+        "enabled": true,
+        "value": 0.3
+      }
+    }
+  ],
+  "supported-platforms": {
+    "circles": [
+      "watchOS"
+    ]
+  }
+}

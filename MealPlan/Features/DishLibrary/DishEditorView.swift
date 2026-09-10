@@ -63,6 +63,12 @@ struct DishEditorView: View {
             appLinkURLText = dish.deepLinkURLString ?? ""
             translationBaseline = dish.translationSourceSignature
         }
+        // Cancel is not the only way out: a sheet can be swiped away, a Mac
+        // window closed with its red button, and neither runs `cancel()`. A
+        // new dish exists in the store from the moment the editor opens, so
+        // whichever way the editor is left, an untouched draft has to go with
+        // it — otherwise it stays in the library as an untitled nothing.
+        .onDisappear { discardEmptyDraft() }
         .onChange(of: photoItems) { _, items in Task { await loadPhotos(items) } }
         // While the placeholder is still the app's suggestion it follows what
         // the dish becomes; `refreshAutoGlyph` is a no-op once the user picks.
@@ -465,6 +471,10 @@ struct DishEditorView: View {
 
     private func save(checkDuplicates: Bool = true) {
         dish.name = dish.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        // The Save button is disabled without a name; this is the same rule
+        // stated where the write happens, so no other path can slip an
+        // unnamed dish into the library.
+        guard !dish.name.isEmpty else { return }
         dish.modifiedAt = .now
         if dish.translationSourceSignature != translationBaseline { dish.clearTranslation() }
         let trimmedURL = sourceURLText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -488,6 +498,16 @@ struct DishEditorView: View {
         if dish.household == nil { dish.household = appState.currentHousehold }
         try? context.save()
         dismiss()
+    }
+
+    /// Removes a new dish nobody filled in. Deliberately narrow: it asks for
+    /// a draft that is still completely empty, so a dish that has so much as
+    /// a photo or one ingredient survives being dismissed and can be finished
+    /// later.
+    private func discardEmptyDraft() {
+        guard isNew, !dish.isDeleted, dish.modelContext != nil, dish.isBlankDraft else { return }
+        context.delete(dish)
+        try? context.save()
     }
 
     private func cancel() {

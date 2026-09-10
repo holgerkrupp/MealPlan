@@ -12,11 +12,16 @@ struct RecipeDiscoveryView: View {
     @State private var showingBookmark = false
     @State private var browserTarget: BookmarkBrowserTarget?
     @State private var refreshing = false
+    @State private var loadingDiscovery = true
+    @State private var discoveredSources: [RecipeDiscoverySourceResult] = []
+    @State private var failedDiscoverySources: [String] = []
+    @State private var selectedCategory: RecipeDiscoveryCategory?
+    @State private var surpriseArticle: RecipeArticleContent?
     @State private var search = ""
-    @State private var sort: RecipeArticleSort = .newest
+    @State private var sort: RecipeArticleSort = .mixed
     @State private var scope: RecipeArticleScope = .current
-    /// nil means every subscribed site.
-    @State private var feedFilter: UUID?
+    /// nil means built-in and subscribed sources together.
+    @State private var sourceFilter: String?
 
     private var feeds: [RecipeFeed] {
         allFeeds.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
@@ -26,8 +31,19 @@ struct RecipeDiscoveryView: View {
         allBookmarks.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
     }
 
-    private var visibleFeeds: [RecipeFeed] {
-        feeds.filter { feedFilter == nil || $0.uuid == feedFilter }
+    private var subscribedSites: [SubscribedSite] {
+        feeds.compactMap { feed in
+            guard let url = feed.siteURL ?? feed.feedURL else { return nil }
+            return SubscribedSite(id: feed.uuid, name: feed.title, url: url)
+        }
+    }
+
+    private var sourceOptions: [DiscoverySourceOption] {
+        RecipeDiscoveryService.sources.map {
+            DiscoverySourceOption(id: "discovery:\($0.id)", name: $0.name, siteURL: $0.siteURL)
+        } + feeds.map {
+            DiscoverySourceOption(id: "feed:\($0.uuid.uuidString)", name: $0.title, siteURL: $0.siteURL)
+        }
     }
 
     /// True while the view is showing less than everything it has, which is
@@ -35,31 +51,126 @@ struct RecipeDiscoveryView: View {
     private var isFiltering: Bool {
         !search.trimmingCharacters(in: .whitespaces).isEmpty
             || scope != .current
-            || feedFilter != nil
+            || sourceFilter != nil
+            || selectedCategory != nil
     }
 
     private var hasVisibleArticles: Bool {
-        visibleFeeds.contains { !articles(of: $0).isEmpty }
+        !visibleArticles.isEmpty
+    }
+
+    private var allArticles: [DiscoveryArticle] {
+        let subscribed = feeds.flatMap { feed in
+            feed.sortedItems.filter { item in
+                RecipeArticleClassifier.isLikelyRecipe(
+                    title: item.title,
+                    summary: item.summary,
+                    url: item.url
+                )
+            }.map { item in
+                let sourceID = "feed:\(feed.uuid.uuidString)"
+                return DiscoveryArticle(
+                    content: RecipeArticleContent(item, sourceName: feed.title, sourceID: sourceID),
+                    sourceID: sourceID,
+                    sourceName: feed.title,
+                    date: item.publishedAt ?? item.fetchedAt,
+                    isArchived: item.isArchived,
+                    categories: RecipeDiscoveryCategory.categories(
+                        title: item.title,
+                        summary: item.summary,
+                        providerTags: []
+                    ),
+                    feed: feed
+                )
+            }
+        }
+        let publicArticles = discoveredSources.flatMap { result in
+            result.articles.enumerated().map { index, article in
+                let sourceID = "discovery:\(result.source.id)"
+                return DiscoveryArticle(
+                    content: RecipeArticleContent(
+                        article,
+                        sourceName: result.source.name,
+                        sourceID: sourceID
+                    ),
+                    sourceID: sourceID,
+                    sourceName: result.source.name,
+                    // Card order is meaningful on sources without dates. Keep
+                    // that order while still placing them after dated posts in
+                    // the explicit newest/oldest modes.
+                    date: article.publishedAt ?? Date.distantPast.addingTimeInterval(-Double(index)),
+                    isArchived: false,
+                    categories: RecipeDiscoveryCategory.categories(
+                        title: article.title,
+                        summary: article.summary,
+                        providerTags: article.categories
+                    ),
+                    feed: nil
+                )
+            }
+        }
+        // Prefer the stored copy when a household has subscribed to one of the
+        // built-in sources, so image backfills still persist and the same URL
+        // does not appear twice in the mixed grid.
+        return subscribed + publicArticles
+    }
+
+    private var categoryCandidates: [DiscoveryArticle] {
+        var seenURLs: Set<String> = []
+        return allArticles.filter { article in
+            (sourceFilter == nil || article.sourceID == sourceFilter)
+                && RecipeArticleFilter.matches(
+                    candidate(article),
+                    scope: scope,
+                    search: search
+                )
+                && seenURLs.insert(article.content.articleURL?.absoluteString ?? article.id).inserted
+        }
+    }
+
+    private var availableCategories: [RecipeDiscoveryCategory] {
+        RecipeDiscoveryCategory.allCases.filter { category in
+            categoryCandidates.contains { $0.categories.contains(category) }
+        }
+    }
+
+    private var visibleArticles: [DiscoveryArticle] {
+        let matching = categoryCandidates.filter { article in
+            guard let selectedCategory else { return true }
+            return article.categories.contains(selectedCategory)
+        }
+
+        if sort == .mixed {
+            let groups = sourceOptions.map { option in
+                matching.filter { $0.sourceID == option.id }.sorted {
+                    RecipeArticleFilter.areInOrder(candidate($0), candidate($1), sort: .newest)
+                }
+            }
+            return Array(RecipeArticleFilter.interleave(groups).prefix(isFiltering ? 80 : 40))
+        }
+
+        return Array(matching.sorted {
+            RecipeArticleFilter.areInOrder(candidate($0), candidate($1), sort: sort)
+        }.prefix(isFiltering ? 80 : 40))
     }
 
     var body: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
-                if feeds.isEmpty && bookmarks.isEmpty {
+                if loadingDiscovery && allArticles.isEmpty {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding(.top, 40)
+                } else if allArticles.isEmpty && bookmarks.isEmpty && subscribedSites.isEmpty {
                     discoveryEmptyState
                 } else if isFiltering && !hasVisibleArticles {
                     noMatchesEmptyState
                 }
-                ForEach(visibleFeeds) { feed in
-                    // While filtering, a site with no matches is left out
-                    // rather than shown as an empty heading.
-                    if !isFiltering || !articles(of: feed).isEmpty {
-                        Section {
-                            feedBody(feed)
-                        } header: {
-                            feedHeader(feed)
-                        }
-                    }
+                if !subscribedSites.isEmpty {
+                    subscribedSitesSection
+                }
+                if hasVisibleArticles {
+                    articleSection
                 }
                 if !bookmarks.isEmpty && !isFiltering { bookmarksSection }
             }
@@ -90,17 +201,25 @@ struct RecipeDiscoveryView: View {
         }
         .overlay { if refreshing { ProgressView().controlSize(.large) } }
         .task { await refresh(force: false) }
-        .sheet(isPresented: $showingSubscription) {
+        .detailPresentation(isPresented: $showingSubscription, route: .subscribeToSite) {
             FeedSubscriptionSheet()
         }
-        .sheet(isPresented: $showingBookmark) {
+        .detailPresentation(isPresented: $showingBookmark, route: .addRecipeSite) {
             RecipeBookmarkSheet()
         }
-        .sheet(item: $browserTarget) { target in
+        .detailPresentation(
+            item: $browserTarget,
+            route: { .browseSite(url: $0.url, title: $0.dish.name) }
+        ) { target in
             NavigationStack {
                 RecipeFinderView(dish: target.dish, initialURL: target.url, createsDish: true)
             }
             .dismissesOnOutsideClick()
+        }
+        .navigationDestination(item: $surpriseArticle) { article in
+            RecipeArticleReaderView(article: article) { url in
+                record(imageURL: url, forArticle: article)
+            }
         }
     }
 
@@ -108,7 +227,7 @@ struct RecipeDiscoveryView: View {
         ContentUnavailableView {
             Label(String(localized: "Find something good"), systemImage: "newspaper")
         } description: {
-            Text(String(localized: "Subscribe to a recipe blog or bookmark a site your household likes."))
+            Text(String(localized: "Recipe sources are unavailable right now. You can still subscribe to a blog or bookmark a site your household likes."))
         } actions: {
             if !appState.isGuest {
                 Button(String(localized: "Subscribe to a site")) { showingSubscription = true }
@@ -121,71 +240,159 @@ struct RecipeDiscoveryView: View {
         .padding(.top, 40)
     }
 
-    @ViewBuilder
-    private func feedBody(_ feed: RecipeFeed) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if articles(of: feed).isEmpty {
-                Text(isFiltering
-                     ? String(localized: "Nothing here matches.")
-                     : String(localized: "No posts yet."))
-                    .foregroundStyle(.secondary)
-            } else {
-                RecipeArticleGrid(
-                    articles: articles(of: feed),
-                    onImageResolved: { article, url in
-                        record(imageURL: url, forArticle: article, in: feed)
-                    }
-                ) { article in
-                    RecipeArticleReaderView(article: article) { url in
-                        record(imageURL: url, forArticle: article, in: feed)
+    private var subscribedSitesSection: some View {
+        Section {
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    ForEach(subscribedSites) { site in
+                        Link(destination: site.url) {
+                            Label(site.name, systemImage: "safari")
+                                .font(.subheadline.weight(.medium))
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .background(.quaternary, in: Capsule())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityHint(String(localized: "Open website"))
                     }
                 }
+                .padding(.horizontal, MacLayout.gutter)
             }
-            feedFooter(feed)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal)
-    }
-
-    private func feedHeader(_ feed: RecipeFeed) -> some View {
-        HStack {
-            Text(feed.title)
+            .scrollIndicators(.hidden)
+        } header: {
+            Text(String(localized: "Subscribed sites"))
                 .font(.title3.weight(.semibold))
-                .lineLimit(1)
-            Spacer()
-            if let site = feed.siteURL {
-                Link(destination: site) { Image(systemName: "safari") }
-                    .accessibilityLabel(String(localized: "Open website"))
-            }
-            if !appState.isGuest {
-                Menu {
-                    Button(String(localized: "Delete feed"), role: .destructive) {
-                        context.delete(feed)
-                        try? context.save()
-                    }
-                } label: {
-                    Image(systemName: "ellipsis.circle")
-                }
-                .accessibilityLabel(String(localized: "Feed options"))
-            }
+                .padding(.horizontal, MacLayout.gutter)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
-        // A pinned header slides over the cards behind it, so it needs a
-        // ground of its own to stay readable.
-        .background(.bar)
+    }
+
+    private var articleSection: some View {
+        Section {
+            categoryBrowser
+                .padding(.horizontal, MacLayout.gutter)
+
+            RecipeArticleGrid(
+                articles: visibleArticles.map(\.content),
+                onImageResolved: { article, url in
+                    record(imageURL: url, forArticle: article)
+                }
+            ) { article in
+                RecipeArticleReaderView(article: article) { url in
+                    record(imageURL: url, forArticle: article)
+                }
+            }
+            .padding(.horizontal, MacLayout.gutter)
+
+            discoveryStatus
+                .padding(.horizontal, MacLayout.gutter)
+        } header: {
+            HStack {
+                Text(sourceFilter.flatMap { selected in
+                    sourceOptions.first(where: { $0.id == selected })?.name
+                } ?? String(localized: "Recipes from across the web"))
+                    .font(.title3.weight(.semibold))
+                    .lineLimit(1)
+                Spacer()
+                if let source = sourceFilter.flatMap({ selected in
+                    sourceOptions.first(where: { $0.id == selected })
+                }), let siteURL = source.siteURL {
+                    Link(destination: siteURL) { Image(systemName: "safari") }
+                        .accessibilityLabel(String(localized: "Open website"))
+                }
+            }
+            .padding(.horizontal, MacLayout.gutter)
+            .padding(.vertical, 8)
+            .background(.bar)
+        }
+    }
+
+    private var categoryBrowser: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(String(localized: "Browse by category"), systemImage: "square.grid.2x2")
+                    .font(.headline)
+                Spacer()
+                Button(String(localized: "Surprise me"), systemImage: "dice") {
+                    surpriseArticle = visibleArticles.randomElement()?.content
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(visibleArticles.isEmpty)
+            }
+
+            ScrollView(.horizontal) {
+                HStack(spacing: 8) {
+                    categoryButton(nil, title: String(localized: "All recipes"), symbol: "square.grid.2x2")
+                    ForEach(availableCategories) { category in
+                        categoryButton(category, title: category.localizedName, symbol: category.symbolName)
+                    }
+                }
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func categoryButton(
+        _ category: RecipeDiscoveryCategory?,
+        title: String,
+        symbol: String
+    ) -> some View {
+        let selected = selectedCategory == category
+        return Button {
+            selectedCategory = category
+        } label: {
+            Label(title, systemImage: symbol)
+                .font(.subheadline.weight(.medium))
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .foregroundStyle(selected ? Color.white : Color.primary)
+                .background(selected ? Color.accentColor : Color.secondary.opacity(0.12), in: Capsule())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     @ViewBuilder
-    private func feedFooter(_ feed: RecipeFeed) -> some View {
-        if feed.hasBeenMissingForFortnight {
-            Label(String(localized: "This feed has been unavailable for two weeks."), systemImage: "exclamationmark.triangle")
+    private var discoveryStatus: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !failedDiscoverySources.isEmpty {
+                Label(
+                    String(localized: "Some sources could not be refreshed: \(failedDiscoverySources.joined(separator: ", "))."),
+                    systemImage: "exclamationmark.triangle"
+                )
                 .foregroundStyle(.orange)
-        } else if feed.consecutiveFailures > 0 {
-            Text(String(localized: "Refresh will retry later."))
-        } else if let fetched = feed.lastFetchedAt {
-            Text(String(localized: "Updated \(fetched.formatted(date: .abbreviated, time: .shortened))"))
+            }
+            ForEach(feeds.filter { $0.hasBeenMissingForFortnight }) { feed in
+                Label(
+                    String(localized: "\(feed.title) has been unavailable for two weeks."),
+                    systemImage: "exclamationmark.triangle"
+                )
+                .foregroundStyle(.orange)
+            }
+            if let latest = feeds.compactMap(\.lastFetchedAt).max() {
+                Text(String(localized: "Subscriptions updated \(latest.formatted(date: .abbreviated, time: .shortened))"))
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.caption)
+        .padding(.top, 4)
+    }
+
+    private func remove(_ feed: RecipeFeed) {
+        if sourceFilter == "feed:\(feed.uuid.uuidString)" {
+            sourceFilter = nil
+        }
+        context.delete(feed)
+        try? context.save()
+    }
+
+    private var subscriptionManagementMenu: some View {
+        Menu(String(localized: "Subscriptions"), systemImage: "dot.radiowaves.left.and.right") {
+            ForEach(feeds) { feed in
+                Button(String(localized: "Remove \(feed.title)"), systemImage: "trash", role: .destructive) {
+                    remove(feed)
+                }
+            }
         }
     }
 
@@ -215,11 +422,11 @@ struct RecipeDiscoveryView: View {
                     }
                 }
             }
-            .padding(.horizontal)
+            .padding(.horizontal, MacLayout.gutter)
         } header: {
             Text(String(localized: "Recipe sites"))
                 .font(.title3.weight(.semibold))
-                .padding(.horizontal)
+                .padding(.horizontal, MacLayout.gutter)
                 .padding(.vertical, 8)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.bar)
@@ -238,13 +445,17 @@ struct RecipeDiscoveryView: View {
                     Text(sort.localizedName).tag(sort)
                 }
             }
-            if feeds.count > 1 {
-                Picker(String(localized: "Site"), selection: $feedFilter) {
-                    Text(String(localized: "All sites")).tag(UUID?.none)
-                    ForEach(feeds) { feed in
-                        Text(feed.title).tag(UUID?.some(feed.uuid))
+            if sourceOptions.count > 1 {
+                Picker(String(localized: "Source"), selection: $sourceFilter) {
+                    Text(String(localized: "All sources")).tag(String?.none)
+                    ForEach(sourceOptions) { source in
+                        Text(source.name).tag(String?.some(source.id))
                     }
                 }
+            }
+            if !feeds.isEmpty && !appState.isGuest {
+                Divider()
+                subscriptionManagementMenu
             }
         } label: {
             Label(
@@ -265,60 +476,46 @@ struct RecipeDiscoveryView: View {
             Button(String(localized: "Clear filters")) {
                 search = ""
                 scope = .current
-                feedFilter = nil
+                sourceFilter = nil
+                selectedCategory = nil
             }
         }
         .frame(maxWidth: .infinity)
         .padding(.top, 40)
     }
 
-    /// The articles of one feed, after the search field, the scope and the sort
-    /// have had their say. Capped while simply browsing, uncapped once the
-    /// household is actually looking for something.
-    private func articles(of feed: RecipeFeed) -> [RecipeArticleContent] {
-        let matching = feed.sortedItems.filter { item in
-            RecipeArticleFilter.matches(
-                candidate(item, feedTitle: feed.title),
-                scope: scope,
-                search: search
-            )
-        }
-        let sorted = matching.sorted {
-            RecipeArticleFilter.areInOrder(
-                candidate($0, feedTitle: feed.title),
-                candidate($1, feedTitle: feed.title),
-                sort: sort
-            )
-        }
-        let limit = isFiltering ? 60 : 20
-        return sorted.prefix(limit).map(RecipeArticleContent.init)
-    }
-
-    private func candidate(_ item: RecipeFeedItem, feedTitle: String) -> RecipeArticleFilter.Candidate {
+    private func candidate(_ article: DiscoveryArticle) -> RecipeArticleFilter.Candidate {
         RecipeArticleFilter.Candidate(
-            title: item.title,
-            summary: item.summary,
-            author: item.author,
-            feedTitle: feedTitle,
-            date: item.publishedAt ?? item.fetchedAt,
-            isArchived: item.isArchived,
-            isRead: RecipeFeedReadState.isRead(item.stableID)
+            title: article.content.title,
+            summary: article.content.summary,
+            author: article.content.author,
+            feedTitle: article.sourceName,
+            date: article.date,
+            isArchived: article.isArchived,
+            isRead: RecipeFeedReadState.isRead(article.content.readStateID)
         )
     }
 
     /// Writes a picture found on an article's own page back to its stored item,
     /// so the lookup happens once and survives a relaunch.
-    private func record(imageURL: URL?, forArticle article: RecipeArticleContent, in feed: RecipeFeed) {
-        guard let item = feed.items?.first(where: { $0.stableID == article.id }) else { return }
+    private func record(imageURL: URL?, forArticle article: RecipeArticleContent) {
+        guard let feed = allArticles.first(where: { $0.id == article.id })?.feed else { return }
+        guard let item = feed.items?.first(where: { $0.stableID == article.readStateID }) else { return }
         if let imageURL { item.imageURLString = imageURL.absoluteString }
         item.imageLookupAt = .now
         try? context.save()
     }
 
     private func refresh(force: Bool) async {
-        guard !appState.isGuest else { return }
-        refreshing = true
-        await RecipeFeedService.refreshAll(context: context, force: force)
+        if force { refreshing = true }
+        async let discoveryLoad = RecipeDiscoveryService.load()
+        if !appState.isGuest {
+            await RecipeFeedService.refreshAll(context: context, force: force)
+        }
+        let loaded = await discoveryLoad
+        discoveredSources = loaded.sources
+        failedDiscoverySources = loaded.failedSourceNames
+        loadingDiscovery = false
         refreshing = false
     }
 
@@ -329,6 +526,29 @@ struct RecipeDiscoveryView: View {
         dish.createdByName = appState.currentMemberName
         browserTarget = BookmarkBrowserTarget(dish: dish, url: url)
     }
+}
+
+private struct DiscoverySourceOption: Identifiable {
+    let id: String
+    let name: String
+    let siteURL: URL?
+}
+
+private struct SubscribedSite: Identifiable {
+    let id: UUID
+    let name: String
+    let url: URL
+}
+
+private struct DiscoveryArticle: Identifiable {
+    var id: String { content.id }
+    let content: RecipeArticleContent
+    let sourceID: String
+    let sourceName: String
+    let date: Date
+    let isArchived: Bool
+    let categories: Set<RecipeDiscoveryCategory>
+    let feed: RecipeFeed?
 }
 
 private struct BookmarkBrowserTarget: Identifiable {

@@ -12,7 +12,6 @@ struct DishSidebarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     #if os(macOS)
-    @Environment(\.openWindow) private var openWindow
     #endif
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
@@ -52,14 +51,13 @@ struct DishSidebarView: View {
         // and offering neither import nor export, which belong to the Dishes
         // section proper.
         .focusedSceneValue(\.dishLibraryCommands, sidebarCommands)
-        .sheet(item: $planningDish) { dish in
+        .detailPresentation(item: $planningDish, route: { .planRecipe($0.uuid) }) { dish in
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
             }
             .dismissesOnOutsideClick()
         }
-        #if !os(macOS)
-        .sheet(item: $detailDish) { dish in
+        .detailPresentation(item: $detailDish, route: { .recipe($0.uuid) }) { dish in
             NavigationStack {
                 DishDetailView(dish: dish)
                     .toolbar {
@@ -70,7 +68,6 @@ struct DishSidebarView: View {
             }
             .dismissesOnOutsideClick()
         }
-        #endif
     }
 
     private var sidebarCommands: DishLibraryCommands {
@@ -204,6 +201,7 @@ struct DishSidebarView: View {
                         Button(String(localized: "Show details"), systemImage: "info.circle") {
                             showDetails(for: dish)
                         }
+                        OpenInNewWindowButton(route: .recipe(dish.uuid))
                     }
                     .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
                     .listRowBackground(Color.clear)
@@ -214,11 +212,7 @@ struct DishSidebarView: View {
     }
 
     private func showDetails(for dish: Dish) {
-        #if os(macOS)
-        openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
-        #else
         detailDish = dish
-        #endif
     }
 
     private func row(_ dish: Dish) -> some View {

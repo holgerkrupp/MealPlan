@@ -33,42 +33,48 @@ struct RecipeFeedSuggestion: Identifiable, Hashable, Sendable {
 /// speaker in a region we have no list for.
 enum RecipeFeedSuggestions {
     static func suggestions(for locale: Locale = .current) -> [RecipeFeedSuggestion] {
-        if let region = locale.region?.identifier.uppercased(), let list = byRegion[region] {
-            return list
-        }
-        if let language = locale.language.languageCode?.identifier.lowercased(), let list = byLanguage[language] {
-            return list
-        }
-        return unitedStates
+        region(for: locale).sites
     }
 
-    private static let byRegion: [String: [RecipeFeedSuggestion]] = [
-        "US": unitedStates,
-        "CA": unitedStates,
-        "AU": unitedKingdom,
-        "NZ": unitedKingdom,
-        "GB": unitedKingdom,
-        "IE": unitedKingdom,
-        "DE": germanSpeaking,
-        "AT": germanSpeaking,
-        "CH": germanSpeaking,
-        "LI": germanSpeaking,
-        "FR": france,
-        "IT": italy,
-        "ES": spain,
-        "NL": netherlands,
+    /// Which list the device's own settings point at.
+    static func region(for locale: Locale = .current) -> RecipeSuggestionRegion {
+        if let region = locale.region?.identifier.uppercased(), let match = byRegion[region] {
+            return match
+        }
+        if let language = locale.language.languageCode?.identifier.lowercased(),
+           let match = byLanguage[language] {
+            return match
+        }
+        return .unitedStates
+    }
+
+    private static let byRegion: [String: RecipeSuggestionRegion] = [
+        "US": .unitedStates,
+        "CA": .unitedStates,
+        "AU": .unitedKingdom,
+        "NZ": .unitedKingdom,
+        "GB": .unitedKingdom,
+        "IE": .unitedKingdom,
+        "DE": .germanSpeaking,
+        "AT": .germanSpeaking,
+        "CH": .germanSpeaking,
+        "LI": .germanSpeaking,
+        "FR": .france,
+        "IT": .italy,
+        "ES": .spain,
+        "NL": .netherlands,
     ]
 
-    private static let byLanguage: [String: [RecipeFeedSuggestion]] = [
-        "de": germanSpeaking,
-        "fr": france,
-        "it": italy,
-        "es": spain,
-        "nl": netherlands,
-        "en": unitedStates,
+    private static let byLanguage: [String: RecipeSuggestionRegion] = [
+        "de": .germanSpeaking,
+        "fr": .france,
+        "it": .italy,
+        "es": .spain,
+        "nl": .netherlands,
+        "en": .unitedStates,
     ]
 
-    private static let unitedStates: [RecipeFeedSuggestion] = [
+    fileprivate static let unitedStates: [RecipeFeedSuggestion] = [
         .init(
             name: "Smitten Kitchen",
             detail: "Deb Perelman’s small-kitchen classics.",
@@ -111,7 +117,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let unitedKingdom: [RecipeFeedSuggestion] = [
+    fileprivate static let unitedKingdom: [RecipeFeedSuggestion] = [
         .init(
             name: "Good Food",
             detail: "Tested everyday recipes from the BBC Good Food team.",
@@ -144,7 +150,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let germanSpeaking: [RecipeFeedSuggestion] = [
+    fileprivate static let germanSpeaking: [RecipeFeedSuggestion] = [
         .init(
             name: "Küchengötter",
             detail: "Erprobte Rezepte aus der Redaktion, täglich neu.",
@@ -192,7 +198,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let france: [RecipeFeedSuggestion] = [
+    fileprivate static let france: [RecipeFeedSuggestion] = [
         .init(
             name: "Ptitchef",
             detail: "De nouvelles recettes de cuisine tous les jours.",
@@ -220,7 +226,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let italy: [RecipeFeedSuggestion] = [
+    fileprivate static let italy: [RecipeFeedSuggestion] = [
         .init(
             name: "GialloZafferano",
             detail: "Le ricette più cercate d’Italia, provate in redazione.",
@@ -248,7 +254,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let spain: [RecipeFeedSuggestion] = [
+    fileprivate static let spain: [RecipeFeedSuggestion] = [
         .init(
             name: "Cocina Casera y Fácil",
             detail: "Recetas sencillas para el día a día.",
@@ -271,7 +277,7 @@ enum RecipeFeedSuggestions {
         ),
     ]
 
-    private static let netherlands: [RecipeFeedSuggestion] = [
+    fileprivate static let netherlands: [RecipeFeedSuggestion] = [
         .init(
             name: "Lekker en Simpel",
             detail: "Simpele recepten voor doordeweekse dagen.",
@@ -298,4 +304,60 @@ enum RecipeFeedSuggestions {
             urlString: "https://www.laurasbakery.nl"
         ),
     ]
+}
+
+/// A published set of recipe sites. Several countries share one — a cook in
+/// Austria wants the same sites as one in Germany — so this is what the
+/// subscribe sheet's region picker lists, rather than raw country codes.
+enum RecipeSuggestionRegion: String, CaseIterable, Identifiable, Sendable {
+    case unitedStates, unitedKingdom, germanSpeaking, france, italy, spain, netherlands
+
+    var id: String { rawValue }
+
+    /// The countries the list is drawn from, not a single country name: these
+    /// are groupings, and calling the German list "Germany" would be wrong for
+    /// the Austrian and Swiss sites in it.
+    var localizedName: String {
+        switch self {
+        case .unitedStates: String(localized: "United States & Canada")
+        case .unitedKingdom: String(localized: "United Kingdom, Ireland & Oceania")
+        case .germanSpeaking: String(localized: "Germany, Austria & Switzerland")
+        case .france: String(localized: "France")
+        case .italy: String(localized: "Italy")
+        case .spain: String(localized: "Spain")
+        case .netherlands: String(localized: "Netherlands & Belgium")
+        }
+    }
+
+    /// The flag of the country most of the list's sites publish from. Purely a
+    /// visual anchor for the menu — the name carries the meaning.
+    var flag: String {
+        switch self {
+        case .unitedStates: "🇺🇸"
+        case .unitedKingdom: "🇬🇧"
+        case .germanSpeaking: "🇩🇪"
+        case .france: "🇫🇷"
+        case .italy: "🇮🇹"
+        case .spain: "🇪🇸"
+        case .netherlands: "🇳🇱"
+        }
+    }
+
+    var sites: [RecipeFeedSuggestion] {
+        switch self {
+        case .unitedStates: RecipeFeedSuggestions.unitedStates
+        case .unitedKingdom: RecipeFeedSuggestions.unitedKingdom
+        case .germanSpeaking: RecipeFeedSuggestions.germanSpeaking
+        case .france: RecipeFeedSuggestions.france
+        case .italy: RecipeFeedSuggestions.italy
+        case .spain: RecipeFeedSuggestions.spain
+        case .netherlands: RecipeFeedSuggestions.netherlands
+        }
+    }
+
+    /// Menu order: whatever the device points at comes first, so the picker
+    /// opens on the list already on screen.
+    static func ordered(startingWith first: RecipeSuggestionRegion) -> [RecipeSuggestionRegion] {
+        [first] + allCases.filter { $0 != first }
+    }
 }

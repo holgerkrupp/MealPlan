@@ -59,6 +59,11 @@ struct DishFilter: Equatable {
     /// Apply the non-sort filters and search ranking to a fetched list.
     func apply(to dishes: [Dish], now: Date = .now) -> [Dish] {
         var result = dishes.filter { dish in
+            // A dish the editor has open but nobody has typed into yet is not
+            // part of the library: on a Mac or iPad that editor is a window of
+            // its own, and the empty draft behind it would otherwise sit in
+            // the grid as an untitled card while it is being written.
+            if dish.isBlankDraft { return false }
             if let mealType, !dish.mealTypeTags.contains(mealType) { return false }
             if let season, dish.season != season { return false }
             if let maxMinutes {

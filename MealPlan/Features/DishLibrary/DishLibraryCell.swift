@@ -60,11 +60,11 @@ struct DishLibraryCell: View {
             #if os(macOS)
             DishGridCell(dish: dish)
                 .onTapGesture {
-                    openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                    openWindow(value: DetailWindowRoute.recipe(dish.uuid))
                 }
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction {
-                    openWindow(value: MacDetailWindowRoute.recipe(dish.uuid))
+                    openWindow(value: DetailWindowRoute.recipe(dish.uuid))
                 }
                 .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
             #else
@@ -73,6 +73,9 @@ struct DishLibraryCell: View {
             }
             .buttonStyle(.plain)
             .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+            // An iPad in Stage Manager can hold the recipe beside the
+            // library; on iPhone this modifier adds nothing at all.
+            .openInNewWindowContextMenu(.recipe(dish.uuid))
             #endif
         }
     }

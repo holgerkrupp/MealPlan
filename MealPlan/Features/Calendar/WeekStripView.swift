@@ -26,6 +26,10 @@ struct WeekStripView: View {
     /// there is nothing to do, so the drag animates back.
     var onDropDish: ([DishReference], Date) -> Bool = { _, _ in false }
     var onSelect: (Date) -> Void
+    /// Whether the "Jump to date" popover is open. It hangs off the month
+    /// title; a binding so the menu bar's ⇧⌘T can open it too.
+    @Binding var isPickingDate: Bool
+    var onJumpToDate: (Date) -> Void
 
     /// This week's planned meals, and the household's meals. Both are handed
     /// down from the calendar rather than queried here: a `@Query` whose
@@ -38,6 +42,7 @@ struct WeekStripView: View {
     @State private var targetedDayID: String?
     /// Pages the strip while a drag rests on one of the arrows.
     @State private var pagingTask: Task<Void, Never>?
+    @State private var jumpDate = Date.now
 
     @Environment(\.colorSchemeContrast) private var contrast
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -52,6 +57,8 @@ struct WeekStripView: View {
         entries: [MealPlanEntry],
         mealTypes: [MealType],
         onDropDish: @escaping ([DishReference], Date) -> Bool = { _, _ in false },
+        isPickingDate: Binding<Bool> = .constant(false),
+        onJumpToDate: @escaping (Date) -> Void = { _ in },
         onSelect: @escaping (Date) -> Void
     ) {
         _weekStart = weekStart
@@ -60,6 +67,8 @@ struct WeekStripView: View {
         self.entries = entries
         self.mealTypes = mealTypes
         self.onDropDish = onDropDish
+        _isPickingDate = isPickingDate
+        self.onJumpToDate = onJumpToDate
         self.onSelect = onSelect
     }
 
@@ -117,9 +126,7 @@ struct WeekStripView: View {
             HStack {
                 stepButton(weeks: -1, symbol: "chevron.left", label: String(localized: "Previous week"))
                 Spacer(minLength: 0)
-                Text(title)
-                    .font(.subheadline.weight(.semibold))
-                    .contentTransition(reduceMotion ? .identity : .numericText())
+                titleButton
                 Spacer(minLength: 0)
                 stepButton(weeks: 1, symbol: "chevron.right", label: String(localized: "Next week"))
             }
@@ -161,6 +168,54 @@ struct WeekStripView: View {
         }
         .animation(reduceMotion ? nil : .smooth(duration: 0.25), value: span)
         .allowsHitTesting(false)
+    }
+
+    /// The month title doubles as the way to jump to any date.
+    private var titleButton: some View {
+        Button {
+            isPickingDate = true
+        } label: {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .contentTransition(reduceMotion ? .identity : .numericText())
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(String(localized: "Jump to date…"))
+        .accessibilityHint(String(localized: "Jump to date"))
+        .popover(isPresented: $isPickingDate, arrowEdge: .bottom) {
+            datePicker
+                .presentationCompactAdaptation(.popover)
+        }
+        .onChange(of: isPickingDate) { _, picking in
+            if picking { jumpDate = selectedDate }
+        }
+    }
+
+    /// Where the plan jumps to. A small transient chooser, so it stays a
+    /// popover rather than becoming a window of its own.
+    private var datePicker: some View {
+        VStack(alignment: .trailing, spacing: 12) {
+            DatePicker(
+                String(localized: "Jump to date"),
+                selection: $jumpDate,
+                displayedComponents: .date
+            )
+            .datePickerStyle(.graphical)
+            .labelsHidden()
+
+            HStack {
+                Button(String(localized: "Cancel")) { isPickingDate = false }
+                Button(String(localized: "Go")) {
+                    isPickingDate = false
+                    onJumpToDate(jumpDate)
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding()
+        .frame(minWidth: 300)
     }
 
     private func stepButton(weeks: Int, symbol: String, label: String) -> some View {

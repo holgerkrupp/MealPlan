@@ -302,7 +302,7 @@ struct CookingModeView: View {
                     .accessibilityValue(checked
                         ? String(localized: "Checked off")
                         : String(localized: "Not checked off"))
-                    .accessibilityHint(String(localized: "Double tap to check off"))
+                    .accessibilityHint(InteractionWording.checkOffHint)
                     .accessibilityAddTraits(checked ? .isSelected : [])
                     Divider()
                 }
@@ -372,7 +372,7 @@ struct CookingModeView: View {
                     .accessibilityAddTraits(isCurrent ? [.isButton, .isSelected] : .isButton)
                     .accessibilityHint(isCurrent
                         ? String(localized: "Current step")
-                        : String(localized: "Double tap to jump to this step"))
+                        : InteractionWording.jumpToStepHint)
                 }
 
                 HStack {
