@@ -20,7 +20,9 @@ final class PurchaseManager {
     }()
 
     private(set) var product: Product?
-    /// This device's own App Store purchase of the unlock.
+    /// The unlock this device's Apple Account is entitled to by itself:
+    /// bought with it, or shared with it through the App Store's Family
+    /// Sharing. Never borrowed from a MealPlan household.
     private(set) var ownsUnlock = PurchaseEntitlementCache.isUnlocked
     /// The active household's synced `unlockedByPurchase` flag. Kept apart
     /// from `ownsUnlock` so switching households can drop the inherited
@@ -71,7 +73,11 @@ final class PurchaseManager {
         for await result in Transaction.currentEntitlements {
             if case .verified(let transaction) = result,
                transaction.productID == Self.unlockProductID,
-               transaction.revocationDate == nil {
+               transaction.revocationDate == nil,
+               // Bought by this Apple Account, or shared with it by its App
+               // Store family (the product is Family Shareable). Leaving the
+               // family revokes the shared transaction, so it drops out here.
+               [.purchased, .familyShared].contains(transaction.ownershipType) {
                 owned = true
             }
         }

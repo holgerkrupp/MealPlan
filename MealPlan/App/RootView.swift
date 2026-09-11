@@ -48,6 +48,9 @@ struct RootView: View {
     @State private var didEvaluateOnboarding = false
     @State private var rootSheet: RootSheet?
     @State private var sharingErrorMessage: String?
+    /// The shared household this device just lost access to, for the one
+    /// alert that explains why the plan changed underneath the person.
+    @State private var lostHouseholdName: String?
     /// Set instead of joining immediately when accepting `metadata` would
     /// replace a household this device already has something in. Presented
     /// by the `confirmationDialog` below; see
@@ -109,6 +112,9 @@ struct RootView: View {
             }
             .dismissesOnOutsideClick()
         }
+        .sheet(item: Binding(get: { appState.pendingNearbyJoin }, set: { appState.pendingNearbyJoin = $0 })) { request in
+            JoinNearbyHouseholdView(code: request.code)
+        }
         .task { await evaluateOnboarding() }
         .task { await acceptPendingCloudShares() }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
@@ -133,6 +139,14 @@ struct RootView: View {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(sharingErrorMessage ?? "")
+        }
+        .alert(
+            String(localized: "You’re No Longer in “\(lostHouseholdName ?? "")”"),
+            isPresented: Binding(get: { lostHouseholdName != nil }, set: { if !$0 { lostHouseholdName = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text("The owner removed you or stopped sharing the household. Your recipes are still here, in a new household of your own; the shared plan and shopping list are gone from this device.")
         }
         .confirmationDialog(
             String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
@@ -361,9 +375,30 @@ struct RootView: View {
             // scan only competes with foreground reads and can overlap an
             // engine callback on current iOS betas.
             try await HouseholdCloudSharingService.synchronize(household, context: context)
+        } catch HouseholdSharingError.accessRemoved {
+            await moveToOwnHousehold(from: household)
         } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
             // Offline editing remains available; a push or the next launch
             // retries without interrupting the foreground UI.
+        } catch {
+            sharingErrorMessage = error.localizedDescription
+        }
+    }
+
+    /// The owner removed this person, or replaced the invitation. Start a
+    /// household of their own that keeps the recipes. Changing
+    /// `currentHousehold` re-runs the `.task(id:)`s above: the new household
+    /// syncs to this account's own iCloud, and `reconcileEntitlement` drops
+    /// the unlock borrowed from the old household unless this Apple Account
+    /// bought it or gets it through Family Sharing.
+    private func moveToOwnHousehold(from household: Household) async {
+        let name = household.name
+        do {
+            let own = try await HouseholdCloudSharingService.startOwnHousehold(afterLosingAccessTo: household, context: context)
+            appState.currentHousehold = own
+            appState.isGuest = false
+            MealType.ensure(for: own, context: context)
+            lostHouseholdName = name
         } catch {
             sharingErrorMessage = error.localizedDescription
         }

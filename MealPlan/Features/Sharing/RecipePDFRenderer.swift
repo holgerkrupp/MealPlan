@@ -480,19 +480,44 @@ struct RecipePDFBlockView: View {
     }
 
     private var source: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            if let host = content.sourceHost {
-                Text(String(localized: "Original recipe: \(host)"))
-                    .font(style.font(9, .semibold))
-                    .foregroundStyle(ink)
+        let qrCode = sourceQRCode
+        return HStack(alignment: .center, spacing: 16 * style.scale) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let host = content.sourceHost {
+                    Text(String(localized: "Original recipe: \(host)"))
+                        .font(style.font(9, .semibold))
+                        .foregroundStyle(ink)
+                }
+                if let url = content.sourceURL, !content.sourceIsGone {
+                    Text(url.absoluteString)
+                        .font(style.font(8))
+                        .foregroundStyle(muted)
+                        .lineLimit(2)
+                }
+                if qrCode != nil {
+                    Text("Scan the code to open the original recipe.")
+                        .font(style.font(8))
+                        .foregroundStyle(muted)
+                        .padding(.top, 3)
+                }
             }
-            if let url = content.sourceURL, !content.sourceIsGone {
-                Text(url.absoluteString)
-                    .font(style.font(8))
-                    .foregroundStyle(muted)
-                    .lineLimit(2)
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if let qrCode {
+                // About 25 mm across: small enough to sit beside the credit,
+                // large enough for a phone held over a kitchen counter.
+                QRCodeShape(matrix: qrCode)
+                    .fill(Color.black)
+                    .frame(width: 72 * style.scale, height: 72 * style.scale)
             }
         }
         .padding(.top, 18 * style.scale)
+    }
+
+    /// Only for a page that is still there — a code that leads to a 404 is
+    /// worse on paper than no code, because nobody can see where it goes.
+    private var sourceQRCode: QRCodeMatrix? {
+        guard content.hasWebSource, !content.sourceIsGone, let url = content.sourceURL else { return nil }
+        return QRCodeMatrix(string: url.absoluteString)
     }
 }

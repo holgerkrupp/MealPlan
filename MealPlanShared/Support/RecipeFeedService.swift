@@ -131,12 +131,36 @@ enum RecipeFeedService {
     /// high-volume magazine cannot grow the shared store without limit.
     static let archiveLimit = 600
 
-    private static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) async throws {
-        var existing = Dictionary(uniqueKeysWithValues: (feed.items ?? []).map { ($0.stableID, $0) })
+    static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) async throws {
+        // Some feeds repeat the same entry, and older versions consequently
+        // stored more than one item with the same stable ID. Building a
+        // dictionary with `uniqueKeysWithValues` traps on that data before a
+        // refresh can repair it, which made the whole app crash on launch.
+        // Keep the most recently fetched copy and remove the others.
+        var existing: [String: RecipeFeedItem] = [:]
+        var duplicates: [RecipeFeedItem] = []
+        for item in feed.items ?? [] {
+            guard let current = existing[item.stableID] else {
+                existing[item.stableID] = item
+                continue
+            }
+            if item.fetchedAt > current.fetchedAt {
+                existing[item.stableID] = item
+                duplicates.append(current)
+            } else {
+                duplicates.append(item)
+            }
+        }
+
+        var refreshedIDs = Set<String>()
         for article in parsed.articles.prefix(100) where RecipeArticleClassifier.isLikelyRecipe(article) {
-            let item = existing.removeValue(forKey: article.id)
+            // A repeated entry in a single response must update the same
+            // model rather than insert another duplicate for the next launch.
+            guard refreshedIDs.insert(article.id).inserted else { continue }
+            let item = existing[article.id]
                 ?? RecipeFeedItem(stableID: article.id, title: article.title, url: article.url)
             if item.feed == nil { context.insert(item) }
+            existing[article.id] = item
             item.title = article.title
             item.urlString = article.url.absoluteString
             item.author = article.author
@@ -152,13 +176,19 @@ enum RecipeFeedService {
         // Everything the feed no longer lists is archived rather than deleted:
         // a blog that publishes ten posts at a time would otherwise quietly
         // lose a recipe for anyone who didn't open the app that week.
-        for stranded in existing.values where stranded.archivedAt == nil {
+        for (id, stranded) in existing where !refreshedIDs.contains(id) && stranded.archivedAt == nil {
             stranded.archivedAt = .now
+        }
+
+        for duplicate in duplicates {
+            context.delete(duplicate)
         }
 
         // The archive is still bounded. The oldest archived posts go first, and
         // only once the feed is over its limit.
-        let all = feed.sortedItems
+        let all = existing.values.sorted {
+            ($0.publishedAt ?? $0.fetchedAt) > ($1.publishedAt ?? $1.fetchedAt)
+        }
         guard all.count > archiveLimit else { return }
         let doomed = all.dropFirst(archiveLimit).filter(\.isArchived)
         for item in doomed { context.delete(item) }

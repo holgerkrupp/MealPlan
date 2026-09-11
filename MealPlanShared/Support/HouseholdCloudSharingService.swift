@@ -2,32 +2,138 @@ import CloudKit
 import Foundation
 import SwiftData
 
-struct HouseholdShareInvitation: Sendable {
-    let url: URL
-    let participantCount: Int
+/// Someone on the household's share, as the invitation sheet lists them.
+struct HouseholdShareParticipant: Identifiable, Equatable, Sendable {
+    enum Status: Equatable, Sendable {
+        /// Invited by Apple Account; hasn't opened the link yet.
+        case invited
+        case joined
+    }
+
+    /// `CKShare.Participant.participantID`.
+    let id: String
+    let name: String?
+    let emailAddress: String?
+    let phoneNumber: String?
     let isOwner: Bool
+    let canEdit: Bool
+    let status: Status
+
+    /// CloudKit only learns an invitee's name once they accept, so until
+    /// then they are shown by the address they were invited at.
+    var displayName: String {
+        name ?? emailAddress ?? phoneNumber ?? String(localized: "Invited person")
+    }
+
+    /// The address the invitation went to, when the name is shown instead.
+    var detail: String? {
+        name == nil ? nil : (emailAddress ?? phoneNumber)
+    }
+}
+
+extension HouseholdShareParticipant {
+    /// `nil` for anyone who is neither invited nor joined (removed, unknown).
+    init?(_ participant: CKShare.Participant) {
+        let status: Status
+        switch participant.acceptanceStatus {
+        case .accepted: status = .joined
+        case .pending: status = .invited
+        default: return nil
+        }
+        let formatter = PersonNameComponentsFormatter()
+        self.init(
+            id: participant.participantID,
+            name: participant.userIdentity.nameComponents
+                .map { formatter.string(from: $0) }
+                .flatMap { $0.isEmpty ? nil : $0 },
+            emailAddress: participant.userIdentity.lookupInfo?.emailAddress,
+            phoneNumber: participant.userIdentity.lookupInfo?.phoneNumber,
+            isOwner: participant.role == .owner,
+            canEdit: participant.permission == .readWrite,
+            status: status
+        )
+    }
+}
+
+struct HouseholdShareInvitation: Sendable {
+    /// The share's one link. It only opens the household for the people
+    /// invited to it; CloudKit turns every other Apple Account away.
+    let url: URL
+    let participants: [HouseholdShareParticipant]
+
+    /// Everyone on the share except the owner.
+    var invitees: [HouseholdShareParticipant] { participants.filter { !$0.isOwner } }
+}
+
+/// What the owner typed to invite someone: the email address or phone
+/// number of that person's Apple Account.
+enum HouseholdInviteAddress: Equatable, Sendable {
+    case email(String)
+    case phone(String)
+
+    init?(_ text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.contains("@") {
+            let parts = trimmed.split(separator: "@", omittingEmptySubsequences: false)
+            guard parts.count == 2, !parts[0].isEmpty,
+                  parts[1].contains("."), !parts[1].hasPrefix("."), !parts[1].hasSuffix("."),
+                  !trimmed.contains(where: \.isWhitespace) else { return nil }
+            self = .email(trimmed)
+        } else {
+            // People paste numbers the way their contacts app shows them.
+            let formatting = CharacterSet(charactersIn: " -()./\u{00A0}")
+            var scalars = String.UnicodeScalarView()
+            scalars.append(contentsOf: trimmed.unicodeScalars.filter { !formatting.contains($0) })
+            let compact = String(scalars)
+            let digits = compact.hasPrefix("+") ? compact.dropFirst() : Substring(compact)
+            guard (6...15).contains(digits.count), digits.allSatisfy({ $0.isASCII && $0.isNumber }) else { return nil }
+            self = .phone(compact)
+        }
+    }
+
+    var text: String {
+        switch self {
+        case .email(let value), .phone(let value): value
+        }
+    }
 }
 
 enum HouseholdSharingError: LocalizedError {
     case cloudKitUnavailable
     case invalidInvitation
     case invitationNotFound
+    case notInvited
     case missingShareURL
     case missingRootRecord
     case cloudKitDidNotReturnRecord
     case onlyOwnerCanInvite
     case readOnlyHousehold
+    case onlyOwnerCanRemoveMembers
+    case memberNotRemovable
+    case inviteeNotFound(String)
+    case cannotInviteYourself
+    case legacyShareNotConverted
+    /// This device's Apple Account is no longer on the household's share.
+    /// `RootView` answers it by moving to a household of its own.
+    case accessRemoved
 
     var errorDescription: String? {
         switch self {
         case .cloudKitUnavailable: String(localized: "iCloud sharing is unavailable on this device.")
         case .invalidInvitation: String(localized: "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app.")
         case .invitationNotFound: String(localized: "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation.")
+        case .notInvited: String(localized: "This invitation is for a different Apple Account. Ask the household’s owner to invite the email address or phone number of the Apple Account on this device.")
         case .missingShareURL: String(localized: "iCloud did not create an invitation link. Please try again.")
         case .missingRootRecord: String(localized: "The shared household could not be found.")
         case .cloudKitDidNotReturnRecord: String(localized: "iCloud did not return the saved collaboration record.")
         case .onlyOwnerCanInvite: String(localized: "Only the household owner can invite people.")
         case .readOnlyHousehold: String(localized: "This household is view only. Ask its owner for edit access to make changes.")
+        case .onlyOwnerCanRemoveMembers: String(localized: "Only the household owner can remove people.")
+        case .memberNotRemovable: String(localized: "This person can’t be removed from the household.")
+        case .inviteeNotFound(let address): String(localized: "iCloud couldn’t find an Apple Account for “\(address)”. Check it for typos, or try another email address or phone number they use with their Apple Account.")
+        case .cannotInviteYourself: String(localized: "That’s your own Apple Account. Your other devices signed in to it get the household automatically.")
+        case .legacyShareNotConverted: String(localized: "Some people who joined with the old link couldn’t be moved to personal invitations. Use Create New Invitation, then invite everyone again.")
+        case .accessRemoved: String(localized: "You no longer have access to this household.")
         }
     }
 }
@@ -144,10 +250,25 @@ enum HouseholdCloudSharingService {
     /// would be.
     static func fetchMetadata(for url: URL) async throws -> CKShare.Metadata {
         let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
-        return try await container.shareMetadata(for: url)
+        do {
+            return try await container.shareMetadata(for: url)
+        } catch let error as CKError where error.code == .participantMayNeedVerification {
+            throw HouseholdSharingError.notInvited
+        }
     }
 
-    static func prepareInvitation(for household: Household, canEdit: Bool, context: ModelContext) async throws -> HouseholdShareInvitation {
+    /// Makes sure the household has a share, and returns its link and the
+    /// people on it.
+    ///
+    /// The share is private (`publicPermission == .none`): only people the
+    /// owner invites by Apple Account can open the link, so someone who was
+    /// removed can't come back through it. Per-person
+    /// `oneTimeURLParticipant()` links would work without knowing an address,
+    /// but `addParticipant(_:)` traps — not throws — unless the app carries
+    /// Apple's restricted `com.apple.developer.icloud-extended-share-access`
+    /// entitlement, which crashed the app on every invitation. Participants
+    /// looked up by email or phone need no entitlement.
+    static func prepareInvitation(for household: Household, context: ModelContext) async throws -> HouseholdShareInvitation {
         let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
         var locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         guard locator.isOwner else { throw HouseholdSharingError.onlyOwnerCanInvite }
@@ -170,18 +291,8 @@ enum HouseholdCloudSharingService {
         // invitation UI is opened so future participants can fetch the root
         // record by ID without relying on any CloudKit query indexes.
         share[householdIDKey] = household.uuid.uuidString as CKRecordValue
-
-        // Anyone holding the link may join, at the permission the owner picked.
-        // A `CKShare.Participant.oneTimeURLParticipant()` would be tighter, but
-        // `addParticipant(_:)` traps (not throws) unless the app carries Apple's
-        // restricted `com.apple.developer.icloud-extended-share-access`
-        // entitlement — which crashed the app on every invitation.
-        share.publicPermission = canEdit ? .readWrite : .readOnly
-        let result = try await database.modifyRecords(saving: [share], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
-        guard let savedShare = try savedRecord(share.recordID, in: result.saveResults) as? CKShare,
-              let url = savedShare.url else {
-            throw HouseholdSharingError.missingShareURL
-        }
+        try await convertToPersonalInvitations(share, container: container)
+        let savedShare = try await save(share, to: database)
 
         locator.shareRecordName = savedShare.recordID.recordName
         locator.isReadOnly = false
@@ -190,14 +301,65 @@ enum HouseholdCloudSharingService {
         refreshMembers(from: savedShare, household: household, context: context)
         try context.save()
 
-        return .init(url: url, participantCount: acceptedParticipantCount(in: savedShare), isOwner: true)
+        return try invitation(from: savedShare)
+    }
+
+    /// Adds the person behind `address` to the share at the chosen access.
+    /// They still have to open the link, and only an Apple Account with that
+    /// email address or phone number can. Inviting someone already on the
+    /// share updates their access instead of adding them twice.
+    static func invite(
+        _ address: HouseholdInviteAddress,
+        canEdit: Bool,
+        to household: Household,
+        context: ModelContext
+    ) async throws -> HouseholdShareInvitation {
+        try await addParticipant(canEdit: canEdit, to: household, context: context) { container in
+            try await lookUpParticipant(address, in: container)
+        }
+    }
+
+    /// Adds the Apple Account a nearby device identified itself as (its
+    /// iCloud user record name, handed over by `NearbyInviteHost`) and returns
+    /// the invitation with the link that device joins with.
+    static func invite(
+        userRecordName: String,
+        canEdit: Bool,
+        to household: Household,
+        context: ModelContext
+    ) async throws -> HouseholdShareInvitation {
+        try await addParticipant(canEdit: canEdit, to: household, context: context) { container in
+            try await container.shareParticipant(forUserRecordID: CKRecord.ID(recordName: userRecordName))
+        }
+    }
+
+    private static func addParticipant(
+        canEdit: Bool,
+        to household: Household,
+        context: ModelContext,
+        lookUp: (CKContainer) async throws -> CKShare.Participant
+    ) async throws -> HouseholdShareInvitation {
+        let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
+        let currentUserRecordID = try? await container.userRecordID()
+        return try await modifyShare(of: household, context: context, unlessOwner: .onlyOwnerCanInvite) { share in
+            // Looked up afresh on every attempt: a participant object belongs
+            // to the share instance it was added to.
+            let participant = try await lookUp(container)
+            if let id = participant.userIdentity.userRecordID, id == currentUserRecordID {
+                throw HouseholdSharingError.cannotInviteYourself
+            }
+            participant.role = .privateUser
+            participant.permission = canEdit ? .readWrite : .readOnly
+            share.addParticipant(participant)
+        }
     }
 
     /// Revokes the current zone-wide share and immediately creates a new one.
     /// Deleting a `CKShare` stops sharing its zone but does not delete the zone
     /// or any of the household records inside it, so this is the safe escape
-    /// hatch for an invitation URL that CloudKit can no longer resolve.
-    static func replaceInvitation(for household: Household, canEdit: Bool, context: ModelContext) async throws -> HouseholdShareInvitation {
+    /// hatch for an invitation URL that CloudKit can no longer resolve. The
+    /// new share starts with nobody on it.
+    static func replaceInvitation(for household: Household, context: ModelContext) async throws -> HouseholdShareInvitation {
         var locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         guard locator.isOwner else { throw HouseholdSharingError.onlyOwnerCanInvite }
 
@@ -229,7 +391,40 @@ enum HouseholdCloudSharingService {
         household.modifiedAt = .now
         try context.save()
 
-        return try await prepareInvitation(for: household, canEdit: canEdit, context: context)
+        return try await prepareInvitation(for: household, context: context)
+    }
+
+    /// Whether the owner can take `member` out of the share: an active,
+    /// CloudKit-backed participant who isn't the owner. The owner stops
+    /// sharing altogether with `replaceInvitation`, not by removing themselves.
+    static func canRemove(_ member: HouseholdMember) -> Bool {
+        member.isActive && !member.isCurrentUser && member.role != .owner && member.cloudKitParticipantID != nil
+    }
+
+    /// Takes one person out of the household's share. For someone who joined,
+    /// CloudKit revokes their access to the zone immediately, and their device
+    /// moves to a household of its own on its next sync (see
+    /// `startOwnHousehold(afterLosingAccessTo:context:)`). For a pending
+    /// invitation, the link simply stops working for them. The household and
+    /// its records stay put either way.
+    static func removeParticipant(
+        withID participantID: String,
+        from household: Household,
+        context: ModelContext
+    ) async throws -> HouseholdShareInvitation {
+        try await modifyShare(of: household, context: context, unlessOwner: .onlyOwnerCanRemoveMembers) { share in
+            // Already gone: they left, or another owner device removed them.
+            guard let participant = share.participants.first(where: { $0.participantID == participantID }) else { return }
+            guard participant.role != .owner else { throw HouseholdSharingError.memberNotRemovable }
+            share.removeParticipant(participant)
+        }
+    }
+
+    static func removeMember(_ member: HouseholdMember, from household: Household, context: ModelContext) async throws {
+        guard canRemove(member), let participantID = member.cloudKitParticipantID else {
+            throw HouseholdSharingError.memberNotRemovable
+        }
+        _ = try await removeParticipant(withID: participantID, from: household, context: context)
     }
 
     /// Joins the household behind `metadata`. `mergeRecipes` decides what
@@ -287,9 +482,14 @@ enum HouseholdCloudSharingService {
                 metadata.share.recordID,
                 from: database
             ) else {
-                if let cloudError = error as? CKError,
-                   cloudError.code == .unknownItem || cloudError.code == .zoneNotFound {
-                    throw HouseholdSharingError.invitationNotFound
+                if let cloudError = error as? CKError {
+                    switch cloudError.code {
+                    case .unknownItem, .zoneNotFound: throw HouseholdSharingError.invitationNotFound
+                    // The link was opened by an Apple Account the owner
+                    // didn't invite.
+                    case .participantMayNeedVerification: throw HouseholdSharingError.notInvited
+                    default: break
+                    }
                 }
                 throw error
             }
@@ -369,15 +569,90 @@ enum HouseholdCloudSharingService {
         throw lastError
     }
 
+    /// Runs a sync round and refreshes the member roster from the share.
+    ///
+    /// On a participant's device this is also where losing access shows up:
+    /// once the owner removes them, or replaces the invitation, the share and
+    /// its zone vanish from this account's shared database. That throws
+    /// `HouseholdSharingError.accessRemoved` — only for a missing share or
+    /// zone, never for a network or server failure (see
+    /// `indicatesLostAccess(_:)`), because the answer to it replaces the
+    /// household on this device.
     static func synchronize(_ household: Household, context: ModelContext) async throws {
-        try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
-        guard let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier),
-              let shareID = locator.shareRecordID else { return }
+        let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
+        var syncError: Error?
+        do {
+            try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+        } catch {
+            // A removed participant's engine fails first; the share lookup
+            // below decides whether that failure means removal.
+            syncError = error
+        }
+
+        guard let locator, let shareID = locator.shareRecordID else {
+            if let syncError { throw syncError }
+            return
+        }
         let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
         let database = locator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
-        if let share = try? await fetchRecord(shareID, from: database) as? CKShare {
-            refreshMembers(from: share, household: household, context: context)
+        let lostAccess: Bool
+        do {
+            let share = try await fetchRecord(shareID, from: database) as? CKShare
+            let isStillOnShare = share?.currentUserParticipant.map { $0.acceptanceStatus == .accepted } ?? true
+            lostAccess = !locator.isOwner && !isStillOnShare
+            if let share, !lostAccess {
+                refreshMembers(from: share, household: household, context: context)
+            }
+        } catch {
+            lostAccess = !locator.isOwner && indicatesLostAccess(error)
         }
+
+        if lostAccess { throw HouseholdSharingError.accessRemoved }
+        if let syncError { throw syncError }
+    }
+
+    /// Whether a CloudKit failure on a participant's device means the share
+    /// itself is gone for this account — the owner removed them, or replaced
+    /// the invitation — rather than a passing network or server problem.
+    static func indicatesLostAccess(_ error: Error) -> Bool {
+        guard let error = error as? CKError else { return false }
+        if error.code == .partialFailure {
+            guard let itemErrors = error.partialErrorsByItemID?.values, !itemErrors.isEmpty else { return false }
+            return itemErrors.allSatisfy(indicatesLostAccess)
+        }
+        return [.unknownItem, .zoneNotFound, .userDeletedZone].contains(error.code)
+    }
+
+    /// Moves this device off a shared household it can no longer reach onto
+    /// a new household of its own. The recipes come along, as with joining's
+    /// Merge Recipes; the shared plan, shopping list, history, and routines
+    /// stay with the old household, which is deleted from this device only.
+    /// Household preferences (units, portions, nutrition) carry over; the
+    /// synced App Store unlock deliberately doesn't.
+    static func startOwnHousehold(afterLosingAccessTo old: Household, context: ModelContext) async throws -> Household {
+        // Stop syncing the lost zone before anything is deleted, or the
+        // deletion scan would queue deletes for the owner's records.
+        await HouseholdRecordSyncService.shared.stop()
+        if let locator = HouseholdShareLocator.decode(old.cloudKitShareIdentifier) {
+            HouseholdRecordSyncService.shared.discardState(for: locator)
+        }
+
+        let household = Household(name: String(localized: "Family"))
+        household.unitSystemRaw = old.unitSystemRaw
+        household.roundsDisplayedAmounts = old.roundsDisplayedAmounts
+        household.calendarStyleRaw = old.calendarStyleRaw
+        household.standardServings = old.standardServings
+        household.showsNutritionEstimates = old.showsNutritionEstimates
+        household.energyUnitRaw = old.energyUnitRaw
+        household.localeIdentifier = old.localeIdentifier
+        context.insert(household)
+
+        mergeDishes(from: old, into: household)
+        context.delete(old)
+        try context.save()
+        PantryStaples.seedDefaults(for: household, context: context)
+        NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
+        return household
     }
 
     /// Moves every dish in `oldHousehold` to `newHousehold`, along with the
@@ -448,6 +723,97 @@ enum HouseholdCloudSharingService {
         try? context.save()
     }
 
+    /// Fetches the household's share, lets `change` edit it, and saves it —
+    /// starting once more from a fresh copy if another owner device saved the
+    /// share in between. A share from before per-person invitations is
+    /// converted first: CloudKit only allows participant changes on a share
+    /// that isn't open to anyone with the link.
+    private static func modifyShare(
+        of household: Household,
+        context: ModelContext,
+        unlessOwner notOwnerError: HouseholdSharingError,
+        _ change: (CKShare) async throws -> Void
+    ) async throws -> HouseholdShareInvitation {
+        guard let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier), locator.isOwner else {
+            throw notOwnerError
+        }
+        guard let shareID = locator.shareRecordID else { throw HouseholdSharingError.missingShareURL }
+        let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
+        let database = container.privateCloudDatabase
+
+        var attempt = 0
+        while true {
+            guard let share = try await fetchRecord(shareID, from: database) as? CKShare else {
+                throw HouseholdSharingError.cloudKitDidNotReturnRecord
+            }
+            try await convertToPersonalInvitations(share, container: container)
+            try await change(share)
+            do {
+                let savedShare = try await save(share, to: database)
+                refreshMembers(from: savedShare, household: household, context: context)
+                return try invitation(from: savedShare)
+            } catch let error as CKError where error.code == .serverRecordChanged && attempt == 0 {
+                attempt += 1
+            }
+        }
+    }
+
+    /// Shares made before per-person invitations let anyone with the link
+    /// join. Closing one (`publicPermission = .none`) would lock out everyone
+    /// who joined that way, so each of them is looked up by user record and
+    /// added back as a named participant at the access they had; CloudKit
+    /// updates an existing participant with the same identity in place.
+    /// Throws before touching the share if anyone can't be carried over.
+    private static func convertToPersonalInvitations(_ share: CKShare, container: CKContainer) async throws {
+        guard share.publicPermission != .none else { return }
+        let joined = share.participants.filter { $0.role != .owner && $0.acceptanceStatus == .accepted }
+        let userRecordIDs = joined.compactMap(\.userIdentity.userRecordID)
+        guard userRecordIDs.count == joined.count else { throw HouseholdSharingError.legacyShareNotConverted }
+        let lookups: [CKRecord.ID: Result<CKShare.Participant, any Error>] = userRecordIDs.isEmpty
+            ? [:]
+            : try await container.shareParticipants(forUserRecordIDs: userRecordIDs)
+
+        var replacements: [CKShare.Participant] = []
+        for previous in joined {
+            guard let id = previous.userIdentity.userRecordID,
+                  let participant = try? lookups[id]?.get() else {
+                throw HouseholdSharingError.legacyShareNotConverted
+            }
+            participant.role = .privateUser
+            participant.permission = previous.permission == .readOnly ? .readOnly : .readWrite
+            replacements.append(participant)
+        }
+
+        share.publicPermission = .none
+        for participant in replacements {
+            share.addParticipant(participant)
+        }
+    }
+
+    private static func lookUpParticipant(_ address: HouseholdInviteAddress, in container: CKContainer) async throws -> CKShare.Participant {
+        do {
+            switch address {
+            case .email(let email): return try await container.shareParticipant(forEmailAddress: email)
+            case .phone(let number): return try await container.shareParticipant(forPhoneNumber: number)
+            }
+        } catch let error as CKError where error.code == .unknownItem || error.code == .invalidArguments {
+            throw HouseholdSharingError.inviteeNotFound(address.text)
+        }
+    }
+
+    private static func invitation(from share: CKShare) throws -> HouseholdShareInvitation {
+        guard let url = share.url else { throw HouseholdSharingError.missingShareURL }
+        return .init(url: url, participants: share.participants.compactMap { HouseholdShareParticipant($0) })
+    }
+
+    private static func save(_ share: CKShare, to database: CKDatabase) async throws -> CKShare {
+        let result = try await database.modifyRecords(saving: [share], deleting: [], savePolicy: .ifServerRecordUnchanged, atomically: true)
+        guard let savedShare = try savedRecord(share.recordID, in: result.saveResults) as? CKShare else {
+            throw HouseholdSharingError.cloudKitDidNotReturnRecord
+        }
+        return savedShare
+    }
+
     private static func fetchHouseholdRecord(from share: CKShare, zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> CKRecord {
         let householdID = resolvedHouseholdID(
             shareValue: share[householdIDKey] as? String,
@@ -488,9 +854,5 @@ enum HouseholdCloudSharingService {
     private static func savedRecord(_ id: CKRecord.ID, in results: [CKRecord.ID: Result<CKRecord, Error>]) throws -> CKRecord {
         guard let result = results[id] else { throw HouseholdSharingError.cloudKitDidNotReturnRecord }
         return try result.get()
-    }
-
-    private static func acceptedParticipantCount(in share: CKShare) -> Int {
-        share.participants.filter { $0.role == .owner || $0.acceptanceStatus == .accepted }.count
     }
 }

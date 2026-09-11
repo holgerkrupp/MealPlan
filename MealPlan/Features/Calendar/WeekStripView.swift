@@ -184,7 +184,9 @@ struct WeekStripView: View {
         .buttonStyle(.plain)
         .help(String(localized: "Jump to date…"))
         .accessibilityHint(String(localized: "Jump to date"))
-        .popover(isPresented: $isPickingDate, arrowEdge: .bottom) {
+        // Opens downward, over the plan: the title sits right under the
+        // navigation bar, so a popover above it gets squeezed to a sliver.
+        .popover(isPresented: $isPickingDate, arrowEdge: .top) {
             datePicker
                 .presentationCompactAdaptation(.popover)
         }

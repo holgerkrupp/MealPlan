@@ -28,15 +28,20 @@ records the design decisions that led there.
 | `MealPlanShared/Support/HouseholdRecordConflictResolver.swift` | Decides what wins when the same record changed in two places. |
 | `MealPlanShared/Support/HouseholdCloudBootstrapService.swift` | Finds and downloads a household this Apple Account already owns. |
 | `MealPlanShared/Support/HouseholdCloudSharingService.swift` | Creates, replaces, and accepts invitations; keeps the member roster. |
-| `MealPlan/Features/Household/CloudSharingView.swift` | The invitation sheet: access picker, link, QR code, re-issue. |
+| `MealPlan/Features/Household/CloudSharingView.swift` | The invitation sheet: access, add someone nearby, invite by Apple Account, the people on the share, link, re-issue. |
+| `MealPlan/Features/Household/NearbyInvite.swift` | The in-person hand-off over MultipeerConnectivity: single-use code, owner (`NearbyInviteHost`) and invitee (`NearbyInviteGuest`) sides. |
+| `MealPlan/Features/Household/JoinNearbyHouseholdView.swift` | The invitee's "Join a Household Nearby" screen. |
 | `MealPlan/App/MealPlanApp.swift` | App and scene delegates: push registration and invitation delivery. |
-| `MealPlan/App/RootView.swift` | Accepts queued invitations, warns before replacing a household, drives sync. |
+| `MealPlan/App/RootView.swift` | Accepts queued invitations, warns before replacing a household, drives sync, moves a removed device to a household of its own. |
 
 Configuration that has to be right for any of this to work: the iCloud
 container `iCloud.de.holgerkrupp.mealplan` and the App Group
 `group.de.holgerkrupp.mealplan` in `MealPlan.entitlements`, `CKSharingSupported`
 in `MealPlan/Info.plist`, and the `remote-notification fetch` background modes
-set through `INFOPLIST_KEY_UIBackgroundModes` in the project file.
+set through `INFOPLIST_KEY_UIBackgroundModes` in the project file. Adding
+someone nearby also needs `NSBonjourServices` (`_mealplan-join._tcp` and
+`._udp`) and `NSLocalNetworkUsageDescription` in `Info.plist`, and the Mac
+sandbox's `com.apple.security.network.server` entitlement.
 
 ## The shared foundation
 
@@ -177,24 +182,77 @@ The share gets a title, a `shareType` of
 `de.holgerkrupp.mealplan.household`, and a `householdID` field so a
 participant can address the root record by ID without a CloudKit query.
 
-Access is granted through `share.publicPermission` — `.readWrite` or
-`.readOnly`, from the sheet's Access picker — which means **anyone holding the
-link can join** at that permission. Per-person `oneTimeURLParticipant`
-invitations would be tighter, but `addParticipant(_:)` traps rather than
-throws without Apple's restricted
-`com.apple.developer.icloud-extended-share-access` entitlement, which crashed
-the app on every invitation. The sheet says so in plain language next to the
-link.
+The share is **private** (`publicPermission == .none`): only people the owner
+invites by name can open its link. The owner types the email address or phone
+number of the other person's Apple Account (`HouseholdInviteAddress` accepts
+either, and tolerates the spaces, dashes, and brackets of a pasted number);
+`invite` looks that person up with `CKContainer.shareParticipant(forEmailAddress:)`
+or `(forPhoneNumber:)`, sets the chosen access (`.readWrite` or `.readOnly`),
+and adds them with `addParticipant`. Inviting someone again updates their
+access. Anyone else who opens the link is turned away by CloudKit with
+`participantMayNeedVerification`, which the app shows as `notInvited` ("This
+invitation is for a different Apple Account…").
 
-`HouseholdSharingView` presents the resulting URL three ways — a `ShareLink`,
-a copy button, and a QR code for the phone sitting next to you — and offers
+Participants looked up by address need no special entitlement. The
+alternative — `oneTimeURLParticipant()` links that don't need an address —
+makes `addParticipant(_:)` trap rather than throw without Apple's restricted
+`com.apple.developer.icloud-extended-share-access` entitlement, which crashed
+the app on every invitation in an earlier build.
+
+CloudKit only allows participant changes on a share that isn't public, and
+households shared before this change had anyone-with-the-link shares.
+`convertToPersonalInvitations` handles those the first time the owner opens
+the sheet or changes the people on the share: everyone who already joined is
+looked up by user record ID and added back as a named participant at their old
+access, then the share is closed. If anyone can't be carried over, nothing is
+saved and the owner is told to use **Create New Invitation**.
+
+`HouseholdSharingView` lists everyone on the share — invited or joined, with
+their access — and presents the one link as a `ShareLink` (Messages, Mail, AirDrop) and a
+copy button. It also offers
 **Create New Invitation** (`replaceInvitation`), which deletes the `CKShare`
-and immediately makes a new one. Deleting a share stops sharing the zone but
-keeps the zone and every record in it, so this is the safe repair for a link
-CloudKit can no longer resolve; everyone who had joined loses access and needs
-the new link. Only the owner sees any of this: `isOwner(shareIdentifier:)`
-gates both the sheet's controls and the "Share with family" row in
-`HouseholdSettingsView`.
+and immediately makes a new, empty one. Deleting a share stops sharing the
+zone but keeps the zone and every record in it, so this is the safe repair
+for a link CloudKit can no longer resolve; everyone on the old share loses
+access until they are invited again. Only the owner sees any of this:
+`isOwner(shareIdentifier:)` gates both the sheet's controls and the "Share
+with family" row in `HouseholdSettingsView`.
+
+### Adding someone nearby
+
+When both people are in the same room, the owner doesn't need an address at
+all. CloudKit's own answer, single-use `oneTimeURLParticipant()` links, needs
+the restricted entitlement above. `NearbyInvite` pairs the two devices directly
+instead, over MultipeerConnectivity (peer-to-peer Wi-Fi / Bluetooth, service
+type `mealplan-join`):
+
+- The invitee's device **advertises** (`NearbyInviteGuest`, run by
+  `JoinNearbyHouseholdView`) with its name and, if it came from a QR code, a
+  12-hex-digit SHA-256 `hint` of that code.
+- The owner's sharing sheet **browses** (`NearbyInviteHost`) for as long as it
+  is open, and connects with an `.required`-encrypted `MCSession` either to a
+  device the owner taps **Add** on, or on its own to a device whose hint
+  matches the code currently on screen.
+- Once connected, the invitee sends `joinRequest(code, userRecordName, name)`.
+  A device the owner didn't tap must present the full code. The owner's device
+  then calls `invite(userRecordName:)` — `shareParticipant(forUserRecordID:)`
+  plus `addParticipant`, the same no-entitlement path as an email address —
+  and sends the share URL back as `invitation(url)`.
+- The invitee hands the URL to `fetchMetadata` (retrying briefly while the
+  saved share reaches iCloud) and then to `HouseholdShareInvitationInbox`, so
+  joining goes through exactly the same `accept` path and "replace your
+  household?" question as a tapped link.
+
+The QR code encodes `mealplan://join-nearby?code=…` (`DeepLink.joinNearby`),
+which the Camera app opens in MealPlan; `AppState.pendingNearbyJoin` presents
+the join screen. The 128-bit code is **single use**: the owner's device
+replaces it the moment someone joins with it, and a new sheet always starts
+with a fresh one. Only the hash is ever visible to other devices nearby; the
+code itself only travels inside the encrypted session. Without a QR code, the
+invitee opens Household ▸ Join a Household Nearby, types the name the owner
+will see, and the owner taps it. This is the app's own AirDrop-like path; the
+share link itself can also be AirDropped from **Send Invitation** once someone
+has been invited by address.
 
 ### Receiving the invitation
 
@@ -266,13 +324,68 @@ deleted. Roles map straight from CloudKit — owner, `.readOnly` participant →
 guest, anything else → editor — and the participant matching
 `currentUserParticipant` is flagged `isCurrentUser`. The `CKShare` is always
 the authority; the local rows exist so "Who's planning" and plan attribution
-can be rendered without a round trip.
+can be rendered without a round trip. "Who's planning" lists only active rows.
+
+### Removing someone
+
+The owner removes people from the invitation sheet's list, or by swiping a
+name in "Who's planning" (Control-click on the Mac). A pending invitation can
+be withdrawn the same way. `removeParticipant(withID:)` goes through
+`modifyShare`, which re-fetches the `CKShare` from the private database, calls
+`removeParticipant`, and saves it with `.ifServerRecordUnchanged`, starting
+over once if another owner device changed the share meanwhile. CloudKit
+revokes that person's access to the zone straight away; no household data is
+touched. The following `refreshMembers` marks their row inactive, and that
+row syncs to everyone else like any other record.
+
+`canRemove` keeps this to active, CloudKit-backed participants who are not the
+owner and not the current user. Someone who already left, or was removed by
+another owner device, is not an error — the roster is simply refreshed.
+Because the share is private, a removed person can't rejoin through the link
+they still have.
+
+### On the removed person's device
+
+The removed device learns about it on its next sync. For a participant,
+`HouseholdCloudSharingService.synchronize` always re-fetches the share from
+the shared database. When that fails with `unknownItem`, `zoneNotFound`, or
+`userDeletedZone` (every item of a `partialFailure` counts only if all of
+them say so), or the share no longer lists this account as accepted, it throws
+`accessRemoved`. `indicatesLostAccess` deliberately ignores network, server,
+and account errors, because the response replaces the household.
+
+`RootView.moveToOwnHousehold` then calls `startOwnHousehold(afterLosingAccessTo:)`:
+
+1. The sync engine is stopped **before** anything is deleted, and the old
+   shared zone's stored sync state is discarded. Otherwise the deletion scan
+   would queue deletes against the owner's records, and a later re-invitation
+   would read the old fingerprints as local deletions.
+2. A new "Family" household is created with the old one's preferences (units,
+   rounding, calendar style, portions, nutrition settings).
+3. `mergeDishes` moves every dish and the ingredients it needs, as joining's
+   Merge Recipes does. The old household — plan, shopping list, history,
+   routines, members — is deleted from this device only.
+4. Default pantry staples and meal types are seeded, and the person sees one
+   alert: "You're No Longer in …".
+
+The new household has no locator, so the next sync creates its zone in this
+account's own private database. It also has `unlockedByPurchase == false`, and
+because its UUID is new, `PurchaseManager.reconcile` drops the unlock that was
+borrowed from the old household and re-checks the App Store (see below).
+
+The same path covers everyone on the old share after **Create New
+Invitation**.
 
 One household-wide field rides along with this: `unlockedByPurchase`. A
 one-time App Store unlock made by any member unlocks unlimited planning for
-everyone, and a device that later joins a *different* household drops the
-inherited unlock and re-checks its own purchase
-(`RootView.reconcileEntitlement`).
+everyone, and a device that later joins — or is removed into — a *different*
+household drops the inherited unlock and re-checks its own entitlement
+(`RootView.reconcileEntitlement`). Only two things count there, both read from
+StoreKit's `Transaction.currentEntitlements`: a purchase made with this Apple
+Account (`ownershipType == .purchased`), or one shared with it by the App
+Store's Family Sharing (`.familyShared` — the product is Family Shareable).
+Leaving the App Store family revokes the shared transaction, and
+`Transaction.updates` re-runs the check.
 
 ### View-only guests
 
@@ -313,7 +426,11 @@ manual recovery path.
   the QR code, the access picker, and the re-issue action on both iOS and
   macOS.
 - No SwiftData CloudKit mirror alongside `CKSyncEngine`.
-- No per-person invitations, for the entitlement reason above.
+- No CloudKit one-time invitation links, for the entitlement reason above;
+  every invitation names an Apple Account. The nearby QR code is single use
+  through the app's own pairing instead.
+- No changing an existing person's access in place: invite the same address
+  again with the other access level.
 - No more than one household per device.
 - No migration from the old whole-household `MealPlanBackup` sharing asset; the
   cutover to per-record sharing was a clean break.
@@ -326,5 +443,15 @@ identity, legacy shares without a `householdID` field, the bootstrap candidate
 ordering, environment namespacing of sync state, both two-clock merges, the
 "equal check clocks prefer checked" rule, and the photo/asset conflict rules.
 `MealPlanTests/HouseholdCloudSharingServiceTests.swift` covers share-link
-recognition, the at-most-once delivery gate with its retry, and the window
-scene configuration that delivers invitations at all.
+recognition, the at-most-once delivery gate with its retry, the window
+scene configuration that delivers invitations at all, which members the
+owner may remove, parsing of invitation addresses, how an invitee is labelled,
+and which CloudKit errors count as losing access.
+
+`MealPlanTests/NearbyInviteTests.swift` covers the single-use code and its
+hint, the `MCPeerID` name limit, the message round trip, and the QR link.
+
+Not covered, because it needs two real devices and Apple Accounts against a
+live container: inviting by address, adding someone nearby, the conversion of
+an old public share, and a removed device switching to its own household.
+Check those by hand before shipping.

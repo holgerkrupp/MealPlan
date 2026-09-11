@@ -120,6 +120,15 @@ final class HouseholdRecordSyncService {
         needsLocalScan = true
     }
 
+    /// Forgets everything stored for syncing `locator`'s zone. Used once this
+    /// device has lost access to a shared household: if it were ever invited
+    /// back, the old fingerprints would read as local deletions and queue
+    /// deletes for the owner's records.
+    func discardState(for locator: HouseholdShareLocator) {
+        defaults.removeObject(forKey: stateKey(for: locator))
+        defaults.removeObject(forKey: metadataKey(for: locator))
+    }
+
     func record(for id: CKRecord.ID) async throws -> CKRecord? {
         guard id.zoneID == locator?.zoneID else { return nil }
         let snapshot: LocalHouseholdRecord?

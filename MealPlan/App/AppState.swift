@@ -47,9 +47,17 @@ final class AppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
+    /// Set when the owner's single-use "add someone nearby" QR code opened
+    /// the app; `RootView` presents `JoinNearbyHouseholdView` for it.
+    var pendingNearbyJoin: NearbyJoinRequest?
     /// Keeps a newly installed device from presenting an empty editable
     /// household while it is still discovering/downloading the owner's data.
     var cloudBootstrapState: CloudBootstrapState = .checking
+
+    struct NearbyJoinRequest: Identifiable, Equatable {
+        let id = UUID()
+        var code: String?
+    }
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -245,6 +253,8 @@ final class AppState {
             if let date { selectedDate = date.startOfDay }
             if dishName != nil { pendingAddDish = PendingAddDish(url: nil, name: dishName) }
             requestedSection = .plan
+        case .joinNearby(let code):
+            pendingNearbyJoin = NearbyJoinRequest(code: code)
         }
     }
 

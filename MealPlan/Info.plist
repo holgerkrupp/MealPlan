@@ -50,6 +50,16 @@
 	</array>
 	<key>CKSharingSupported</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_mealplan-join._tcp</string>
+		<string>_mealplan-join._udp</string>
+	</array>
+	<key>UIApplicationSceneManifest</key>
+	<dict>
+		<key>UIApplicationSupportsMultipleScenes</key>
+		<true/>
+	</dict>
 	<key>UTExportedTypeDeclarations</key>
 	<array>
 		<dict>
@@ -134,10 +144,5 @@
 			</dict>
 		</dict>
 	</array>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<true/>
-	</dict>
 </dict>
 </plist>

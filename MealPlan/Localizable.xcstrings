@@ -85,6 +85,9 @@
     "%@ per 100 g" : {
 
     },
+    "%@ will lose access to the shared plan and shopping list right away. They keep a copy of the household’s recipes." : {
+
+    },
     "%@, %@" : {
       "localizations" : {
         "en" : {
@@ -296,9 +299,6 @@
         }
       }
     },
-    "%lld people currently have access." : {
-
-    },
     "%lld photos" : {
 
     },
@@ -427,9 +427,6 @@
         }
       }
     },
-    "1 person currently has access." : {
-
-    },
     "2 weeks back, 4 weeks ahead" : {
 
     },
@@ -536,6 +533,9 @@
 
     },
     "Access" : {
+
+    },
+    "Access for people you add" : {
 
     },
     "Active" : {
@@ -739,6 +739,9 @@
           }
         }
       }
+    },
+    "Add Someone Nearby" : {
+
     },
     "Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later." : {
 
@@ -1055,12 +1058,6 @@
           }
         }
       }
-    },
-    "Anyone who opens this link gets edit access, so only send it to someone you trust." : {
-
-    },
-    "Anyone who opens this link gets view-only access." : {
-
     },
     "App version" : {
 
@@ -1799,6 +1796,9 @@
         }
       }
     },
+    "Connected. Adding you to the household…" : {
+
+    },
     "Connecting to your household…" : {
       "localizations" : {
         "de" : {
@@ -1844,6 +1844,9 @@
           }
         }
       }
+    },
+    "Control-click someone to remove them from the household." : {
+
     },
     "Cook" : {
       "localizations" : {
@@ -2075,6 +2078,9 @@
     "Couldn’t read that page" : {
 
     },
+    "Couldn’t Remove" : {
+
+    },
     "Couldn’t restore that backup" : {
 
     },
@@ -2109,6 +2115,9 @@
           }
         }
       }
+    },
+    "Couldn’t Update Sharing" : {
+
     },
     "Create a backup…" : {
 
@@ -2531,6 +2540,9 @@
       }
     },
     "Edit meal" : {
+
+    },
+    "Email or phone number" : {
 
     },
     "Emoji" : {
@@ -3062,6 +3074,9 @@
     "Get This Week’s Meal Plan" : {
 
     },
+    "Getting ready…" : {
+
+    },
     "Getting started" : {
       "localizations" : {
         "de" : {
@@ -3222,6 +3237,9 @@
 
     },
     "iCloud" : {
+
+    },
+    "iCloud couldn’t find an Apple Account for “%@”. Check it for typos, or try another email address or phone number they use with their Apple Account." : {
 
     },
     "iCloud did not create an invitation link. Please try again." : {
@@ -3466,6 +3484,12 @@
     "Invitation Copied" : {
 
     },
+    "Invite" : {
+
+    },
+    "Invite by Apple Account" : {
+
+    },
     "Invite people as editors, or as view-only guests who can look but not change." : {
       "localizations" : {
         "de" : {
@@ -3488,6 +3512,12 @@
           }
         }
       }
+    },
+    "Invited" : {
+
+    },
+    "Invited person" : {
+
     },
     "It contains" : {
 
@@ -3516,6 +3546,18 @@
       }
     },
     "Join %@ in MealPlan" : {
+
+    },
+    "Join a Household Nearby" : {
+
+    },
+    "Join Nearby" : {
+
+    },
+    "Joined" : {
+
+    },
+    "Joining the household…" : {
 
     },
     "Jump to date" : {
@@ -3552,6 +3594,9 @@
 
     },
     "Keep looking" : {
+
+    },
+    "Keep this screen open near the device showing the code. You’re added as soon as it finds you." : {
 
     },
     "Kid-friendly" : {
@@ -3696,6 +3741,9 @@
         }
       }
     },
+    "Looking for the owner’s device…" : {
+
+    },
     "Looking for your household before setting up this device." : {
       "localizations" : {
         "de" : {
@@ -3827,6 +3875,12 @@
       }
     },
     "MealPlan" : {
+
+    },
+    "MealPlan can’t be found by nearby devices. Allow it to find devices on your local network in the Settings app, then try again." : {
+
+    },
+    "MealPlan can’t look for nearby devices. Allow it to find devices on your local network in the Settings app, then reopen this screen." : {
 
     },
     "MealPlan couldn’t save the Bring! password to the keychain: %@" : {
@@ -4641,6 +4695,9 @@
         }
       }
     },
+    "On the owner’s device, open Share with family. Your name appears under Add Someone Nearby, and they add you with one tap." : {
+
+    },
     "On the shopping list" : {
       "localizations" : {
         "de" : {
@@ -4681,6 +4738,9 @@
       }
     },
     "Only the household owner can invite people." : {
+
+    },
+    "Only the household owner can remove people." : {
 
     },
     "Only what's planned in this window is published. It updates automatically as the window rolls forward." : {
@@ -4741,9 +4801,6 @@
         }
       }
     },
-    "Open the Camera app on the other phone and point it at this code." : {
-
-    },
     "Open the page with the actual recipe on it, then try again." : {
 
     },
@@ -4764,9 +4821,6 @@
       }
     },
     "Options for %@" : {
-
-    },
-    "Or scan nearby" : {
 
     },
     "Or type any emoji" : {
@@ -4920,6 +4974,9 @@
           }
         }
       }
+    },
+    "People" : {
+
     },
     "People are free at different times." : {
       "localizations" : {
@@ -5344,9 +5401,6 @@
     "Purchases could not be restored: %@" : {
 
     },
-    "QR code for the household invitation" : {
-
-    },
     "Quick" : {
       "localizations" : {
         "de" : {
@@ -5691,6 +5745,9 @@
         }
       }
     },
+    "Remove %@?" : {
+
+    },
     "Remove from group" : {
       "localizations" : {
         "de" : {
@@ -5700,6 +5757,9 @@
           }
         }
       }
+    },
+    "Remove from Household" : {
+
     },
     "Remove from plan" : {
       "localizations" : {
@@ -6050,6 +6110,16 @@
     "Scan recipe" : {
 
     },
+    "Scan the code to open the original recipe." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Code scannen, um das Originalrezept zu öffnen."
+          }
+        }
+      }
+    },
     "Scan with camera" : {
 
     },
@@ -6191,6 +6261,9 @@
         }
       }
     },
+    "Send them the link" : {
+
+    },
     "Send to Bring!" : {
       "localizations" : {
         "de" : {
@@ -6314,6 +6387,9 @@
     "Share Images" : {
 
     },
+    "Share it by Messages, Mail, or AirDrop. It only opens the household for the people listed above." : {
+
+    },
     "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
       "localizations" : {
         "de" : {
@@ -6358,9 +6434,6 @@
 
     },
     "Share Selected Images" : {
-
-    },
-    "Share the invitation" : {
 
     },
     "Share the list or send it to Reminders." : {
@@ -6454,6 +6527,9 @@
         }
       }
     },
+    "Shown on the owner’s device so they know it’s you." : {
+
+    },
     "Shows only when someone is busy, never what they are doing." : {
       "localizations" : {
         "de" : {
@@ -6484,6 +6560,9 @@
         }
       }
     },
+    "Sign in to iCloud on this device to join a household." : {
+
+    },
     "Signed in as" : {
       "localizations" : {
         "de" : {
@@ -6493,6 +6572,9 @@
           }
         }
       }
+    },
+    "Single-use QR code for adding someone nearby" : {
+
     },
     "Site" : {
       "extractionState" : "stale",
@@ -6570,6 +6652,9 @@
         }
       }
     },
+    "Some people who joined with the old link couldn’t be moved to personal invitations. Use Create New Invitation, then invite everyone again." : {
+
+    },
     "Some sources could not be refreshed: %@." : {
       "localizations" : {
         "de" : {
@@ -6579,6 +6664,9 @@
           }
         }
       }
+    },
+    "Someone who already plans with MealPlan can add you from their device while you’re together, no email address needed." : {
+
     },
     "Someone with MealPlan" : {
       "localizations" : {
@@ -6951,6 +7039,9 @@
         }
       }
     },
+    "Swipe someone’s name to remove them from the household." : {
+
+    },
     "Sync now" : {
       "localizations" : {
         "de" : {
@@ -7071,6 +7162,9 @@
     "That calendar isn’t available anymore. Choose another." : {
 
     },
+    "That code has already been used. Ask for a new one." : {
+
+    },
     "That dish isn’t in your library." : {
 
     },
@@ -7089,6 +7183,9 @@
     "That planned meal no longer exists." : {
 
     },
+    "That’s your own Apple Account. Your other devices signed in to it get the household automatically." : {
+
+    },
     "The bottom row plans it as an extra on that day, without using one of your meals." : {
       "localizations" : {
         "de" : {
@@ -7099,16 +7196,22 @@
         }
       }
     },
-    "The current link will stop working and everyone who already joined will lose access. Your household, dishes, and meal plan will stay intact." : {
+    "The connection was lost." : {
+
+    },
+    "The current link will stop working and everyone you invited will lose access until you invite them again. Your household, dishes, and meal plan will stay intact." : {
 
     },
     "The dish needs a name." : {
 
     },
-    "The household stays in iCloud." : {
+    "The invitation could not be opened." : {
 
     },
     "The invitation could not be prepared." : {
+
+    },
+    "The link will stop working for %@." : {
 
     },
     "The next 7 days" : {
@@ -7118,6 +7221,9 @@
 
     },
     "The next 30 days" : {
+
+    },
+    "The owner removed you or stopped sharing the household. Your recipes are still here, in a new household of your own; the shared plan and shopping list are gone from this device." : {
 
     },
     "The PDF and text still credit the site, without the dead link." : {
@@ -7233,6 +7339,9 @@
     "These values are estimates" : {
 
     },
+    "They can also choose Join a Household Nearby in MealPlan’s Household settings, and show up here." : {
+
+    },
     "This aisle name will be remembered for the ingredient." : {
 
     },
@@ -7313,6 +7422,9 @@
     "This invitation does not belong to MealPlan. Ask the owner to send a new invitation from the app." : {
 
     },
+    "This invitation is for a different Apple Account. Ask the household’s owner to invite the email address or phone number of the Apple Account on this device." : {
+
+    },
     "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation." : {
 
     },
@@ -7331,6 +7443,9 @@
           }
         }
       }
+    },
+    "This person can’t be removed from the household." : {
+
     },
     "This planned meal may have been removed." : {
 
@@ -7485,6 +7600,9 @@
           }
         }
       }
+    },
+    "Together in the same room? They scan this code with their camera and are added straight away, no email address needed. Each code works once." : {
+
     },
     "Tomato pasta" : {
       "localizations" : {
@@ -7900,6 +8018,9 @@
         }
       }
     },
+    "Use the email address or phone number of their Apple Account — with the country code for a phone number. Only the people you invite can open the link." : {
+
+    },
     "Use the standard times" : {
       "localizations" : {
         "de" : {
@@ -8021,6 +8142,9 @@
           }
         }
       }
+    },
+    "Waiting for the owner to add you…" : {
+
     },
     "Water" : {
       "localizations" : {
@@ -8183,6 +8307,12 @@
     "Winter" : {
 
     },
+    "Withdraw Invitation" : {
+
+    },
+    "Withdraw the invitation for %@?" : {
+
+    },
     "Worked out from each recipe's ingredients using average reference values, so figures are rough — a planning aid, not a nutrition label. Add your own values to an ingredient from the recipe screen." : {
 
     },
@@ -8211,6 +8341,12 @@
 
     },
     "You joined this household as a guest, so you can’t replace its data." : {
+
+    },
+    "You no longer have access to this household." : {
+
+    },
+    "You’re No Longer in “%@”" : {
 
     },
     "You’re subscribed to all of these already." : {
@@ -8274,6 +8410,9 @@
           }
         }
       }
+    },
+    "Your name" : {
+
     },
     "Your plan and dishes are stored on your device and shared with your family through iCloud." : {
       "localizations" : {
