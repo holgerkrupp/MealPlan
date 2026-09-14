@@ -238,12 +238,14 @@ struct WeekSectionView: View {
             showingPaywall = true
             return false
         }
-        return MealPlanner.drop(
+        let accepted = MealPlanner.drop(
             reference, onto: day, mealKey: nil,
             household: appState.currentHousehold,
             memberName: appState.currentMemberName,
             context: context
         )
+        if accepted { MealPlanTips.recordAcceptedDrop(reference) }
+        return accepted
     }
 
     /// The day menu's "plan an extra" action, or nil for a guest, who can read
@@ -452,6 +454,7 @@ private struct DayCard<Content: View>: View {
                         .frame(minWidth: 44, minHeight: 44)
                         .contentShape(Rectangle())
                 }
+                .help(String(localized: "Collapse this day, copy last week’s meals, or plan an extra"))
                 .accessibilityLabel(String(localized: "Day options"))
             }
             .padding(.horizontal, 12)

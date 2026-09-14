@@ -29,8 +29,8 @@ records the design decisions that led there.
 | `MealPlanShared/Support/HouseholdCloudBootstrapService.swift` | Finds and downloads a household this Apple Account already owns. |
 | `MealPlanShared/Support/HouseholdCloudSharingService.swift` | Creates, replaces, and accepts invitations; keeps the member roster. |
 | `MealPlan/Features/Household/CloudSharingView.swift` | The invitation sheet: access, add someone nearby, invite by Apple Account, the people on the share, link, re-issue. |
-| `MealPlan/Features/Household/NearbyInvite.swift` | The in-person hand-off over MultipeerConnectivity: single-use code, owner (`NearbyInviteHost`) and invitee (`NearbyInviteGuest`) sides. |
-| `MealPlan/Features/Household/JoinNearbyHouseholdView.swift` | The invitee's "Join a Household Nearby" screen. |
+| `MealPlan/Features/Household/NearbyInvite.swift` | The in-person hand-off over MultipeerConnectivity, iOS only: single-use code, owner (`NearbyInviteHost`) and invitee (`NearbyInviteGuest`) sides. The code and message helpers stay cross-platform so the tests cover them. |
+| `MealPlan/Features/Household/JoinNearbyHouseholdView.swift` | The invitee's "Join a Household Nearby" screen (iOS only). |
 | `MealPlan/App/MealPlanApp.swift` | App and scene delegates: push registration and invitation delivery. |
 | `MealPlan/App/RootView.swift` | Accepts queued invitations, warns before replacing a household, drives sync, moves a removed device to a household of its own. |
 
@@ -39,9 +39,11 @@ container `iCloud.de.holgerkrupp.mealplan` and the App Group
 `group.de.holgerkrupp.mealplan` in `MealPlan.entitlements`, `CKSharingSupported`
 in `MealPlan/Info.plist`, and the `remote-notification fetch` background modes
 set through `INFOPLIST_KEY_UIBackgroundModes` in the project file. Adding
-someone nearby also needs `NSBonjourServices` (`_mealplan-join._tcp` and
-`._udp`) and `NSLocalNetworkUsageDescription` in `Info.plist`, and the Mac
-sandbox's `com.apple.security.network.server` entitlement.
+someone nearby (iPhone and iPad only) also needs `NSBonjourServices`
+(`_mealplan-join._tcp` and `._udp`) in `Info.plist` and
+`INFOPLIST_KEY_NSLocalNetworkUsageDescription` in the project file. The Mac
+app deliberately carries **no** `com.apple.security.network.server`
+entitlement — see below.
 
 ## The shared foundation
 
@@ -219,6 +221,14 @@ access until they are invited again. Only the owner sees any of this:
 with family" row in `HouseholdSettingsView`.
 
 ### Adding someone nearby
+
+**iPhone and iPad only.** Everything in this section is compiled out on
+macOS (`#if os(iOS)` in `NearbyInvite.swift`, `JoinNearbyHouseholdView.swift`,
+and the nearby parts of `CloudSharingView`/`HouseholdView`/`RootView`), because
+a sandboxed Mac app needs `com.apple.security.network.server` to accept the
+incoming peer connection, and App Review rejected that entitlement as not
+matching visible functionality. The Mac invites people by Apple Account
+instead. A Mac that opens a `mealplan://join-nearby` link does nothing.
 
 When both people are in the same room, the owner doesn't need an address at
 all. CloudKit's own answer, single-use `oneTimeURLParticipant()` links, needs

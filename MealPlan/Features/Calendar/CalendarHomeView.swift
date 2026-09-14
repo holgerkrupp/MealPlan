@@ -75,8 +75,19 @@ struct CalendarHomeView: View {
                 .background(.bar)
             }
 
+            // Moving a meal is a long press and a drag — nothing on a card
+            // says so. Above the plan rather than on a card, since the tip is
+            // about every meal and also points at the strip up here.
+            if !appState.isGuest {
+                InlineTip(
+                    tip: MoveMealTip(),
+                    padding: EdgeInsets(top: 8, leading: MacLayout.gutter, bottom: 8, trailing: MacLayout.gutter)
+                )
+            }
+
             plan
         }
+        .task(id: planEntries.count) { MealPlanTips.updatePlannedMealCount(planEntries.count) }
         // The Plan menu only works while the calendar is on screen; switching
         // to another section drops this value and greys the menu out.
         .focusedSceneValue(\.planCommands, PlanCommands(
@@ -117,40 +128,36 @@ struct CalendarHomeView: View {
                 if localeWeek != stripWeekStart { stripWeekStart = localeWeek }
             }
         )
-        .navigationTitle(appState.currentHousehold?.name ?? "MealPlan")
+        .navigationTitle(AppSection.plan.title)
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
+            ToolbarItem(placement: .navigation) {
                 Button(String(localized: "Today")) { goTo(.now) }
             }
-            ToolbarItem(placement: .primaryAction) {
-                Button {
-                    showingShareImages = true
+            ToolbarItem(placement: .secondaryAction) {
+                Menu {
+                    Button(String(localized: "Share Images"), systemImage: "photo.stack") {
+                        showingShareImages = true
+                    }
+                    Button(String(localized: "Print plan…"), systemImage: "printer") {
+                        printingWeek = focusWeek
+                    }
+                    Divider()
+                    Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
+                        showingMealsSettings = true
+                    }
+                    Menu(String(localized: "This week"), systemImage: "square.on.square") {
+                        Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
+                            savingTemplateWeek = focusWeek
+                        }
+                        Button(String(localized: "Apply a template…"), systemImage: "square.on.square.dashed") {
+                            applyingTemplateWeek = focusWeek
+                        }
+                    }
                 } label: {
-                    Label(String(localized: "Share Images"), systemImage: "photo.stack")
-                }
-                .help(String(localized: "Share Images"))
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
-                    showingMealsSettings = true
-                }
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Print plan…"), systemImage: "printer") {
-                    printingWeek = focusWeek
-                }
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Menu(String(localized: "This week"), systemImage: "square.on.square") {
-                    Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
-                        savingTemplateWeek = focusWeek
-                    }
-                    Button(String(localized: "Apply a template…"), systemImage: "square.on.square.dashed") {
-                        applyingTemplateWeek = focusWeek
-                    }
+                    Label(String(localized: "More"), systemImage: "ellipsis")
                 }
             }
         }
@@ -225,7 +232,10 @@ struct CalendarHomeView: View {
             memberName: appState.currentMemberName,
             context: context
         )
-        if accepted { goTo(day) }
+        if accepted {
+            MealPlanTips.recordAcceptedDrop(reference)
+            goTo(day)
+        }
         return accepted
     }
 

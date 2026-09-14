@@ -135,65 +135,70 @@ struct ShoppingListView: View {
                 }
                 .disabled(items.isEmpty)
             }
-            ToolbarItemGroup(placement: .secondaryAction) {
-                Button {
-                    showingPantryStaples = true
-                } label: {
-                    Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
-                }
-                Divider()
-                Button {
-                    showingPrint = true
-                } label: {
-                    Label(String(localized: "Print list…"), systemImage: "printer")
-                }
-                .disabled(items.isEmpty)
-                #if os(iOS)
-                Button {
-                    Task { await exportToReminders() }
-                } label: {
-                    Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
-                }
-                .disabled(isExporting || items.isEmpty)
-                #endif
-                Toggle(isOn: $hideCheckedItems) {
-                    Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
-                }
-                Divider()
-                Button(String(localized: "Clear ticked items"), role: .destructive) {
-                    clearChecked()
-                }
-                .disabled(!items.contains(where: \.isChecked))
-                Button(String(localized: "Clear the whole list"), role: .destructive) {
-                    confirmingClearAll = true
-                }
-                .disabled(items.isEmpty)
-
-                Divider()
-
-                if isConnectedToBring {
+            ToolbarItem(placement: .secondaryAction) {
+                Menu {
                     Button {
-                        Task { await sendToBring() }
+                        showingPantryStaples = true
                     } label: {
-                        Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+                        Label(String(localized: "Pantry staples…"), systemImage: "shippingbox")
                     }
-                    .disabled(items.isEmpty || bringService.isSyncing)
                     Button {
-                        Task { await syncWithBring() }
+                        showingPrint = true
                     } label: {
-                        Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+                        Label(String(localized: "Print list…"), systemImage: "printer")
                     }
-                    .disabled(bringService.isSyncing)
-                }
-                Button {
-                    showingBringSetup = true
+                    .disabled(items.isEmpty)
+                    #if os(iOS)
+                    Button {
+                        Task { await exportToReminders() }
+                    } label: {
+                        Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
+                    }
+                    .disabled(isExporting || items.isEmpty)
+                    #endif
+                    Toggle(isOn: $hideCheckedItems) {
+                        Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
+                    }
+
+                    Divider()
+
+                    Button(String(localized: "Clear ticked items"), role: .destructive) {
+                        clearChecked()
+                    }
+                    .disabled(!items.contains(where: \.isChecked))
+                    Button(String(localized: "Clear the whole list"), role: .destructive) {
+                        confirmingClearAll = true
+                    }
+                    .disabled(items.isEmpty)
+
+                    Divider()
+
+                    if isConnectedToBring {
+                        Button {
+                            Task { await sendToBring() }
+                        } label: {
+                            Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
+                        }
+                        .disabled(items.isEmpty || bringService.isSyncing)
+                        Button {
+                            Task { await syncWithBring() }
+                        } label: {
+                            Label(String(localized: "Sync with Bring!"), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .disabled(bringService.isSyncing)
+                    }
+                    Button {
+                        showingBringSetup = true
+                    } label: {
+                        Label(
+                            isConnectedToBring
+                                ? String(localized: "Bring! settings…")
+                                : String(localized: "Connect to Bring!…"),
+                            systemImage: "cart.badge.plus"
+                        )
+                    }
                 } label: {
-                    Label(
-                        isConnectedToBring
-                            ? String(localized: "Bring! settings…")
-                            : String(localized: "Connect to Bring!…"),
-                        systemImage: "cart.badge.plus"
-                    )
+                    Label(String(localized: "More"), systemImage: "ellipsis")
                 }
             }
         }

@@ -93,6 +93,7 @@ struct ShoppingListRow: View {
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .help(String(localized: "Change the aisle, or mark as a pantry staple"))
             .accessibilityLabel(String(localized: "Options for \(item.name)"))
         }
     }

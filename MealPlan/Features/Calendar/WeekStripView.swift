@@ -160,8 +160,16 @@ struct WeekStripView: View {
                 let width = CGFloat(span.count) * cell + CGFloat(span.count - 1) * spacing
                 let x = CGFloat(span.lowerBound) * (cell + spacing)
 
-                Color.clear
-                    .glassEffect(.regular, in: .capsule)
+                Group {
+                    #if os(visionOS)
+                    // visionOS windows already use spatial glass; a tinted
+                    // capsule keeps the selection legible without applying
+                    // the Liquid Glass modifier that is unavailable here.
+                    Capsule().fill(Color.accentColor.opacity(0.14))
+                    #else
+                    Color.clear.glassEffect(.regular, in: .capsule)
+                    #endif
+                }
                     .frame(width: width + 8, height: proxy.size.height + 10)
                     .offset(x: x - 4, y: -5)
             }
@@ -237,6 +245,7 @@ struct WeekStripView: View {
         } isTargeted: { targeted in
             pageWeek(by: weeks, whileTargeted: targeted)
         }
+        .help(label)
         .accessibilityLabel(label)
     }
 

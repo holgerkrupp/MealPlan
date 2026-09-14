@@ -101,7 +101,7 @@ struct RecipeFinderView: View {
             .disabled(importableURL == nil || isImporting)
         }
 
-        ToolbarItemGroup(placement: .secondaryAction) {
+        ToolbarItemGroup(placement: .navigation) {
             Button(String(localized: "Back"), systemImage: "chevron.backward") {
                 if let item = page.backForwardList.backList.last { _ = page.load(item) }
             }

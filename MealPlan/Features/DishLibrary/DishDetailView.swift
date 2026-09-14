@@ -110,44 +110,32 @@ struct DishDetailView: View {
         )
         .ignoresSafeArea(.all, edges: usesCoverHero ? .top : [])
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack {
-                    if !dish.sortedIngredients.isEmpty || !(dish.recipeText ?? "").isEmpty {
-                        Button(String(localized: "Cook"), systemImage: "frying.pan") {
-                            showingCookingMode = true
-                        }
-                    }
-                    Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
-                        showingPlanSheet = true
+            ToolbarItemGroup(placement: .primaryAction) {
+                if !dish.sortedIngredients.isEmpty || !(dish.recipeText ?? "").isEmpty {
+                    Button(String(localized: "Cook"), systemImage: "frying.pan") {
+                        showingCookingMode = true
                     }
                 }
+                Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
+                    showingPlanSheet = true
+                }
             }
-            ToolbarItem(placement: .secondaryAction) {
+            ToolbarItemGroup(placement: .secondaryAction) {
                 Button(String(localized: "Share recipe…"), systemImage: "square.and.arrow.up") {
                     showingShareSheet = true
                 }
-            }
-            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Edit"), systemImage: "pencil") { showingEditor = true }
-            }
-            if !appState.isGuest {
-                ToolbarItem(placement: .secondaryAction) {
+                if !appState.isGuest {
                     Button(String(localized: "Save as new variant"), systemImage: "square.on.square") {
                         addVariant()
                     }
-                }
-                ToolbarItem(placement: .secondaryAction) {
                     Button(String(localized: "Group with another dish"), systemImage: "link") {
                         showingVariantPicker = true
                     }
                 }
-            }
-            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Translate…"), systemImage: "translate") {
                     showingTranslation = true
                 }
-            }
-            ToolbarItem(placement: .secondaryAction) {
                 Button(String(localized: "Delete recipe"), systemImage: "trash", role: .destructive) {
                     confirmingDelete = true
                 }

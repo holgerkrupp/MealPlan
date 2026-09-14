@@ -1304,6 +1304,16 @@
         }
       }
     },
+    "Brings back the tips about moving meals, grouping dishes, and cooking hands-free, one at a time as you use the app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zeigt die Tipps zum Verschieben von Mahlzeiten, zum Gruppieren von Gerichten und zum freihändigen Kochen wieder an – einen nach dem anderen, während du die App nutzt."
+          }
+        }
+      }
+    },
     "Browse by category" : {
       "localizations" : {
         "de" : {
@@ -1532,6 +1542,16 @@
         }
       }
     },
+    "Change the aisle, or mark as a pantry staple" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gang ändern oder als Vorratsartikel markieren"
+          }
+        }
+      }
+    },
     "Check the split is right, then save. The dish opens for editing and is marked to review." : {
 
     },
@@ -1539,6 +1559,7 @@
 
     },
     "Checking iCloud…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -1728,6 +1749,16 @@
     "Collapse day" : {
 
     },
+    "Collapse this day, copy last week’s meals, or plan an extra" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tag einklappen, Mahlzeiten der Vorwoche übernehmen oder ein Extra einplanen"
+          }
+        }
+      }
+    },
     "Collapses this day" : {
 
     },
@@ -1854,6 +1885,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Kochen"
+          }
+        }
+      }
+    },
+    "Cook Hands-Free" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Freihändig kochen"
           }
         }
       }
@@ -2419,6 +2460,16 @@
     "Disliked" : {
 
     },
+    "Display" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Anzeige"
+          }
+        }
+      }
+    },
     "Don’t forget to prep “%@” for tomorrow." : {
 
     },
@@ -2458,6 +2509,46 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Daten werden aus iCloud geladen …"
+          }
+        }
+      }
+    },
+    "Drag a dish onto a meal card to plan it, or onto a day in the week strip." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zieh ein Gericht auf eine Mahlzeitkarte, um es einzuplanen – oder auf einen Tag in der Wochenleiste."
+          }
+        }
+      }
+    },
+    "Drag a meal onto another card, or onto a day in the week strip to move it further." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zieh eine Mahlzeit auf eine andere Karte oder auf einen Tag in der Wochenleiste, um sie weiter zu verschieben."
+          }
+        }
+      }
+    },
+    "Drag one dish onto another to keep versions of it — like a weeknight and a weekend chili — together in one place." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zieh ein Gericht auf ein anderes, um Varianten – etwa ein schnelles Feierabend-Chili und eins fürs Wochenende – an einem Ort zusammenzuhalten."
+          }
+        }
+      }
+    },
+    "Drag to resize the dish list" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ziehen, um die Liste der Gerichte breiter oder schmaler zu machen"
           }
         }
       }
@@ -3130,6 +3221,16 @@
         }
       }
     },
+    "Group Variations of a Dish" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Varianten eines Gerichts gruppieren"
+          }
+        }
+      }
+    },
     "Group with another dish" : {
       "localizations" : {
         "de" : {
@@ -3268,6 +3369,7 @@
 
     },
     "iCloud sync paused" : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -3680,6 +3782,16 @@
     "Last updated" : {
 
     },
+    "Left-handed layout" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Layout für Linkshänder"
+          }
+        }
+      }
+    },
     "Let regular meals keep your future plan filled." : {
 
     },
@@ -3745,6 +3857,7 @@
 
     },
     "Looking for your household before setting up this device." : {
+      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4058,7 +4171,6 @@
 
     },
     "More" : {
-      "extractionState" : "stale",
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -4070,6 +4182,16 @@
     },
     "Most frequent" : {
 
+    },
+    "Move a Meal to Another Day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mahlzeit auf einen anderen Tag verschieben"
+          }
+        }
+      }
     },
     "Move to another day or meal…" : {
       "localizations" : {
@@ -4855,6 +4977,16 @@
     "Other" : {
 
     },
+    "Other ingredients" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Zutaten"
+          }
+        }
+      }
+    },
     "Other variants of %@" : {
       "localizations" : {
         "de" : {
@@ -5150,6 +5282,26 @@
     },
     "Plan and shopping list" : {
 
+    },
+    "Plan by Dragging" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Per Ziehen planen"
+          }
+        }
+      }
+    },
+    "Plan here" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hier einplanen"
+          }
+        }
+      }
     },
     "Plan meal" : {
       "localizations" : {
@@ -5771,6 +5923,16 @@
         }
       }
     },
+    "Remove from the plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus dem Plan entfernen"
+          }
+        }
+      }
+    },
     "Remove photo" : {
 
     },
@@ -5875,6 +6037,16 @@
     },
     "Restaurant" : {
 
+    },
+    "Restaurant map" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Restaurantkarte"
+          }
+        }
+      }
     },
     "Restaurant, café, bakery…" : {
 
@@ -6097,6 +6269,9 @@
           }
         }
       }
+    },
+    "Say “next”, “back”, “repeat” or “start timer” to follow the recipe without touching the screen." : {
+
     },
     "Say “next”, “back”, “repeat” or “start timer”." : {
 
@@ -6513,6 +6688,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Original anzeigen"
+          }
+        }
+      }
+    },
+    "Show Tips Again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipps wieder anzeigen"
           }
         }
       }
@@ -7575,6 +7760,16 @@
         }
       }
     },
+    "Tips Will Show Again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tipps werden wieder angezeigt"
+          }
+        }
+      }
+    },
     "Title" : {
 
     },
@@ -7629,6 +7824,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Gesamt"
+          }
+        }
+      }
+    },
+    "Touch and hold a meal, then drag it onto another card — or onto a day in the week strip to move it further." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halte eine Mahlzeit gedrückt und zieh sie auf eine andere Karte – oder auf einen Tag in der Wochenleiste, um sie weiter zu verschieben."
           }
         }
       }
@@ -7762,6 +7967,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Aktiviere Apple Intelligence in den Einstellungen, um Rezepte auf diesem Gerät zu übersetzen."
+          }
+        }
+      }
+    },
+    "Turn On Voice Control" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sprachsteuerung einschalten"
           }
         }
       }

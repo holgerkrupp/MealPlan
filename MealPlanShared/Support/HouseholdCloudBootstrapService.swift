@@ -54,16 +54,23 @@ enum HouseholdCloudBootstrapService {
             shareRecordName: candidate.zone.share?.recordID.recordName,
             replacing: localHousehold,
             mergeRecipes: false,
+            adoptingLocalContent: true,
             context: context,
             progress: progress
         )
     }
 
+    /// - Parameter adoptingLocalContent: The launch-time lookup runs behind an
+    ///   ordinary, usable household, so by the time it replaces that
+    ///   household the person may have started filling it. When set,
+    ///   everything in it moves into the restored household first — see
+    ///   `adoptContent(of:into:)` — instead of going down with it.
     static func restoreOwnedHousehold(
         in zoneID: CKRecordZone.ID,
         shareRecordName: String?,
         replacing localHousehold: Household?,
         mergeRecipes: Bool,
+        adoptingLocalContent: Bool = false,
         context: ModelContext,
         progress: @escaping @MainActor (HouseholdCloudDownloadProgress) -> Void
     ) async throws -> Household {
@@ -126,7 +133,9 @@ enum HouseholdCloudBootstrapService {
         household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
 
         if let localHousehold, localHousehold.uuid != household.uuid {
-            if mergeRecipes {
+            if adoptingLocalContent {
+                adoptContent(of: localHousehold, into: household)
+            } else if mergeRecipes {
                 HouseholdCloudSharingService.mergeDishes(from: localHousehold, into: household)
             }
             context.delete(localHousehold)
@@ -134,6 +143,40 @@ enum HouseholdCloudBootstrapService {
         try context.save()
         NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
         return household
+    }
+
+    /// Moves what someone created in the placeholder household — dishes and
+    /// their ingredients, planned meals, the shopping list, history, routines,
+    /// templates, feeds and bookmarks — into the restored one. Only what the
+    /// placeholder was seeded with and nobody used (its default meals, unused
+    /// pantry staples) is left to be deleted with it; the restored household
+    /// has its own.
+    static func adoptContent(of placeholder: Household, into household: Household) {
+        HouseholdCloudSharingService.mergeDishes(from: placeholder, into: household)
+
+        // Same rule `mergeDishes` applies to a dish's ingredients: join the
+        // restored household's ingredient of that name, or move over.
+        var ingredientsByName = [String: Ingredient](
+            (household.ingredients ?? []).map { ($0.normalizedName, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+        for item in placeholder.shoppingItems ?? [] {
+            item.household = household
+            guard let ingredient = item.ingredient, ingredient.household === placeholder else { continue }
+            if let match = ingredientsByName[ingredient.normalizedName] {
+                item.ingredient = match
+            } else {
+                ingredient.household = household
+                ingredientsByName[ingredient.normalizedName] = ingredient
+            }
+        }
+
+        for entry in placeholder.entries ?? [] { entry.household = household }
+        for log in placeholder.cookedLogs ?? [] { log.household = household }
+        for routine in placeholder.mealRoutines ?? [] { routine.household = household }
+        for template in placeholder.weekTemplates ?? [] { template.household = household }
+        for feed in placeholder.recipeFeeds ?? [] { feed.household = household }
+        for bookmark in placeholder.recipeBookmarks ?? [] { bookmark.household = household }
     }
 
     static func candidateComesFirst(_ lhs: CandidateSummary, _ rhs: CandidateSummary) -> Bool {

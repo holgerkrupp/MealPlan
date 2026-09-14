@@ -385,6 +385,9 @@ struct DataSettingsSection: View {
 @MainActor
 struct AboutSettingsSection: View {
     @State private var showingOnboarding = false
+    /// Set once the tips have been brought back, so the button can say so
+    /// instead of silently doing nothing on a second tap.
+    @State private var tipsWereReset = false
 
     var body: some View {
         Group {
@@ -396,6 +399,23 @@ struct AboutSettingsSection: View {
                 }
             } footer: {
                 Text("A short tour of the plan, the dish library, and how to share recipes into MealPlan from other apps.")
+            }
+
+            Section {
+                Button {
+                    Task {
+                        await MealPlanTips.resetEligibility()
+                        tipsWereReset = true
+                    }
+                } label: {
+                    Label(
+                        tipsWereReset ? String(localized: "Tips Will Show Again") : String(localized: "Show Tips Again"),
+                        systemImage: tipsWereReset ? "checkmark" : "lightbulb"
+                    )
+                }
+                .disabled(tipsWereReset)
+            } footer: {
+                Text("Brings back the tips about moving meals, grouping dishes, and cooking hands-free, one at a time as you use the app.")
             }
 
             Section {

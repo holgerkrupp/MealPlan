@@ -31,6 +31,11 @@ struct MealPlanApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     #endif
 
+    init() {
+        // Before the first view asks a tip whether it may show.
+        MealPlanTips.configure()
+    }
+
     var body: some Scene {
         WindowGroup {
             // The awning comes down over the real interface, which is mounted
@@ -43,6 +48,9 @@ struct MealPlanApp: App {
                     .environment(publishedCalendarSettings)
                     .environment(\.calendarEventWriter, calendarEventWriter)
                     .task {
+                        // The device's own data first; nothing below is
+                        // allowed to keep it off the screen.
+                        appState.showLocalHousehold(context: container.mainContext)
                         await purchaseManager.prepareForLaunch()
                         await appState.bootstrapFromCloud(
                             context: container.mainContext,
@@ -115,11 +123,11 @@ struct MealPlanApp: App {
         .defaultSize(width: 1180, height: 820)
         #endif
 
-        #if os(macOS) || os(iOS)
+        #if os(macOS) || os(iOS) || os(visionOS)
         // Recipes, planning, subscribing and the rest of the auxiliary screens
-        // open here rather than in a sheet over the main window — on the Mac
-        // always, on an iPad whenever the system offers more than one scene.
-        // Everywhere else `detailPresentation` keeps its sheet and this group
+        // open here rather than in a sheet over the main window — on Mac and
+        // Vision Pro always, on iPad whenever the system offers more than one
+        // scene. Elsewhere `detailPresentation` keeps its sheet and this group
         // simply never has a window in it.
         WindowGroup("MealPlan", for: DetailWindowRoute.self) { $route in
             if let route {
@@ -141,6 +149,21 @@ struct MealPlanApp: App {
         // the toolbar sits in the title bar rather than under it.
         .windowToolbarStyle(.unified)
         #endif
+        #endif
+
+        #if os(visionOS)
+        // Cooking uses small, independently placeable panels in the cook's
+        // space. Every panel observes the same durable session on `AppState`,
+        // so checking an ingredient or advancing a step updates all of them.
+        WindowGroup("Cooking", for: SpatialCookingWindowRoute.self) { $route in
+            if let route {
+                SpatialCookingWindow(route: route)
+                    .environment(appState)
+                    .environment(purchaseManager)
+            }
+        }
+        .defaultSize(width: 560, height: 640)
+        .modelContainer(container)
         #endif
 
         #if os(macOS)

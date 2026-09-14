@@ -1,6 +1,9 @@
 import Foundation
 import Observation
 import StoreKit
+#if os(visionOS)
+import UIKit
+#endif
 
 /// StoreKit 2 wrapper for MealPlan's single non-consumable unlock.
 @MainActor
@@ -101,7 +104,23 @@ final class PurchaseManager {
         purchaseInFlight = true
         defer { purchaseInFlight = false }
         do {
-            switch try await product.purchase() {
+            #if os(visionOS)
+            // StoreKit presents purchases from a specific window on visionOS.
+            // Choosing the foreground scene also keeps this working when the
+            // paywall lives in one of MealPlan's auxiliary floating windows.
+            guard let windowScene = UIApplication.shared.connectedScenes
+                .compactMap({ $0 as? UIWindowScene })
+                .first(where: { $0.activationState == .foregroundActive })
+                ?? UIApplication.shared.connectedScenes.compactMap({ $0 as? UIWindowScene }).first
+            else {
+                lastError = String(localized: "Open MealPlan in a window and try again.")
+                return false
+            }
+            let result = try await product.purchase(confirmIn: windowScene)
+            #else
+            let result = try await product.purchase()
+            #endif
+            switch result {
             case .success(.verified(let transaction)):
                 await transaction.finish()
                 setOwnsUnlock(true)

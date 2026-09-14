@@ -6,18 +6,19 @@ import SwiftUI
 import UIKit
 #endif
 
+/// Progress of deliberately joining a household — accepting an invitation.
+/// The launch-time iCloud lookup never reports here: it runs silently behind
+/// the device's own data (see `AppState.bootstrapFromCloud`).
 enum CloudBootstrapState: Equatable {
-    case checking
     case connecting
     case downloading(Int)
     case importing(completed: Int, total: Int)
     case ready
-    case failed(String)
 
     var isWorking: Bool {
         switch self {
-        case .checking, .connecting, .downloading, .importing: true
-        case .ready, .failed: false
+        case .connecting, .downloading, .importing: true
+        case .ready: false
         }
     }
 }
@@ -50,9 +51,17 @@ final class AppState {
     /// Set when the owner's single-use "add someone nearby" QR code opened
     /// the app; `RootView` presents `JoinNearbyHouseholdView` for it.
     var pendingNearbyJoin: NearbyJoinRequest?
-    /// Keeps a newly installed device from presenting an empty editable
-    /// household while it is still discovering/downloading the owner's data.
-    var cloudBootstrapState: CloudBootstrapState = .checking
+    /// Covers the app while an accepted invitation downloads the household
+    /// the person asked to join.
+    var cloudBootstrapState: CloudBootstrapState = .ready
+    /// True from launch until it is settled whether this device's household
+    /// comes from iCloud. Nothing is shown for it — the device's own data is
+    /// on screen the whole time — but syncing, the first-run tour and
+    /// invitations wait for the answer rather than racing it.
+    private(set) var isLookingForCloudHousehold = true
+    /// Set once the lookup has actually found a household and is fetching it,
+    /// so the first-run tour knows it is worth waiting for.
+    private(set) var isDownloadingCloudHousehold = false
 
     struct NearbyJoinRequest: Identifiable, Equatable {
         let id = UUID()
@@ -139,6 +148,7 @@ final class AppState {
     static var preview: AppState {
         let state = AppState()
         state.bootstrap(context: PreviewData.container.mainContext)
+        state.isLookingForCloudHousehold = false
         return state
     }
 
@@ -180,40 +190,61 @@ final class AppState {
         cloudBootstrapState = .ready
     }
 
-    /// Before creating the first local household, look for an existing
-    /// private CloudKit zone owned by this Apple Account. Older versions
-    /// created a new empty zone immediately, so a defaults-only household is
-    /// also safe to replace during this recovery pass.
+    /// Puts the household already on this device on screen straight away,
+    /// before the slower launch work (the App Store entitlement, the iCloud
+    /// lookup) has run. Creates nothing — `bootstrap` does that.
+    func showLocalHousehold(context: ModelContext) {
+        guard currentHousehold == nil else { return }
+        currentHousehold = try? context.fetch(FetchDescriptor<Household>()).first
+    }
+
+    /// Local first, iCloud behind it. The device's own household is set up
+    /// and usable immediately; only when it is still empty — a new install,
+    /// or a placeholder an older build created — does this go on to look for
+    /// a household this Apple Account already has in iCloud, silently, and
+    /// swap it in once it has been downloaded.
+    ///
+    /// Anything the person adds to the empty household in the meantime moves
+    /// into the restored one (see `HouseholdCloudBootstrapService`), so using
+    /// the app while the lookup runs costs nothing. A lookup that fails —
+    /// offline, no iCloud account — is not reported: the app is already
+    /// working, and the next launch looks again while the household is still
+    /// empty.
     func bootstrapFromCloud(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) async {
-        cloudBootstrapState = .checking
         let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
         let local = households.count == 1 ? households[0] : nil
         let shouldDiscover = households.isEmpty || (local.map(isReplaceableCloudPlaceholder) == true)
 
-        guard shouldDiscover else {
-            bootstrap(context: context, planningThrough: latestPlanningDate)
+        bootstrap(context: context, planningThrough: latestPlanningDate)
+
+        guard shouldDiscover, let placeholder = currentHousehold else {
+            isLookingForCloudHousehold = false
             return
         }
-
+        isLookingForCloudHousehold = true
+        defer {
+            isLookingForCloudHousehold = false
+            isDownloadingCloudHousehold = false
+        }
         do {
-            _ = try await HouseholdCloudBootstrapService.restoreOwnedHouseholdIfAvailable(
-                replacing: local,
+            let restored = try await HouseholdCloudBootstrapService.restoreOwnedHouseholdIfAvailable(
+                replacing: placeholder,
                 context: context,
-                progress: updateCloudProgress
+                progress: { [weak self] progress in
+                    if progress != .lookingForHousehold { self?.isDownloadingCloudHousehold = true }
+                }
             )
-            bootstrap(context: context, planningThrough: latestPlanningDate)
+            if restored != nil {
+                bootstrap(context: context, planningThrough: latestPlanningDate)
+            }
         } catch {
-            // Remain fully usable offline, but make the failed initial lookup
-            // visible and retryable instead of silently showing an empty plan.
-            bootstrap(context: context, planningThrough: latestPlanningDate)
-            cloudBootstrapState = .failed(error.localizedDescription)
+            // Deliberately silent; see above.
         }
     }
 
     func updateCloudProgress(_ progress: HouseholdCloudDownloadProgress) {
         switch progress {
-        case .lookingForHousehold: cloudBootstrapState = .checking
-        case .connecting: cloudBootstrapState = .connecting
+        case .lookingForHousehold, .connecting: cloudBootstrapState = .connecting
         case .downloading(let count): cloudBootstrapState = .downloading(count)
         case .importing(let completed, let total):
             cloudBootstrapState = .importing(completed: completed, total: total)
@@ -254,7 +285,13 @@ final class AppState {
             if dishName != nil { pendingAddDish = PendingAddDish(url: nil, name: dishName) }
             requestedSection = .plan
         case .joinNearby(let code):
+            // Adding someone nearby is iPhone and iPad only: the Mac app
+            // ships without the local-network entitlement it would need.
+            #if os(iOS)
             pendingNearbyJoin = NearbyJoinRequest(code: code)
+            #else
+            _ = code
+            #endif
         }
     }
 

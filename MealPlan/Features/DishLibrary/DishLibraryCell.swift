@@ -106,6 +106,7 @@ struct DishLibraryCell: View {
         guard joined else { return false }
         try? context.save()
         SharedStore.reloadWidgets()
+        MealPlanTips.recordVariantsJoined()
         return true
     }
 }

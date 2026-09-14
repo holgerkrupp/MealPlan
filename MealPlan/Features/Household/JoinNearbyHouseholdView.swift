@@ -1,5 +1,7 @@
 import SwiftUI
 
+#if os(iOS)
+
 /// The invitee's side of adding someone nearby (see `NearbyInvite`): makes
 /// this device visible to the owner's "Share with family" sheet, hands over
 /// this Apple Account's iCloud identity when the owner adds it, and joins with
@@ -158,3 +160,5 @@ struct JoinNearbyHouseholdView: View {
         joinError = lastError?.localizedDescription ?? String(localized: "The invitation could not be opened.")
     }
 }
+
+#endif

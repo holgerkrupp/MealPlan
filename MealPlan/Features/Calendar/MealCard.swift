@@ -135,6 +135,7 @@ struct MealCard: View {
                                     .padding(.vertical, 2)
                             }
                             .buttonStyle(.plain)
+                            .help(String(localized: "Remove from the plan"))
                             .accessibilityLabel(String(localized: "Remove \(entry.displayTitle)"))
                         }
                     }
@@ -335,7 +336,10 @@ struct MealCard: View {
             memberName: appState.currentMemberName,
             context: context
         )
-        if accepted { acceptedDrops += 1 }
+        if accepted {
+            acceptedDrops += 1
+            MealPlanTips.recordAcceptedDrop(ref)
+        }
         return accepted
     }
 
@@ -439,27 +443,33 @@ struct MealCard: View {
                 HStack(spacing: 6) {
                     if entry.routineUUID != nil {
                         Image(systemName: "repeat")
+                            .help(String(localized: "Repeating meal"))
                             .accessibilityLabel(String(localized: "Repeating meal"))
                     }
                     if entry.servingsOverride != nil {
                         Label(String(localized: "\(entry.effectiveServings)"), systemImage: "person.2")
                             .labelStyle(.titleAndIcon)
+                            .help(String(localized: "\(entry.effectiveServings) servings"))
                             .accessibilityLabel(String(localized: "\(entry.effectiveServings) servings"))
                     }
                     if entry.prepReminder {
                         Image(systemName: "bell")
+                            .help(String(localized: "Prep reminder set"))
                             .accessibilityLabel(String(localized: "Prep reminder set"))
                     }
                     if let reaction = entry.reaction {
+                        let reactionName = reaction == .down
+                            ? String(localized: "Disliked")
+                            : String(localized: "Liked")
                         Image(systemName: reaction.symbolName)
                             .foregroundStyle(showsBackdrop ? .white : (reaction == .down ? .red : .yellow))
-                            .accessibilityLabel(reaction == .down
-                                ? String(localized: "Disliked")
-                                : String(localized: "Liked"))
+                            .help(reactionName)
+                            .accessibilityLabel(reactionName)
                     }
                     if entry.dish?.needsReview == true {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(showsBackdrop ? .white : .orange)
+                            .help(String(localized: "Needs review"))
                             .accessibilityLabel(String(localized: "Needs review"))
                     }
                     // Reading the day's total is one thing; seeing which meal

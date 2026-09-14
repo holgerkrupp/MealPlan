@@ -46,6 +46,8 @@ struct DishPickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @State private var tab: Tab = .cook
@@ -92,6 +94,10 @@ struct DishPickerView: View {
         DishSearch.hasExactMatch(allDishes, name: query)
     }
 
+    private var usesCompactLandscapeHeader: Bool {
+        horizontalSizeClass == .compact && verticalSizeClass == .compact
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             header
@@ -126,37 +132,60 @@ struct DishPickerView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 14) {
-            HStack(spacing: 12) {
-                Image(systemName: mealSymbol)
-                    .font(.system(size: 17, weight: .medium))
-                    .foregroundStyle(.tint)
-                    .frame(width: 38, height: 38)
-                    .background(Circle().fill(.tint.opacity(0.15)))
-
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(mealTitle)
-                        .font(.headline)
-                    Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
+        Group {
+            if usesCompactLandscapeHeader {
+                HStack(spacing: 12) {
+                    mealIdentity
+                        .frame(maxWidth: 210, alignment: .leading)
+                    eatingPicker
+                        .frame(maxWidth: 220)
+                    searchField
+                        .frame(maxWidth: .infinity)
                 }
-
-                Spacer(minLength: 8)
-            }
-
-            Picker(String(localized: "How are we eating?"), selection: $tab) {
-                ForEach(Tab.allCases) { tab in
-                    Label(tab.title, systemImage: tab.symbol).tag(tab)
+                .padding(12)
+            } else {
+                VStack(spacing: 14) {
+                    HStack {
+                        mealIdentity
+                        Spacer(minLength: 8)
+                    }
+                    eatingPicker
+                    searchField
                 }
+                .padding(16)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-
-            searchField
         }
-        .padding(16)
         .background(.bar)
+    }
+
+    private var mealIdentity: some View {
+        HStack(spacing: 12) {
+            Image(systemName: mealSymbol)
+                .font(.system(size: 17, weight: .medium))
+                .foregroundStyle(.tint)
+                .frame(width: 38, height: 38)
+                .background(Circle().fill(.tint.opacity(0.15)))
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(mealTitle)
+                    .font(.headline)
+                    .lineLimit(1)
+                Text(date.formatted(.dateTime.weekday(.wide).day().month(.wide)))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var eatingPicker: some View {
+        Picker(String(localized: "How are we eating?"), selection: $tab) {
+            ForEach(Tab.allCases) { tab in
+                Label(tab.title, systemImage: tab.symbol).tag(tab)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
     }
 
     private var searchField: some View {
@@ -181,6 +210,7 @@ struct DishPickerView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help(String(localized: "Clear search"))
                 .accessibilityLabel(String(localized: "Clear"))
             }
         }

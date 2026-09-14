@@ -1,7 +1,9 @@
 import CloudKit
 import CryptoKit
 import Foundation
+#if os(iOS)
 import MultipeerConnectivity
+#endif
 import Observation
 
 /// Adding someone to the household while you're together, without knowing
@@ -20,8 +22,12 @@ import Observation
 /// device connect to it automatically; the code itself travels inside the
 /// encrypted session and is replaced as soon as it has been used.
 enum NearbyInvite {
+    #if os(iOS)
     /// Bonjour service `_mealplan-join._tcp` / `._udp` (declared in Info.plist).
+    /// iOS only: the Mac app ships without nearby adding, so it neither
+    /// advertises nor browses for this service.
     static let serviceType = "mealplan-join"
+    #endif
 
     /// 128 random bits, base64url without padding — safe in a URL query.
     static func makeCode() -> String {
@@ -70,6 +76,8 @@ enum NearbyInviteMessage: Codable, Equatable, Sendable {
         self = message
     }
 }
+
+#if os(iOS)
 
 /// Carries MultipeerConnectivity's objects from its delegate queues to the
 /// main actor, where every use of them happens.
@@ -387,3 +395,5 @@ extension NearbyInviteGuest: MCSessionDelegate {
     nonisolated func session(_ session: MCSession, didStartReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, with progress: Progress) {}
     nonisolated func session(_ session: MCSession, didFinishReceivingResourceWithName resourceName: String, fromPeer peerID: MCPeerID, at localURL: URL?, withError error: Error?) {}
 }
+
+#endif

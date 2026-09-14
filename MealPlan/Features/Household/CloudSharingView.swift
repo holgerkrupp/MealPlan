@@ -9,8 +9,9 @@ import UIKit
 /// Adds people to the current household and lists who is invited or has
 /// joined. Two ways in, both naming exactly one Apple Account, so removing
 /// someone is final:
-/// - **Nearby** — a single-use QR code, or a tap on a device that has "Join a
-///   Household Nearby" open; see `NearbyInvite`.
+/// - **Nearby** (iPhone and iPad only) — a single-use QR code, or a tap on a
+///   device that has "Join a Household Nearby" open; see `NearbyInvite`. The
+///   Mac app ships without it, and so without the local-network entitlement.
 /// - **By Apple Account** — an email address or phone number, then the share
 ///   link sent by Messages, Mail, or AirDrop.
 ///
@@ -24,7 +25,9 @@ struct HouseholdSharingView: View {
     @State private var address = ""
     @State private var canEdit = true
     @State private var invitation: HouseholdShareInvitation?
+    #if os(iOS)
     @State private var nearbyHost: NearbyInviteHost?
+    #endif
     @State private var errorMessage: String?
     @State private var actionErrorMessage: String?
     @State private var isPreparing = true
@@ -84,7 +87,9 @@ struct HouseholdSharingView: View {
         .frame(minWidth: 460, minHeight: 640)
         #endif
         .task { await prepareInvitation() }
+        #if os(iOS)
         .onDisappear { nearbyHost?.stop() }
+        #endif
         .confirmationDialog(
             String(localized: "Create a New Invitation?"),
             isPresented: $isConfirmingNewInvitation,
@@ -163,9 +168,11 @@ struct HouseholdSharingView: View {
                 }
                 .sharingCard()
 
+                #if os(iOS)
                 if let nearbyHost {
                     nearbyCard(nearbyHost)
                 }
+                #endif
 
                 inviteCard
 
@@ -199,6 +206,7 @@ struct HouseholdSharingView: View {
         #endif
     }
 
+    #if os(iOS)
     private func nearbyCard(_ host: NearbyInviteHost) -> some View {
         VStack(alignment: .leading, spacing: 14) {
             Label("Add Someone Nearby", systemImage: "dot.radiowaves.left.and.right")
@@ -276,6 +284,8 @@ struct HouseholdSharingView: View {
         }
         .padding(.vertical, 10)
     }
+
+    #endif
 
     private var inviteCard: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -418,13 +428,16 @@ struct HouseholdSharingView: View {
         do {
             invitation = try await HouseholdCloudSharingService.prepareInvitation(for: household, context: modelContext)
             errorMessage = nil
+            #if os(iOS)
             startNearbyIfNeeded()
+            #endif
         } catch {
             errorMessage = error.localizedDescription
         }
         isPreparing = false
     }
 
+    #if os(iOS)
     /// Nearby adding needs the share to exist first, so it starts once the
     /// invitation is ready and runs until the sheet closes.
     private func startNearbyIfNeeded() {
@@ -443,6 +456,7 @@ struct HouseholdSharingView: View {
         host.start()
         nearbyHost = host
     }
+    #endif
 
     private func invite() async {
         guard let parsed = HouseholdInviteAddress(address), !isInviting else { return }
@@ -473,7 +487,9 @@ struct HouseholdSharingView: View {
         do {
             invitation = try await HouseholdCloudSharingService.replaceInvitation(for: household, context: modelContext)
             errorMessage = nil
+            #if os(iOS)
             startNearbyIfNeeded()
+            #endif
         } catch {
             errorMessage = error.localizedDescription
         }

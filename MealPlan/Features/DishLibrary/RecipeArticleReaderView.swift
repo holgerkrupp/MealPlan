@@ -93,23 +93,21 @@ struct RecipeArticleReaderView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
-            ToolbarItem(placement: .primaryAction) {
-                HStack {
-                    Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
-                        Task { await planRecipe() }
-                    }
-                    .disabled(!canPlan)
-
-                    Button {
-                        Task { await saveRecipe() }
-                    } label: {
-                        if saving { ProgressView() }
-                        else if savedDish != nil { Label(String(localized: "Saved"), systemImage: "checkmark.circle") }
-                        else if noRecipeFound { Label(String(localized: "No recipe found"), systemImage: "xmark.circle") }
-                        else { Label(String(localized: "Save recipe"), systemImage: "square.and.arrow.down") }
-                    }
-                    .disabled(!canSave)
+            ToolbarItemGroup(placement: .primaryAction) {
+                Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
+                    Task { await planRecipe() }
                 }
+                .disabled(!canPlan)
+
+                Button {
+                    Task { await saveRecipe() }
+                } label: {
+                    if saving { ProgressView() }
+                    else if savedDish != nil { Label(String(localized: "Saved"), systemImage: "checkmark.circle") }
+                    else if noRecipeFound { Label(String(localized: "No recipe found"), systemImage: "xmark.circle") }
+                    else { Label(String(localized: "Save recipe"), systemImage: "square.and.arrow.down") }
+                }
+                .disabled(!canSave)
             }
         }
         .task { await load() }

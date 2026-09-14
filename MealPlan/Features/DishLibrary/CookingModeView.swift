@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import TipKit
 
 /// A distraction-free menu cooking view. The durable state lives on
 /// `AppState`, so closing this sheet is an interruption rather than a reset.
@@ -9,10 +10,15 @@ struct CookingModeView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query(sort: \Dish.name) private var allDishes: [Dish]
 
     @AppStorage("CookingMode.textScale") private var textScale = 1.0
+    /// Mirrors the two cooking columns so the step controls can sit nearest
+    /// the cook's dominant hand.
+    @AppStorage("CookingMode.leftHandedLayout") private var usesLeftHandedLayout = false
     /// Speak each step aloud as it becomes current. On by default — the whole
     /// point of opening this screen at the stove is not having to look at it.
     @AppStorage("CookingMode.speakSteps") private var speakSteps = true
@@ -53,6 +59,19 @@ struct CookingModeView: View {
         return steps.indices.contains(index) ? steps[index].text : nil
     }
 
+    private var ingredientGroups: [CookingIngredientGroup] {
+        CookingRecipe.ingredientGroups(
+            ingredientNames: currentDish.sortedIngredients.map {
+                $0.displayName(translated: showsTranslation) ?? ""
+            },
+            steps: steps
+        )
+    }
+
+    private var hasStepIngredientGroups: Bool {
+        ingredientGroups.contains { $0.stepID != nil }
+    }
+
     /// BCP-47 tag for the text currently on screen, so a German recipe isn't
     /// read aloud with an English accent.
     private var narrationLanguageCode: String? {
@@ -69,17 +88,16 @@ struct CookingModeView: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 28) {
-                sessionDishStrip
-                servingsControl
-                ingredients
-                directions
-                if !(store.session?.timers.isEmpty ?? true) { activeTimers }
+        GeometryReader { geometry in
+            if CookingModeLayoutPolicy.usesSideBySideLayout(
+                in: geometry.size,
+                horizontalSizeClass: horizontalSizeClass,
+                verticalSizeClass: verticalSizeClass
+            ) {
+                landscapeContent
+            } else {
+                portraitContent
             }
-            .padding()
-            .frame(maxWidth: 760, alignment: .leading)
-            .frame(maxWidth: .infinity)
         }
         .navigationTitle(currentDish.displayName(translated: showsTranslation))
         #if os(iOS)
@@ -103,6 +121,7 @@ struct CookingModeView: View {
         }
         .onChange(of: voiceControlEnabled) { _, enabled in
             if enabled {
+                MealPlanTips.recordVoiceControlTurnedOn()
                 Task { await startVoiceControl(requesting: true) }
             } else {
                 voice.stop()
@@ -155,12 +174,136 @@ struct CookingModeView: View {
         }
     }
 
+    private var portraitContent: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 28) {
+                handsFreeTip
+                sessionDishStrip
+                servingsControl
+                ingredients
+                directions
+                if !(store.session?.timers.isEmpty ?? true) { activeTimers }
+            }
+            .padding()
+            .frame(maxWidth: 760, alignment: .leading)
+            .frame(maxWidth: .infinity)
+        }
+    }
+
+    /// iPhone landscape keeps the two things a cook cross-references visible
+    /// at once. Each pane scrolls independently, so a long ingredient list
+    /// never pushes the current instruction or its controls off screen.
+    private var landscapeContent: some View {
+        VStack(spacing: 0) {
+            landscapeSessionBar
+            Divider()
+            HStack(spacing: 0) {
+                if usesLeftHandedLayout {
+                    ingredientPane
+                    Divider()
+                    instructionPane
+                } else {
+                    instructionPane
+                    Divider()
+                    ingredientPane
+                }
+            }
+        }
+        // The NavigationStack and sheet already provide the device's safe
+        // area. Keeping all content inside this geometry makes the columns
+        // avoid both the camera cutout and the home indicator in landscape.
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var instructionPane: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                handsFreeTip
+                directions
+                if !(store.session?.timers.isEmpty ?? true) { activeTimers }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var ingredientPane: some View {
+        ScrollViewReader { proxy in
+            ScrollView {
+                ingredients
+                    .padding(16)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .onChange(of: progress.currentStep) { _, step in
+                withAnimation(.snappy) {
+                    proxy.scrollTo(CookingIngredientGroup(stepID: step, ingredientIndexes: []).id, anchor: .top)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var handsFreeTip: some View {
+        // Inline rather than a popover on the Voice menu: on iPhone that menu
+        // lives in the toolbar's overflow, where a popover has no anchor.
+        if voice.isAvailable, !voiceControlEnabled {
+            InlineTip(tip: HandsFreeCookingTip()) { action in
+                if action.id == HandsFreeCookingTip.turnOnActionID {
+                    voiceControlEnabled = true
+                }
+            }
+        }
+    }
+
+    /// A single compact row leaves the limited landscape height to the recipe.
+    private var landscapeSessionBar: some View {
+        HStack(spacing: 10) {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(spacing: 8) {
+                    ForEach(store.session?.dishes ?? []) { item in
+                        if item.id == currentDish.uuid {
+                            Button(label(for: item)) { store.select(item.id) }
+                                .buttonStyle(.borderedProminent)
+                        } else {
+                            Button(label(for: item)) { store.select(item.id) }
+                                .buttonStyle(.bordered)
+                        }
+                    }
+                }
+            }
+
+            Button {
+                showingDishPicker = true
+            } label: {
+                Label(String(localized: "Add dish"), systemImage: "plus")
+                    .labelStyle(.iconOnly)
+            }
+            .buttonStyle(.bordered)
+            .accessibilityLabel(String(localized: "Add dish"))
+
+            Divider().frame(height: 28)
+
+            Stepper(value: servingsBinding, in: 1...50) {
+                Text(String(localized: "\(progress.targetServings) servings"))
+                    .font(.callout)
+                    .monospacedDigit()
+            }
+            .fixedSize()
+        }
+        .controlSize(.small)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .background(.bar)
+    }
+
     @ToolbarContentBuilder
     private var cookingToolbar: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
             Button(String(localized: "Close")) { dismiss() }
         }
-        ToolbarItem {
+        ToolbarItemGroup(placement: .secondaryAction) {
             Menu {
                 Button(String(localized: "Smaller text"), systemImage: "textformat.size.smaller") {
                     textScale = max(0.85, textScale - 0.1)
@@ -171,11 +314,13 @@ struct CookingModeView: View {
                 }
                 .disabled(textScale >= 1.6)
                 Button(String(localized: "Default text size")) { textScale = 1 }
+                Divider()
+                Toggle(isOn: $usesLeftHandedLayout) {
+                    Label(String(localized: "Left-handed layout"), systemImage: "hand.raised")
+                }
             } label: {
-                Label(String(localized: "Text size"), systemImage: "textformat.size")
+                Label(String(localized: "Display"), systemImage: "rectangle.split.2x1")
             }
-        }
-        ToolbarItem {
             Menu {
                 Toggle(String(localized: "Read steps aloud"), isOn: $speakSteps)
                 Button(String(localized: "Repeat this step"), systemImage: "arrow.clockwise") {
@@ -195,9 +340,7 @@ struct CookingModeView: View {
                     systemImage: voice.isListening ? "waveform.circle.fill" : "speaker.wave.2"
                 )
             }
-        }
-        if currentDish.hasSavedTranslation {
-            ToolbarItem {
+            if currentDish.hasSavedTranslation {
                 Button(
                     showsTranslation
                         ? String(localized: "Show original")
@@ -277,37 +420,103 @@ struct CookingModeView: View {
             if currentDish.sortedIngredients.isEmpty {
                 Text(String(localized: "No ingredients added yet."))
                     .foregroundStyle(.secondary)
+            } else if hasStepIngredientGroups {
+                ForEach(ingredientGroups) { group in
+                    ingredientGroup(group)
+                        .id(group.id)
+                }
             } else {
                 ForEach(Array(currentDish.sortedIngredients.enumerated()), id: \.offset) { index, line in
-                    let checked = progress.checkedIngredientIndexes.contains(index)
-                    let name = line.displayName(translated: showsTranslation) ?? "—"
-                    let amount = scaler.amountText(for: line)
-                    Button { store.toggleIngredient(index, for: currentDish.uuid) } label: {
-                        HStack(alignment: .firstTextBaseline, spacing: 12) {
-                            Image(systemName: checked ? "checkmark.circle.fill" : "circle")
-                                .foregroundStyle(checked ? .green : .secondary)
-                            Text(name)
-                                .strikethrough(checked)
-                            Spacer()
-                            if let amount {
-                                Text(amount).foregroundStyle(.secondary).monospacedDigit()
-                            }
-                        }
-                        .font(.title3)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityElement(children: .ignore)
-                    .accessibilityLabel(amount.map { "\(name), \($0)" } ?? name)
-                    .accessibilityValue(checked
-                        ? String(localized: "Checked off")
-                        : String(localized: "Not checked off"))
-                    .accessibilityHint(InteractionWording.checkOffHint)
-                    .accessibilityAddTraits(checked ? .isSelected : [])
+                    ingredientRow(index: index, line: line)
                     Divider()
                 }
             }
         }
+    }
+
+    private func ingredientGroup(_ group: CookingIngredientGroup) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ingredientGroupHeader(group)
+            ForEach(group.ingredientIndexes, id: \.self) { index in
+                if currentDish.sortedIngredients.indices.contains(index) {
+                    ingredientRow(index: index, line: currentDish.sortedIngredients[index])
+                    if index != group.ingredientIndexes.last { Divider() }
+                }
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background {
+            RoundedRectangle(cornerRadius: 14)
+                .fill(group.stepID == progress.currentStep ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.06))
+        }
+    }
+
+    @ViewBuilder
+    private func ingredientGroupHeader(_ group: CookingIngredientGroup) -> some View {
+        if let stepID = group.stepID, let step = steps.first(where: { $0.id == stepID }) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "Step \(step.id + 1)"))
+                    .font(.headline)
+                        .foregroundStyle(
+                            group.stepID == progress.currentStep ? Color.accentColor : Color.secondary
+                        )
+                Text(step.text)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+            .padding(.bottom, 6)
+        } else {
+            Text(String(localized: "Other ingredients"))
+                .font(.headline)
+                .foregroundStyle(.secondary)
+                .padding(.bottom, 6)
+        }
+    }
+
+    private func ingredientRow(index: Int, line: DishIngredient) -> some View {
+        let checked = progress.checkedIngredientIndexes.contains(index)
+        let name = line.displayName(translated: showsTranslation) ?? "—"
+        let amount = scaler.amountText(for: line)
+
+        return Button {
+            withAnimation(.snappy) {
+                store.toggleIngredient(index, for: currentDish.uuid)
+            }
+        } label: {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: checked ? "checkmark.circle.fill" : "circle")
+                    .font(.title2)
+                    .foregroundStyle(checked ? .green : .secondary)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(name)
+                        .strikethrough(checked)
+                    if let note = line.displayNote(translated: showsTranslation), !note.isEmpty {
+                        Text(note)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .strikethrough(checked)
+                    }
+                }
+                Spacer(minLength: 8)
+                if let amount {
+                    Text(amount).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }
+            .font(.title3)
+            .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
+            .contentShape(Rectangle())
+            .opacity(checked ? 0.62 : 1)
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(amount.map { "\(name), \($0)" } ?? name)
+        .accessibilityValue(checked
+            ? String(localized: "Checked off")
+            : String(localized: "Not checked off"))
+        .accessibilityHint(InteractionWording.checkOffHint)
+        .accessibilityAddTraits(checked ? .isSelected : [])
     }
 
     @ViewBuilder
@@ -375,20 +584,34 @@ struct CookingModeView: View {
                         : InteractionWording.jumpToStepHint)
                 }
 
-                HStack {
-                    Button(String(localized: "Previous"), systemImage: "chevron.left") {
-                        store.setCurrentStep(progress.currentStep - 1, for: currentDish.uuid, stepCount: steps.count)
+                HStack(spacing: 12) {
+                    if usesLeftHandedLayout {
+                        nextStepButton
+                        Spacer(minLength: 0)
+                        previousStepButton
+                    } else {
+                        previousStepButton
+                        Spacer(minLength: 0)
+                        nextStepButton
                     }
-                    .disabled(progress.currentStep == 0)
-                    Spacer()
-                    Button(String(localized: "Next"), systemImage: "chevron.right") {
-                        store.setCurrentStep(progress.currentStep + 1, for: currentDish.uuid, stepCount: steps.count)
-                    }
-                    .disabled(progress.currentStep >= steps.count - 1)
                 }
                 .buttonStyle(.bordered)
             }
         }
+    }
+
+    private var previousStepButton: some View {
+        Button(String(localized: "Previous"), systemImage: "chevron.left") {
+            store.setCurrentStep(progress.currentStep - 1, for: currentDish.uuid, stepCount: steps.count)
+        }
+        .disabled(progress.currentStep == 0)
+    }
+
+    private var nextStepButton: some View {
+        Button(String(localized: "Next"), systemImage: "chevron.right") {
+            store.setCurrentStep(progress.currentStep + 1, for: currentDish.uuid, stepCount: steps.count)
+        }
+        .disabled(progress.currentStep >= steps.count - 1)
     }
 
     private var activeTimers: some View {
@@ -398,26 +621,44 @@ struct CookingModeView: View {
                 VStack(spacing: 10) {
                     ForEach(store.session?.timers ?? []) { timer in
                         let remaining = timer.remaining(at: timeline.date)
-                        HStack {
-                            Image(systemName: remaining <= 0 ? "alarm.waves.left.and.right.fill" : "timer")
-                                .foregroundStyle(remaining <= 0 ? .red : .accentColor)
-                            VStack(alignment: .leading) {
-                                Text(timer.contextLabel).font(.caption).foregroundStyle(.secondary)
-                                Text(timer.label).font(.headline)
-                                Text(clockText(remaining)).font(.title2.monospacedDigit())
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                timerDetails(timer, remaining: remaining)
+                                Spacer(minLength: 8)
+                                timerButtons(timer, at: timeline.date)
                             }
-                            Spacer()
-                            Button(timer.pausedRemaining == nil ? String(localized: "Pause") : String(localized: "Resume")) {
-                                store.pauseOrResumeTimer(timer.id, at: timeline.date)
-                            }
-                            Button(String(localized: "Cancel"), role: .destructive) {
-                                store.cancelTimer(timer.id)
+                            VStack(alignment: .leading, spacing: 10) {
+                                timerDetails(timer, remaining: remaining)
+                                timerButtons(timer, at: timeline.date)
                             }
                         }
                         .padding(12)
                         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                     }
                 }
+            }
+        }
+    }
+
+    private func timerDetails(_ timer: CookingTimerState, remaining: TimeInterval) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: remaining <= 0 ? "alarm.waves.left.and.right.fill" : "timer")
+                .foregroundStyle(remaining <= 0 ? .red : .accentColor)
+            VStack(alignment: .leading) {
+                Text(timer.contextLabel).font(.caption).foregroundStyle(.secondary)
+                Text(timer.label).font(.headline)
+                Text(clockText(remaining)).font(.title2.monospacedDigit())
+            }
+        }
+    }
+
+    private func timerButtons(_ timer: CookingTimerState, at date: Date) -> some View {
+        HStack(spacing: 8) {
+            Button(timer.pausedRemaining == nil ? String(localized: "Pause") : String(localized: "Resume")) {
+                store.pauseOrResumeTimer(timer.id, at: date)
+            }
+            Button(String(localized: "Cancel"), role: .destructive) {
+                store.cancelTimer(timer.id)
             }
         }
     }
@@ -525,6 +766,9 @@ struct CookingModeView: View {
     private func enterCookingMode() {
         guard !didEnter else { return }
         didEnter = true
+        MealPlanTips.recordCookingModeOpened()
+        // Someone who turned it on before tips existed has found it already.
+        if voiceControlEnabled { MealPlanTips.recordVoiceControlTurnedOn() }
         DisplayAwakeCoordinator.shared.acquire()
         holdsDisplayAwake = true
         if store.hasInterruptedSession {
@@ -659,6 +903,24 @@ private struct ManualCookingTimerSheet: View {
             }
         }
         .presentationDetents([.medium])
+    }
+}
+
+/// Geometry-based because iPhones keep a compact horizontal size class in
+/// both orientations. Requiring compact height avoids turning iPad and Mac
+/// windows into the phone-specific cooking layout simply because they are wide.
+enum CookingModeLayoutPolicy {
+    static let minimumSideBySideWidth: Double = 620
+
+    static func usesSideBySideLayout(
+        in size: CGSize,
+        horizontalSizeClass: UserInterfaceSizeClass?,
+        verticalSizeClass: UserInterfaceSizeClass?
+    ) -> Bool {
+        horizontalSizeClass == .compact
+            && verticalSizeClass == .compact
+            && size.width > size.height
+            && size.width >= minimumSideBySideWidth
     }
 }
 

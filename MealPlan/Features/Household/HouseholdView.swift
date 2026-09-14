@@ -7,7 +7,9 @@ struct HouseholdSettingsView: View {
     @Environment(\.modelContext) private var context
 
     @State private var showingShareSheet = false
+    #if os(iOS)
     @State private var showingJoinNearby = false
+    #endif
     @State private var memberPendingRemoval: HouseholdMember?
     @State private var removingMemberID: UUID?
     @State private var removalErrorMessage: String?
@@ -95,6 +97,7 @@ struct HouseholdSettingsView: View {
                     }
                 }
 
+                #if os(iOS)
                 Section {
                     Button {
                         showingJoinNearby = true
@@ -104,6 +107,7 @@ struct HouseholdSettingsView: View {
                 } footer: {
                     Text("Someone who already plans with MealPlan can add you from their device while you’re together, no email address needed.")
                 }
+                #endif
 
                 Section {
                     NavigationLink {
@@ -161,9 +165,11 @@ struct HouseholdSettingsView: View {
                     .dismissesOnOutsideClick()
             }
         }
+        #if os(iOS)
         .sheet(isPresented: $showingJoinNearby) {
             JoinNearbyHouseholdView(code: nil)
         }
+        #endif
         .confirmationDialog(
             String(localized: "Remove \(memberPendingRemoval?.name ?? "")?"),
             isPresented: Binding(get: { memberPendingRemoval != nil }, set: { if !$0 { memberPendingRemoval = nil } }),

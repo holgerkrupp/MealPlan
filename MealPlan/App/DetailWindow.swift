@@ -76,14 +76,14 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
 ///   the model supports it; an iPhone never can. This gates the explicit
 ///   "Open in New Window" affordances.
 /// * `prefersWindowsOverSheets` — should an ordinary "Edit", "Plan", "Print"
-///   put up a window *instead of* a sheet? Only on the Mac, where a modal
-///   sheet over the one window is the thing we are getting rid of. On an iPad
-///   a new scene takes over the whole display, so a quick action there stays a
-///   sheet and the second window is something the person asks for.
+///   put up a window *instead of* a sheet? The Mac and Vision Pro prefer
+///   independent windows. On an iPad a new scene takes over the whole display,
+///   so a quick action there stays a sheet and the second window is something
+///   the person asks for.
 enum DetailWindowSupport {
     @MainActor
     static var canOpenWindows: Bool {
-        #if os(macOS)
+        #if os(macOS) || os(visionOS)
         return true
         #elseif os(iOS)
         return UIApplication.shared.supportsMultipleScenes
@@ -94,7 +94,7 @@ enum DetailWindowSupport {
 
     @MainActor
     static var prefersWindowsOverSheets: Bool {
-        #if os(macOS)
+        #if os(macOS) || os(visionOS)
         return true
         #else
         return false
@@ -205,7 +205,11 @@ struct DetailWindow: View {
             }
         case .cookRecipe(let id):
             DishWindow(dishID: id, route: route) { dish, _ in
+                #if os(visionOS)
+                SpatialCookingGuideView(dish: dish)
+                #else
                 NavigationStack { CookingModeView(dish: dish) }
+                #endif
             }
         case .findRecipe(let id):
             DishWindow(dishID: id, route: route) { dish, _ in

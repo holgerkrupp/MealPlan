@@ -87,6 +87,12 @@ struct DishLibraryView: View {
                 emptyState
                     .frame(maxWidth: .infinity, minHeight: 320)
             } else {
+                if !appState.isGuest {
+                    InlineTip(
+                        tip: DishVariantsTip(),
+                        padding: EdgeInsets(top: 8, leading: MacLayout.gutter, bottom: 0, trailing: MacLayout.gutter)
+                    )
+                }
                 LazyVGrid(columns: columns, spacing: 16) {
                     ForEach(libraryItems) { item in
                         switch item {
@@ -110,6 +116,7 @@ struct DishLibraryView: View {
                 .padding(MacLayout.gutter)
             }
         }
+        .task(id: allDishes.count) { MealPlanTips.updateLibrary(allDishes) }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
         .navigationDestination(for: DishVariantGroupRef.self) { DishVariantGroupView(group: $0) }
@@ -130,24 +137,25 @@ struct DishLibraryView: View {
                     }
                 }
             }
-            ToolbarItem(placement: .secondaryAction) {
+            ToolbarItemGroup(placement: .secondaryAction) {
                 DishFilterMenu(
                     filter: $appState.dishFilter,
                     availableTags: tags
                 )
-            }
-            if !appState.isGuest {
-                ToolbarItem(placement: .secondaryAction) {
-                    Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
-                        showingFilePicker = true
+
+                Menu {
+                    if !appState.isGuest {
+                        Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
+                            showingFilePicker = true
+                        }
                     }
+                    Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
+                        exportAllRecipes()
+                    }
+                    .disabled(allDishes.isEmpty)
+                } label: {
+                    Label(String(localized: "More"), systemImage: "ellipsis")
                 }
-            }
-            ToolbarItem(placement: .secondaryAction) {
-                Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
-                    exportAllRecipes()
-                }
-                .disabled(allDishes.isEmpty)
             }
         }
         .detailPresentation(item: $newDish, route: { .newRecipe($0.uuid) }) { dish in

@@ -10,6 +10,8 @@ with other household members.
 - Store, edit, search, import, export, and translate recipes.
 - Build shopping lists from planned meals and pantry staples.
 - Share a household through CloudKit and keep working offline.
+- Cook on Apple Vision Pro with independently placeable ingredient,
+  instruction, and timer windows that share live progress.
 - Add meal plans to a calendar and send shopping lists to supported services.
 - Use widgets, App Intents, Spotlight, printing, and the recipe share
   extension.
@@ -23,10 +25,11 @@ with other household members.
 
 ## Building
 
-Open `MealPlan.xcodeproj` in Xcode, choose the `MealPlan` scheme, select a
-destination, and build or run. Some capabilities—such as iCloud sharing,
-calendar access, notifications, and StoreKit—need the corresponding entitlements
-and development configuration before they can be tested fully.
+Open `MealPlan.xcodeproj` in Xcode, choose the `MealPlan` scheme, select an
+iOS, macOS, or visionOS destination, and build or run. Some capabilities—such
+as iCloud sharing, calendar access, notifications, and StoreKit—need the
+corresponding entitlements and development configuration before they can be
+tested fully.
 
 The project also contains documentation for the recipe archive format and
 selected design decisions in [`RECIPE_ARCHIVE_FORMAT.md`](RECIPE_ARCHIVE_FORMAT.md)

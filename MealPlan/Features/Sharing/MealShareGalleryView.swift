@@ -1,7 +1,7 @@
 import SwiftData
 import SwiftUI
 
-#if os(iOS)
+#if os(iOS) || os(visionOS)
 import UIKit
 private typealias MealSharePlatformImage = UIImage
 #elseif os(macOS)
@@ -500,6 +500,7 @@ struct MealShareGalleryView: View {
                         Image(systemName: "chevron.left")
                     }
                     .buttonStyle(.bordered)
+                    .help(String(localized: "Previous period"))
                     .accessibilityLabel(String(localized: "Previous period"))
 
                     Spacer()
@@ -513,6 +514,7 @@ struct MealShareGalleryView: View {
                     }
                     .buttonStyle(.bordered)
                     .disabled(!canMoveForward)
+                    .help(String(localized: "Next period"))
                     .accessibilityLabel(String(localized: "Next period"))
                 }
             }
@@ -570,7 +572,7 @@ struct MealShareGalleryView: View {
             }
         }
         .navigationTitle(String(localized: "Share Images"))
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar {
@@ -655,7 +657,7 @@ struct MealShareGalleryView: View {
     }
 
     private func platformImage(from renderer: ImageRenderer<some View>) -> MealSharePlatformImage? {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         renderer.uiImage
         #elseif os(macOS)
         renderer.nsImage
@@ -663,7 +665,7 @@ struct MealShareGalleryView: View {
     }
 
     private func pngData(for image: MealSharePlatformImage) -> Data? {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         image.pngData()
         #elseif os(macOS)
         guard let tiff = image.tiffRepresentation, let bitmap = NSBitmapImageRep(data: tiff) else { return nil }
@@ -736,7 +738,7 @@ private struct MealSharePreviewTile: View {
     }
 
     private func platformImage(_ image: MealSharePlatformImage) -> Image {
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         Image(uiImage: image)
         #elseif os(macOS)
         Image(nsImage: image)
@@ -795,7 +797,7 @@ private struct MealShareCustomizeView: View {
             }
         }
         .navigationTitle(String(localized: "Customize"))
-        #if os(iOS)
+        #if os(iOS) || os(visionOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
     }
@@ -1261,20 +1263,27 @@ private struct MealShareMonthDayCell: View {
 
     @ViewBuilder
     private var background: some View {
-        if let data = meal?.imageData, let image = Image(data: data) {
-            image
-                .resizable()
-                .scaledToFill()
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .clipped()
-        } else {
-            let tint = DishGlyph.tint(forName: meal?.name ?? "")
-            ZStack {
-                Rectangle().fill(day == nil ? primary.opacity(0.07) : tint.opacity(0.78))
-                placeholderGlyph
-                    .opacity(day == nil ? 0.14 : 0.55)
+        GeometryReader { geometry in
+            if let data = meal?.imageData, let image = Image(data: data) {
+                image
+                    .resizable()
+                    .scaledToFill()
+                    // `scaledToFill` alone keeps the photo's ideal size and can
+                    // make a wide image bleed into neighbouring grid cells.
+                    // Pin it to the square first, then crop that exact frame.
+                    .frame(width: geometry.size.width, height: geometry.size.height)
+                    .clipped()
+            } else {
+                let tint = DishGlyph.tint(forName: meal?.name ?? "")
+                ZStack {
+                    Rectangle().fill(day == nil ? primary.opacity(0.07) : tint.opacity(0.78))
+                    placeholderGlyph
+                        .opacity(day == nil ? 0.14 : 0.55)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height)
             }
         }
+        .clipped()
     }
 
     @ViewBuilder

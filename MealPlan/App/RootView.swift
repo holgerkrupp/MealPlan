@@ -112,9 +112,11 @@ struct RootView: View {
             }
             .dismissesOnOutsideClick()
         }
+        #if os(iOS)
         .sheet(item: Binding(get: { appState.pendingNearbyJoin }, set: { appState.pendingNearbyJoin = $0 })) { request in
             JoinNearbyHouseholdView(code: request.code)
         }
+        #endif
         .task { await evaluateOnboarding() }
         .task { await acceptPendingCloudShares() }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
@@ -214,6 +216,15 @@ struct RootView: View {
     private func evaluateOnboarding() async {
         guard !didEvaluateOnboarding else { return }
         didEvaluateOnboarding = true
+        // A new device looks for its household in iCloud in the background.
+        // Wait for that answer so returning users don't get the tour on every
+        // new device — but only a few seconds, unless a household was actually
+        // found and is still coming down.
+        let start = ContinuousClock.now
+        while appState.isLookingForCloudHousehold, !Task.isCancelled,
+              appState.isDownloadingCloudHousehold || ContinuousClock.now - start < .seconds(10) {
+            try? await Task.sleep(for: .milliseconds(150))
+        }
         while appState.cloudBootstrapState.isWorking, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(150))
         }
@@ -238,7 +249,7 @@ struct RootView: View {
         // The app-level CloudKit discovery and a share acceptance both replace
         // the active household. Serialize them so a launch-time invitation
         // cannot import the same private zone while discovery is still doing so.
-        while appState.cloudBootstrapState.isWorking, !Task.isCancelled {
+        while appState.isLookingForCloudHousehold || appState.cloudBootstrapState.isWorking, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(150))
         }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
@@ -290,11 +301,6 @@ struct RootView: View {
     @ViewBuilder
     private var cloudBootstrapOverlay: some View {
         switch appState.cloudBootstrapState {
-        case .checking:
-            cloudProgressPanel(
-                title: String(localized: "Checking iCloud…"),
-                detail: String(localized: "Looking for your household before setting up this device.")
-            )
         case .connecting:
             cloudProgressPanel(
                 title: String(localized: "Connecting to your household…"),
@@ -313,30 +319,6 @@ struct RootView: View {
                 detail: String(localized: "Imported (completed) of (total) items."),
                 progress: total > 0 ? Double(completed) / Double(total) : nil
             )
-        case .failed(let message):
-            VStack(spacing: 10) {
-                Label(String(localized: "iCloud sync paused"), systemImage: "icloud.slash")
-                    .font(.headline)
-                Text(message)
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                Button(String(localized: "Try Again")) {
-                    Task {
-                        await appState.bootstrapFromCloud(
-                            context: context,
-                            planningThrough: purchaseManager.latestPlanningDate()
-                        )
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-            }
-            .padding()
-            .frame(maxWidth: 420)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18))
-            .shadow(radius: 12)
-            .padding()
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         case .ready:
             EmptyView()
         }
@@ -368,7 +350,13 @@ struct RootView: View {
     /// Keeps both solo and shared households in sync through their per-record
     /// CloudKit zone while the app is open.
     private func synchronizeHousehold() async {
-        guard let household = appState.currentHousehold else { return }
+        // An empty household on a new device may be about to be replaced by
+        // the one this account already has in iCloud. Syncing it first would
+        // leave an extra, empty zone behind in the private database.
+        while appState.isLookingForCloudHousehold, !Task.isCancelled {
+            try? await Task.sleep(for: .milliseconds(150))
+        }
+        guard !Task.isCancelled, let household = appState.currentHousehold else { return }
         do {
             // CKSyncEngine push notifications fetch remote edits and local
             // saves schedule their own sends. A minute-by-minute full safety

@@ -42,6 +42,12 @@ struct DishSidebarView: View {
             if filteredDishes.isEmpty {
                 emptyState
             } else {
+                if !appState.isGuest {
+                    InlineTip(
+                        tip: DragToPlanTip(),
+                        padding: EdgeInsets(top: 10, leading: 10, bottom: 0, trailing: 10)
+                    )
+                }
                 dishList
             }
         }
@@ -134,6 +140,7 @@ struct DishSidebarView: View {
                         .foregroundStyle(.secondary)
                 }
                 .buttonStyle(.plain)
+                .help(String(localized: "Clear search"))
                 .accessibilityLabel(String(localized: "Clear search"))
             }
         }
