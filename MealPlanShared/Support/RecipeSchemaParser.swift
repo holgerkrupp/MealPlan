@@ -1,5 +1,38 @@
 import Foundation
 
+enum RecipeExtractionProvenance: String, Sendable {
+    case jsonLD
+    case microdata
+    case embeddedJSON
+}
+
+/// A structured recipe together with enough context for the importer to make
+/// a deterministic choice when a page publishes more than one representation.
+struct RecipeExtractionCandidate: Sendable {
+    let recipe: ImportedRecipe
+    let provenance: RecipeExtractionProvenance
+    let evidence: [String]
+    let score: Int
+}
+
+private final class RecipeHTMLNode {
+    let tagName: String
+    let attributes: [String: String]
+    var text = ""
+    var children: [RecipeHTMLNode] = []
+
+    init(tagName: String, attributes: [String: String] = [:]) {
+        self.tagName = tagName
+        self.attributes = attributes
+    }
+}
+
+private extension RecipeHTMLNode {
+    var textContent: String {
+        text + children.map(\.textContent).joined()
+    }
+}
+
 /// Fetches a web page and extracts a recipe from `schema.org/Recipe`
 /// structured data — JSON-LD first, then microdata, then a best-effort
 /// heuristic. German quantity strings are handed to `GermanUnitParser`
@@ -20,8 +53,8 @@ struct RecipeSchemaParser: RecipeImporter {
         if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
-        if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        if let candidate = bestStructuredCandidate(in: html, sourceURL: sourceURL) {
+            return await withImage(candidate.recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
@@ -43,8 +76,8 @@ struct RecipeSchemaParser: RecipeImporter {
         if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
-        if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        if let candidate = bestStructuredCandidate(in: html, sourceURL: sourceURL) {
+            return await withImage(candidate.recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
@@ -140,34 +173,103 @@ struct RecipeSchemaParser: RecipeImporter {
     // MARK: - JSON-LD
 
     func parseJSONLD(html: String, sourceURL: URL) -> ImportedRecipe? {
-        for json in Self.jsonLDBlocks(in: html) {
-            guard let data = json.data(using: .utf8),
-                  let object = try? JSONSerialization.jsonObject(with: data) else { continue }
-            for candidate in Self.recipeDicts(in: object) {
-                if let recipe = Self.map(candidate, sourceURL: sourceURL) {
-                    return recipe
-                }
+        Self.bestCandidate(Self.candidates(
+            from: Self.jsonLDBlocks(in: html), sourceURL: sourceURL, provenance: .jsonLD
+        ))?.recipe
+    }
+
+    static func jsonLDBlocks(in html: String) -> [String] {
+        scriptBlocks(in: html).compactMap { attributes, body in
+            guard let type = htmlAttribute("type", in: attributes),
+                  type.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .caseInsensitiveCompare("application/ld+json") == .orderedSame else { return nil }
+            return body
+        }
+    }
+
+    static func embeddedJSONBlocks(in html: String) -> [String] {
+        scriptBlocks(in: html).compactMap { attributes, body in
+            let id = htmlAttribute("id", in: attributes)?.lowercased() ?? ""
+            let type = htmlAttribute("type", in: attributes)?.lowercased() ?? ""
+            let trimmed = body.trimmingCharacters(in: .whitespacesAndNewlines)
+            let isKnownStateScript = id.contains("next_data") || id.contains("initial_state")
+                || id.contains("preloaded_state") || type == "application/json"
+            guard !type.contains("ld+json"), isKnownStateScript || trimmed.hasPrefix("{") || trimmed.hasPrefix("[") else {
+                return nil
             }
+            if let object = decodeJSON(trimmed), !recipeDicts(in: object).isEmpty {
+                return trimmed
+            }
+            // A few sites assign JSON to a global instead of using a JSON
+            // script. Extract only the balanced object/array after the equals
+            // sign; arbitrary JavaScript is intentionally not evaluated.
+            return balancedJSON(in: trimmed).flatMap { json in
+                decodeJSON(json).map { _ in json }
+            }
+        }
+    }
+
+    private static func scriptBlocks(in html: String) -> [(attributes: String, body: String)] {
+        let pattern = #"<script\b([^>]*)>([\s\S]*?)</script\s*>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
+        let ns = html as NSString
+        return regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
+            guard $0.numberOfRanges > 2,
+                  $0.range(at: 1).location != NSNotFound,
+                  $0.range(at: 2).location != NSNotFound else { return nil }
+            return (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range(at: 2)))
+        }
+    }
+
+    private static func decodeJSON(_ raw: String) -> Any? {
+        var json = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if json.hasPrefix("\u{FEFF}") { json.removeFirst() }
+        if json.hasPrefix("<!--") { json.removeFirst(4) }
+        if json.hasSuffix("-->") { json.removeLast(3) }
+        json = json.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let data = json.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data)
+    }
+
+    private static func balancedJSON(in text: String) -> String? {
+        guard let first = text.firstIndex(where: { $0 == "{" || $0 == "[" }) else { return nil }
+        let opening = text[first]
+        let closing: Character = opening == "{" ? "}" : "]"
+        var depth = 0
+        var inString = false
+        var escaped = false
+        var index = first
+        while index < text.endIndex {
+            let character = text[index]
+            if inString {
+                if escaped { escaped = false }
+                else if character == "\\" { escaped = true }
+                else if character == "\"" { inString = false }
+                index = text.index(after: index)
+                continue
+            }
+            if character == "\"" { inString = true; index = text.index(after: index); continue }
+            if character == opening { depth += 1 }
+            if character == closing {
+                depth -= 1
+                if depth == 0 { return String(text[first...index]) }
+            }
+            index = text.index(after: index)
         }
         return nil
     }
 
-    static func jsonLDBlocks(in html: String) -> [String] {
-        let pattern = #"<script[^>]*type\s*=\s*['"]application/ld\+json['"][^>]*>(.*?)</script>"#
-        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
-        let ns = html as NSString
-        return regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
-            $0.numberOfRanges > 1 ? ns.substring(with: $0.range(at: 1)) : nil
-        }
-    }
-
-    /// Walk an arbitrary JSON structure collecting objects that look like a Recipe.
+    /// Walk every value in an arbitrary JSON structure collecting objects that
+    /// look like a Recipe. This covers arrays nested inside arrays and graphs
+    /// nested below other application-state keys.
     static func recipeDicts(in object: Any) -> [[String: Any]] {
         var found: [[String: Any]] = []
         func visit(_ any: Any) {
             if let dict = any as? [String: Any] {
                 if isRecipe(dict) { found.append(dict) }
-                if let graph = dict["@graph"] { visit(graph) }
+                for (key, value) in dict where key != "@type" && key != "name" {
+                    visit(value)
+                }
             } else if let array = any as? [Any] {
                 array.forEach(visit)
             }
@@ -178,22 +280,87 @@ struct RecipeSchemaParser: RecipeImporter {
 
     static func isRecipe(_ dict: [String: Any]) -> Bool {
         let type = dict["@type"]
-        if let s = type as? String { return s.caseInsensitiveCompare("Recipe") == .orderedSame }
-        if let arr = type as? [String] { return arr.contains { $0.caseInsensitiveCompare("Recipe") == .orderedSame } }
-        return dict["recipeIngredient"] != nil || dict["recipeInstructions"] != nil
+        if let s = type as? String { return isRecipeTypeValue(s) }
+        if let arr = type as? [String] { return arr.contains(where: isRecipeTypeValue) }
+        if let arr = type as? [Any] { return arr.compactMap({ $0 as? String }).contains(where: isRecipeTypeValue) }
+        return (dict["recipeIngredient"] != nil || dict["recipeInstructions"] != nil)
+            && (dict["name"] != nil || dict["headline"] != nil)
+    }
+
+    private static func isRecipeTypeValue(_ value: String) -> Bool {
+        let normalized = value.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+        return normalized == "recipe" || normalized.hasSuffix("/recipe")
+    }
+
+    func parseEmbeddedJSON(html: String, sourceURL: URL) -> ImportedRecipe? {
+        Self.bestCandidate(Self.candidates(
+            from: Self.embeddedJSONBlocks(in: html), sourceURL: sourceURL, provenance: .embeddedJSON
+        ))?.recipe
+    }
+
+    func structuredCandidates(in html: String, sourceURL: URL) -> [RecipeExtractionCandidate] {
+        Self.candidates(from: Self.jsonLDBlocks(in: html), sourceURL: sourceURL, provenance: .jsonLD)
+            + Self.candidates(from: Self.embeddedJSONBlocks(in: html), sourceURL: sourceURL, provenance: .embeddedJSON)
+            + parseMicrodataCandidates(html: html, sourceURL: sourceURL)
+    }
+
+    private func bestStructuredCandidate(in html: String, sourceURL: URL) -> RecipeExtractionCandidate? {
+        Self.bestCandidate(structuredCandidates(in: html, sourceURL: sourceURL))
+    }
+
+    private static func candidates(
+        from blocks: [String],
+        sourceURL: URL,
+        provenance: RecipeExtractionProvenance
+    ) -> [RecipeExtractionCandidate] {
+        blocks.flatMap { block -> [RecipeExtractionCandidate] in
+            guard let object = decodeJSON(block) else { return [] }
+            return recipeDicts(in: object).compactMap {
+                map($0, sourceURL: sourceURL).map { candidate($0, provenance: provenance) }
+            }
+        }
+    }
+
+    private static func bestCandidate(_ candidates: [RecipeExtractionCandidate]) -> RecipeExtractionCandidate? {
+        candidates.max {
+            if $0.score != $1.score { return $0.score < $1.score }
+            let priority: [RecipeExtractionProvenance: Int] = [.jsonLD: 3, .embeddedJSON: 2, .microdata: 1]
+            return (priority[$0.provenance] ?? 0) < (priority[$1.provenance] ?? 0)
+        }
+    }
+
+    private static func candidate(_ recipe: ImportedRecipe, provenance: RecipeExtractionProvenance) -> RecipeExtractionCandidate {
+        var evidence = ["name"]
+        var score = 10
+        if !recipe.ingredientLines.isEmpty {
+            evidence.append("ingredients")
+            score += min(recipe.ingredientLines.count, 8) * 4
+        }
+        if recipe.instructions != nil {
+            evidence.append("instructions")
+            score += 18
+        }
+        if recipe.servings != nil { evidence.append("yield"); score += 2 }
+        if recipe.prepTimeMinutes != nil { evidence.append("prepTime"); score += 2 }
+        if recipe.cookTimeMinutes != nil { evidence.append("cookTime"); score += 2 }
+        if recipe.imageURLString != nil { evidence.append("image"); score += 1 }
+        if !recipe.tagNames.isEmpty { evidence.append("tags"); score += 1 }
+        if recipe.nutritionPerServing != nil { evidence.append("nutrition"); score += 1 }
+        return RecipeExtractionCandidate(recipe: recipe, provenance: provenance, evidence: evidence, score: score)
     }
 
     static func map(_ dict: [String: Any], sourceURL: URL) -> ImportedRecipe? {
-        let name = string(dict["name"]) ?? string(dict["headline"]) ?? ""
+        let name = (string(dict["name"]) ?? string(dict["headline"]))?
+            .strippingHTML.trimmedCollapsed ?? ""
         guard !name.isEmpty else { return nil }
 
         var recipe = ImportedRecipe(name: name.trimmedCollapsed, sourceURL: sourceURL)
         recipe.needsReview = false
 
-        recipe.imageURLString = imageURL(dict["image"])
-        recipe.ingredientLines = stringArray(dict["recipeIngredient"] ?? dict["ingredients"])
-            .map { $0.trimmedCollapsed }
-            .filter { !$0.isEmpty }
+        recipe.imageURLString = imageURL(dict["image"])?.strippingHTML.trimmedCollapsed
+        recipe.ingredientLines = cleanedPayloadLines(
+            stringArray(dict["recipeIngredient"] ?? dict["ingredients"])
+        )
         recipe.instructions = instructions(dict["recipeInstructions"])
         recipe.servings = servings(dict["recipeYield"] ?? dict["yield"])
         recipe.tagNames = tagList([
@@ -300,7 +467,7 @@ struct RecipeSchemaParser: RecipeImporter {
         switch any {
         case let s as String:
             return s.contains("\n") ? s.components(separatedBy: .newlines).map { $0.trimmedCollapsed } : [s]
-        case let a as [Any]: return a.compactMap { string($0) }
+        case let a as [Any]: return a.flatMap { stringArray($0) }
         case let d as [String: Any]: return string(d).map { [$0] } ?? []
         default: return []
         }
@@ -310,7 +477,8 @@ struct RecipeSchemaParser: RecipeImporter {
         switch any {
         case let s as String: return s
         case let d as [String: Any]:
-            return string(d["url"]) ?? (d["@list"].map { imageURL($0) } ?? nil)
+            return imageURL(d["url"]) ?? imageURL(d["contentUrl"])
+                ?? imageURL(d["@list"]) ?? imageURL(d["item"])
         case let a as [Any]:
             return a.compactMap { imageURL($0) }.first
         default: return nil
@@ -318,29 +486,37 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     static func instructions(_ any: Any?) -> String? {
-        switch any {
-        case let s as String:
-            let cleaned = s.strippingHTML.trimmedCollapsed
-            return cleaned.isEmpty ? nil : cleaned
-        case let a as [Any]:
-            let steps = a.flatMap { element -> [String] in
-                if let s = element as? String { return [s] }
-                if let d = element as? [String: Any] {
-                    let type = (d["@type"] as? String) ?? ""
-                    if type.caseInsensitiveCompare("HowToSection") == .orderedSame {
-                        return stringArray(d["itemListElement"])
-                    }
-                    if let text = string(d["text"]) ?? string(d["name"]) { return [text] }
+        var steps: [String] = []
+
+        func collect(_ value: Any?, section: String? = nil) {
+            switch value {
+            case let s as String:
+                let cleaned = s.strippingHTML.trimmedCollapsed
+                guard !cleaned.isEmpty, !isPlaceholderPayload(cleaned) else { return }
+                steps.append(section.map { "\($0): \(cleaned)" } ?? cleaned)
+            case let a as [Any]:
+                a.forEach { collect($0, section: section) }
+            case let d as [String: Any]:
+                let type = string(d["@type"])?.lowercased() ?? ""
+                if type == "howtosection" {
+                    let title = string(d["name"] ?? d["headline"])
+                        .map { $0.strippingHTML.trimmedCollapsed }
+                        .flatMap { isPlaceholderPayload($0) ? nil : $0 }
+                    collect(d["itemListElement"] ?? d["steps"], section: title ?? section)
+                } else if d["itemListElement"] != nil || d["steps"] != nil {
+                    collect(d["itemListElement"] ?? d["steps"], section: section)
+                } else if let text = string(d["text"] ?? d["name"] ?? d["description"]) {
+                    collect(text, section: section)
                 }
-                return []
+            default:
+                break
             }
-            .map { $0.strippingHTML.trimmedCollapsed }
-            .filter { !$0.isEmpty }
-            return steps.isEmpty ? nil : steps.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n\n")
-        case let d as [String: Any]:
-            return instructions(d["itemListElement"]) ?? string(d)
-        default: return nil
         }
+
+        collect(any)
+        return steps.isEmpty ? nil : steps.enumerated()
+            .map { "\($0.offset + 1). \($0.element)" }
+            .joined(separator: "\n\n")
     }
 
     static func servings(_ any: Any?) -> Int? {
@@ -509,13 +685,31 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     private static func cleanedUnique(_ values: [String]) -> [String] {
+        cleanedPayloadLines(values, deduplicate: true)
+    }
+
+    private static func cleanedPayloadLines(_ values: [String], deduplicate: Bool = false) -> [String] {
         var seen = Set<String>()
         return values.compactMap { value in
             let line = value.strippingHTML.trimmedCollapsed
-            guard !line.isEmpty, line.count > 1 else { return nil }
+            guard !line.isEmpty, line.count > 1, !isPlaceholderPayload(line) else { return nil }
             let key = line.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
-            return seen.insert(key).inserted ? line : nil
+            if deduplicate { return seen.insert(key).inserted ? line : nil }
+            return line
         }
+    }
+
+    private static func isPlaceholderPayload(_ value: String) -> Bool {
+        let normalized = value
+            .strippingHTML
+            .trimmedCollapsed
+            .trimmingCharacters(in: .punctuationCharacters)
+            .lowercased()
+        return [
+            "ingredient", "ingredients", "zutat", "zutaten",
+            "direction", "directions", "instruction", "instructions",
+            "anleitung", "zubereitung", "method", "steps", "step"
+        ].contains(normalized)
     }
 
     private static func numberedSteps(_ steps: [String]) -> String? {
@@ -609,52 +803,122 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     func parseMicrodata(html: String, sourceURL: URL) -> ImportedRecipe? {
-        guard html.range(of: #"itemtype\s*=\s*['"][^'"]*schema\.org/Recipe/?['"]"#,
-                         options: [.regularExpression, .caseInsensitive]) != nil else { return nil }
+        Self.bestCandidate(parseMicrodataCandidates(html: html, sourceURL: sourceURL))?.recipe
+    }
 
-        func props(_ name: String) -> [String] {
-            // A schema.org microdata property can be expressed either as the
-            // element's text or as a `content` / `value` attribute.  The
-            // latter is common on publisher sites and its attributes can be
-            // in either order, so read it from the opening tag first.
-            var values = Self.captures(of: #"(<[^>]+>)"#, in: html).compactMap { tag -> String? in
-                guard let itemprop = Self.htmlAttribute("itemprop", in: tag),
-                      itemprop.split(whereSeparator: \.isWhitespace).contains(where: {
-                          $0.caseInsensitiveCompare(name) == .orderedSame
-                      }) else { return nil }
-                return Self.htmlAttribute("content", in: tag)
-                    ?? Self.htmlAttribute("value", in: tag)
+    private func parseMicrodataCandidates(html: String, sourceURL: URL) -> [RecipeExtractionCandidate] {
+        let root = Self.parseHTMLTree(html)
+        var recipeNodes: [RecipeHTMLNode] = []
+
+        func findRecipes(_ node: RecipeHTMLNode) {
+            if node.attributes["itemscope"] != nil,
+               Self.isRecipeType(node.attributes["itemtype"] ?? "") {
+                recipeNodes.append(node)
+                return
             }
+            node.children.forEach(findRecipes)
+        }
+        findRecipes(root)
 
-            let pattern = "itemprop\\s*=\\s*['\"][^'\"]*\\b\(name)\\b[^'\"]*['\"][^>]*>(.*?)<"
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
-            let ns = html as NSString
-            values += regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
-                $0.numberOfRanges > 1 ? ns.substring(with: $0.range(at: 1)).strippingHTML.trimmedCollapsed : nil
+        return recipeNodes.compactMap { node in
+            var properties: [String: [String]] = [:]
+            func collect(_ current: RecipeHTMLNode) {
+                for child in current.children {
+                    if let itemprop = child.attributes["itemprop"] {
+                        for property in itemprop.split(whereSeparator: { $0.isWhitespace }) {
+                            let name = property.lowercased()
+                            properties[name, default: []].append(Self.microdataValue(child))
+                        }
+                    }
+                    // A nested item is a value in its parent's itemprop, not a
+                    // second traversal of all of its child properties.
+                    if child.attributes["itemscope"] == nil { collect(child) }
+                }
             }
-            return Self.uniqueNonEmpty(values)
-        }
+            collect(node)
 
-        let name = props("name").first ?? heuristicTitle(html) ?? ""
-        guard !name.isEmpty else { return nil }
-        var recipe = ImportedRecipe(name: name, sourceURL: sourceURL)
-        recipe.needsReview = true
-        recipe.ingredientLines = props("recipeIngredient") + props("ingredients")
-        recipe.instructions = props("recipeInstructions").joined(separator: "\n\n").nilIfEmpty
-        // Some publishers, including REWE, expose the ingredient rows and
-        // portion count as microdata when their JSON-LD is unavailable to the
-        // importer.  Without carrying the yield over, `DishBuilder` applies
-        // its two-serving default even though the quantities belong to the
-        // source recipe's stated number of portions.
-        recipe.servings = (props("recipeYield") + props("yield"))
-            .lazy
-            .compactMap(Self.servings)
-            .first
-        if let content = html.range(of: #"itemprop\s*=\s*['"]image['"][^>]*(content|src)\s*=\s*['"]([^'"]+)"#,
-                                    options: [.regularExpression, .caseInsensitive]) {
-            recipe.imageURLString = extractLastQuoted(String(html[content]))
+            let name = properties["name"]?.first(where: { !$0.isEmpty })
+                ?? heuristicTitle(html)
+                ?? ""
+            guard let cleanedName = name.strippingHTML.trimmedCollapsed.nilIfEmpty else { return nil }
+            var recipe = ImportedRecipe(name: cleanedName, sourceURL: sourceURL)
+            recipe.needsReview = true
+            recipe.ingredientLines = Self.cleanedPayloadLines(
+                (properties["recipeingredient"] ?? []) + (properties["ingredients"] ?? [])
+            )
+            let instructionValues = (properties["recipeinstructions"] ?? [])
+            recipe.instructions = Self.instructions(instructionValues)
+            recipe.servings = ((properties["recipeyield"] ?? []) + (properties["yield"] ?? []))
+                .compactMap(Self.servings).first
+            recipe.prepTimeMinutes = properties["preptime"]?.compactMap(Self.minutes).first
+            recipe.cookTimeMinutes = properties["cooktime"]?.compactMap(Self.minutes).first
+            if recipe.prepTimeMinutes == nil, recipe.cookTimeMinutes == nil {
+                recipe.cookTimeMinutes = properties["totaltime"]?.compactMap(Self.minutes).first
+            }
+            recipe.imageURLString = properties["image"]?.first?.nilIfEmpty
+            return Self.candidate(recipe, provenance: .microdata)
         }
-        return recipe
+    }
+
+    private static func isRecipeType(_ raw: String) -> Bool {
+        raw.split(whereSeparator: { $0.isWhitespace }).contains { token in
+            let type = token.trimmingCharacters(in: CharacterSet(charactersIn: "/")).lowercased()
+            return type == "recipe" || type.hasSuffix("/recipe")
+        }
+    }
+
+    private static func microdataValue(_ node: RecipeHTMLNode) -> String {
+        if let value = node.attributes["content"] ?? node.attributes["value"] {
+            return value.strippingHTML.trimmedCollapsed
+        }
+        switch node.tagName {
+        case "img", "audio", "video", "source":
+            return (node.attributes["src"] ?? node.attributes["content"] ?? "").strippingHTML.trimmedCollapsed
+        case "a", "link":
+            return (node.attributes["href"] ?? "").strippingHTML.trimmedCollapsed
+        case "time":
+            return (node.attributes["datetime"] ?? node.textContent).strippingHTML.trimmedCollapsed
+        default:
+            return node.textContent.strippingHTML.trimmedCollapsed
+        }
+    }
+
+    private static func parseHTMLTree(_ html: String) -> RecipeHTMLNode {
+        let root = RecipeHTMLNode(tagName: "root")
+        let pattern = #"<!--[\s\S]*?-->|</?([A-Za-z][A-Za-z0-9:-]*)([^>]*)>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return root }
+        let ns = html as NSString
+        let matches = regex.matches(in: html, range: NSRange(location: 0, length: ns.length))
+        var stack = [root]
+        var cursor = 0
+        let voidTags: Set<String> = ["area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source", "track", "wbr"]
+
+        for match in matches {
+            let range = match.range
+            if range.location > cursor {
+                stack[stack.count - 1].text += ns.substring(with: NSRange(location: cursor, length: range.location - cursor))
+            }
+            let raw = ns.substring(with: range)
+            if raw.hasPrefix("<!--") { cursor = range.location + range.length; continue }
+            let isClosing = raw.hasPrefix("</")
+            let tag = match.numberOfRanges > 1 && match.range(at: 1).location != NSNotFound
+                ? ns.substring(with: match.range(at: 1)).lowercased() : ""
+            if isClosing {
+                if let index = stack.lastIndex(where: { $0.tagName == tag }), index > 0 {
+                    stack.removeLast(stack.count - index)
+                }
+            } else if !tag.isEmpty {
+                let attrs = htmlAttributes(in: match.numberOfRanges > 2 && match.range(at: 2).location != NSNotFound
+                    ? ns.substring(with: match.range(at: 2)) : "")
+                let node = RecipeHTMLNode(tagName: tag, attributes: attrs)
+                stack[stack.count - 1].children.append(node)
+                let selfClosing = raw.hasSuffix("/>") || voidTags.contains(tag)
+                if !selfClosing { stack.append(node) }
+            }
+            cursor = range.location + range.length
+        }
+        if cursor < ns.length { stack[stack.count - 1].text += ns.substring(from: cursor) }
+        return root
     }
 
     // MARK: - Heuristic
@@ -734,6 +998,25 @@ struct RecipeSchemaParser: RecipeImporter {
         return nil
     }
 
+    private static func htmlAttributes(in raw: String) -> [String: String] {
+        let pattern = #"([A-Za-z_:][A-Za-z0-9:_.-]*)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+)))?"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]) else { return [:] }
+        let ns = raw as NSString
+        var attributes: [String: String] = [:]
+        for match in regex.matches(in: raw, range: NSRange(location: 0, length: ns.length)) {
+            guard match.numberOfRanges > 1 else { continue }
+            let name = ns.substring(with: match.range(at: 1)).lowercased()
+            guard name != "=" else { continue }
+            var value = ""
+            for index in 2..<match.numberOfRanges where match.range(at: index).location != NSNotFound {
+                value = ns.substring(with: match.range(at: index))
+                break
+            }
+            attributes[name] = value
+        }
+        return attributes
+    }
+
     private static func uniqueNonEmpty(_ values: [String]) -> [String] {
         var seen = Set<String>()
         return values.compactMap { value in
@@ -760,10 +1043,36 @@ extension String {
             .replacingOccurrences(of: "&nbsp;", with: " ")
             .replacingOccurrences(of: "&quot;", with: "\"")
             .replacingOccurrences(of: "&#39;", with: "'")
+            .replacingOccurrences(of: "&lt;", with: "<")
+            .replacingOccurrences(of: "&gt;", with: ">")
+            .replacingOccurrences(of: "&apos;", with: "'")
             .replacingOccurrences(of: "&auml;", with: "ä")
             .replacingOccurrences(of: "&ouml;", with: "ö")
             .replacingOccurrences(of: "&uuml;", with: "ü")
             .replacingOccurrences(of: "&szlig;", with: "ß")
+            .decodingNumericHTMLEntities
+    }
+
+    private var decodingNumericHTMLEntities: String {
+        let patterns = [
+            ("&#x([0-9A-Fa-f]+);", 16),
+            ("&#([0-9]+);", 10)
+        ]
+        var result = self
+        for (pattern, radix) in patterns {
+            guard let regex = try? NSRegularExpression(pattern: pattern),
+                  let mutable = result.mutableCopy() as? NSMutableString else { continue }
+            let source = mutable as String
+            let matches = regex.matches(in: source, range: NSRange(location: 0, length: (source as NSString).length))
+            for match in matches.reversed() {
+                guard match.numberOfRanges > 1 else { continue }
+                let digits = (source as NSString).substring(with: match.range(at: 1))
+                guard let value = UInt32(digits, radix: radix), let scalar = UnicodeScalar(value) else { continue }
+                mutable.replaceCharacters(in: match.range, with: String(scalar))
+            }
+            result = mutable as String
+        }
+        return result
     }
 
     /// Script and style contents often contain strings such as "ingredient"
