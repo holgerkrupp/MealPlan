@@ -19,11 +19,7 @@ struct RecipeArticleContent: Identifiable, Hashable, Sendable {
     /// False once the article's own page has already been searched for a photo,
     /// so a page that has none is not fetched again on every scroll.
     var mayLookUpImage: Bool = true
-
-    /// Read state lives in the iCloud key-value store, which is main-actor
-    /// bound, so this is asked for on the main actor by the views that draw it.
-    @MainActor
-    var isRead: Bool { RecipeFeedReadState.isRead(readStateID) }
+    var isRead: Bool = false
 }
 
 extension RecipeArticleContent {
@@ -41,6 +37,7 @@ extension RecipeArticleContent {
         publishedAt = item.publishedAt
         self.sourceName = sourceName ?? item.feed?.title
         mayLookUpImage = item.imageLookupAt == nil
+        isRead = RecipeFeedReadState.isRead(item.stableID)
     }
 
     /// An article from a feed that has only been fetched to look at.
@@ -112,7 +109,9 @@ struct RecipeArticleCard: View {
     private func lookUpImage() async {
         guard article.imageURL == nil, article.mayLookUpImage, resolvedImageURL == nil,
               let link = article.articleURL else { return }
-        switch await RecipeFeedImageResolver.shared.lookUpImage(forArticleAt: link) {
+        let result = await RecipeFeedImageResolver.shared.lookUpImage(forArticleAt: link)
+        guard !Task.isCancelled else { return }
+        switch result {
         case .found(let url):
             resolvedImageURL = url
             onImageResolved?(url)

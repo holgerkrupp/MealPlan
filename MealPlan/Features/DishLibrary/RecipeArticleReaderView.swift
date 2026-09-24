@@ -1,5 +1,6 @@
 import SwiftData
 import SwiftUI
+import os
 
 /// An article read as a recipe. When the page carries structured recipe data
 /// this lays it out the way a saved dish is laid out — photo, times, ingredient
@@ -8,6 +9,7 @@ import SwiftUI
 @MainActor
 struct RecipeArticleReaderView: View {
     let article: RecipeArticleContent
+    var onRead: (() -> Void)? = nil
     /// Called when reading the page turned up a picture the feed lacked, so a
     /// subscribed feed can keep it. A preview passes nothing.
     var onImageResolved: ((URL?) -> Void)? = nil
@@ -234,7 +236,10 @@ struct RecipeArticleReaderView: View {
     // MARK: - Actions
 
     private func load() async {
-        RecipeFeedReadState.markRead(article.id)
+        let signpost = RecipePerformanceSignposts.signposter.beginInterval("article navigation")
+        defer { RecipePerformanceSignposts.signposter.endInterval("article navigation", signpost) }
+        RecipeFeedReadState.markRead(article.readStateID)
+        onRead?()
         guard let url = article.articleURL else {
             loading = false
             return

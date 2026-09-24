@@ -1,4 +1,5 @@
 import Foundation
+import os
 
 /// What a trip to an article's own page turned up.
 enum ArticleImageLookup: Sendable, Equatable {
@@ -26,21 +27,49 @@ enum ArticleImageLookup: Sendable, Equatable {
 actor RecipeFeedImageResolver {
     static let shared = RecipeFeedImageResolver()
 
-    private let concurrencyLimit = 3
+    typealias Loader = @Sendable (URL) async -> ArticleImageLookup
+
+    private let concurrencyLimit: Int
+    private let loader: Loader
     private var running = 0
-    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var waiting: [UUID: CheckedContinuation<Bool, Never>] = [:]
+    private var cached: [URL: ArticleImageLookup] = [:]
+    private var inFlight: [URL: Task<ArticleImageLookup, Never>] = [:]
+
+    init(concurrencyLimit: Int = 3, loader: Loader? = nil) {
+        self.concurrencyLimit = max(1, concurrencyLimit)
+        self.loader = loader ?? { url in
+            guard let html = try? await RecipeArticleCache.shared.articleHTML(for: url) else {
+                return .unreachable
+            }
+            if let image = Self.imageURL(inHTML: html, relativeTo: url) {
+                return .found(image)
+            }
+            return .none
+        }
+    }
 
     func lookUpImage(forArticleAt url: URL) async -> ArticleImageLookup {
-        await acquireSlot()
-        defer { releaseSlot() }
+        if let cachedResult = cached[url] { return cachedResult }
+        if let existing = inFlight[url] {
+            let result = await existing.value
+            return Task.isCancelled ? .unreachable : result
+        }
 
-        guard let html = try? await RecipeArticleCache.shared.articleHTML(for: url) else {
-            return .unreachable
+        let task = Task { [loader] in
+            guard await self.acquireSlot() else { return ArticleImageLookup.unreachable }
+            defer { Task { await self.releaseSlot() } }
+            guard !Task.isCancelled else { return .unreachable }
+            let state = RecipePerformanceSignposts.signposter.beginInterval("article image lookup")
+            let result = await loader(url)
+            RecipePerformanceSignposts.signposter.endInterval("article image lookup", state)
+            return result
         }
-        if let image = Self.imageURL(inHTML: html, relativeTo: url) {
-            return .found(image)
-        }
-        return .none
+        inFlight[url] = task
+        let result = await task.value
+        inFlight[url] = nil
+        if result != .unreachable { cached[url] = result }
+        return Task.isCancelled ? .unreachable : result
     }
 
     /// The best picture a recipe page advertises. A `schema.org` recipe's own
@@ -65,12 +94,20 @@ actor RecipeFeedImageResolver {
 
     // MARK: - Throttle
 
-    private func acquireSlot() async {
+    private func acquireSlot() async -> Bool {
+        guard !Task.isCancelled else { return false }
         if running < concurrencyLimit {
             running += 1
-            return
+            return true
         }
-        await withCheckedContinuation { waiting.append($0) }
+        let id = UUID()
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                waiting[id] = continuation
+            }
+        } onCancel: {
+            Task { await self.cancelWaiter(id) }
+        }
     }
 
     /// Hands the slot straight to whoever is next rather than decrementing, so
@@ -79,7 +116,12 @@ actor RecipeFeedImageResolver {
         if waiting.isEmpty {
             running -= 1
         } else {
-            waiting.removeFirst().resume()
+            let id = waiting.keys.first!
+            waiting.removeValue(forKey: id)?.resume(returning: true)
         }
+    }
+
+    private func cancelWaiter(_ id: UUID) {
+        waiting.removeValue(forKey: id)?.resume(returning: false)
     }
 }

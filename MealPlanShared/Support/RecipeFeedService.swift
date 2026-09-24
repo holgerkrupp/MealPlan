@@ -228,7 +228,13 @@ enum RecipeFeedReadState {
     private static let store = NSUbiquitousKeyValueStore.default
 
     static func isRead(_ itemID: String) -> Bool {
-        Set(store.array(forKey: key) as? [String] ?? []).contains(itemID)
+        readIDs().contains(itemID)
+    }
+
+    /// Reads the ubiquitous store once for a discovery snapshot instead of
+    /// once for every card body/accessibility evaluation.
+    static func readIDs() -> Set<String> {
+        Set(store.array(forKey: key) as? [String] ?? [])
     }
 
     static func markRead(_ itemID: String) {
