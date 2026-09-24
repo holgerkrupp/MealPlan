@@ -21,7 +21,7 @@ struct DishSidebarView: View {
     @FocusState private var searchFocused: Bool
 
     private var filteredDishes: [Dish] {
-        appState.planDishFilter.apply(to: allDishes)
+        appState.planDishFilter.apply(to: allDishes, sourceIsAlphabeticallySorted: true)
     }
 
     private var tags: [String] {

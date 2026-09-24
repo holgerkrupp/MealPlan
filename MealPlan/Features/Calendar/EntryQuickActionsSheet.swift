@@ -250,6 +250,7 @@ struct EntryQuickActionsSheet: View {
             let image = DishImage(data: data, sortIndex: -1, isPrimary: true)
             image.dish = dish
             context.insert(image)
+            dish.modifiedAt = .now
         }
         save()
         SharedStore.reloadWidgets()

@@ -30,6 +30,9 @@ extension Image {
 /// to the generic fork-and-knife.
 @MainActor
 struct DishThumbnail: View {
+    private let dishID: PersistentIdentifier?
+    private let dishUUID: UUID?
+    private let dishCacheKey: String?
     private let imageRecord: DishImage?
     private let rawData: Data?
     var glyph: DishGlyph?
@@ -47,6 +50,9 @@ struct DishThumbnail: View {
         size: CGFloat = 56, cornerRadius: CGFloat = 12,
         width: CGFloat? = nil, height: CGFloat? = nil
     ) {
+        self.dishID = nil
+        self.dishUUID = nil
+        self.dishCacheKey = nil
         self.imageRecord = nil
         self.rawData = data
         self.glyph = glyph
@@ -62,6 +68,9 @@ struct DishThumbnail: View {
         size: CGFloat = 56, cornerRadius: CGFloat = 12,
         width: CGFloat? = nil, height: CGFloat? = nil
     ) {
+        self.dishID = nil
+        self.dishUUID = nil
+        self.dishCacheKey = nil
         self.imageRecord = image
         self.rawData = nil
         self.glyph = glyph
@@ -77,7 +86,22 @@ struct DishThumbnail: View {
         dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12,
         width: CGFloat? = nil, height: CGFloat? = nil
     ) {
-        self.imageRecord = dish?.primaryImage
+        if let dish, let persistentID = DishPhotoLoading.persistentID(for: dish) {
+            // Do not touch `dish.images` here. It is a lazy SwiftData
+            // relationship, and faulting it while a grid constructs its cells
+            // serialises disk work onto the main actor.
+            self.dishID = persistentID
+            self.dishUUID = dish.uuid
+            self.dishCacheKey = "dish-\(dish.uuid)-\(dish.modifiedAt.timeIntervalSinceReferenceDate)"
+            self.imageRecord = nil
+        } else {
+            // A newly inserted dish is not visible from another ModelContext
+            // yet, so its unsaved image must stay on the local-context path.
+            self.dishID = nil
+            self.dishUUID = nil
+            self.dishCacheKey = nil
+            self.imageRecord = dish?.primaryImage
+        }
         self.rawData = nil
         self.glyph = dish?.glyph
         self.tint = DishGlyph.tint(forName: dish?.name ?? "")
@@ -89,14 +113,15 @@ struct DishThumbnail: View {
 
     var body: some View {
         ZStack {
-            if imageRecord == nil {
-                placeholder
-            } else {
-                // A photo-backed dish should not flash its emoji while a
-                // newly-created lazy cell obtains the already-decoded image.
-                Rectangle().fill(tint.opacity(0.18))
-            }
-            if let imageRecord {
+            placeholder
+            if let dishID, let dishUUID, let dishCacheKey {
+                CachedDishPhoto(
+                    dishID: dishID,
+                    dishUUID: dishUUID,
+                    cacheKey: dishCacheKey,
+                    maxPixelSize: size * displayScale
+                )
+            } else if let imageRecord {
                 CachedDishPhoto(
                     image: imageRecord,
                     cacheKey: "\(imageRecord.persistentModelID.hashValue)-\(imageRecord.modifiedAt.timeIntervalSinceReferenceDate)",
@@ -153,10 +178,12 @@ struct DishThumbnail: View {
 private final class DishPhotoMemoryCache {
     static let shared = DishPhotoMemoryCache()
     private let images = NSCache<NSString, CGImage>()
+    private let missingSources = NSCache<NSString, NSNumber>()
 
     private init() {
         images.totalCostLimit = 96 * 1024 * 1024
         images.countLimit = 240
+        missingSources.countLimit = 2_000
     }
 
     func image(for key: String) -> CGImage? {
@@ -165,6 +192,33 @@ private final class DishPhotoMemoryCache {
 
     func insert(_ image: CGImage, for key: String) {
         images.setObject(image, forKey: key as NSString, cost: image.bytesPerRow * image.height)
+    }
+
+    func isKnownMissing(_ sourceKey: String) -> Bool {
+        missingSources.object(forKey: sourceKey as NSString) != nil
+    }
+
+    func markMissing(_ sourceKey: String) {
+        missingSources.setObject(NSNumber(value: true), forKey: sourceKey as NSString)
+    }
+}
+
+/// Reuse one background ModelContext per store. Creating one for every card
+/// causes needless SQLite connection churn and lets a fast scroll issue many
+/// competing reads at once; the model actor also naturally serialises them.
+@MainActor
+private final class DishPhotoDataActorPool {
+    static let shared = DishPhotoDataActorPool()
+    private var loaders: [ObjectIdentifier: DishPhotoDataActor] = [:]
+
+    private init() {}
+
+    func loader(for container: ModelContainer) -> DishPhotoDataActor {
+        let key = ObjectIdentifier(container)
+        if let loader = loaders[key] { return loader }
+        let loader = DishPhotoDataActor(modelContainer: container)
+        loaders[key] = loader
+        return loader
     }
 }
 
@@ -188,6 +242,8 @@ private actor DishPhotoDecoder {
 }
 
 struct CachedDishPhoto: View {
+    private let dishID: PersistentIdentifier?
+    private let dishUUID: UUID?
     private let imageID: PersistentIdentifier?
     private let imageUUID: UUID?
     private let rawData: Data?
@@ -203,6 +259,8 @@ struct CachedDishPhoto: View {
     }
 
     init(image: DishImage, cacheKey: String, maxPixelSize: CGFloat) {
+        self.dishID = nil
+        self.dishUUID = nil
         if let persistentID = DishPhotoLoading.persistentID(for: image) {
             self.imageID = persistentID
             self.imageUUID = image.uuid
@@ -220,9 +278,26 @@ struct CachedDishPhoto: View {
     }
 
     init(data: Data, cacheKey: String, maxPixelSize: CGFloat) {
+        self.dishID = nil
+        self.dishUUID = nil
         self.imageID = nil
         self.imageUUID = nil
         self.rawData = data
+        self.cacheKey = cacheKey
+        self.maxPixelSize = maxPixelSize
+    }
+
+    init(
+        dishID: PersistentIdentifier,
+        dishUUID: UUID,
+        cacheKey: String,
+        maxPixelSize: CGFloat
+    ) {
+        self.dishID = dishID
+        self.dishUUID = dishUUID
+        self.imageID = nil
+        self.imageUUID = nil
+        self.rawData = nil
         self.cacheKey = cacheKey
         self.maxPixelSize = maxPixelSize
     }
@@ -247,14 +322,23 @@ struct CachedDishPhoto: View {
                 decodedKey = sizedKey
                 return
             }
+            if dishID != nil, DishPhotoMemoryCache.shared.isKnownMissing(cacheKey) {
+                return
+            }
             let sourceData: Data?
-            if let imageID, let imageUUID {
-                let loader = DishPhotoDataActor(modelContainer: modelContext.container)
+            let loader = DishPhotoDataActorPool.shared.loader(for: modelContext.container)
+            if let dishID, let dishUUID {
+                sourceData = await loader.primaryImageData(for: dishID, uuid: dishUUID)
+            } else if let imageID, let imageUUID {
                 sourceData = await loader.data(for: imageID, uuid: imageUUID)
             } else {
                 sourceData = rawData
             }
-            guard !Task.isCancelled, let sourceData else { return }
+            guard !Task.isCancelled else { return }
+            guard let sourceData else {
+                if dishID != nil { DishPhotoMemoryCache.shared.markMissing(cacheKey) }
+                return
+            }
             let image = await DishPhotoDecoder.shared.image(
                 data: sourceData,
                 maxPixelSize: max(1, maxPixelSize)
@@ -268,8 +352,8 @@ struct CachedDishPhoto: View {
 }
 
 enum DishPhotoLoading {
-    static func persistentID(for image: DishImage) -> PersistentIdentifier? {
-        let id = image.persistentModelID
+    static func persistentID<Model: PersistentModel>(for model: Model) -> PersistentIdentifier? {
+        let id = model.persistentModelID
         // `isTemporary` was added in OS 27, while `storeIdentifier` exposes
         // the same distinction back to the app's deployment target.
         return id.storeIdentifier == nil ? nil : id
@@ -281,6 +365,23 @@ enum DishPhotoLoading {
 /// main-actor task.
 @ModelActor
 actor DishPhotoDataActor {
+    func primaryImageData(for dishID: PersistentIdentifier, uuid: UUID) -> Data? {
+        let dish: Dish?
+        if let registered: Dish = modelContext.registeredModel(for: dishID) {
+            dish = registered
+        } else {
+            var descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate<Dish> { $0.uuid == uuid }
+            )
+            descriptor.fetchLimit = 1
+            dish = (try? modelContext.fetch(descriptor))?
+                .first(where: { $0.persistentModelID == dishID })
+        }
+
+        guard !Task.isCancelled else { return nil }
+        return dish?.primaryImage?.data
+    }
+
     func data(for imageID: PersistentIdentifier, uuid: UUID) -> Data? {
         // `model(for:)` traps when a thumbnail outlives a deleted/replaced
         // image. A drag preview makes that race especially easy to hit because

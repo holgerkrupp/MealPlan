@@ -5,8 +5,36 @@ import UniformTypeIdentifiers
 @MainActor
 struct DishLibraryView: View {
     @Environment(AppState.self) private var appState
+    @State private var fetchLimit = Self.pageSize
+
+    private static let pageSize = 120
+
+    private var needsEntireLibrary: Bool {
+        let filter = appState.dishFilter
+        return filter.sort != .alphabetical
+            || filter.isActive
+            || !filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    var body: some View {
+        DishLibraryContent(
+            fetchLimit: needsEntireLibrary ? nil : fetchLimit,
+            loadMore: { fetchLimit += Self.pageSize }
+        )
+        .onChange(of: appState.dishFilter) {
+            fetchLimit = Self.pageSize
+        }
+    }
+}
+
+@MainActor
+private struct DishLibraryContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
+
+    private let fetchLimit: Int?
+    private let loadMore: @MainActor () -> Void
 
     /// The freshly created dish whose editor is open. Setting it is what
     /// opens the editor — in a window where the platform has them, else a sheet.
@@ -18,17 +46,41 @@ struct DishLibraryView: View {
     @State private var importError: String?
     /// Driven by the menu bar's Find command so ⌘F lands in the search field.
     @State private var isSearchPresented = false
+    @State private var availableTags: [String] = []
+    @State private var popularTags: [String] = []
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
-    private var filteredDishes: [Dish] {
-        appState.dishFilter.apply(to: allDishes)
+    init(fetchLimit: Int?, loadMore: @escaping @MainActor () -> Void) {
+        var descriptor = FetchDescriptor<Dish>(sortBy: [SortDescriptor(\Dish.name)])
+        if let fetchLimit {
+            descriptor.fetchLimit = fetchLimit
+        }
+        _allDishes = Query(descriptor)
+        self.fetchLimit = fetchLimit
+        self.loadMore = loadMore
+    }
+
+    private struct LibraryRevision: Equatable {
+        var count: Int
+        var latestModification: Date?
+    }
+
+    private var libraryRevision: LibraryRevision {
+        LibraryRevision(
+            count: allDishes.count,
+            latestModification: allDishes.lazy.map(\.modifiedAt).max()
+        )
     }
 
     /// What the grid actually draws. A variant group collapses into one cell
     /// so five takes on a burger don't push everything else off the screen;
     /// the group's own screen lists them.
-    private var libraryItems: [LibraryItem] {
+    private func libraryItems(from filteredDishes: [Dish]) -> [LibraryItem] {
+        guard filteredDishes.contains(where: { $0.variantGroupID != nil }) else {
+            return filteredDishes.map(LibraryItem.dish)
+        }
+
         let groups = DishVariants.groups(in: filteredDishes)
         var seenGroups: Set<UUID> = []
         var items: [LibraryItem] = []
@@ -61,17 +113,14 @@ struct DishLibraryView: View {
         }
     }
 
-    private var tags: [String] {
-        DishTag.vocabulary(from: allDishes)
-    }
-
-    /// What the strip under the search bar offers, in usage order.
-    private var popularTags: [String] {
-        DishTag.mostUsed(from: allDishes)
-    }
-
     var body: some View {
         @Bindable var appState = appState
+        let filteredDishes = appState.dishFilter.apply(
+            to: allDishes,
+            sourceIsAlphabeticallySorted: true
+        )
+        let items = libraryItems(from: filteredDishes)
+        let canLoadMore = fetchLimit.map { allDishes.count >= $0 } ?? false
 
         ScrollView {
             TagFilterStrip(
@@ -81,7 +130,7 @@ struct DishLibraryView: View {
             )
             .padding(.top, 8)
 
-            SeasonalSuggestionsStrip()
+            SeasonalSuggestionsStrip(dishes: allDishes)
 
             if filteredDishes.isEmpty {
                 emptyState
@@ -94,7 +143,7 @@ struct DishLibraryView: View {
                     )
                 }
                 LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(libraryItems) { item in
+                    ForEach(items) { item in
                         switch item {
                         case .dish(let dish):
                             DishLibraryCell(
@@ -112,11 +161,25 @@ struct DishLibraryView: View {
                             )
                         }
                     }
+
+                    if canLoadMore {
+                        ProgressView()
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .onAppear {
+                                loadMore()
+                            }
+                    }
                 }
                 .padding(MacLayout.gutter)
             }
         }
-        .task(id: allDishes.count) { MealPlanTips.updateLibrary(allDishes) }
+        .task(id: allDishes.count) {
+            MealPlanTips.updateLibrary(allDishes)
+        }
+        .task(id: libraryRevision) {
+            await refreshTags()
+        }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
         .navigationDestination(for: DishVariantGroupRef.self) { DishVariantGroupView(group: $0) }
@@ -140,7 +203,7 @@ struct DishLibraryView: View {
             ToolbarItemGroup(placement: .secondaryAction) {
                 DishFilterMenu(
                     filter: $appState.dishFilter,
-                    availableTags: tags
+                    availableTags: availableTags
                 )
 
                 Menu {
@@ -198,6 +261,21 @@ struct DishLibraryView: View {
             appState.pendingAddDish = nil
             await handleAddRequest(request)
         }
+    }
+
+    private func refreshTags() async {
+        // Let the tab and its first page become interactive before deriving
+        // secondary navigation from the complete library. The full scan uses
+        // its own SwiftData executor so it cannot stall scrolling or the tab
+        // transition on the main actor.
+        try? await Task.sleep(for: .milliseconds(150))
+        guard !Task.isCancelled else { return }
+        let metadata = await DishLibraryMetadataActor(
+            modelContainer: context.container
+        ).tagMetadata()
+        guard !Task.isCancelled else { return }
+        availableTags = metadata.available
+        popularTags = metadata.popular
     }
 
     private func handleAddRequest(_ request: AppState.PendingAddDish) async {
@@ -282,8 +360,14 @@ struct DishLibraryView: View {
 
     private func exportAllRecipes() {
         do {
+            // The normal library query is deliberately paged. Export is an
+            // explicit whole-library operation, so fetch everything only when
+            // the cook actually requests it.
+            let dishes = try context.fetch(
+                FetchDescriptor<Dish>(sortBy: [SortDescriptor(\Dish.name)])
+            )
             exportedArchive = ExportedRecipeArchive(
-                url: try MealPlanRecipeArchive.temporaryFile(for: allDishes)
+                url: try MealPlanRecipeArchive.temporaryFile(for: dishes)
             )
         } catch {
             exportError = error.localizedDescription
@@ -297,6 +381,29 @@ struct DishLibraryView: View {
         dish.refreshAutoGlyph()
         context.insert(dish)
         newDish = dish
+    }
+}
+
+private struct DishLibraryTagMetadata: Sendable {
+    var available: [String]
+    var popular: [String]
+
+    static let empty = DishLibraryTagMetadata(available: [], popular: [])
+}
+
+@ModelActor
+private actor DishLibraryMetadataActor {
+    func tagMetadata() -> DishLibraryTagMetadata {
+        guard !Task.isCancelled,
+              let dishes = try? modelContext.fetch(FetchDescriptor<Dish>())
+        else { return .empty }
+
+        let usage = DishTag.usage(fromTagLists: dishes.map(\.tagNames))
+        guard !Task.isCancelled else { return .empty }
+        return DishLibraryTagMetadata(
+            available: DishTag.sorted(usage.map(\.tag)),
+            popular: Array(usage.prefix(12).map(\.tag))
+        )
     }
 }
 

@@ -76,11 +76,17 @@ enum DishTag {
     /// used by the most dishes wins so the vocabulary reads consistently.
     @MainActor
     static func usage(from dishes: [Dish]) -> [(tag: String, count: Int)] {
+        usage(fromTagLists: dishes.map(\.tagNames))
+    }
+
+    /// The storage-only form lets background SwiftData actors build the same
+    /// vocabulary without sending model objects across actor boundaries.
+    static func usage(fromTagLists tagLists: [[String]]) -> [(tag: String, count: Int)] {
         var counts: [String: Int] = [:]
         var spellings: [String: [String: Int]] = [:]
-        for dish in dishes {
+        for tags in tagLists {
             var counted: Set<String> = []
-            for raw in dish.tagNames {
+            for raw in tags {
                 let display = clean(raw)
                 let key = normalize(display)
                 guard !key.isEmpty, counted.insert(key).inserted else { continue }

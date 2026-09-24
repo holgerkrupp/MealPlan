@@ -385,6 +385,10 @@ enum DishBuilder {
         to dish: Dish,
         context: ModelContext
     ) -> DishImage {
+        // Dish thumbnails key their asynchronous photo request by this value,
+        // so changing the primary image must invalidate that request as well
+        // as the image record itself.
+        dish.modifiedAt = .now
         if let primary = dish.primaryImage {
             primary.data = data
             primary.isPrimary = true

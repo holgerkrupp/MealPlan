@@ -60,6 +60,36 @@ struct HouseholdRecordSyncTests {
         #expect(await loader.data(for: secondID, uuid: duplicateUUID) == Data([7, 8, 9]))
     }
 
+    @Test func photoLoaderFindsPrimaryImageWithoutMainContextRelationshipFault() async throws {
+        let storeDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-primary-photo-loader-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+
+        let schema = SharedStore.makeSchema()
+        let configuration = ModelConfiguration(
+            schema: schema,
+            url: storeDirectory.appending(path: "test.sqlite"),
+            cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+        let dish = Dish(name: "Soup")
+        let secondary = DishImage(data: Data([1, 2, 3]), sortIndex: 0)
+        let primary = DishImage(data: Data([7, 8, 9]), sortIndex: 1, isPrimary: true)
+        secondary.dish = dish
+        primary.dish = dish
+        context.insert(dish)
+        context.insert(secondary)
+        context.insert(primary)
+        try context.save()
+
+        let loader = DishPhotoDataActor(modelContainer: container)
+        let data = await loader.primaryImageData(for: dish.persistentModelID, uuid: dish.uuid)
+
+        #expect(data == Data([7, 8, 9]))
+    }
+
     @Test func stableIdentityRoundTripsFromCloudKitName() throws {
         let uuid = UUID()
         let identity = HouseholdRecordIdentity(type: .dish, uuid: uuid)

@@ -57,7 +57,11 @@ struct DishFilter: Equatable {
     }
 
     /// Apply the non-sort filters and search ranking to a fetched list.
-    func apply(to dishes: [Dish], now: Date = .now) -> [Dish] {
+    func apply(
+        to dishes: [Dish],
+        now: Date = .now,
+        sourceIsAlphabeticallySorted: Bool = false
+    ) -> [Dish] {
         var result = dishes.filter { dish in
             // A dish the editor has open but nobody has typed into yet is not
             // part of the library: on a Mac or iPad that editor is a window of
@@ -97,6 +101,12 @@ struct DishFilter: Equatable {
                 .sorted { $0.score > $1.score }
                 .map(\.dish)
         } else {
+            // Both library queries already fetch by name. Filtering preserves
+            // that order, so sorting thousands of imported recipes again on
+            // every tab presentation only burns main-thread time.
+            if sort == .alphabetical, sourceIsAlphabeticallySorted {
+                return result
+            }
             result = sortDishes(result, now: now)
         }
         return result
