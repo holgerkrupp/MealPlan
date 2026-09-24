@@ -5,13 +5,101 @@ import SwiftData
 /// Shared by the app's importer and the Share Extension so both behave alike.
 enum DishBuilder {
 
+    /// State shared by every recipe in one bulk import. It avoids repeatedly
+    /// traversing SwiftData relationships for the household's complete
+    /// ingredient catalogue and tag vocabulary.
+    @MainActor
+    final class ImportSession {
+        private struct IndexedIngredient {
+            var ingredient: Ingredient
+            var matchingKey: String
+            var offset: Int
+        }
+
+        private var ingredientCount = 0
+        private var ingredientsByKeyLength: [Int: [IndexedIngredient]] = [:]
+        private var exactIngredients: [String: Ingredient] = [:]
+        private var resolvedIngredients: [String: Ingredient] = [:]
+        fileprivate private(set) var tagVocabulary: [String]
+
+        init(household: Household?) {
+            tagVocabulary = DishTag.vocabulary(from: household?.dishes ?? [])
+            for ingredient in household?.ingredients ?? [] {
+                index(ingredient)
+            }
+        }
+
+        fileprivate func ingredient(
+            named rawName: String,
+            household: Household?,
+            context: ModelContext
+        ) -> Ingredient {
+            let normalized = Ingredient.normalize(rawName)
+            if !normalized.isEmpty, let cached = resolvedIngredients[normalized] {
+                return cached
+            }
+            if !normalized.isEmpty, let existing = matchingIngredient(
+                named: rawName,
+                normalized: normalized
+            ) {
+                resolvedIngredients[normalized] = existing
+                return existing
+            }
+
+            let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
+            ingredient.household = household
+            context.insert(ingredient)
+            index(ingredient)
+            if !normalized.isEmpty { resolvedIngredients[normalized] = ingredient }
+            return ingredient
+        }
+
+        /// Exact names are constant-time. Fuzzy matching only examines keys
+        /// whose lengths are close enough to be within the matcher's edit or
+        /// inflection tolerance, instead of rescanning the entire catalogue.
+        private func matchingIngredient(named rawName: String, normalized: String) -> Ingredient? {
+            if let exact = exactIngredients[normalized] { return exact }
+
+            let wanted = IngredientMatching.key(for: rawName)
+            var best: IndexedIngredient?
+            for length in max(0, wanted.count - 2)...(wanted.count + 2) {
+                for candidate in ingredientsByKeyLength[length] ?? []
+                where (best == nil || candidate.offset < best!.offset)
+                    && IngredientMatching.keysMatch(candidate.matchingKey, wanted) {
+                    best = candidate
+                }
+            }
+            return best?.ingredient
+        }
+
+        private func index(_ ingredient: Ingredient) {
+            let normalized = ingredient.normalizedName
+            if !normalized.isEmpty, exactIngredients[normalized] == nil {
+                exactIngredients[normalized] = ingredient
+            }
+            let key = IngredientMatching.key(for: ingredient.name)
+            ingredientsByKeyLength[key.count, default: []].append(IndexedIngredient(
+                ingredient: ingredient,
+                matchingKey: key,
+                offset: ingredientCount
+            ))
+            ingredientCount += 1
+        }
+
+        fileprivate func record(tags: [String]) {
+            tagVocabulary = DishTag.merge(tagVocabulary, adding: tags)
+        }
+    }
+
     @MainActor
     @discardableResult
     static func makeDish(
         from recipe: ImportedRecipe,
         household: Household?,
         createdByName: String?,
-        context: ModelContext
+        context: ModelContext,
+        importSession: ImportSession? = nil,
+        savesChanges: Bool = true
     ) -> Dish {
         // A parse that came back without a title still has to arrive under a
         // name — an untitled recipe is unfindable. The site it came from is a
@@ -56,7 +144,11 @@ enum DishBuilder {
 
         if let structured = recipe.structuredIngredients {
             for (index, value) in structured.enumerated() {
-                let ingredient = upsertIngredient(named: value.name, household: household, context: context)
+                let ingredient = importSession?.ingredient(
+                    named: value.name,
+                    household: household,
+                    context: context
+                ) ?? upsertIngredient(named: value.name, household: household, context: context)
                 ingredient.category = value.category
                 ingredient.customAisleName = value.customAisleName
                 ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
@@ -82,7 +174,11 @@ enum DishBuilder {
         } else {
             for (index, rawLine) in recipe.ingredientLines.enumerated() {
                 let parsed = GermanUnitParser.parse(rawLine)
-                let ingredient = upsertIngredient(named: parsed.name, household: household, context: context)
+                let ingredient = importSession?.ingredient(
+                    named: parsed.name,
+                    household: household,
+                    context: context
+                ) ?? upsertIngredient(named: parsed.name, household: household, context: context)
                 let line = DishIngredient(
                     canonicalValue: parsed.quantity?.value,
                     dimension: parsed.quantity?.dimension,
@@ -102,9 +198,14 @@ enum DishBuilder {
         // Rezept" can still fall back to what's in it. A photo from the site
         // takes precedence when rendering; the glyph is the fallback.
         dish.refreshAutoGlyph()
-        addSuggestedTags(to: dish, household: household)
+        addSuggestedTags(
+            to: dish,
+            household: household,
+            existingVocabulary: importSession?.tagVocabulary
+        )
+        importSession?.record(tags: dish.tagNames)
 
-        try? context.save()
+        if savesChanges { try? context.save() }
         return dish
     }
 
@@ -173,6 +274,96 @@ enum DishBuilder {
         }
 
         // Imports are guesswork, so ask the cook to check the result.
+        dish.needsReview = recipe.needsReview
+        dish.refreshAutoGlyph()
+        dish.tagNames = DishLabelConsolidation.tags(
+            existing: dish.tagNames,
+            collections: recipe.collectionNames + recipe.tagNames,
+            dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
+        )
+        addSuggestedTags(to: dish, household: dish.household)
+        try? context.save()
+    }
+
+    /// Replaces the web-sourced portion of an existing recipe. Unlike
+    /// `apply(_:to:context:)`, this intentionally replaces old ingredient
+    /// rows: a person has explicitly asked to refresh the recipe, often to
+    /// recover from a source site's earlier incomplete or incorrect data.
+    /// Personal organisation, photos, ratings and planning history remain
+    /// untouched.
+    @MainActor
+    static func refresh(
+        _ recipe: ImportedRecipe,
+        to dish: Dish,
+        context: ModelContext
+    ) {
+        let importedName = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !importedName.isEmpty { dish.name = importedName }
+        dish.sourceURL = recipe.sourceURL ?? dish.sourceURL
+        dish.deepLinkURL = recipe.deepLinkURL ?? dish.deepLinkURL
+        dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
+        dish.importedSourceID = recipe.sourceIdentifier ?? dish.importedSourceID
+        dish.recipeText = recipe.instructions ?? dish.recipeText
+        if let servings = recipe.servings { dish.servings = servings }
+        if let prep = recipe.prepTimeMinutes { dish.prepTimeMinutes = prep }
+        if let cook = recipe.cookTimeMinutes { dish.cookTimeMinutes = cook }
+        if let nutrition = recipe.nutritionPerServing {
+            dish.setStatedNutritionPerServing(nutrition)
+        }
+
+        // A KptnCook import with no visible rows deliberately means there are
+        // no trustworthy ingredients. Replace the old rows with nothing so a
+        // later shopping-list rebuild can show its missing-ingredients alert.
+        let replacesIngredients = !recipe.ingredientLines.isEmpty
+            || recipe.structuredIngredients?.isEmpty == false
+            || recipe.importedSourceApp == "KptnCook"
+        if replacesIngredients {
+            for line in dish.ingredients ?? [] { context.delete(line) }
+            if let structured = recipe.structuredIngredients {
+                for (index, value) in structured.enumerated() {
+                    let ingredient = upsertIngredient(named: value.name, household: dish.household, context: context)
+                    ingredient.category = value.category
+                    ingredient.customAisleName = value.customAisleName
+                    ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
+                    if ingredient.nutritionFacts == nil, let facts = value.nutrition {
+                        ingredient.setNutrition(facts, reference: value.nutritionReference, source: .imported)
+                    }
+                    let line = DishIngredient(
+                        canonicalValue: value.canonicalValue,
+                        dimension: value.dimension,
+                        displayUnit: value.displayUnit,
+                        isApproximate: value.isApproximate,
+                        note: value.note,
+                        rawText: value.rawText,
+                        sortIndex: index
+                    )
+                    line.dish = dish
+                    line.ingredient = ingredient
+                    context.insert(line)
+                }
+            } else {
+                for (index, rawLine) in recipe.ingredientLines.enumerated() {
+                    let parsed = GermanUnitParser.parse(rawLine)
+                    let ingredient = upsertIngredient(named: parsed.name, household: dish.household, context: context)
+                    let line = DishIngredient(
+                        canonicalValue: parsed.quantity?.value,
+                        dimension: parsed.quantity?.dimension,
+                        displayUnit: parsed.displayUnit,
+                        isApproximate: parsed.isApproximate,
+                        note: parsed.note,
+                        rawText: parsed.rawText,
+                        sortIndex: index
+                    )
+                    line.dish = dish
+                    line.ingredient = ingredient
+                    context.insert(line)
+                }
+            }
+        }
+
+        // Translations describe the old source wording, so retaining one
+        // after a refresh would show a misleading recipe.
+        dish.clearTranslation()
         dish.needsReview = recipe.needsReview
         dish.refreshAutoGlyph()
         dish.tagNames = DishLabelConsolidation.tags(
@@ -286,8 +477,13 @@ enum DishBuilder {
     /// an import contributes a handful rather than a wall of labels — the cook
     /// adds the rest themselves.
     @MainActor
-    static func addSuggestedTags(to dish: Dish, household: Household?, limit: Int = 6) {
-        let vocabulary = DishTag.vocabulary(from: household?.dishes ?? [dish])
+    static func addSuggestedTags(
+        to dish: Dish,
+        household: Household?,
+        existingVocabulary: [String]? = nil,
+        limit: Int = 6
+    ) {
+        let vocabulary = existingVocabulary ?? DishTag.vocabulary(from: household?.dishes ?? [dish])
         let suggested = DishTagSuggester.suggestions(
             for: dish,
             existingVocabulary: vocabulary,

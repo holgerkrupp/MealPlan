@@ -27,6 +27,9 @@ struct MealPlanCommands: Commands {
         undoCommands
         findCommands
         viewCommands
+        #if os(macOS)
+        windowCommands
+        #endif
         planMenu
         dishMenu
         shoppingMenu
@@ -201,6 +204,22 @@ struct MealPlanCommands: Commands {
     private var dishSortBinding: Binding<DishFilter.Sort> {
         Binding(get: { library?.sort ?? .alphabetical }, set: { library?.setSort($0) })
     }
+
+    // MARK: - Window
+
+    #if os(macOS)
+    /// Closing the last SwiftUI window leaves the app running. Keep an
+    /// explicit, always-enabled way to bring its primary scene back so the
+    /// app is never left without a visible recovery path in the menu bar.
+    private var windowCommands: some Commands {
+        CommandGroup(after: .windowList) {
+            Button(String(localized: "Open MealPlan")) {
+                openWindow(id: "main")
+            }
+            .keyboardShortcut("0", modifiers: .command)
+        }
+    }
+    #endif
 
     private var shoppingRangeBinding: Binding<ShoppingRangeOption> {
         Binding(get: { shopping?.range ?? .thisWeek }, set: { shopping?.setRange($0) })

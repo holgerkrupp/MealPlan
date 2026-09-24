@@ -190,14 +190,6 @@ final class AppState {
         cloudBootstrapState = .ready
     }
 
-    /// Puts the household already on this device on screen straight away,
-    /// before the slower launch work (the App Store entitlement, the iCloud
-    /// lookup) has run. Creates nothing — `bootstrap` does that.
-    func showLocalHousehold(context: ModelContext) {
-        guard currentHousehold == nil else { return }
-        currentHousehold = try? context.fetch(FetchDescriptor<Household>()).first
-    }
-
     /// Local first, iCloud behind it. The device's own household is set up
     /// and usable immediately; only when it is still empty — a new install,
     /// or a placeholder an older build created — does this go on to look for
@@ -326,18 +318,24 @@ final class AppState {
             handle(url: url)
             return
         }
-        do {
-            let recipes = try RecipeImportCommitter.recipes(fromFileAt: url)
-            let result = RecipeImportCommitter.importAll(
-                recipes,
-                household: currentHousehold,
-                createdByName: currentMemberName,
-                context: context
-            )
-            requestedSection = .dishes
-            importNotice = result.summary
-        } catch {
-            importNotice = String(localized: "Couldn’t import that recipe archive: \(error.localizedDescription)")
+        requestedSection = .dishes
+        Task { @MainActor in
+            do {
+                let recipes = try await Task.detached(priority: .userInitiated) {
+                    try RecipeImportCommitter.recipes(fromFileAt: url)
+                }.value
+                let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+                let plan = RecipeImportPlanner.plan(recipes, against: library)
+                let result = await RecipeImportCommitter.commitResponsively(
+                    plan,
+                    household: currentHousehold,
+                    createdByName: currentMemberName,
+                    context: context
+                )
+                importNotice = result.summary
+            } catch {
+                importNotice = String(localized: "Couldn’t import that recipe archive: \(error.localizedDescription)")
+            }
         }
     }
 }

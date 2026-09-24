@@ -37,7 +37,9 @@ struct MealPlanApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        // Giving the main scene a stable identifier lets the Window menu
+        // restore it after its last window has been closed on macOS.
+        WindowGroup(id: "main") {
             // The awning comes down over the real interface, which is mounted
             // and doing its launch work underneath the whole time.
             AppLaunchContainerView {
@@ -48,14 +50,26 @@ struct MealPlanApp: App {
                     .environment(publishedCalendarSettings)
                     .environment(\.calendarEventWriter, calendarEventWriter)
                     .task {
-                        // The device's own data first; nothing below is
-                        // allowed to keep it off the screen.
-                        appState.showLocalHousehold(context: container.mainContext)
-                        await purchaseManager.prepareForLaunch()
-                        await appState.bootstrapFromCloud(
+                        // Open the on-device store synchronously. This creates
+                        // a usable first-run household too, rather than
+                        // leaving a new install on a cloud-loading screen.
+                        appState.bootstrap(
                             context: container.mainContext,
                             planningThrough: purchaseManager.latestPlanningDate()
                         )
+
+                        // CloudKit is a reconciliation step, never a launch
+                        // prerequisite. Keep it separate from the foreground
+                        // setup so a slow account lookup cannot hold the app
+                        // (or its local data) hostage.
+                        Task { @MainActor in
+                            await appState.bootstrapFromCloud(
+                                context: container.mainContext,
+                                planningThrough: purchaseManager.latestPlanningDate()
+                            )
+                        }
+
+                        await purchaseManager.prepareForLaunch()
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         await MealNotificationScheduler.shared.refreshFromStore(context: container.mainContext)
                         await calendarStore.start()

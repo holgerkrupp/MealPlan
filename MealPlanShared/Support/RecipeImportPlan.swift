@@ -48,21 +48,42 @@ enum RecipeImportPlanner {
 
     @MainActor
     static func plan(_ recipes: [ImportedRecipe], against dishes: [Dish]) -> [PlannedRecipeImport] {
-        var accepted: [ImportedRecipe] = []
+        let library = LibraryIndex(dishes)
+        var acceptedByName: [String: [(offset: Int, recipe: ImportedRecipe)]] = [:]
+        var acceptedBySourceID: [String: (offset: Int, recipe: ImportedRecipe)] = [:]
         var planned: [PlannedRecipeImport] = []
 
         for recipe in recipes {
             let outcome: RecipeImportOutcome
-            if let twin = accepted.first(where: { areSameRecipe($0, recipe) }) {
+            let name = RecipeDuplicateDetector.normalizedName(recipe.name)
+            var possibleTwins = acceptedByName[name] ?? []
+            if let sourceID = recipe.sourceIdentifier?.nilIfEmpty,
+               let sourceTwin = acceptedBySourceID[sourceID],
+               !possibleTwins.contains(where: { $0.offset == sourceTwin.offset }) {
+                possibleTwins.append(sourceTwin)
+            }
+            let twin = possibleTwins
+                .filter { areSameRecipe($0.recipe, recipe) }
+                .min { $0.offset < $1.offset }?
+                .recipe
+
+            if let twin {
                 outcome = .duplicateInFile(twin.name)
-            } else if let match = RecipeDuplicateDetector.duplicate(of: recipe, in: dishes) {
+            } else if let match = library.duplicate(of: recipe) {
                 outcome = .duplicate(DishReferenceInfo(uuid: match.uuid, name: match.name))
-            } else if let match = RecipeDuplicateDetector.sameDish(as: recipe, in: dishes) {
+            } else if let match = library.sameDish(as: recipe) {
                 outcome = .variant(DishReferenceInfo(uuid: match.uuid, name: match.name))
             } else {
                 outcome = .new
             }
-            if !outcome.isSkippedByDefault { accepted.append(recipe) }
+            if !outcome.isSkippedByDefault {
+                let accepted = (offset: planned.count, recipe: recipe)
+                acceptedByName[name, default: []].append(accepted)
+                if let sourceID = recipe.sourceIdentifier?.nilIfEmpty,
+                   acceptedBySourceID[sourceID] == nil {
+                    acceptedBySourceID[sourceID] = accepted
+                }
+            }
             planned.append(PlannedRecipeImport(
                 recipe: recipe, outcome: outcome, include: !outcome.isSkippedByDefault
             ))
@@ -82,6 +103,63 @@ enum RecipeImportPlanner {
             RecipeDuplicateDetector.signature(of: lhs.ingredientLines),
             RecipeDuplicateDetector.signature(of: rhs.ingredientLines)
         )
+    }
+
+    /// Precomputed lookup tables keep planning proportional to the recipes
+    /// that can actually match. The previous implementation walked the whole
+    /// library (and reparsed stored ingredient rows) once or twice for every
+    /// recipe in a large archive.
+    @MainActor
+    private final class LibraryIndex {
+        private var bySourceID: [String: Dish] = [:]
+        private var byURL: [String: Dish] = [:]
+        private var byName: [String: [Dish]] = [:]
+        private var ingredientSignatures: [UUID: Set<String>] = [:]
+
+        init(_ dishes: [Dish]) {
+            for dish in dishes {
+                if let sourceID = dish.importedSourceID?.nilIfEmpty,
+                   bySourceID[sourceID] == nil {
+                    bySourceID[sourceID] = dish
+                }
+                if let url = RecipeDuplicateDetector.urlKey(dish.sourceURL),
+                   byURL[url] == nil {
+                    byURL[url] = dish
+                }
+                let name = RecipeDuplicateDetector.normalizedName(dish.name)
+                if !name.isEmpty {
+                    byName[name, default: []].append(dish)
+                }
+            }
+        }
+
+        func duplicate(of recipe: ImportedRecipe) -> Dish? {
+            if let sourceID = recipe.sourceIdentifier?.nilIfEmpty,
+               let match = bySourceID[sourceID] {
+                return match
+            }
+            if let url = RecipeDuplicateDetector.urlKey(recipe.sourceURL),
+               let match = byURL[url] {
+                return match
+            }
+            let name = RecipeDuplicateDetector.normalizedName(recipe.name)
+            guard !name.isEmpty else { return nil }
+            let incoming = RecipeDuplicateDetector.signature(of: recipe.ingredientLines)
+            return byName[name]?.first { dish in
+                let stored = ingredientSignatures[dish.uuid] ?? {
+                    let signature = RecipeDuplicateDetector.signature(of: dish)
+                    ingredientSignatures[dish.uuid] = signature
+                    return signature
+                }()
+                return RecipeDuplicateDetector.ingredientsOverlap(incoming, stored)
+            }
+        }
+
+        func sameDish(as recipe: ImportedRecipe) -> Dish? {
+            let name = RecipeDuplicateDetector.normalizedName(recipe.name)
+            guard !name.isEmpty else { return nil }
+            return byName[name]?.first
+        }
     }
 }
 

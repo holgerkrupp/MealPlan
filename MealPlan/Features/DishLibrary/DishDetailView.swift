@@ -24,6 +24,9 @@ struct DishDetailView: View {
     @State private var editingVariant: Dish?
     @State private var editingNutritionFor: Ingredient?
     @State private var showingTranslation = false
+    @State private var confirmingRefresh = false
+    @State private var isRefreshingRecipe = false
+    @State private var refreshError: String?
     /// Whether the saved translation is the wording on screen. Starts from
     /// what this device reads (see `Dish.prefersTranslation`) and is a
     /// per-visit choice after that — switching to the original is a glance at
@@ -37,6 +40,12 @@ struct DishDetailView: View {
             system: appState.unitSystem,
             roundsAmounts: appState.roundsDisplayedAmounts
         )
+    }
+
+    private var refreshableSourceURL: URL? {
+        guard let url = dish.sourceURL,
+              url.scheme == "http" || url.scheme == "https" else { return nil }
+        return url
     }
 
     var body: some View {
@@ -125,6 +134,12 @@ struct DishDetailView: View {
                     showingShareSheet = true
                 }
                 Button(String(localized: "Edit"), systemImage: "pencil") { showingEditor = true }
+                if !appState.isGuest, refreshableSourceURL != nil {
+                    Button(String(localized: "Refresh recipe"), systemImage: "arrow.clockwise") {
+                        confirmingRefresh = true
+                    }
+                    .disabled(isRefreshingRecipe)
+                }
                 if !appState.isGuest {
                     Button(String(localized: "Save as new variant"), systemImage: "square.on.square") {
                         addVariant()
@@ -218,6 +233,26 @@ struct DishDetailView: View {
             Button(role: .cancel, action: {}) {
                 Text("Cancel")
             }
+        }
+        .confirmationDialog(
+            String(localized: "Refresh recipe from its source?"),
+            isPresented: $confirmingRefresh,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Refresh recipe")) {
+                Task { await refreshRecipe() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("This replaces the recipe’s title, ingredients, instructions and timings with the latest information from its saved link. Your photos, tags, ratings and meal plan stay unchanged.")
+        }
+        .alert(
+            String(localized: "Couldn’t refresh recipe"),
+            isPresented: Binding(get: { refreshError != nil }, set: { if !$0 { refreshError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(refreshError ?? "")
         }
     }
 
@@ -519,6 +554,23 @@ struct DishDetailView: View {
     /// the same variant group.
     private func addVariant() {
         editingVariant = DishBuilder.duplicateAsVariant(of: dish, context: context)
+    }
+
+    private func refreshRecipe() async {
+        guard let url = refreshableSourceURL else { return }
+        isRefreshingRecipe = true
+        defer { isRefreshingRecipe = false }
+
+        do {
+            let recipe = try await RecipeSchemaParser().importRecipe(from: url)
+            guard !recipe.ingredientLines.isEmpty || !(recipe.instructions ?? "").isEmpty else {
+                refreshError = String(localized: "No recipe details were found at the saved link.")
+                return
+            }
+            DishBuilder.refresh(recipe, to: dish, context: context)
+        } catch {
+            refreshError = error.localizedDescription
+        }
     }
 
     private func deleteRecipe() {

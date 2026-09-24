@@ -5,6 +5,9 @@ import SwiftData
 /// the share sheet, a file opened in Finder or the Dishes screen's importer.
 enum RecipeImportCommitter {
 
+    private static let saveBatchSize = 100
+    private static let responsiveBatchSize = 10
+
     struct Result {
         var imported: Int = 0
         var variants: Int = 0
@@ -51,32 +54,113 @@ enum RecipeImportCommitter {
         context: ModelContext
     ) -> Result {
         var result = Result()
-        var library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        let importSession = DishBuilder.ImportSession(household: household)
+        var unsavedCount = 0
 
         for item in plan {
-            guard item.include else {
-                result.skipped += 1
-                continue
-            }
-            let dish = DishBuilder.makeDish(
-                from: item.recipe,
+            if commitOne(
+                item,
                 household: household,
                 createdByName: createdByName,
-                context: context
-            )
-            result.imported += 1
-            result.dishes.append(dish)
-
-            if case .variant(let reference) = item.outcome,
-               let sibling = library.first(where: { $0.uuid == reference.uuid }) {
-                DishVariants.join(dish, with: sibling)
-                result.variants += 1
+                context: context,
+                importSession: importSession,
+                libraryByID: &libraryByID,
+                result: &result
+            ) {
+                unsavedCount += 1
+                if unsavedCount >= saveBatchSize {
+                    try? context.save()
+                    unsavedCount = 0
+                }
             }
-            library.append(dish)
         }
 
         try? context.save()
         return result
+    }
+
+    /// Imports on the main model context in short bursts, allowing SwiftUI to
+    /// draw and process input between them. SwiftData model objects remain on
+    /// their owning actor while a very large archive no longer monopolises it.
+    @MainActor
+    @discardableResult
+    static func commitResponsively(
+        _ plan: [PlannedRecipeImport],
+        household: Household?,
+        createdByName: String?,
+        context: ModelContext,
+        progress: (Int, Int) -> Void = { _, _ in }
+    ) async -> Result {
+        var result = Result()
+        let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        let importSession = DishBuilder.ImportSession(household: household)
+        var unsavedCount = 0
+
+        progress(0, plan.count)
+        for (offset, item) in plan.enumerated() {
+            if commitOne(
+                item,
+                household: household,
+                createdByName: createdByName,
+                context: context,
+                importSession: importSession,
+                libraryByID: &libraryByID,
+                result: &result
+            ) {
+                unsavedCount += 1
+                if unsavedCount >= saveBatchSize {
+                    try? context.save()
+                    unsavedCount = 0
+                }
+            }
+
+            let completed = offset + 1
+            if completed.isMultiple(of: responsiveBatchSize) || completed == plan.count {
+                progress(completed, plan.count)
+                await Task.yield()
+            }
+        }
+
+        try? context.save()
+        return result
+    }
+
+    /// Returns true when the item changed the model context.
+    @MainActor
+    private static func commitOne(
+        _ item: PlannedRecipeImport,
+        household: Household?,
+        createdByName: String?,
+        context: ModelContext,
+        importSession: DishBuilder.ImportSession,
+        libraryByID: inout [UUID: Dish],
+        result: inout Result
+    ) -> Bool {
+        guard item.include else {
+            result.skipped += 1
+            return false
+        }
+        let dish = DishBuilder.makeDish(
+            from: item.recipe,
+            household: household,
+            createdByName: createdByName,
+            context: context,
+            importSession: importSession,
+            savesChanges: false
+        )
+        result.imported += 1
+        result.dishes.append(dish)
+
+        if case .variant(let reference) = item.outcome,
+           let sibling = libraryByID[reference.uuid] {
+            DishVariants.join(dish, with: sibling)
+            result.variants += 1
+        }
+        libraryByID[dish.uuid] = dish
+        return true
     }
 
     /// Plan and commit in one step, for the callers that have no review UI

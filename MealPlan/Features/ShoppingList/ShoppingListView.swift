@@ -58,6 +58,16 @@ struct ShoppingListView: View {
     /// Shared with the printed list — see `ShoppingListGrouping`.
     private var grouped: [ShoppingAisle] { ShoppingListGrouping.aisles(visibleItems) }
 
+    /// An empty KptnCook ingredient list is intentional when the site did
+    /// not provide reliable rows. Surface that omission above the generated
+    /// groceries rather than silently making an incomplete shopping trip.
+    private var missingIngredientDishes: [String] {
+        let planned = (appState.currentHousehold?.entries ?? []).filter {
+            $0.date >= range.start && $0.date < range.end
+        }
+        return ShoppingListBuilder.missingIngredientDishNames(planned)
+    }
+
     var body: some View {
         @Bindable var appState = appState
 
@@ -74,6 +84,22 @@ struct ShoppingListView: View {
                     regenerate()
                 } label: {
                     Label(String(localized: "Rebuild from plan"), systemImage: "arrow.triangle.2.circlepath")
+                }
+            }
+
+            if !missingIngredientDishes.isEmpty {
+                Section {
+                    Label(
+                        String(localized: "Some planned recipes are missing ingredients"),
+                        systemImage: "exclamationmark.triangle"
+                    )
+                    .foregroundStyle(.orange)
+                    Text(
+                        String(
+                            localized: "Ingredients could not be imported for \(missingIngredientDishes.joined(separator: ", ")). Add them to the recipe before shopping."
+                        )
+                    )
+                    .font(.footnote)
                 }
             }
 

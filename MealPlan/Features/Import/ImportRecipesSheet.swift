@@ -18,7 +18,12 @@ struct ImportRecipesSheet: View {
     @State private var phase: Phase = .loading
     @State private var plan: [PlannedRecipeImport] = []
 
-    private enum Phase: Equatable { case loading, review, importing, failed(String) }
+    private enum Phase: Equatable {
+        case loading
+        case review
+        case importing(completed: Int, total: Int)
+        case failed(String)
+    }
 
     var body: some View {
         NavigationStack {
@@ -27,9 +32,20 @@ struct ImportRecipesSheet: View {
                 case .loading:
                     ProgressView(String(localized: "Reading recipes…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
-                case .importing:
-                    ProgressView(String(localized: "Importing…"))
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .importing(let completed, let total):
+                    VStack(spacing: 12) {
+                        ProgressView(
+                            value: Double(completed),
+                            total: Double(max(total, 1))
+                        ) {
+                            Text(String(localized: "Importing…"))
+                        }
+                        Text("\(completed) / \(total)")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .frame(maxWidth: 320)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
                     ContentUnavailableView(
                         String(localized: "Couldn’t read that file"),
@@ -47,6 +63,7 @@ struct ImportRecipesSheet: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Cancel")) { dismiss() }
+                        .disabled(isImporting)
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Import")) { runImport() }
@@ -142,6 +159,10 @@ struct ImportRecipesSheet: View {
     private var selectedCount: Int {
         plan.filter(\.include).count
     }
+    private var isImporting: Bool {
+        if case .importing = phase { return true }
+        return false
+    }
     private var variantCount: Int {
         plan.filter { item in
             guard item.include, case .variant = item.outcome else { return false }
@@ -156,7 +177,10 @@ struct ImportRecipesSheet: View {
 
     private func load() async {
         do {
-            let recipes = try RecipeImportCommitter.recipes(fromFileAt: fileURL)
+            let url = fileURL
+            let recipes = try await Task.detached(priority: .userInitiated) {
+                try RecipeImportCommitter.recipes(fromFileAt: url)
+            }.value
             guard !recipes.isEmpty else {
                 phase = .failed(String(localized: "No recipes in that file."))
                 return
@@ -170,16 +194,21 @@ struct ImportRecipesSheet: View {
     }
 
     private func runImport() {
-        phase = .importing
-        let result = RecipeImportCommitter.commit(
-            plan,
-            household: appState.currentHousehold,
-            createdByName: appState.currentMemberName,
-            context: context
-        )
-        SharedStore.reloadWidgets()
-        appState.importNotice = result.summary
-        dismiss()
+        let importPlan = plan
+        phase = .importing(completed: 0, total: importPlan.count)
+        Task { @MainActor in
+            let result = await RecipeImportCommitter.commitResponsively(
+                importPlan,
+                household: appState.currentHousehold,
+                createdByName: appState.currentMemberName,
+                context: context
+            ) { completed, total in
+                phase = .importing(completed: completed, total: total)
+            }
+            SharedStore.reloadWidgets()
+            appState.importNotice = result.summary
+            dismiss()
+        }
     }
 }
 

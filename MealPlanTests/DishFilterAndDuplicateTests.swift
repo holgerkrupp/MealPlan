@@ -69,4 +69,47 @@ struct DishFilterAndDuplicateTests {
         #expect(additional.data == Data([2]))
         #expect(dish.images?.count == 2)
     }
+
+    @Test func refreshReplacesImportedRecipeContentButKeepsPersonalDetails() {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Family")
+        context.insert(household)
+
+        var original = ImportedRecipe(
+            name: "Old soup",
+            sourceURL: URL(string: "https://example.com/soup")!
+        )
+        original.ingredientLines = ["500 g old vegetables"]
+        original.instructions = "Old instructions"
+        let dish = DishBuilder.makeDish(
+            from: original,
+            household: household,
+            createdByName: nil,
+            context: context
+        )
+        dish.tagNames = ["Family favorite"]
+        dish.rating = 5
+        let photo = DishImage(data: Data([1]), isPrimary: true)
+        photo.dish = dish
+        context.insert(photo)
+
+        var refreshed = ImportedRecipe(
+            name: "New soup",
+            sourceURL: URL(string: "https://example.com/soup")!
+        )
+        refreshed.ingredientLines = ["300 g Karotten", "200 ml Brühe"]
+        refreshed.instructions = "New instructions"
+        refreshed.servings = 4
+        refreshed.importedSourceApp = "KptnCook"
+        DishBuilder.refresh(refreshed, to: dish, context: context)
+
+        #expect(dish.name == "New soup")
+        #expect(dish.recipeText == "New instructions")
+        #expect(dish.servings == 4)
+        #expect(dish.sortedIngredients.map { $0.ingredient?.name } == ["Karotten", "Brühe"])
+        #expect(dish.tagNames.contains("Family favorite"))
+        #expect(dish.rating == 5)
+        #expect(dish.primaryImage?.data == Data([1]))
+    }
 }

@@ -44,6 +44,26 @@ enum ShoppingListBuilder {
 
     // MARK: - Pure aggregation (unit-tested)
 
+    /// KptnCook recipes with no trusted ingredient rows deliberately import
+    /// empty. Keep those meals visible on the shopping screen: otherwise a
+    /// rebuilt list looks complete when it is not.
+    static func missingIngredientDishNames(_ entries: [MealPlanEntry]) -> [String] {
+        var seen = Set<String>()
+        return entries
+            .filter { entry in
+                guard !entry.skipped,
+                      let dish = entry.dish,
+                      dish.importedSourceApp == "KptnCook" else { return false }
+                return dish.sortedIngredients.isEmpty
+            }
+            .sorted {
+                if $0.date != $1.date { return $0.date < $1.date }
+                return $0.sortIndex < $1.sortIndex
+            }
+            .compactMap { $0.dish?.name }
+            .filter { seen.insert($0).inserted }
+    }
+
     /// Aggregate the ingredients of the given planned meals, scaling each
     /// dish to the head-count planned for that occasion.
     ///

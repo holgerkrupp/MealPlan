@@ -13,13 +13,17 @@ struct RecipeSchemaParser: RecipeImporter {
         let html = page.html
         let sourceURL = page.url
 
+        // KptnCook's page contains a hidden, incomplete microdata block as
+        // well as the rows a person actually sees.  Give its narrow parser
+        // first refusal so a generic schema parser cannot accidentally turn
+        // that compatibility markup into an ingredient list.
+        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
+            return await withImage(recipe, html: html)
+        }
         if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
         if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
@@ -36,13 +40,13 @@ struct RecipeSchemaParser: RecipeImporter {
     /// actually looking at — cookie banners dismissed, lazy content rendered —
     /// instead of whatever a fresh anonymous request would return.
     func importRecipe(fromHTML html: String, sourceURL: URL) async throws -> ImportedRecipe {
+        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
+            return await withImage(recipe, html: html)
+        }
         if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
             return await withImage(recipe, html: html)
         }
         if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
@@ -259,7 +263,7 @@ struct RecipeSchemaParser: RecipeImporter {
         case let s as String: return s.isEmpty ? nil : s
         case let n as NSNumber: return n.stringValue
         case let d as [String: Any]:
-            return string(d["@value"]) ?? string(d["name"]) ?? string(d["text"]) ?? string(d["url"])
+            return string(d["@value"]) ?? string(d["value"]) ?? string(d["name"]) ?? string(d["text"]) ?? string(d["url"])
         case let a as [Any]: return a.compactMap(string).first
         default: return nil
         }
@@ -346,7 +350,7 @@ struct RecipeSchemaParser: RecipeImporter {
             let digits = s.firstInteger
             return digits.map { max(1, $0) }
         case let a as [Any]: return a.compactMap { servings($0) }.first
-        default: return nil
+        default: return string(any).flatMap(servings)
         }
     }
 
@@ -519,9 +523,11 @@ struct RecipeSchemaParser: RecipeImporter {
         return steps.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n\n")
     }
 
-    /// KptnCook publishes useful microdata for name, ingredients and yield,
-    /// but marks its instructions only with CSS classes. Keep this narrow so
-    /// ordinary microdata pages still use the standard parser below.
+    /// KptnCook puts a second, hidden microdata ingredient list on its pages.
+    /// It has proved unreliable: it can contain values from another recipe.
+    /// The displayed paired amount/name rows are the only ingredient source we
+    /// trust. If those rows are unavailable, importing no ingredients is much
+    /// safer than adding a believable but wrong shopping list.
     func parseKptnCook(html: String, sourceURL: URL) -> ImportedRecipe? {
         guard sourceURL.host?.lowercased().hasSuffix("kptncook.com") == true,
               let name = Self.firstCapture(
@@ -535,12 +541,18 @@ struct RecipeSchemaParser: RecipeImporter {
             of: #"itemprop\s*=\s*['\"]image['\"][^>]*(?:content|src)\s*=\s*['\"]([^'\"]+)['\"]"#,
             in: html
         )
-        recipe.ingredientLines = Self.captures(
-            of: #"itemprop\s*=\s*['\"]ingredients['\"][^>]*>(.*?)<"#,
-            in: html
-        )
-        .map { $0.strippingHTML.trimmedCollapsed }
-        .filter { !$0.isEmpty }
+        let ingredients = Self.kptnCookVisibleIngredientLines(in: html)
+        recipe.ingredientLines = ingredients
+        // A repeated name with several different amounts is precisely the
+        // failure this parser is protecting against. It is not trustworthy
+        // enough to put on the family's shopping list.
+        let parsedNames = ingredients.map { GermanUnitParser.parse($0).name }
+        let hasOnlyOneRepeatedName = parsedNames.count >= 3
+            && Set(parsedNames.map(Ingredient.normalize)).count == 1
+        if ingredients.isEmpty || hasOnlyOneRepeatedName {
+            recipe.ingredientLines = []
+            recipe.needsReview = true
+        }
         recipe.instructions = Self.captures(
             of: #"<[^>]*class\s*=\s*['\"][^'\"]*\bkptn-step-title\b[^'\"]*['\"][^>]*>\s*<[^>]*>(.*?)</[^>]+>\s*</[^>]+>"#,
             in: html
@@ -564,6 +576,19 @@ struct RecipeSchemaParser: RecipeImporter {
         return recipe
     }
 
+    /// Each KptnCook ingredient the page asks the cook to buy is rendered as
+    /// an amount cell immediately followed by a name cell. Deliberately avoid
+    /// `itemprop=ingredients`: that hidden fallback markup is not authoritative.
+    private static func kptnCookVisibleIngredientLines(in html: String) -> [String] {
+        let pattern = #"<[^>]*class\s*=\s*['\"][^'\"]*\bkptn-ingredient-measure\b[^'\"]*['\"][^>]*>(.*?)</div>\s*</div>\s*<div[^>]*>\s*<[^>]*class\s*=\s*['\"][^'\"]*\bkptn-ingredient\b[^'\"]*['\"][^>]*>(.*?)</div>"#
+        return pairedCaptures(of: pattern, in: html).compactMap { amount, name in
+            let amount = amount.strippingHTML.trimmedCollapsed
+            let name = name.strippingHTML.trimmedCollapsed
+            guard !name.isEmpty else { return nil }
+            return [amount, name].filter { !$0.isEmpty }.joined(separator: " ")
+        }
+    }
+
     /// The preview page writes this universal link to its "Copy link" button.
     /// iOS opens it in KptnCook when the app is installed, where the complete
     /// recipe is available.
@@ -584,16 +609,30 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     func parseMicrodata(html: String, sourceURL: URL) -> ImportedRecipe? {
-        guard html.range(of: #"itemtype\s*=\s*['"]https?://schema.org/Recipe['"]"#,
+        guard html.range(of: #"itemtype\s*=\s*['"][^'"]*schema\.org/Recipe/?['"]"#,
                          options: [.regularExpression, .caseInsensitive]) != nil else { return nil }
 
         func props(_ name: String) -> [String] {
-            let pattern = "itemprop\\s*=\\s*['\"]\(name)['\"][^>]*>(.*?)<"
+            // A schema.org microdata property can be expressed either as the
+            // element's text or as a `content` / `value` attribute.  The
+            // latter is common on publisher sites and its attributes can be
+            // in either order, so read it from the opening tag first.
+            var values = Self.captures(of: #"(<[^>]+>)"#, in: html).compactMap { tag -> String? in
+                guard let itemprop = Self.htmlAttribute("itemprop", in: tag),
+                      itemprop.split(whereSeparator: \.isWhitespace).contains(where: {
+                          $0.caseInsensitiveCompare(name) == .orderedSame
+                      }) else { return nil }
+                return Self.htmlAttribute("content", in: tag)
+                    ?? Self.htmlAttribute("value", in: tag)
+            }
+
+            let pattern = "itemprop\\s*=\\s*['\"][^'\"]*\\b\(name)\\b[^'\"]*['\"][^>]*>(.*?)<"
             guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
             let ns = html as NSString
-            return regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
+            values += regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
                 $0.numberOfRanges > 1 ? ns.substring(with: $0.range(at: 1)).strippingHTML.trimmedCollapsed : nil
-            }.filter { !$0.isEmpty }
+            }
+            return Self.uniqueNonEmpty(values)
         }
 
         let name = props("name").first ?? heuristicTitle(html) ?? ""
@@ -602,6 +641,15 @@ struct RecipeSchemaParser: RecipeImporter {
         recipe.needsReview = true
         recipe.ingredientLines = props("recipeIngredient") + props("ingredients")
         recipe.instructions = props("recipeInstructions").joined(separator: "\n\n").nilIfEmpty
+        // Some publishers, including REWE, expose the ingredient rows and
+        // portion count as microdata when their JSON-LD is unavailable to the
+        // importer.  Without carrying the yield over, `DishBuilder` applies
+        // its two-serving default even though the quantities belong to the
+        // source recipe's stated number of portions.
+        recipe.servings = (props("recipeYield") + props("yield"))
+            .lazy
+            .compactMap(Self.servings)
+            .first
         if let content = html.range(of: #"itemprop\s*=\s*['"]image['"][^>]*(content|src)\s*=\s*['"]([^'"]+)"#,
                                     options: [.regularExpression, .caseInsensitive]) {
             recipe.imageURLString = extractLastQuoted(String(html[content]))
@@ -661,6 +709,39 @@ struct RecipeSchemaParser: RecipeImporter {
             $0.numberOfRanges > 1 ? ns.substring(with: $0.range(at: 1)) : nil
         }
     }
+
+    private static func pairedCaptures(of pattern: String, in html: String) -> [(String, String)] {
+        guard let regex = try? NSRegularExpression(
+            pattern: pattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else { return [] }
+        let ns = html as NSString
+        return regex.matches(in: html, range: NSRange(location: 0, length: ns.length)).compactMap {
+            guard $0.numberOfRanges > 2 else { return nil }
+            return (ns.substring(with: $0.range(at: 1)), ns.substring(with: $0.range(at: 2)))
+        }
+    }
+
+    private static func htmlAttribute(_ name: String, in tag: String) -> String? {
+        let escaped = NSRegularExpression.escapedPattern(for: name)
+        let pattern = #"\s"# + escaped + #"\s*=\s*(?:\"([^\"]*)\"|'([^']*)'|([^\s>]+))"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive]),
+              let match = regex.firstMatch(in: tag, range: NSRange(location: 0, length: (tag as NSString).length)) else { return nil }
+        let ns = tag as NSString
+        for index in 1..<match.numberOfRanges where match.range(at: index).location != NSNotFound {
+            return ns.substring(with: match.range(at: index))
+        }
+        return nil
+    }
+
+    private static func uniqueNonEmpty(_ values: [String]) -> [String] {
+        var seen = Set<String>()
+        return values.compactMap { value in
+            let cleaned = value.strippingHTML.trimmedCollapsed
+            guard !cleaned.isEmpty, seen.insert(cleaned).inserted else { return nil }
+            return cleaned
+        }
+    }
 }
 
 // MARK: - String helpers
@@ -703,11 +784,19 @@ extension String {
     var nilIfEmpty: String? { isEmpty ? nil : self }
 
     var firstInteger: Int? {
-        var digits = ""
+        var value = 0
+        var found = false
         for ch in self {
-            if ch.isNumber { digits.append(ch) }
-            else if !digits.isEmpty { break }
+            if let digit = ch.wholeNumberValue {
+                found = true
+                let (shifted, shiftOverflow) = value.multipliedReportingOverflow(by: 10)
+                let (next, addOverflow) = shifted.addingReportingOverflow(digit)
+                guard !shiftOverflow, !addOverflow else { return nil }
+                value = next
+            } else if found {
+                break
+            }
         }
-        return Int(digits)
+        return found ? value : nil
     }
 }

@@ -63,14 +63,20 @@ struct RecipeSchemaParserTests {
 
     @Test func yieldParsing() {
         #expect(RecipeSchemaParser.servings("4 Portionen") == 4)
+        #expect(RecipeSchemaParser.servings("4 servings") == 4)
+        #expect(RecipeSchemaParser.servings("4 portions") == 4)
+        #expect(RecipeSchemaParser.servings("٤ حصص") == 4)
         #expect(RecipeSchemaParser.servings(6 as NSNumber) == 6)
         #expect(RecipeSchemaParser.servings(["2", "4"]) == 2)
+        let quantitativeValue: [String: Any] = ["value": 8]
+        #expect(RecipeSchemaParser.servings(quantitativeValue) == 8)
     }
 
     @Test func microdataFallback() {
         let html = """
         <div itemscope itemtype="https://schema.org/Recipe">
           <h1 itemprop="name">Omelett</h1>
+          <span itemprop="recipeYield">4 Personen</span>
           <li itemprop="recipeIngredient">3 Eier</li>
           <li itemprop="recipeIngredient">Salz</li>
         </div>
@@ -78,7 +84,28 @@ struct RecipeSchemaParserTests {
         let recipe = parser.parseMicrodata(html: html, sourceURL: url)
         #expect(recipe?.name == "Omelett")
         #expect(recipe?.ingredientLines.contains("3 Eier") == true)
+        #expect(recipe?.servings == 4)
         #expect(recipe?.needsReview == true)
+    }
+
+    @Test func microdataYieldReadsContentAndValueAttributesInAnyOrder() {
+        let content = """
+        <div itemscope itemtype="https://schema.org/Recipe/">
+          <h1 itemprop="name">Pasta</h1>
+          <meta content="6 portions" itemprop="recipeYield">
+          <li itemprop="recipeIngredient">500 g pasta</li>
+        </div>
+        """
+        let value = """
+        <div itemscope itemtype="http://schema.org/Recipe">
+          <h1 itemprop="name">Pasta</h1>
+          <data itemprop="yield" value="8 porciones"></data>
+          <li itemprop="recipeIngredient">500 g pasta</li>
+        </div>
+        """
+
+        #expect(parser.parseMicrodata(html: content, sourceURL: url)?.servings == 6)
+        #expect(parser.parseMicrodata(html: value, sourceURL: url)?.servings == 8)
     }
 
     @Test func heuristicUsesOgTitle() {
@@ -107,8 +134,11 @@ struct RecipeSchemaParserTests {
           <div class="kptn-recipetitle">Bratnudeln mit Teriyaki-Hühnchen</div>
           <span itemprop="totalTime">PT30M</span>
           <span itemprop="recipeYield">Für 2 Portionen</span>
-          <span itemprop="ingredients">250 g Hühnerbrustfilets</span>
-          <span itemprop="ingredients">160 g Mie-Nudeln</span>
+          <div class="row"><div class="kptn-ingredient-measure">250 g</div></div>
+          <div><div class="kptn-ingredient">Hühnerbrustfilets</div></div>
+          <div class="row"><div class="kptn-ingredient-measure">160 g</div></div>
+          <div><div class="kptn-ingredient">Mie-Nudeln</div></div>
+          <span itemprop="ingredients">900 g Schweinenacken ohne Knochen</span>
           <div class="row kptn-step-title"><div><span>1. </span>Alles parat?</div></div>
           <div class="row kptn-step-title"><div><span>2. </span>Backofen vorheizen.</div></div>
           <script>navigator.clipboard.writeText("https://mobile.kptncook.com/r/123?lang=de")</script>
@@ -126,6 +156,23 @@ struct RecipeSchemaParserTests {
         #expect(recipe?.deepLinkURL?.absoluteString == "https://mobile.kptncook.com/r/123?lang=de")
         #expect(recipe?.importedSourceApp == "KptnCook")
         #expect(recipe?.needsReview == false)
+    }
+
+    @Test func rejectsKptnCookHiddenIngredientsWhenVisibleRowsAreUnavailable() {
+        let source = URL(string: "https://mobile.kptncook.com/recipe/pinterest/test/123")!
+        let html = """
+        <body>
+          <div class="kptn-recipetitle">Unvollständiges Rezept</div>
+          <div style="visibility: hidden">
+            <span itemprop="ingredients">300 g Hackfleisch</span>
+            <span itemprop="ingredients">200 g Kartoffeln</span>
+          </div>
+        </body>
+        """
+
+        let recipe = parser.parseKptnCook(html: html, sourceURL: source)
+        #expect(recipe?.ingredientLines.isEmpty == true)
+        #expect(recipe?.needsReview == true)
     }
 
     @Test func parsesChefkochRenderedRecipeMarkup() {

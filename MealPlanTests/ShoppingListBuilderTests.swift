@@ -70,6 +70,20 @@ struct ShoppingListBuilderTests {
         #expect(ShoppingListBuilder.aggregate([entry]).isEmpty)
     }
 
+    @Test func reportsPlannedKptnCookRecipesWithoutIngredients() {
+        let missing = dish("KptnCook-Rezept", servings: 2)
+        missing.importedSourceApp = "KptnCook"
+        let complete = dish("Vollständiges Rezept", servings: 2)
+        complete.importedSourceApp = "KptnCook"
+        line(complete, "Tomate", 2, .count)
+
+        let names = ShoppingListBuilder.missingIngredientDishNames([
+            MealPlanEntry(date: .now, slot: .dinner, dish: missing),
+            MealPlanEntry(date: .now, slot: .lunch, dish: complete),
+        ])
+        #expect(names == ["KptnCook-Rezept"])
+    }
+
     @Test func groupsAndSortsByCategory() {
         let d = dish("Salat", servings: 2)
         line(d, "Tomate", 3, .count, category: .produce)

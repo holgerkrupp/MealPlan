@@ -2119,6 +2119,16 @@
     "Couldn’t read that page" : {
 
     },
+    "Couldn’t refresh recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht aktualisiert werden"
+          }
+        }
+      }
+    },
     "Couldn’t Remove" : {
 
     },
@@ -3567,6 +3577,9 @@
         }
       }
     },
+    "Ingredients could not be imported for %@. Add them to the recipe before shopping." : {
+
+    },
     "Ingredients for %lld" : {
 
     },
@@ -4418,6 +4431,16 @@
     "No readable text was found. Try again with more light or a straighter angle." : {
 
     },
+    "No recipe details were found at the saved link." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unter dem gespeicherten Link wurden keine Rezeptdetails gefunden."
+          }
+        }
+      }
+    },
     "No recipe feed was advertised by this site." : {
       "localizations" : {
         "de" : {
@@ -4902,6 +4925,16 @@
     },
     "Open in New Window" : {
 
+    },
+    "Open MealPlan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan öffnen"
+          }
+        }
+      }
     },
     "Open Settings" : {
       "localizations" : {
@@ -5828,6 +5861,26 @@
     },
     "Recognizing recipe…" : {
 
+    },
+    "Refresh recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept aktualisieren"
+          }
+        }
+      }
+    },
+    "Refresh recipe from its source?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept von der Quelle aktualisieren?"
+          }
+        }
+      }
     },
     "Refresh will retry later." : {
       "extractionState" : "stale",
@@ -6840,6 +6893,9 @@
     "Some people who joined with the old link couldn’t be moved to personal invitations. Use Create New Invitation, then invite everyone again." : {
 
     },
+    "Some planned recipes are missing ingredients" : {
+
+    },
     "Some sources could not be refreshed: %@." : {
       "localizations" : {
         "de" : {
@@ -7657,6 +7713,16 @@
     },
     "This recipe may have been deleted." : {
 
+    },
+    "This replaces the recipe’s title, ingredients, instructions and timings with the latest information from its saved link. Your photos, tags, ratings and meal plan stay unchanged." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadurch werden Titel, Zutaten, Anleitung und Zeiten des Rezepts mit den neuesten Angaben des gespeicherten Links ersetzt. Fotos, Tags, Bewertungen und Essensplan bleiben unverändert."
+          }
+        }
+      }
     },
     "This site did not return an RSS, Atom or JSON feed." : {
       "localizations" : {

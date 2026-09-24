@@ -142,8 +142,8 @@ This path involves no `CKShare` at all.
 **First device.** `AppState.bootstrap` creates the single `Household`. The
 first sync adds the zone to the private database and uploads every record.
 
-**A second device signed in to the same account.** Before creating a local
-household, `AppState.bootstrapFromCloud` asks
+**A second device signed in to the same account.** The app first opens (or
+creates) its local household, then `AppState.bootstrapFromCloud` asks
 `HouseholdCloudBootstrapService.restoreOwnedHouseholdIfAvailable`, which:
 
 1. lists every zone in the private database and keeps those named
@@ -157,10 +157,10 @@ household, `AppState.bootstrapFromCloud` asks
 
 Discovery also runs when the local household is an empty placeholder — older
 builds created one immediately on each new device — so those devices heal
-themselves instead of staying stuck with an empty plan. `RootView` shows the
-"Checking iCloud… / Downloading… / Preparing your household…" overlay from
-`AppState.cloudBootstrapState` for the whole operation, and onboarding waits
-for it so a returning user is not offered the first-run tour again.
+themselves instead of staying stuck with an empty plan. This launch-time
+lookup is silent and runs after the local store is usable; it never covers the
+interface with an iCloud loading screen. Onboarding waits briefly for it so a
+returning user is not offered the first-run tour again.
 
 **Opening your own invitation link on your own second device.** CloudKit
 refuses to let an account accept its own share into the shared database, so
