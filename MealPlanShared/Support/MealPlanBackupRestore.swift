@@ -58,6 +58,7 @@ enum MealPlanBackupRestore {
         try deleteAll(DishImage.self, in: context)
         try deleteAll(Dish.self, in: context)
         try deleteAll(IngredientAlias.self, in: context)
+        try deleteAll(IngredientPackageSize.self, in: context)
         try deleteAll(Ingredient.self, in: context)
         try deleteAll(MealType.self, in: context)
         try deleteAll(HouseholdMember.self, in: context)
@@ -83,6 +84,8 @@ enum MealPlanBackupRestore {
         household.standardServings = backup.household.standardServings ?? Household.defaultStandardServings
         household.showsNutritionEstimates = backup.household.showsNutritionEstimates ?? true
         household.energyUnitRaw = backup.household.energyUnitRaw ?? EnergyUnit.kilocalories.rawValue
+        household.leftoverSuggestionsEnabled = backup.household.leftoverSuggestionsEnabled ?? false
+        household.packageSizeCountryCode = backup.household.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         // A restored library brings its own staples with it; an older file
@@ -145,6 +148,30 @@ enum MealPlanBackupRestore {
                 context.insert(alias)
             }
             ingredients[stored.normalizedName] = ingredient
+        }
+
+        for stored in backup.packageSizes {
+            let packageSize = IngredientPackageSize(
+                ingredientKey: stored.ingredientKey,
+                ingredientName: stored.ingredientName,
+                countryCode: stored.countryCode,
+                quantity: Quantity(value: stored.quantityValue, dimension: QuantityDimension(rawValue: stored.quantityDimensionRaw) ?? .mass),
+                containerType: PackageContainerType(rawValue: stored.containerTypeRaw) ?? .other,
+                priority: PackageSizePriority(rawValue: stored.priorityRaw) ?? .common,
+                provenance: PackageSizeProvenance(rawValue: stored.provenanceRaw) ?? .user
+            )
+            packageSize.uuid = stored.uuid
+            packageSize.modifiedAt = stored.modifiedAt
+            packageSize.sourceNote = stored.sourceNote
+            packageSize.sourceDate = stored.sourceDate
+            packageSize.sourceVersion = stored.sourceVersion
+            packageSize.stableBundledID = stored.stableBundledID
+            packageSize.overridesBundledID = stored.overridesBundledID
+            packageSize.overridesProfile = stored.overridesProfile
+            packageSize.isEnabled = stored.isEnabled
+            packageSize.isPreferred = stored.isPreferred
+            packageSize.household = household
+            context.insert(packageSize)
         }
 
         var dishes: [UUID: Dish] = [:]

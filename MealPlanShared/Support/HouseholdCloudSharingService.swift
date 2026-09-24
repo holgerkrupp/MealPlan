@@ -643,11 +643,16 @@ enum HouseholdCloudSharingService {
         household.calendarStyleRaw = old.calendarStyleRaw
         household.standardServings = old.standardServings
         household.showsNutritionEstimates = old.showsNutritionEstimates
+        household.leftoverSuggestionsEnabled = old.leftoverSuggestionsEnabled
+        household.packageSizeCountryCode = old.packageSizeCountryCode
         household.energyUnitRaw = old.energyUnitRaw
         household.localeIdentifier = old.localeIdentifier
         context.insert(household)
 
         mergeDishes(from: old, into: household)
+        for packageSize in old.packageSizeOverrides ?? [] {
+            packageSize.household = household
+        }
         context.delete(old)
         try context.save()
         PantryStaples.seedDefaults(for: household, context: context)

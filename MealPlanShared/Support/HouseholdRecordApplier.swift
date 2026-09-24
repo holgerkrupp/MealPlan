@@ -19,6 +19,7 @@ enum HouseholdRecordApplier {
         case .dishImage: touch(DishImage.self, identity.uuid, date, context)
         case .ingredient: touch(Ingredient.self, identity.uuid, date, context)
         case .ingredientAlias: touch(IngredientAlias.self, identity.uuid, date, context)
+        case .packageSize: touch(IngredientPackageSize.self, identity.uuid, date, context)
         case .dishIngredient: touch(DishIngredient.self, identity.uuid, date, context)
         case .planEntry:
             if let model = find(MealPlanEntry.self, identity.uuid, context) {
@@ -59,6 +60,8 @@ enum HouseholdRecordApplier {
             household.roundsDisplayedAmounts = value.roundsDisplayedAmounts
             household.standardServings = value.standardServings
             household.showsNutritionEstimates = value.showsNutritionEstimates
+            household.leftoverSuggestionsEnabled = value.leftoverSuggestionsEnabled ?? false
+            household.packageSizeCountryCode = value.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
             household.energyUnitRaw = value.energyUnitRaw
             household.localeIdentifier = value.localeIdentifier
             household.dateCreated = value.dateCreated
@@ -119,6 +122,35 @@ enum HouseholdRecordApplier {
             model.confidence = value.confidence
             model.modifiedAt = modifiedAt
             model.ingredient = ingredient
+
+        case .packageSize(let value):
+            let model = find(IngredientPackageSize.self, identity.uuid, context)
+                ?? insert(IngredientPackageSize(
+                    ingredientKey: value.ingredientKey, ingredientName: value.ingredientName,
+                    countryCode: value.countryCode,
+                    quantity: Quantity(value: value.quantityValue, dimension: QuantityDimension(rawValue: value.quantityDimensionRaw) ?? .mass),
+                    containerType: PackageContainerType(rawValue: value.containerTypeRaw) ?? .other,
+                    priority: PackageSizePriority(rawValue: value.priorityRaw) ?? .common,
+                    provenance: PackageSizeProvenance(rawValue: value.provenanceRaw) ?? .user
+                ), identity.uuid, context)
+            model.ingredientKey = value.ingredientKey
+            model.ingredientName = value.ingredientName
+            model.countryCode = value.countryCode
+            model.quantityValue = value.quantityValue
+            model.quantityDimensionRaw = value.quantityDimensionRaw
+            model.containerTypeRaw = value.containerTypeRaw
+            model.priorityRaw = value.priorityRaw
+            model.provenanceRaw = value.provenanceRaw
+            model.sourceNote = value.sourceNote
+            model.sourceDate = value.sourceDate
+            model.sourceVersion = value.sourceVersion
+            model.stableBundledID = value.stableBundledID
+            model.overridesBundledID = value.overridesBundledID
+            model.overridesProfile = value.overridesProfile
+            model.isEnabled = value.isEnabled
+            model.isPreferred = value.isPreferred
+            model.modifiedAt = modifiedAt
+            model.household = household
 
         case .dish(let value):
             let model = find(Dish.self, identity.uuid, context) ?? insert(Dish(), identity.uuid, context)
@@ -313,6 +345,7 @@ enum HouseholdRecordApplier {
         case .dishImage: delete(DishImage.self, uuid, context)
         case .ingredient: delete(Ingredient.self, uuid, context)
         case .ingredientAlias: delete(IngredientAlias.self, uuid, context)
+        case .packageSize: delete(IngredientPackageSize.self, uuid, context)
         case .dishIngredient: delete(DishIngredient.self, uuid, context)
         case .planEntry: delete(MealPlanEntry.self, uuid, context)
         case .routine: delete(MealRoutine.self, uuid, context)

@@ -30,6 +30,7 @@ enum SharedStore {
             DishImage.self,
             Ingredient.self,
             IngredientAlias.self,
+            IngredientPackageSize.self,
             DishIngredient.self,
             MealPlanEntry.self,
             MealRoutine.self,
