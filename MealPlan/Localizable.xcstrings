@@ -13,7 +13,13 @@
     "“%@” is already in MealPlan." : {
 
     },
+    "(count) to review" : {
+
+    },
     "(dish removed)" : {
+
+    },
+    "(Int((value * 100).rounded()))% match" : {
 
     },
     "%@" : {
@@ -866,6 +872,9 @@
         }
       }
     },
+    "All clear" : {
+
+    },
     "All day" : {
       "localizations" : {
         "de" : {
@@ -1002,6 +1011,9 @@
           }
         }
       }
+    },
+    "Alternate spelling" : {
+
     },
     "Always at home" : {
       "localizations" : {
@@ -1539,6 +1551,9 @@
     "Cancelled" : {
 
     },
+    "Canonical display name" : {
+
+    },
     "Carbs" : {
 
     },
@@ -1551,6 +1566,12 @@
           }
         }
       }
+    },
+    "Catalogue differences" : {
+
+    },
+    "Category" : {
+
     },
     "Change the aisle, or mark as a pantry staple" : {
       "localizations" : {
@@ -1641,6 +1662,12 @@
 
     },
     "Choose recipe photos" : {
+
+    },
+    "Choose the catalogue name" : {
+
+    },
+    "Choose which ingredient it means." : {
 
     },
     "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." : {
@@ -1756,6 +1783,9 @@
         }
       }
     },
+    "close spelling" : {
+
+    },
     "Collapse day" : {
 
     },
@@ -1781,6 +1811,9 @@
           }
         }
       }
+    },
+    "Confidence" : {
+
     },
     "Configure meals…" : {
       "localizations" : {
@@ -2088,6 +2121,9 @@
     "Couldn’t find a list to add the items to." : {
 
     },
+    "Couldn’t finish cleanup" : {
+
+    },
     "Couldn’t import recipes" : {
       "localizations" : {
         "de" : {
@@ -2377,6 +2413,9 @@
           }
         }
       }
+    },
+    "Different" : {
+
     },
     "different meals" : {
 
@@ -3567,6 +3606,12 @@
     "Ingredient" : {
 
     },
+    "Ingredient Cleanup" : {
+
+    },
+    "Ingredient merged" : {
+
+    },
     "Ingredients" : {
       "localizations" : {
         "de" : {
@@ -3591,6 +3636,9 @@
 
     },
     "Ingredients for %lld" : {
+
+    },
+    "Ingredients merged" : {
 
     },
     "Ingredients, method and nutrition as separate images — post them together as a carousel." : {
@@ -3721,6 +3769,9 @@
     "Keep looking" : {
 
     },
+    "Keep separate" : {
+
+    },
     "Keep this screen open near the device showing the code. You’re added as soon as it finds you." : {
 
     },
@@ -3738,6 +3789,9 @@
 
     },
     "Kilojoules (kJ)" : {
+
+    },
+    "known alias" : {
 
     },
     "Lactose-free" : {
@@ -3949,6 +4003,9 @@
         }
       }
     },
+    "Matcher evidence" : {
+
+    },
     "Max. time" : {
       "localizations" : {
         "de" : {
@@ -4146,7 +4203,37 @@
         }
       }
     },
+    "Merge" : {
+
+    },
+    "Merge (batchSuggestions.count)" : {
+
+    },
+    "Merge / Same ingredient" : {
+
+    },
+    "Merge and keep canonical details" : {
+
+    },
+    "Merge despite catalogue differences?" : {
+
+    },
+    "Merge high-confidence" : {
+
+    },
+    "Merge high-confidence suggestions?" : {
+
+    },
+    "Merge ingredients?" : {
+
+    },
     "Merge Recipes" : {
+
+    },
+    "Merges only high-confidence suggestions without metadata conflicts" : {
+
+    },
+    "Merging keeps the recipe wording and moves recipe and shopping list relationships to the canonical ingredient. The last merge can be undone from the Edit menu." : {
 
     },
     "Method" : {
@@ -4203,6 +4290,9 @@
         }
       }
     },
+    "more than one possible match" : {
+
+    },
     "Most frequent" : {
 
     },
@@ -4225,6 +4315,9 @@
           }
         }
       }
+    },
+    "Moves recipe and shopping list relationships to the canonical ingredient" : {
+
     },
     "Moves this meal here" : {
 
@@ -4310,6 +4403,9 @@
     "New shopping item" : {
 
     },
+    "New uncertain matches will appear here after an import or recipe edit." : {
+
+    },
     "New variants" : {
       "localizations" : {
         "de" : {
@@ -4343,6 +4439,9 @@
 
     },
     "Next week" : {
+
+    },
+    "No" : {
 
     },
     "No calendar on this device accepts new events. Add or unlock one in the Calendar app, then come back here." : {
@@ -4413,6 +4512,9 @@
 
     },
     "No places found." : {
+
+    },
+    "No possible duplicates" : {
 
     },
     "No posts yet." : {
@@ -4490,6 +4592,9 @@
 
     },
     "No recipe yet. Search the web and save one straight onto this dish." : {
+
+    },
+    "No recipes" : {
 
     },
     "No recipes in that file." : {
@@ -4642,6 +4747,9 @@
 
     },
     "Not published" : {
+
+    },
+    "Not set" : {
 
     },
     "Note" : {
@@ -4892,6 +5000,9 @@
         }
       }
     },
+    "Only suggestions with high matcher confidence and matching category, aisle, pantry, and nutrition data will be merged. You can undo the last merge from the Edit menu." : {
+
+    },
     "Only the household owner can invite people." : {
 
     },
@@ -4973,6 +5084,9 @@
 
     },
     "Open website" : {
+
+    },
+    "Opens ingredient cleanup details" : {
 
     },
     "Optional. When you say who a calendar belongs to, the plan can show who is still busy around a meal. MealPlan never guesses this from calendar names." : {
@@ -5470,6 +5584,12 @@
     "Possible duplicate" : {
 
     },
+    "Possible duplicates" : {
+
+    },
+    "Possible match: %@" : {
+
+    },
     "Poultry" : {
       "localizations" : {
         "de" : {
@@ -5808,6 +5928,16 @@
         }
       }
     },
+    "Recipes and shopping list items using “%@” will use “%@” from now on. The alternate spelling is saved as an alias." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Recipes and shopping list items using “%1$@” will use “%2$@” from now on. The alternate spelling is saved as an alias."
+          }
+        }
+      }
+    },
     "Recipes are scaled to this many portions automatically, whatever yield they were written for. You can still change the portions of a single meal when you plan it. This is shared with everyone in the family." : {
       "localizations" : {
         "de" : {
@@ -5858,6 +5988,9 @@
           }
         }
       }
+    },
+    "Recipes using %@" : {
+
     },
     "Recipes you already have are left out. Another take on a dish you already have comes in as a variant, so several burgers can live side by side." : {
       "localizations" : {
@@ -5929,6 +6062,9 @@
 
     },
     "Reload photo from recipe link" : {
+
+    },
+    "Remembers that these spellings are different" : {
 
     },
     "Remind me about tonight’s dinner" : {
@@ -6161,6 +6297,12 @@
     "Review" : {
 
     },
+    "Review ingredient" : {
+
+    },
+    "Review the evidence before changing your catalogue. Keeping items separate is remembered for this spelling pair." : {
+
+    },
     "Room for every routine" : {
 
     },
@@ -6219,6 +6361,15 @@
           }
         }
       }
+    },
+    "same name" : {
+
+    },
+    "same normalized words" : {
+
+    },
+    "same words in a different order" : {
+
     },
     "Save" : {
 
@@ -6822,6 +6973,9 @@
       }
     },
     "Single-use QR code for adding someone nearby" : {
+
+    },
+    "singular/plural form" : {
 
     },
     "Site" : {
@@ -7447,6 +7601,9 @@
         }
       }
     },
+    "The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Review the differences above before continuing." : {
+
+    },
     "The connection was lost." : {
 
     },
@@ -7547,6 +7704,9 @@
           }
         }
       }
+    },
+    "The spelling “(pendingRawName)” is close to an existing ingredient. Your recipe wording will remain unchanged." : {
+
     },
     "The translation didn’t come back. Please try again." : {
       "localizations" : {
@@ -8261,7 +8421,13 @@
     "US Tabloid" : {
 
     },
+    "Use (candidate.name)" : {
+
+    },
     "Use a template" : {
+
+    },
+    "Use an existing ingredient?" : {
 
     },
     "Use as the dish’s photo" : {
@@ -8582,6 +8748,9 @@
         }
       }
     },
+    "Why it may match" : {
+
+    },
     "Widgets and Siri show tonight’s meal without opening the app." : {
       "localizations" : {
         "de" : {
@@ -8620,6 +8789,9 @@
 
     },
     "Year" : {
+
+    },
+    "Yes" : {
 
     },
     "You" : {

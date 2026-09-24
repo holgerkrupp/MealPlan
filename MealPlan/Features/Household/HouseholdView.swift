@@ -129,6 +129,16 @@ struct HouseholdSettingsView: View {
                             Label(String(localized: "Pantry staples"), systemImage: "shippingbox")
                         }
                     }
+
+                    NavigationLink {
+                        IngredientCleanupView()
+                    } label: {
+                        LabeledContent {
+                            Text(ingredientCleanupSummary(household))
+                        } label: {
+                            Label(String(localized: "Ingredient Cleanup"), systemImage: "wand.and.stars")
+                        }
+                    }
                 } footer: {
                     Text("Salt, pepper, oil — what your family always has at home. Staples stay off the shopping list when it's rebuilt, and you can put one on it yourself when you run out.")
                 }
@@ -192,6 +202,11 @@ struct HouseholdSettingsView: View {
         } message: { message in
             Text(message)
         }
+    }
+
+    private func ingredientCleanupSummary(_ household: Household) -> String {
+        let count = IngredientCleanupService.suggestions(in: household).count
+        return count == 0 ? String(localized: "All clear") : String(localized: "(count) to review")
     }
 
     private func memberRow(_ member: HouseholdMember, removable: Bool) -> some View {

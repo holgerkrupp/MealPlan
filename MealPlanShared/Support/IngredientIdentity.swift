@@ -144,9 +144,28 @@ enum IngredientMergeService {
     static func merge(
         duplicate: Ingredient,
         into canonical: Ingredient,
+        canonicalName: String? = nil,
         context: ModelContext
     ) throws {
         guard duplicate !== canonical else { throw IngredientMergeError.sameIngredient }
+
+        let undoManager = context.undoManager
+        undoManager?.beginUndoGrouping()
+        defer { undoManager?.endUndoGrouping() }
+
+        let requestedName = canonicalName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !requestedName.isEmpty, Ingredient.normalize(requestedName) != canonical.normalizedName {
+            IngredientIdentity.addAlias(
+                named: canonical.name,
+                to: canonical,
+                source: .userConfirmed,
+                confidence: 1,
+                context: context
+            )
+            canonical.name = requestedName
+            canonical.normalizedName = Ingredient.normalize(requestedName)
+            canonical.modifiedAt = .now
+        }
 
         IngredientIdentity.addAlias(
             named: duplicate.name,
@@ -166,6 +185,18 @@ enum IngredientMergeService {
         for item in duplicate.shoppingItems ?? [] {
             item.ingredient = canonical
         }
+        for rejectedKey in duplicate.rejectedMatchKeys where !canonical.rejectedMatchKeys.contains(rejectedKey) {
+            canonical.rejectedMatchKeys.append(rejectedKey)
+        }
+        var pending = canonical.pendingMergeSuggestions
+        for suggestion in duplicate.pendingMergeSuggestions where suggestion.candidateUUID != canonical.uuid {
+            guard !pending.contains(where: {
+                $0.normalizedName == suggestion.normalizedName
+                    && $0.candidateUUID == suggestion.candidateUUID
+            }) else { continue }
+            pending.append(suggestion)
+        }
+        canonical.pendingMergeSuggestions = pending
         canonical.pendingMergeSuggestions = canonical.pendingMergeSuggestions.filter {
             $0.candidateUUID != duplicate.uuid
         }
