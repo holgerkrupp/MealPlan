@@ -2,6 +2,12 @@ import Testing
 @testable import MealPlan
 
 struct ScannedRecipeParserTests {
+    @Test func emptyInputProducesAnEmptyDraft() async {
+        let draft = await RecipeExtractor.extract(from: "  \n\t")
+
+        #expect(draft == ScannedRecipeDraft(name: "", ingredientLines: [], instructions: ""))
+    }
+
     @Test func parsesGermanHeadings() {
         let draft = ScannedRecipeParser.parse("""
         Kartoffelsuppe
@@ -15,6 +21,22 @@ struct ScannedRecipeParserTests {
         #expect(draft.name == "Kartoffelsuppe")
         #expect(draft.ingredientLines == ["500 g Kartoffeln", "1 Zwiebel"])
         #expect(draft.instructions == "Alles schneiden.\n20 min kochen.")
+    }
+
+    @Test func acceptsPunctuatedEnglishHeadings() {
+        let draft = ScannedRecipeParser.parse("""
+        Tomato soup
+        Ingredients:
+        400 g tomatoes
+        1 onion
+        Directions:
+        Cook until soft.
+        Blend until smooth.
+        """)
+
+        #expect(draft.name == "Tomato soup")
+        #expect(draft.ingredientLines == ["400 g tomatoes", "1 onion"])
+        #expect(draft.instructions == "Cook until soft.\nBlend until smooth.")
     }
 
     @Test func splitsHeadinglessPageByMeasurementLines() {
