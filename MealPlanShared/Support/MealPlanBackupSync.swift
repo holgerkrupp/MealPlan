@@ -81,6 +81,20 @@ enum MealPlanBackupSync {
             }
         }
 
+        // MARK: Learned ingredient decisions
+
+        var matchRules = partition(household.matchRules ?? [], by: \.uuid)
+        for stored in backup.matchRules {
+            let model = matchRules.map[stored.uuid] ?? insert(
+                IngredientMatchRule(), uuid: stored.uuid, into: context, map: &matchRules.map
+            )
+            model.leftKey = stored.leftKey
+            model.rightKey = stored.rightKey
+            model.kindRaw = stored.kindRaw
+            model.household = household
+        }
+        deleteMissing(matchRules, keeping: backup.matchRules.map(\.uuid), context: context)
+
         // MARK: Dishes (with their images and ingredient lines replaced wholesale)
 
         var dishes = partition(household.dishes ?? [], by: \.uuid)
@@ -388,6 +402,7 @@ enum MealPlanBackupSync {
         merged.exportedAt = mergeDate
         merged.mealTypes = union(base.mealTypes, other.mealTypes, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.ingredients = union(base.ingredients, other.ingredients, baseIsNewer: baseIsNewer, id: \.normalizedName)
+        merged.matchRules = union(base.matchRules, other.matchRules, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.dishes = union(base.dishes, other.dishes, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.entries = union(base.entries, other.entries, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.routines = union(base.routines, other.routines, baseIsNewer: baseIsNewer, id: \.uuid)

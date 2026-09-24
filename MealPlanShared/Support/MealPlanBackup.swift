@@ -36,6 +36,9 @@ struct MealPlanBackup: Codable, Sendable {
     /// The household's ingredient catalogue, keyed by `normalizedName`. Dish
     /// lines and shopping items refer to entries here by that key.
     var ingredients: [PortableIngredient] = []
+    /// User-confirmed ingredient aliases and keep-separate decisions. The
+    /// default keeps older backups readable.
+    var matchRules: [PortableIngredientMatchRule] = []
     var dishes: [PortableDish] = []
     var entries: [PortableEntry] = []
     var routines: [PortableRoutine] = []
@@ -108,6 +111,13 @@ struct MealPlanBackup: Codable, Sendable {
         var nutritionFatGrams: Double? = nil
         var nutritionReferenceRaw: String? = nil
         var nutritionSourceRaw: String? = nil
+    }
+
+    struct PortableIngredientMatchRule: Codable, Sendable {
+        var uuid: UUID
+        var leftKey: String
+        var rightKey: String
+        var kindRaw: String
     }
 
     struct PortableDish: Codable, Sendable {
@@ -347,6 +357,7 @@ extension MealPlanBackup {
         var mealTypes: [MealType] = []
         var members: [HouseholdMember] = []
         var ingredients: [Ingredient] = []
+        var matchRules: [IngredientMatchRule] = []
         var dishes: [Dish] = []
         var entries: [MealPlanEntry] = []
         var routines: [MealRoutine] = []
@@ -374,6 +385,7 @@ extension MealPlanBackup {
             mealTypes = try context.fetch(FetchDescriptor<MealType>())
             members = try context.fetch(FetchDescriptor<HouseholdMember>())
             ingredients = try context.fetch(FetchDescriptor<Ingredient>())
+            matchRules = try context.fetch(FetchDescriptor<IngredientMatchRule>())
             dishes = try context.fetch(FetchDescriptor<Dish>())
             entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
             routines = try context.fetch(FetchDescriptor<MealRoutine>())
@@ -457,6 +469,9 @@ extension MealPlanBackup {
             cloudEnvironment: BuildEnvironment.cloudKit.rawValue,
             deviceName: nil
         )
+        backup.matchRules = rows.matchRules.map {
+            PortableIngredientMatchRule(uuid: $0.uuid, leftKey: $0.leftKey, rightKey: $0.rightKey, kindRaw: $0.kindRaw)
+        }
 
         // Meal types are de-duplicated by key the same way `MealType.ensure`
         // does, so a split store doesn't restore two "dinner" meals.

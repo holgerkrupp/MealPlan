@@ -72,6 +72,9 @@ final class Household {
     @Relationship(deleteRule: .cascade, inverse: \Ingredient.household)
     var ingredients: [Ingredient]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \IngredientMatchRule.household)
+    var matchRules: [IngredientMatchRule]? = []
+
     @Relationship(deleteRule: .cascade, inverse: \MealPlanEntry.household)
     var entries: [MealPlanEntry]? = []
 

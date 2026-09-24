@@ -75,7 +75,8 @@ enum ShoppingListBuilder {
     /// `IngredientMatching.key(for:)` — never reaches the list at all.
     static func aggregate(
         _ entries: [MealPlanEntry],
-        stapleKeys: Set<String> = []
+        stapleKeys: Set<String> = [],
+        matchRules: [IngredientMatchRule] = []
     ) -> [AggregatedLine] {
         var lines: [AggregatedLine] = []
         /// Bucket index per key, including every alias that resolved to it, so
@@ -85,7 +86,7 @@ enum ShoppingListBuilder {
 
         func bucket(for key: String, name: String, item: DishIngredient) -> Int {
             if let index = indexByKey[key] { return index }
-            if let index = bucketKeys.firstIndex(where: { IngredientMatching.keysMatch($0, key) }) {
+            if let index = bucketKeys.firstIndex(where: { IngredientMatching.keysMatch($0, key, rules: matchRules) }) {
                 indexByKey[key] = index
                 return index
             }
@@ -216,7 +217,7 @@ enum ShoppingListBuilder {
         let predicate = #Predicate<MealPlanEntry> { $0.date >= start && $0.date < end && $0.skipped == false }
         let entries = (try? context.fetch(FetchDescriptor(predicate: predicate))) ?? []
         let staples = Set(household.pantryStaples.map { IngredientMatching.key(for: $0.name) })
-        let aggregated = aggregate(entries, stapleKeys: staples)
+        let aggregated = aggregate(entries, stapleKeys: staples, matchRules: household.matchRules ?? [])
 
         // Remember what was already ticked off, under the same key the merging
         // uses — a line that comes back spelled differently is still the one
@@ -248,7 +249,7 @@ enum ShoppingListBuilder {
                 roundsAmounts: roundsAmounts
             )
             item.sourceDishNames = line.sourceDishNames
-            item.ingredient = IngredientMatching.match(line.name, in: catalogue)
+            item.ingredient = IngredientMatching.match(line.name, in: catalogue, rules: household.matchRules ?? [])
             item.customAisleName = line.customAisleName
             item.isChecked = checkedByKey[IngredientMatching.key(for: line.name)] ?? false
             item.rangeStart = range.start
@@ -281,7 +282,7 @@ enum ShoppingListBuilder {
         let parsed = GermanUnitParser.parse(trimmed)
         let name = parsed.name.isEmpty ? trimmed : parsed.name
         let normalized = Ingredient.normalize(name)
-        let ingredient = IngredientMatching.match(name, in: household.ingredients ?? [])
+        let ingredient = IngredientMatching.match(name, in: household.ingredients ?? [], rules: household.matchRules ?? [])
 
         let item = ShoppingListItem(name: name, category: ingredient?.category ?? .other, isManual: true)
         item.household = household

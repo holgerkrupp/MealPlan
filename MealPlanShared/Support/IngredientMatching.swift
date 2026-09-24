@@ -58,16 +58,30 @@ enum IngredientMatching {
         return editDistance(Array(a), Array(b), limit: tolerance) <= tolerance
     }
 
+    /// Rule-aware matching used by the explicit resolver and shopping-list
+    /// rebuild. A learned keep-separate decision always wins, including over
+    /// a fuzzy match; an alias can deliberately join two otherwise unrelated
+    /// keys.
+    static func keysMatch(_ a: String, _ b: String, rules: [IngredientMatchRule]) -> Bool {
+        if rules.contains(where: { $0.kind == .keepSeparate && $0.applies(to: a, and: b) }) {
+            return false
+        }
+        if rules.contains(where: { $0.kind == .alias && $0.applies(to: a, and: b) }) {
+            return true
+        }
+        return keysMatch(a, b)
+    }
+
     /// The catalogue entry that means the same as `name`. An exact match on the
     /// normalized name wins; only then is a near one considered.
-    static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
+    static func match(_ name: String, in ingredients: [Ingredient], rules: [IngredientMatchRule] = []) -> Ingredient? {
         let normalized = Ingredient.normalize(name)
         guard !normalized.isEmpty else { return nil }
         if let exact = ingredients.first(where: { $0.normalizedName == normalized }) {
             return exact
         }
         let wanted = key(for: name)
-        return ingredients.first { keysMatch(key(for: $0.name), wanted) }
+        return ingredients.first { keysMatch(key(for: $0.name), wanted, rules: rules) }
     }
 
     // MARK: - Compounds
