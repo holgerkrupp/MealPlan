@@ -45,27 +45,7 @@ struct RecipeSchemaParser: RecipeImporter {
         let page = try await fetchRecipePage(from: url)
         let html = page.html
         let sourceURL = page.url
-
-        // KptnCook's page contains a hidden, incomplete microdata block as
-        // well as the rows a person actually sees.  Give its narrow parser
-        // first refusal so a generic schema parser cannot accidentally turn
-        // that compatibility markup into an ingredient list.
-        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let candidate = bestStructuredCandidate(in: html, sourceURL: sourceURL) {
-            return await withImage(candidate.recipe, html: html)
-        }
-        if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        return await withImage(parseRenderedHTML(html, sourceURL: sourceURL), html: html)
     }
 
     /// Parses HTML the caller already has, rather than fetching it. The
@@ -73,22 +53,82 @@ struct RecipeSchemaParser: RecipeImporter {
     /// actually looking at — cookie banners dismissed, lazy content rendered —
     /// instead of whatever a fresh anonymous request would return.
     func importRecipe(fromHTML html: String, sourceURL: URL) async throws -> ImportedRecipe {
-        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        return await withImage(parseRenderedHTML(html, sourceURL: sourceURL), html: html)
+    }
+
+    /// Structured data remains authoritative, but a page can have a useful
+    /// visible ingredient card while publishing only a name (or placeholder
+    /// headings) in JSON-LD. Semantic HTML is therefore evaluated once after
+    /// the structured/site-specific parsers and used only to fill holes.
+    private func parseRenderedHTML(_ html: String, sourceURL: URL) -> ImportedRecipe {
+        // KptnCook's page contains a hidden, incomplete microdata block as
+        // well as the rows a person actually sees. Give its narrow parser
+        // first refusal so generic extraction cannot mix the two.
+        let structured = parseKptnCook(html: html, sourceURL: sourceURL)
+            ?? parseJSONLD(html: html, sourceURL: sourceURL)
+            ?? parseChefkoch(html: html, sourceURL: sourceURL)
+            ?? parseMicrodata(html: html, sourceURL: sourceURL)
+        let semantic = SemanticRecipeExtractor.extract(html: html, sourceURL: sourceURL)
+
+        if var structured {
+            if let semantic { augment(&structured, with: semantic) }
+            return structured
         }
         if let candidate = bestStructuredCandidate(in: html, sourceURL: sourceURL) {
-            return await withImage(candidate.recipe, html: html)
+            var recipe = candidate.recipe
+            if let semantic { augment(&recipe, with: semantic) }
+            return recipe
         }
-        if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        if let semantic, semantic.hasContent {
+            return recipe(from: semantic, sourceURL: sourceURL)
         }
-        if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        return heuristic(html: html, sourceURL: sourceURL)
+    }
+
+    private func recipe(from semantic: SemanticRecipeExtractor.Result, sourceURL: URL) -> ImportedRecipe {
+        var recipe = ImportedRecipe(
+            name: semantic.name ?? heuristic(html: "", sourceURL: sourceURL).name,
+            sourceURL: sourceURL
+        )
+        recipe.needsReview = true
+        recipe.ingredientLines = semantic.ingredientLines
+        recipe.instructions = Self.numberedSteps(semantic.instructionLines)
+        recipe.fieldEvidence = semantic.fieldEvidence
+        return recipe
+    }
+
+    private func augment(_ recipe: inout ImportedRecipe, with semantic: SemanticRecipeExtractor.Result) {
+        if Self.isPlaceholderPayload(recipe.ingredientLines) || recipe.ingredientLines.isEmpty {
+            if !semantic.ingredientLines.isEmpty {
+                recipe.ingredientLines = semantic.ingredientLines
+                if let evidence = semantic.fieldEvidence["ingredients"] { recipe.fieldEvidence["ingredients"] = evidence }
+            }
         }
-        if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+
+        let structuredInstructions = recipe.instructions.map { [$0] } ?? []
+        if Self.isPlaceholderPayload(structuredInstructions) || (recipe.instructions ?? "").trimmedCollapsed.isEmpty {
+            if !semantic.instructionLines.isEmpty {
+                recipe.instructions = Self.numberedSteps(semantic.instructionLines)
+                if let evidence = semantic.fieldEvidence["instructions"] { recipe.fieldEvidence["instructions"] = evidence }
+            }
         }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        // A partial structured candidate is still reviewable. A complete
+        // structured candidate keeps its stronger status and field evidence.
+        if recipe.ingredientLines.isEmpty && (recipe.instructions ?? "").isEmpty { recipe.needsReview = true }
+    }
+
+    private static func isPlaceholderPayload(_ values: [String]) -> Bool {
+        guard !values.isEmpty else { return true }
+        let headings: Set<String> = [
+            "ingredient", "ingredients", "zutaten", "directions", "direction",
+            "instructions", "instruction", "method", "preparation", "zubereitung",
+            "anleitung", "steps", "step"
+        ]
+        return values.allSatisfy { value in
+            var normalized = value.trimmedCollapsed.lowercased()
+            normalized = normalized.replacingOccurrences(of: #"^\d+[.)]\s*"#, with: "", options: .regularExpression)
+            return headings.contains(normalized.trimmingCharacters(in: CharacterSet(charactersIn: ":")))
+        }
     }
 
     // MARK: - Fetch
@@ -361,7 +401,9 @@ struct RecipeSchemaParser: RecipeImporter {
         recipe.ingredientLines = cleanedPayloadLines(
             stringArray(dict["recipeIngredient"] ?? dict["ingredients"])
         )
+        if Self.isPlaceholderPayload(recipe.ingredientLines) { recipe.ingredientLines = [] }
         recipe.instructions = instructions(dict["recipeInstructions"])
+        if let instructions = recipe.instructions, Self.isPlaceholderPayload([instructions]) { recipe.instructions = nil }
         recipe.servings = servings(dict["recipeYield"] ?? dict["yield"])
         recipe.tagNames = tagList([
             dict["keywords"], dict["recipeCategory"], dict["recipeCuisine"], dict["suitableForDiet"]
@@ -373,6 +415,11 @@ struct RecipeSchemaParser: RecipeImporter {
         }
 
         recipe.nutritionPerServing = nutrition(dict["nutrition"])
+
+        recipe.fieldEvidence["name"] = RecipeFieldEvidence(source: .jsonLD, locator: "application/ld+json name", confidence: 0.99)
+        if !recipe.ingredientLines.isEmpty { recipe.fieldEvidence["ingredients"] = RecipeFieldEvidence(source: .jsonLD, locator: "recipeIngredient", confidence: 0.99) }
+        if recipe.instructions != nil { recipe.fieldEvidence["instructions"] = RecipeFieldEvidence(source: .jsonLD, locator: "recipeInstructions", confidence: 0.99) }
+        if recipe.imageURLString != nil { recipe.fieldEvidence["image"] = RecipeFieldEvidence(source: .jsonLD, locator: "image", confidence: 0.95) }
 
         if recipe.ingredientLines.isEmpty && recipe.instructions == nil {
             recipe.needsReview = true
@@ -612,22 +659,12 @@ struct RecipeSchemaParser: RecipeImporter {
     // MARK: - Generic HTML fallback
 
     /// A best-effort parser for recipe sites that do not expose schema.org.
-    /// It deliberately looks only at recipe-like classes, test IDs and nearby
-    /// headings, so navigation lists and page chrome do not become ingredients.
+    /// It deliberately looks only at visible recipe regions, semantic headings
+    /// and recipe-like classes, so navigation lists and page chrome do not
+    /// become ingredients.
     func parseGenericHTML(html: String, sourceURL: URL) -> ImportedRecipe? {
-        let contentHTML = html.removingScriptsAndStyles
-        let ingredients = Self.genericIngredientLines(in: contentHTML)
-        let steps = Self.genericInstructionSteps(in: contentHTML)
-        guard !ingredients.isEmpty || !steps.isEmpty else { return nil }
-
-        var recipe = ImportedRecipe(
-            name: heuristicTitle(contentHTML) ?? String(localized: "Imported recipe"),
-            sourceURL: sourceURL
-        )
-        recipe.needsReview = true
-        recipe.ingredientLines = ingredients
-        recipe.instructions = Self.numberedSteps(steps)
-        return recipe
+        guard let semantic = SemanticRecipeExtractor.extract(html: html, sourceURL: sourceURL), semantic.hasContent else { return nil }
+        return recipe(from: semantic, sourceURL: sourceURL)
     }
 
     private static func genericIngredientLines(in html: String) -> [String] {
@@ -856,6 +893,9 @@ struct RecipeSchemaParser: RecipeImporter {
                 recipe.cookTimeMinutes = properties["totaltime"]?.compactMap(Self.minutes).first
             }
             recipe.imageURLString = properties["image"]?.first?.nilIfEmpty
+            recipe.fieldEvidence["name"] = RecipeFieldEvidence(source: .microdata, locator: "itemprop=name", confidence: 0.92)
+            if !recipe.ingredientLines.isEmpty { recipe.fieldEvidence["ingredients"] = RecipeFieldEvidence(source: .microdata, locator: "itemprop=recipeIngredient", confidence: 0.92) }
+            if recipe.instructions != nil { recipe.fieldEvidence["instructions"] = RecipeFieldEvidence(source: .microdata, locator: "itemprop=recipeInstructions", confidence: 0.92) }
             return Self.candidate(recipe, provenance: .microdata)
         }
     }

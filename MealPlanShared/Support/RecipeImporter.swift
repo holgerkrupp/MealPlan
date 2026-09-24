@@ -1,5 +1,25 @@
 import Foundation
 
+/// The source of one field in an imported recipe. Keeping this separate from
+/// `needsReview` lets the importer fill a missing structured field without
+/// making the whole recipe look like a heuristic result.
+enum RecipeExtractionSource: String, Sendable, Equatable {
+    case jsonLD
+    case microdata
+    case embeddedJSON
+    case siteMarkup
+    case semanticHTML
+    case heuristic
+}
+
+struct RecipeFieldEvidence: Sendable, Equatable {
+    var source: RecipeExtractionSource
+    /// A short, human-readable locator such as "h2 Ingredients" or
+    /// "recipe-ingredients li". It is deliberately not the page contents.
+    var locator: String?
+    var confidence: Double
+}
+
 /// Result of trying to turn a URL or file into a dish.
 struct ImportedRecipe: Sendable {
     var name: String
@@ -46,6 +66,10 @@ struct ImportedRecipe: Sendable {
     var nutritionPerServing: NutritionFacts?
     /// True when the data came from HTML guesswork rather than structured markup.
     var needsReview: Bool = true
+    /// Evidence for fields populated by an extraction layer. This is kept on
+    /// the transport value so validation and future preview UI can explain
+    /// where a field came from without changing the Dish model.
+    var fieldEvidence: [String: RecipeFieldEvidence] = [:]
 
     init(name: String, sourceURL: URL? = nil) {
         self.name = name
