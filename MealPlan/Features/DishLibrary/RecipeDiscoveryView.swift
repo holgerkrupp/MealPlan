@@ -123,9 +123,9 @@ struct RecipeDiscoveryView: View {
             .dismissesOnOutsideClick()
         }
         .navigationDestination(item: $surpriseArticle) { article in
-            RecipeArticleReaderView(article: article) { url in
+            RecipeArticleReaderView(article: article, onImageResolved: { url in
                 record(imageURL: url, forArticle: article)
-            }
+            })
         }
     }
 
@@ -395,7 +395,7 @@ struct RecipeDiscoveryView: View {
     private var snapshotTaskID: String {
         let feedRevision = feeds.map { feed in
             let itemRevision = (feed.items ?? []).map { item in
-                "\($0.stableID):\($0.fetchedAt.timeIntervalSinceReferenceDate):\($0.archivedAt?.timeIntervalSinceReferenceDate ?? 0)"
+                "\(item.stableID):\(item.fetchedAt.timeIntervalSinceReferenceDate):\(item.archivedAt?.timeIntervalSinceReferenceDate ?? 0)"
             }.joined(separator: ",")
             return "\(feed.uuid.uuidString):\(itemRevision)"
         }.joined(separator: "|")
