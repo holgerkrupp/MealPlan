@@ -10,6 +10,9 @@ struct IngredientRowEditor: View {
     @Environment(\.modelContext) private var context
 
     @State private var text = ""
+    @State private var pendingMatch: IngredientMatchResult?
+    @State private var pendingRawName = ""
+    @State private var pendingNewIngredient: Ingredient?
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -40,6 +43,31 @@ struct IngredientRowEditor: View {
                 .font(.caption)
         }
         .onAppear { if text.isEmpty { text = composedText } }
+        .confirmationDialog(
+            String(localized: "Use an existing ingredient?"),
+            isPresented: Binding(
+                get: { pendingMatch != nil },
+                set: { if !$0 { pendingMatch = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            ForEach(Array((pendingMatch?.candidates ?? []).enumerated()), id: \.offset) { _, candidate in
+                Button(String(localized: "Use (candidate.name)")) {
+                    confirm(candidate)
+                }
+            }
+            Button(String(localized: "Keep separate"), role: .cancel) {
+                rejectPendingMatch()
+            }
+        } message: {
+            if let pendingMatch {
+                Text(String(localized: "The spelling “(pendingRawName)” is close to an existing ingredient. Your recipe wording will remain unchanged."))
+                    .fixedSize(horizontal: false, vertical: true)
+                if pendingMatch.candidates.count > 1 {
+                    Text(String(localized: "Choose which ingredient it means."))
+                }
+            }
+        }
     }
 
     private var composedText: String {
@@ -103,37 +131,65 @@ struct IngredientRowEditor: View {
         line.note = parsed.note
         line.rawText = parsed.rawText
 
-        let normalized = Ingredient.normalize(parsed.name)
-        if line.ingredient?.normalizedName != normalized {
-            if let household = line.dish?.household,
-               let match = IngredientIdentity.resolve(named: parsed.name, in: household.ingredients ?? []) {
-                line.ingredient = match
-                IngredientIdentity.addAlias(
-                    named: parsed.name,
-                    to: match,
-                    source: .userConfirmed,
-                    confidence: 1,
-                    context: context
-                )
-            } else if let ingredient = line.ingredient, (ingredient.dishIngredients?.count ?? 0) <= 1 {
-                IngredientIdentity.addAlias(
-                    named: parsed.name,
-                    to: ingredient,
-                    source: .userConfirmed,
-                    confidence: 1,
-                    context: context
-                )
-            } else {
-                line.ingredient = IngredientIdentity.upsert(
-                    named: parsed.name,
-                    household: line.dish?.household,
-                    context: context,
-                    source: .userConfirmed,
-                    confidence: 1
-                )
+        let household = line.dish?.household
+        let result = IngredientIdentity.matchResult(named: parsed.name, in: household?.ingredients ?? [])
+        if let match = result.candidate, result.isSafeForSilentReuse {
+            line.ingredient = match
+            IngredientIdentity.addAlias(
+                named: parsed.name,
+                to: match,
+                source: .userConfirmed,
+                confidence: 1,
+                context: context
+            )
+        } else if let household {
+            // An uncertain candidate is deliberately kept as a new catalogue
+            // row until the person chooses “same” or “separate”.
+            let newIngredient = IngredientIdentity.upsert(
+                named: parsed.name,
+                household: household,
+                context: context,
+                source: .userConfirmed,
+                confidence: 1
+            )
+            line.ingredient = newIngredient
+            if result.matchClass == .needsConfirmation, !result.candidates.isEmpty {
+                pendingNewIngredient = newIngredient
+                pendingRawName = parsed.name
+                pendingMatch = result
             }
         }
         try? context.save()
+    }
+
+    private func confirm(_ candidate: Ingredient) {
+        guard let newIngredient = pendingNewIngredient else { return }
+        try? IngredientIdentity.confirmMatch(
+            newIngredient: newIngredient,
+            canonical: candidate,
+            context: context
+        )
+        clearPendingMatch()
+        try? context.save()
+    }
+
+    private func rejectPendingMatch() {
+        guard let candidates = pendingMatch?.candidates,
+              let newIngredient = pendingNewIngredient else {
+            clearPendingMatch()
+            return
+        }
+        for candidate in candidates {
+            IngredientIdentity.rejectMatch(named: pendingRawName, for: candidate, on: newIngredient)
+        }
+        clearPendingMatch()
+        try? context.save()
+    }
+
+    private func clearPendingMatch() {
+        pendingMatch = nil
+        pendingNewIngredient = nil
+        pendingRawName = ""
     }
 }
 

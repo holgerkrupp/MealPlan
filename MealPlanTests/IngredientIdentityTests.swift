@@ -22,6 +22,70 @@ struct IngredientIdentityTests {
         #expect(IngredientMatching.match("Mihl", in: [first, second]) == nil)
     }
 
+    @Test func manualChoiceCanRejectAnUncertainCandidate() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let canonical = Ingredient(name: "Joghurt")
+        household.ingredients = [canonical]
+        canonical.household = household
+        context.insert(household)
+        context.insert(canonical)
+
+        let separate = IngredientIdentity.upsert(
+            named: "Jogurt",
+            household: household,
+            context: context,
+            source: .userConfirmed,
+            confidence: 1
+        )
+        #expect(separate !== canonical)
+        #expect(separate.pendingMergeSuggestions.count == 1)
+
+        IngredientIdentity.rejectMatch(named: "Jogurt", for: canonical, on: separate)
+        #expect(separate.pendingMergeSuggestions.isEmpty)
+        #expect(IngredientMatching.result(for: "Jogurt", in: [canonical]).matchClass == .noMatch)
+
+        try context.save()
+    }
+
+    @Test func importedSpellingStaysFaithfulUntilConfirmedAndThenLearns() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let canonical = Ingredient(name: "Joghurt")
+        household.ingredients = [canonical]
+        canonical.household = household
+        context.insert(household)
+        context.insert(canonical)
+
+        var recipe = ImportedRecipe(name: "Breakfast")
+        recipe.ingredientLines = ["200 g Jogurt (cremig)"]
+        let dish = DishBuilder.makeDish(
+            from: recipe,
+            household: household,
+            createdByName: nil,
+            context: context
+        )
+        let line = try #require(dish.sortedIngredients.first)
+        let imported = try #require(line.ingredient)
+        #expect(imported !== canonical)
+        #expect(line.rawText == "200 g Jogurt (cremig)")
+        #expect(line.note == "cremig")
+        #expect(imported.pendingMergeSuggestions.first?.candidateUUID == canonical.uuid)
+
+        try IngredientIdentity.confirmMatch(
+            newIngredient: imported,
+            canonical: canonical,
+            context: context
+        )
+        #expect(line.ingredient === canonical)
+        #expect(line.rawText == "200 g Jogurt (cremig)")
+        #expect(line.note == "cremig")
+        #expect((canonical.aliases ?? []).contains { $0.normalizedName == "jogurt" })
+        #expect(IngredientIdentity.upsert(named: "Jogurt", household: household, context: context) === canonical)
+    }
+
     @Test func mergeRepointsRelationshipsAndKeepsCanonicalMetadata() throws {
         let container = SharedStore.make(cloudKit: false, inMemory: true)
         let context = container.mainContext

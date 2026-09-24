@@ -103,6 +103,8 @@ enum HouseholdRecordApplier {
             model.nutritionFatGrams = value.nutritionFatGrams
             model.nutritionReferenceRaw = value.nutritionReferenceRaw
             model.nutritionSourceRaw = value.nutritionSourceRaw
+            model.rejectedMatchKeys = value.rejectedMatchKeys ?? []
+            model.pendingMergeSuggestionsData = value.pendingMergeSuggestionsData
             model.modifiedAt = modifiedAt
             model.household = household
 

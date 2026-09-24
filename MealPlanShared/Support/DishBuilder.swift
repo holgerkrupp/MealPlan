@@ -44,6 +44,7 @@ enum DishBuilder {
             let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
             ingredient.household = household
             context.insert(ingredient)
+            IngredientIdentity.queueMergeSuggestion(for: rawName, result: match, on: ingredient)
             ingredientMatcher.add(ingredient)
             if !normalized.isEmpty { resolvedIngredients[normalized] = ingredient }
             return ingredient
@@ -218,9 +219,14 @@ enum DishBuilder {
         }
 
         if (dish.ingredients ?? []).isEmpty {
+            let importSession = ImportSession(household: dish.household)
             for (index, rawLine) in recipe.ingredientLines.enumerated() {
                 let parsed = GermanUnitParser.parse(rawLine)
-                let ingredient = upsertIngredient(named: parsed.name, household: dish.household, context: context)
+                let ingredient = importSession.ingredient(
+                    named: parsed.name,
+                    household: dish.household,
+                    context: context
+                )
                 let line = DishIngredient(
                     canonicalValue: parsed.quantity?.value,
                     dimension: parsed.quantity?.dimension,
@@ -282,9 +288,14 @@ enum DishBuilder {
             || recipe.importedSourceApp == "KptnCook"
         if replacesIngredients {
             for line in dish.ingredients ?? [] { context.delete(line) }
+            let importSession = ImportSession(household: dish.household)
             if let structured = recipe.structuredIngredients {
                 for (index, value) in structured.enumerated() {
-                    let ingredient = upsertIngredient(named: value.name, household: dish.household, context: context)
+                    let ingredient = importSession.ingredient(
+                        named: value.name,
+                        household: dish.household,
+                        context: context
+                    )
                     ingredient.category = value.category
                     ingredient.customAisleName = value.customAisleName
                     ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
@@ -307,7 +318,11 @@ enum DishBuilder {
             } else {
                 for (index, rawLine) in recipe.ingredientLines.enumerated() {
                     let parsed = GermanUnitParser.parse(rawLine)
-                    let ingredient = upsertIngredient(named: parsed.name, household: dish.household, context: context)
+                    let ingredient = importSession.ingredient(
+                        named: parsed.name,
+                        household: dish.household,
+                        context: context
+                    )
                     let line = DishIngredient(
                         canonicalValue: parsed.quantity?.value,
                         dimension: parsed.quantity?.dimension,

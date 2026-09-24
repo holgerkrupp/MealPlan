@@ -129,6 +129,8 @@ enum MealPlanBackupRestore {
             ingredient.nutritionFatGrams = stored.nutritionFatGrams
             ingredient.nutritionReferenceRaw = stored.nutritionReferenceRaw
             ingredient.nutritionSourceRaw = stored.nutritionSourceRaw
+            ingredient.rejectedMatchKeys = stored.rejectedMatchKeys ?? []
+            ingredient.pendingMergeSuggestionsData = stored.pendingMergeSuggestionsData
             ingredient.household = household
             context.insert(ingredient)
             for storedAlias in stored.aliases ?? [] {

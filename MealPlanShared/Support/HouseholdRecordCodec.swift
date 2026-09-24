@@ -279,7 +279,9 @@ enum HouseholdRecordCodec {
                 customAisleName: ingredient.customAisleName, isPantryStaple: ingredient.isPantryStaple,
                 nutritionEnergyKcal: ingredient.nutritionEnergyKcal, nutritionProteinGrams: ingredient.nutritionProteinGrams,
                 nutritionCarbGrams: ingredient.nutritionCarbGrams, nutritionFatGrams: ingredient.nutritionFatGrams,
-                nutritionReferenceRaw: ingredient.nutritionReferenceRaw, nutritionSourceRaw: ingredient.nutritionSourceRaw
+                nutritionReferenceRaw: ingredient.nutritionReferenceRaw, nutritionSourceRaw: ingredient.nutritionSourceRaw,
+                rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,
+                pendingMergeSuggestionsData: ingredient.pendingMergeSuggestionsData
             )))
             for alias in ingredient.aliases ?? [] {
                 try append(.init(type: .ingredientAlias, uuid: alias.uuid), alias.modifiedAt, .ingredientAlias(.init(

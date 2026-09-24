@@ -8,6 +8,10 @@ enum IngredientIdentity {
         IngredientMatching.match(rawName, in: ingredients)
     }
 
+    static func matchResult(named rawName: String, in ingredients: [Ingredient]) -> IngredientMatchResult {
+        IngredientMatching.result(for: rawName, in: ingredients)
+    }
+
     @discardableResult
     static func addAlias(
         named rawName: String,
@@ -43,7 +47,8 @@ enum IngredientIdentity {
         source: IngredientAliasSource = .automatic,
         confidence: Double? = nil
     ) -> Ingredient {
-        if let existing = resolve(named: rawName, in: household?.ingredients ?? []) {
+        let result = matchResult(named: rawName, in: household?.ingredients ?? [])
+        if let existing = result.candidate, result.isSafeForSilentReuse {
             addAlias(
                 named: rawName,
                 to: existing,
@@ -57,7 +62,75 @@ enum IngredientIdentity {
         let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
         ingredient.household = household
         context.insert(ingredient)
+        queueMergeSuggestion(for: rawName, result: result, on: ingredient)
         return ingredient
+    }
+
+    /// Records every uncertain candidate on the newly-created spelling. The
+    /// imported/editing line stays attached to that spelling until a person
+    /// chooses what it means.
+    static func queueMergeSuggestion(
+        for rawName: String,
+        result: IngredientMatchResult,
+        on newIngredient: Ingredient
+    ) {
+        guard result.matchClass == .needsConfirmation else { return }
+        let candidates = result.candidates.isEmpty
+            ? result.candidate.map { [$0] } ?? []
+            : result.candidates
+        guard !candidates.isEmpty else { return }
+
+        var suggestions = newIngredient.pendingMergeSuggestions
+        for candidate in candidates where candidate !== newIngredient {
+            let suggestion = IngredientMergeSuggestion(
+                rawName: rawName,
+                normalizedName: Ingredient.normalize(rawName),
+                candidateUUID: candidate.uuid,
+                confidence: result.confidence,
+                reasons: result.reasons.map(\.rawValue),
+                createdAt: .now
+            )
+            guard !suggestions.contains(where: {
+                $0.normalizedName == suggestion.normalizedName
+                    && $0.candidateUUID == suggestion.candidateUUID
+            }) else { continue }
+            suggestions.append(suggestion)
+        }
+        newIngredient.pendingMergeSuggestions = suggestions
+    }
+
+    /// Learns an explicit “same ingredient” choice and removes the duplicate
+    /// row, while preserving every recipe line's raw wording and notes.
+    @discardableResult
+    static func confirmMatch(
+        newIngredient: Ingredient,
+        canonical: Ingredient,
+        context: ModelContext
+    ) throws -> Ingredient {
+        try IngredientMergeService.merge(duplicate: newIngredient, into: canonical, context: context)
+        return canonical
+    }
+
+    /// Learns an explicit “keep separate” choice for this spelling and
+    /// candidate. The spelling remains a real ingredient and will no longer
+    /// produce the same suggestion for that candidate.
+    static func rejectMatch(
+        named rawName: String,
+        for candidate: Ingredient,
+        on newIngredient: Ingredient? = nil
+    ) {
+        let normalized = Ingredient.normalize(rawName)
+        let key = IngredientMatching.key(for: rawName)
+        for value in [normalized, key] where !value.isEmpty && !candidate.rejectedMatchKeys.contains(value) {
+            candidate.rejectedMatchKeys.append(value)
+        }
+        if let newIngredient {
+            newIngredient.pendingMergeSuggestions = newIngredient.pendingMergeSuggestions.filter {
+                !($0.normalizedName == normalized && $0.candidateUUID == candidate.uuid)
+            }
+        }
+        candidate.modifiedAt = .now
+        newIngredient?.modifiedAt = .now
     }
 }
 
@@ -92,6 +165,9 @@ enum IngredientMergeService {
         }
         for item in duplicate.shoppingItems ?? [] {
             item.ingredient = canonical
+        }
+        canonical.pendingMergeSuggestions = canonical.pendingMergeSuggestions.filter {
+            $0.candidateUUID != duplicate.uuid
         }
 
         // Persist the reassignment first. If deletion fails, the duplicate is

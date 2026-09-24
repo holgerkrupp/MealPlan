@@ -16,6 +16,15 @@ final class Ingredient {
     /// Pantry staples are normally on hand and are omitted when rebuilding a
     /// generated shopping list. They can still be added manually.
     var isPantryStaple: Bool = false
+    /// Normalized matcher keys the household explicitly decided not to merge
+    /// into this ingredient. Keeping the spelling-level decision on the
+    /// canonical row makes it durable without making the fuzzy matcher trust
+    /// a rejected candidate again.
+    var rejectedMatchKeys: [String] = []
+    /// JSON-encoded pending suggestions. Suggestions belong to the newly
+    /// created spelling so the raw catalogue entry remains available until a
+    /// person confirms or rejects the proposed merge.
+    var pendingMergeSuggestionsData: Data?
 
     // MARK: Nutrition
     //
@@ -111,11 +120,38 @@ final class Ingredient {
         return custom.isEmpty ? category.localizedName : custom
     }
 
+    var pendingMergeSuggestions: [IngredientMergeSuggestion] {
+        get {
+            guard let data = pendingMergeSuggestionsData else { return [] }
+            return (try? JSONDecoder().decode([IngredientMergeSuggestion].self, from: data)) ?? []
+        }
+        set {
+            pendingMergeSuggestionsData = try? JSONEncoder().encode(newValue)
+        }
+    }
+
+    func rejectsMatch(for rawName: String) -> Bool {
+        let normalized = Ingredient.normalize(rawName)
+        let key = IngredientMatching.key(for: rawName)
+        return rejectedMatchKeys.contains(normalized) || rejectedMatchKeys.contains(key)
+    }
+
     static func normalize(_ raw: String) -> String {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .folding(options: .diacriticInsensitive, locale: .init(identifier: "de"))
     }
+}
+
+/// A persisted, non-destructive suggestion created when an import or edit is
+/// close enough to deserve a question but not safe enough to merge silently.
+struct IngredientMergeSuggestion: Codable, Sendable, Equatable {
+    var rawName: String
+    var normalizedName: String
+    var candidateUUID: UUID
+    var confidence: Double
+    var reasons: [String]
+    var createdAt: Date
 }
 
 /// A spelling that has been associated with one canonical ingredient.

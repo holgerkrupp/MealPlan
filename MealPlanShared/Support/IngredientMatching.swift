@@ -103,7 +103,8 @@ struct IngredientMatcher {
             )
         }
 
-        let exactTerms = termsByNormalizedName[normalized] ?? []
+        let exactTerms = (termsByNormalizedName[normalized] ?? [])
+            .filter { !$0.ingredient.rejectsMatch(for: name) }
         let exactIngredients = distinctIngredients(exactTerms)
         if !exactIngredients.isEmpty {
             let canonical = exactTerms.filter(\.isCanonical)
@@ -145,6 +146,7 @@ struct IngredientMatcher {
         let wanted = IngredientMatching.key(for: name)
         let plausibleTerms = (max(0, wanted.count - 2)...(wanted.count + 2))
             .flatMap { termsByLength[$0] ?? [] }
+            .filter { !$0.ingredient.rejectsMatch(for: name) }
         var bestByIngredient: [ObjectIdentifier: ScoredCandidate] = [:]
 
         for term in plausibleTerms {

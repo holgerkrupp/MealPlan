@@ -110,6 +110,10 @@ struct MealPlanBackup: Codable, Sendable {
         var nutritionSourceRaw: String? = nil
         /// Optional for compatibility with backups written before aliases.
         var aliases: [PortableIngredientAlias]? = nil
+        /// Optional for compatibility with backups written before ingredient
+        /// match decisions were persisted.
+        var rejectedMatchKeys: [String]? = nil
+        var pendingMergeSuggestionsData: Data? = nil
     }
 
     struct PortableIngredientAlias: Codable, Sendable, Equatable {
@@ -440,7 +444,9 @@ extension MealPlanBackup {
                     nutritionFatGrams: ingredient.nutritionFatGrams,
                     nutritionReferenceRaw: ingredient.nutritionReferenceRaw,
                     nutritionSourceRaw: ingredient.nutritionSourceRaw,
-                    aliases: aliases.isEmpty ? nil : aliases
+                    aliases: aliases.isEmpty ? nil : aliases,
+                    rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,
+                    pendingMergeSuggestionsData: ingredient.pendingMergeSuggestionsData
                 )
             } else {
                 // Merging duplicates: a pantry staple stays a pantry staple.
@@ -449,6 +455,12 @@ extension MealPlanBackup {
                 let known = Set(existing.map(\.normalizedName))
                 let additions = aliases.filter { !known.contains($0.normalizedName) }
                 if !additions.isEmpty { catalogue[key]?.aliases = existing + additions }
+                let rejected = Set(catalogue[key]?.rejectedMatchKeys ?? [])
+                let allRejected = rejected.union(ingredient.rejectedMatchKeys)
+                catalogue[key]?.rejectedMatchKeys = allRejected.isEmpty ? nil : Array(allRejected).sorted()
+                if catalogue[key]?.pendingMergeSuggestionsData == nil {
+                    catalogue[key]?.pendingMergeSuggestionsData = ingredient.pendingMergeSuggestionsData
+                }
             }
         }
         func key(for ingredient: Ingredient?) -> String? {
