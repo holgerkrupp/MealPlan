@@ -9,30 +9,38 @@ struct RecipeSchemaParser: RecipeImporter {
     var session: URLSession = .shared
 
     func importRecipe(from url: URL) async throws -> ImportedRecipe {
-        let page = try await fetchRecipePage(from: url)
-        let html = page.html
-        let sourceURL = page.url
+        try await importExtraction(from: url).recipe
+    }
 
+    /// Imports a recipe without losing the quality and provenance information
+    /// needed by the editable preview. `importRecipe` remains as the protocol
+    /// compatibility API for callers that only need the recipe value.
+    func importExtraction(from url: URL) async throws -> RecipeExtractionResult {
+        let page = try await fetchRecipePage(from: url)
+        return await extract(fromHTML: page.html, sourceURL: page.url)
+    }
+
+    private func extract(fromHTML html: String, sourceURL: URL) async -> RecipeExtractionResult {
         // KptnCook's page contains a hidden, incomplete microdata block as
         // well as the rows a person actually sees.  Give its narrow parser
         // first refusal so a generic schema parser cannot accidentally turn
         // that compatibility markup into an ingredient list.
         if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await result(recipe, source: .semanticHTML, html: html)
         }
         if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await result(recipe, source: .jsonLD, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await result(recipe, source: .semanticHTML, html: html)
         }
         if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await result(recipe, source: .microdata, html: html)
         }
         if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await result(recipe, source: .semanticHTML, html: html)
         }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        return await result(heuristic(html: html, sourceURL: sourceURL), source: .semanticHTML, html: html)
     }
 
     /// Parses HTML the caller already has, rather than fetching it. The
@@ -40,22 +48,34 @@ struct RecipeSchemaParser: RecipeImporter {
     /// actually looking at — cookie banners dismissed, lazy content rendered —
     /// instead of whatever a fresh anonymous request would return.
     func importRecipe(fromHTML html: String, sourceURL: URL) async throws -> ImportedRecipe {
-        if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+        try await importExtraction(fromHTML: html, sourceURL: sourceURL).recipe
+    }
+
+    func importExtraction(fromHTML html: String, sourceURL: URL) async throws -> RecipeExtractionResult {
+        await extract(fromHTML: html, sourceURL: sourceURL)
+    }
+
+    private func result(
+        _ recipe: ImportedRecipe,
+        source: RecipeExtractionProvenance,
+        html: String
+    ) async -> RecipeExtractionResult {
+        let recipe = await withImage(recipe, html: html)
+        var provenance: [RecipeExtractionField: RecipeExtractionProvenance] = [:]
+        provenance[.title] = source
+        if !recipe.ingredientLines.isEmpty || recipe.structuredIngredients?.isEmpty == false {
+            provenance[.ingredients] = source
         }
-        if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
-        }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        if recipe.instructions?.isEmpty == false { provenance[.instructions] = source }
+        if recipe.servings != nil { provenance[.servings] = source }
+        if recipe.prepTimeMinutes != nil { provenance[.prepTime] = source }
+        if recipe.cookTimeMinutes != nil { provenance[.cookTime] = source }
+        if recipe.imageData != nil || recipe.imageURLString != nil { provenance[.image] = source }
+        return RecipeExtractionResult(
+            recipe: recipe,
+            provenance: provenance,
+            evidence: ["parser=\(source.rawValue)"]
+        )
     }
 
     // MARK: - Fetch
