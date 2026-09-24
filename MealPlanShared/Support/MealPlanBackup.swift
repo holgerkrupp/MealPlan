@@ -108,6 +108,16 @@ struct MealPlanBackup: Codable, Sendable {
         var nutritionFatGrams: Double? = nil
         var nutritionReferenceRaw: String? = nil
         var nutritionSourceRaw: String? = nil
+        /// Optional for compatibility with backups written before aliases.
+        var aliases: [PortableIngredientAlias]? = nil
+    }
+
+    struct PortableIngredientAlias: Codable, Sendable, Equatable {
+        var uuid: UUID
+        var name: String
+        var normalizedName: String
+        var sourceRaw: String
+        var confidence: Double?
     }
 
     struct PortableDish: Codable, Sendable {
@@ -408,6 +418,15 @@ extension MealPlanBackup {
         var catalogue: [String: PortableIngredient] = [:]
         func remember(_ ingredient: Ingredient) {
             let key = ingredient.normalizedName
+            let aliases = (ingredient.aliases ?? []).map {
+                PortableIngredientAlias(
+                    uuid: $0.uuid,
+                    name: $0.name,
+                    normalizedName: $0.normalizedName,
+                    sourceRaw: $0.sourceRaw,
+                    confidence: $0.confidence
+                )
+            }
             if catalogue[key] == nil {
                 catalogue[key] = PortableIngredient(
                     name: ingredient.name,
@@ -420,11 +439,16 @@ extension MealPlanBackup {
                     nutritionCarbGrams: ingredient.nutritionCarbGrams,
                     nutritionFatGrams: ingredient.nutritionFatGrams,
                     nutritionReferenceRaw: ingredient.nutritionReferenceRaw,
-                    nutritionSourceRaw: ingredient.nutritionSourceRaw
+                    nutritionSourceRaw: ingredient.nutritionSourceRaw,
+                    aliases: aliases.isEmpty ? nil : aliases
                 )
-            } else if ingredient.isPantryStaple {
+            } else {
                 // Merging duplicates: a pantry staple stays a pantry staple.
-                catalogue[key]?.isPantryStaple = true
+                if ingredient.isPantryStaple { catalogue[key]?.isPantryStaple = true }
+                let existing = catalogue[key]?.aliases ?? []
+                let known = Set(existing.map(\.normalizedName))
+                let additions = aliases.filter { !known.contains($0.normalizedName) }
+                if !additions.isEmpty { catalogue[key]?.aliases = existing + additions }
             }
         }
         func key(for ingredient: Ingredient?) -> String? {

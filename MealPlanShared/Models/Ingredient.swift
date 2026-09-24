@@ -2,7 +2,7 @@ import Foundation
 import SwiftData
 
 /// A shopping-relevant ingredient, shared across all dishes in a household.
-/// Matched and de-duplicated on `normalizedName`.
+/// Matched and de-duplicated on `normalizedName` and its persistent aliases.
 @Model
 final class Ingredient {
     var uuid: UUID = UUID()
@@ -41,6 +41,9 @@ final class Ingredient {
 
     @Relationship(deleteRule: .nullify, inverse: \ShoppingListItem.ingredient)
     var shoppingItems: [ShoppingListItem]? = []
+
+    @Relationship(deleteRule: .cascade, inverse: \IngredientAlias.ingredient)
+    var aliases: [IngredientAlias]? = []
 
     var household: Household?
 
@@ -112,5 +115,35 @@ final class Ingredient {
         raw.trimmingCharacters(in: .whitespacesAndNewlines)
             .lowercased()
             .folding(options: .diacriticInsensitive, locale: .init(identifier: "de"))
+    }
+}
+
+/// A spelling that has been associated with one canonical ingredient.
+/// Keeping aliases as rows makes them queryable and independently syncable.
+@Model
+final class IngredientAlias {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
+    var name: String = ""
+    var normalizedName: String = ""
+    var sourceRaw: String = IngredientAliasSource.automatic.rawValue
+    var confidence: Double?
+
+    var ingredient: Ingredient?
+
+    init(
+        name: String = "",
+        source: IngredientAliasSource = .automatic,
+        confidence: Double? = nil
+    ) {
+        self.name = name
+        self.normalizedName = Ingredient.normalize(name)
+        self.sourceRaw = source.rawValue
+        self.confidence = confidence
+    }
+
+    var source: IngredientAliasSource {
+        get { IngredientAliasSource(rawValue: sourceRaw) ?? .automatic }
+        set { sourceRaw = newValue.rawValue }
     }
 }

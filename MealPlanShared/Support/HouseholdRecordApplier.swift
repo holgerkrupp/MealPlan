@@ -18,6 +18,7 @@ enum HouseholdRecordApplier {
         case .dish: touch(Dish.self, identity.uuid, date, context)
         case .dishImage: touch(DishImage.self, identity.uuid, date, context)
         case .ingredient: touch(Ingredient.self, identity.uuid, date, context)
+        case .ingredientAlias: touch(IngredientAlias.self, identity.uuid, date, context)
         case .dishIngredient: touch(DishIngredient.self, identity.uuid, date, context)
         case .planEntry:
             if let model = find(MealPlanEntry.self, identity.uuid, context) {
@@ -104,6 +105,18 @@ enum HouseholdRecordApplier {
             model.nutritionSourceRaw = value.nutritionSourceRaw
             model.modifiedAt = modifiedAt
             model.household = household
+
+        case .ingredientAlias(let value):
+            guard let ingredient = find(Ingredient.self, value.ingredientID, context) else {
+                throw HouseholdRecordCodecError.missingRelationship
+            }
+            let model = find(IngredientAlias.self, identity.uuid, context) ?? insert(IngredientAlias(), identity.uuid, context)
+            model.name = value.name
+            model.normalizedName = value.normalizedName
+            model.sourceRaw = value.sourceRaw
+            model.confidence = value.confidence
+            model.modifiedAt = modifiedAt
+            model.ingredient = ingredient
 
         case .dish(let value):
             let model = find(Dish.self, identity.uuid, context) ?? insert(Dish(), identity.uuid, context)
@@ -297,6 +310,7 @@ enum HouseholdRecordApplier {
         case .dish: delete(Dish.self, uuid, context)
         case .dishImage: delete(DishImage.self, uuid, context)
         case .ingredient: delete(Ingredient.self, uuid, context)
+        case .ingredientAlias: delete(IngredientAlias.self, uuid, context)
         case .dishIngredient: delete(DishIngredient.self, uuid, context)
         case .planEntry: delete(MealPlanEntry.self, uuid, context)
         case .routine: delete(MealRoutine.self, uuid, context)

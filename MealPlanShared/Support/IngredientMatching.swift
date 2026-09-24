@@ -58,16 +58,28 @@ enum IngredientMatching {
         return editDistance(Array(a), Array(b), limit: tolerance) <= tolerance
     }
 
-    /// The catalogue entry that means the same as `name`. An exact match on the
-    /// normalized name wins; only then is a near one considered.
+    /// The catalogue entry that means the same as `name`. Exact canonical
+    /// names win, followed by exact aliases. Fuzzy matching is used only when
+    /// it produces one candidate; a close spelling is not permission to merge
+    /// two plausible ingredients.
     static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
         let normalized = Ingredient.normalize(name)
         guard !normalized.isEmpty else { return nil }
         if let exact = ingredients.first(where: { $0.normalizedName == normalized }) {
             return exact
         }
+        let aliasMatches = ingredients.filter { ingredient in
+            (ingredient.aliases ?? []).contains { $0.normalizedName == normalized }
+        }
+        if aliasMatches.count == 1 { return aliasMatches[0] }
+        if aliasMatches.count > 1 { return nil }
+
         let wanted = key(for: name)
-        return ingredients.first { keysMatch(key(for: $0.name), wanted) }
+        let candidates = ingredients.filter { ingredient in
+            keysMatch(key(for: ingredient.name), wanted)
+                || (ingredient.aliases ?? []).contains { keysMatch(key(for: $0.name), wanted) }
+        }
+        return candidates.count == 1 ? candidates[0] : nil
     }
 
     // MARK: - Compounds

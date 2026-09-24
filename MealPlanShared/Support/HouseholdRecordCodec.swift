@@ -14,6 +14,7 @@ extension MealType: HouseholdSyncModel {}
 extension Dish: HouseholdSyncModel {}
 extension DishImage: HouseholdSyncModel {}
 extension Ingredient: HouseholdSyncModel {}
+extension IngredientAlias: HouseholdSyncModel {}
 extension DishIngredient: HouseholdSyncModel {}
 extension MealPlanEntry: HouseholdSyncModel {}
 extension MealRoutine: HouseholdSyncModel {}
@@ -32,6 +33,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case dish = "MPDish"
     case dishImage = "MPDishImage"
     case ingredient = "MPIngredient"
+    case ingredientAlias = "MPIngredientAlias"
     case dishIngredient = "MPDishIngredient"
     case planEntry = "MPMealPlanEntry"
     case routine = "MPMealRoutine"
@@ -48,7 +50,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     var applyPriority: Int {
         switch self {
         case .household: 0
-        case .member, .mealType, .ingredient, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
+        case .member, .mealType, .ingredient, .ingredientAlias, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
         case .dishIngredient, .planEntry, .routine, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
         case .dishImage, .cookedLogImage: 3
         case .deletionMarker: 4
@@ -127,6 +129,14 @@ struct DishIngredientPayload: Codable, Sendable {
     var translatedNote: String? = nil
 }
 
+struct IngredientAliasPayload: Codable, Sendable {
+    var ingredientID: UUID
+    var name: String
+    var normalizedName: String
+    var sourceRaw: String
+    var confidence: Double?
+}
+
 struct PlanEntryPayload: Codable, Sendable {
     var value: MealPlanBackup.PortableEntry
     var placementModifiedAt: Date
@@ -171,6 +181,7 @@ enum HouseholdRecordPayload: Codable, Sendable {
     case dish(MealPlanBackup.PortableDish)
     case dishImage(DishImagePayload)
     case ingredient(MealPlanBackup.PortableIngredient)
+    case ingredientAlias(IngredientAliasPayload)
     case dishIngredient(DishIngredientPayload)
     case planEntry(PlanEntryPayload)
     case routine(MealPlanBackup.PortableRoutine)
@@ -270,6 +281,12 @@ enum HouseholdRecordCodec {
                 nutritionCarbGrams: ingredient.nutritionCarbGrams, nutritionFatGrams: ingredient.nutritionFatGrams,
                 nutritionReferenceRaw: ingredient.nutritionReferenceRaw, nutritionSourceRaw: ingredient.nutritionSourceRaw
             )))
+            for alias in ingredient.aliases ?? [] {
+                try append(.init(type: .ingredientAlias, uuid: alias.uuid), alias.modifiedAt, .ingredientAlias(.init(
+                    ingredientID: ingredient.uuid, name: alias.name, normalizedName: alias.normalizedName,
+                    sourceRaw: alias.sourceRaw, confidence: alias.confidence
+                )))
+            }
         }
         for dish in household.dishes ?? [] {
             try append(.init(type: .dish, uuid: dish.uuid), dish.modifiedAt, .dish(portableDish(dish)))
@@ -521,6 +538,7 @@ actor HouseholdSnapshotActor {
         touchModels(household.members ?? [], type: .member)
         touchModels(household.mealTypes ?? [], type: .mealType)
         touchModels(household.ingredients ?? [], type: .ingredient)
+        touchModels((household.ingredients ?? []).flatMap { $0.aliases ?? [] }, type: .ingredientAlias)
         touchModels(household.dishes ?? [], type: .dish)
         touchModels((household.dishes ?? []).flatMap { $0.images ?? [] }, type: .dishImage)
         touchModels((household.dishes ?? []).flatMap { $0.ingredients ?? [] }, type: .dishIngredient)

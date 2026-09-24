@@ -19,6 +19,7 @@ enum DishBuilder {
         private var ingredientCount = 0
         private var ingredientsByKeyLength: [Int: [IndexedIngredient]] = [:]
         private var exactIngredients: [String: Ingredient] = [:]
+        private var exactAliases: [String: [Ingredient]] = [:]
         private var resolvedIngredients: [String: Ingredient] = [:]
         fileprivate private(set) var tagVocabulary: [String]
 
@@ -43,6 +44,13 @@ enum DishBuilder {
                 normalized: normalized
             ) {
                 resolvedIngredients[normalized] = existing
+                IngredientIdentity.addAlias(
+                    named: rawName,
+                    to: existing,
+                    source: .imported,
+                    confidence: 0.8,
+                    context: context
+                )
                 return existing
             }
 
@@ -59,17 +67,19 @@ enum DishBuilder {
         /// inflection tolerance, instead of rescanning the entire catalogue.
         private func matchingIngredient(named rawName: String, normalized: String) -> Ingredient? {
             if let exact = exactIngredients[normalized] { return exact }
+            if let aliases = exactAliases[normalized], aliases.count == 1 { return aliases[0] }
+            if exactAliases[normalized]?.isEmpty == false { return nil }
 
             let wanted = IngredientMatching.key(for: rawName)
-            var best: IndexedIngredient?
+            var matches: [IndexedIngredient] = []
             for length in max(0, wanted.count - 2)...(wanted.count + 2) {
                 for candidate in ingredientsByKeyLength[length] ?? []
-                where (best == nil || candidate.offset < best!.offset)
-                    && IngredientMatching.keysMatch(candidate.matchingKey, wanted) {
-                    best = candidate
+                where IngredientMatching.keysMatch(candidate.matchingKey, wanted) {
+                    matches.append(candidate)
                 }
             }
-            return best?.ingredient
+            let distinct = Dictionary(grouping: matches, by: { $0.ingredient.uuid })
+            return distinct.count == 1 ? distinct.values.first?.first?.ingredient : nil
         }
 
         private func index(_ ingredient: Ingredient) {
@@ -83,6 +93,15 @@ enum DishBuilder {
                 matchingKey: key,
                 offset: ingredientCount
             ))
+            for alias in ingredient.aliases ?? [] where !alias.normalizedName.isEmpty {
+                exactAliases[alias.normalizedName, default: []].append(ingredient)
+                let aliasKey = IngredientMatching.key(for: alias.name)
+                ingredientsByKeyLength[aliasKey.count, default: []].append(IndexedIngredient(
+                    ingredient: ingredient,
+                    matchingKey: aliasKey,
+                    offset: ingredientCount
+                ))
+            }
             ingredientCount += 1
         }
 
@@ -498,17 +517,12 @@ enum DishBuilder {
 
     @MainActor
     static func upsertIngredient(named rawName: String, household: Household?, context: ModelContext) -> Ingredient {
-        let normalized = Ingredient.normalize(rawName)
-        // Near matches count: an import that spells it "Salz*" should reuse the
-        // household's "Salz" rather than leave two of them in the catalogue and
-        // two rows on the shopping list.
-        if !normalized.isEmpty,
-           let existing = IngredientMatching.match(rawName, in: household?.ingredients ?? []) {
-            return existing
-        }
-        let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
-        ingredient.household = household
-        context.insert(ingredient)
-        return ingredient
+        IngredientIdentity.upsert(
+            named: rawName,
+            household: household,
+            context: context,
+            source: .imported,
+            confidence: 0.8
+        )
     }
 }

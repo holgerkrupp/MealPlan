@@ -57,6 +57,7 @@ enum MealPlanBackupRestore {
         try deleteAll(DishIngredient.self, in: context)
         try deleteAll(DishImage.self, in: context)
         try deleteAll(Dish.self, in: context)
+        try deleteAll(IngredientAlias.self, in: context)
         try deleteAll(Ingredient.self, in: context)
         try deleteAll(MealType.self, in: context)
         try deleteAll(HouseholdMember.self, in: context)
@@ -130,6 +131,17 @@ enum MealPlanBackupRestore {
             ingredient.nutritionSourceRaw = stored.nutritionSourceRaw
             ingredient.household = household
             context.insert(ingredient)
+            for storedAlias in stored.aliases ?? [] {
+                let alias = IngredientAlias(
+                    name: storedAlias.name,
+                    source: IngredientAliasSource(rawValue: storedAlias.sourceRaw) ?? .automatic,
+                    confidence: storedAlias.confidence
+                )
+                alias.uuid = storedAlias.uuid
+                alias.normalizedName = storedAlias.normalizedName
+                alias.ingredient = ingredient
+                context.insert(alias)
+            }
             ingredients[stored.normalizedName] = ingredient
         }
 

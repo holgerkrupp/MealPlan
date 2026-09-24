@@ -147,6 +147,13 @@ enum IngredientCategory: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// How a spelling became known to the household catalogue.
+enum IngredientAliasSource: String, CaseIterable, Codable, Sendable {
+    case automatic
+    case userConfirmed
+    case imported
+}
+
 // MARK: - Season
 
 enum Season: String, CaseIterable, Identifiable, Codable, Sendable {

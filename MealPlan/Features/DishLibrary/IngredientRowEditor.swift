@@ -106,16 +106,31 @@ struct IngredientRowEditor: View {
         let normalized = Ingredient.normalize(parsed.name)
         if line.ingredient?.normalizedName != normalized {
             if let household = line.dish?.household,
-               let match = (household.ingredients ?? []).first(where: { $0.normalizedName == normalized }) {
+               let match = IngredientIdentity.resolve(named: parsed.name, in: household.ingredients ?? []) {
                 line.ingredient = match
+                IngredientIdentity.addAlias(
+                    named: parsed.name,
+                    to: match,
+                    source: .userConfirmed,
+                    confidence: 1,
+                    context: context
+                )
             } else if let ingredient = line.ingredient, (ingredient.dishIngredients?.count ?? 0) <= 1 {
-                ingredient.name = parsed.name
-                ingredient.normalizedName = normalized
+                IngredientIdentity.addAlias(
+                    named: parsed.name,
+                    to: ingredient,
+                    source: .userConfirmed,
+                    confidence: 1,
+                    context: context
+                )
             } else {
-                let ingredient = Ingredient(name: parsed.name)
-                ingredient.household = line.dish?.household
-                context.insert(ingredient)
-                line.ingredient = ingredient
+                line.ingredient = IngredientIdentity.upsert(
+                    named: parsed.name,
+                    household: line.dish?.household,
+                    context: context,
+                    source: .userConfirmed,
+                    confidence: 1
+                )
             }
         }
         try? context.save()

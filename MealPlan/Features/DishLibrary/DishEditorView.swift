@@ -440,15 +440,13 @@ struct DishEditorView: View {
     }
 
     private func upsertIngredient(named rawName: String) -> Ingredient {
-        let normalized = Ingredient.normalize(rawName)
-        if let existing = (appState.currentHousehold?.ingredients ?? [])
-            .first(where: { $0.normalizedName == normalized }) {
-            return existing
-        }
-        let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
-        ingredient.household = appState.currentHousehold
-        context.insert(ingredient)
-        return ingredient
+        IngredientIdentity.upsert(
+            named: rawName,
+            household: appState.currentHousehold,
+            context: context,
+            source: .userConfirmed,
+            confidence: 1
+        )
     }
 
     // MARK: - Save / cancel
