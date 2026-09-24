@@ -238,6 +238,116 @@ struct RecipeSchemaParserTests {
         #expect(parser.parseGenericHTML(html: html, sourceURL: url) == nil)
     }
 
+    @Test func structuredPipelineSkipsMalformedBlockAndDecodesCompleteGraphRecipe() {
+        let html = """
+        <script type="application/ld+json">{"broken":</script>
+        <script type="application/ld+json">
+        [
+          {"@type":"WebPage","name":"ignore"},
+          {"@type":["Recipe","NewsArticle"],"name":"Kartoffelgratin",
+           "recipeIngredient":["1 ½ kg Kartoffeln", "200 ml Sahne", "⅓ TL Muskat"],
+           "recipeInstructions":[
+             {"@type":"HowToStep","text":"Kartoffeln hobeln."},
+             {"@type":"HowToStep","text":"Mit Sahne backen."}
+           ],
+           "image":[{"url":"https://example.test/first.jpg"},{"url":"https://example.test/second.jpg"}]}
+        ]
+        </script>
+        """
+
+        let recipe = parser.parseJSONLD(html: html, sourceURL: url)
+        #expect(recipe?.name == "Kartoffelgratin")
+        #expect(recipe?.ingredientLines == ["1 ½ kg Kartoffeln", "200 ml Sahne", "⅓ TL Muskat"])
+        #expect(recipe?.instructions?.contains("1. Kartoffeln hobeln.") == true)
+        #expect(recipe?.imageURLString == "https://example.test/first.jpg")
+    }
+
+    @Test func howToSectionsPreserveSectionNamesAndNestedSteps() {
+        let html = """
+        <script type="application/ld+json">
+        {"@type":"Recipe","name":"Curry","recipeInstructions":[
+          {"@type":"HowToSection","name":"Sauce","itemListElement":[
+            {"@type":"HowToStep","text":"Zwiebeln anschwitzen."},
+            {"@type":"HowToStep","text":"Kokosmilch einrühren."}
+          ]},
+          {"@type":"HowToSection","name":"Finish","itemListElement":[
+            {"@type":"HowToStep","text":"Mit Limette servieren."}
+          ]}
+        ]}
+        </script>
+        """
+
+        let recipe = parser.parseJSONLD(html: html, sourceURL: url)
+        #expect(recipe?.instructions?.contains("Sauce: Zwiebeln anschwitzen.") == true)
+        #expect(recipe?.instructions?.contains("Finish: Mit Limette servieren.") == true)
+        #expect(recipe?.instructions?.contains("3. Finish") == false)
+    }
+
+    @Test func embeddedNextDataIsSearchedRecursively() {
+        let html = """
+        <script id="__NEXT_DATA__" type="application/json">
+        {"props":{"pageProps":{"recipe":{"@type":"Recipe","name":"Next Pasta",
+          "recipeIngredient":["80 g Nudeln"],"recipeInstructions":"Kochen."}}}}
+        </script>
+        """
+
+        let recipe = parser.parseEmbeddedJSON(html: html, sourceURL: url)
+        #expect(recipe?.name == "Next Pasta")
+        #expect(recipe?.ingredientLines == ["80 g Nudeln"])
+        #expect(recipe?.instructions?.contains("Kochen.") == true)
+        #expect(parser.structuredCandidates(in: html, sourceURL: url).first?.provenance == .embeddedJSON)
+    }
+
+    @Test func microdataScopesPropertiesAndAcceptsHttpSchema() {
+        let html = """
+        <article itemscope itemtype="http://schema.org/Recipe">
+          <meta itemprop="recipeYield" content="6 servings">
+          <h1 itemprop="name">Mikrodata-Pasta</h1>
+          <ul><li itemprop="recipeIngredient">250 g Spaghetti</li><li itemprop="recipeIngredient">1 ½ EL Öl</li></ul>
+          <div itemprop="recipeInstructions"><span>Wasser aufkochen.</span></div>
+          <img src="https://example.test/pasta.jpg" itemprop="image">
+        </article>
+        <div itemprop="recipeIngredient">not part of recipe</div>
+        """
+
+        let recipe = parser.parseMicrodata(html: html, sourceURL: url)
+        #expect(recipe?.name == "Mikrodata-Pasta")
+        #expect(recipe?.ingredientLines == ["250 g Spaghetti", "1 ½ EL Öl"])
+        #expect(recipe?.servings == 6)
+        #expect(recipe?.instructions?.contains("Wasser aufkochen.") == true)
+        #expect(recipe?.imageURLString == "https://example.test/pasta.jpg")
+    }
+
+    @Test func moreCompleteRecipeCandidateWinsAcrossJSONLDBlocks() {
+        let html = """
+        <script type="application/ld+json">
+        {"@type":"Recipe","name":"Short copy","recipeIngredient":["salt"]}
+        </script>
+        <script type="application/ld+json">
+        {"@type":"Recipe","name":"Complete copy","recipeIngredient":["1 cup flour","2 eggs"],
+         "recipeInstructions":["Mix.","Bake."],"recipeYield":"4 servings"}
+        </script>
+        """
+
+        let candidates = parser.structuredCandidates(in: html, sourceURL: url)
+        #expect(candidates.count == 2)
+        #expect(parser.parseJSONLD(html: html, sourceURL: url)?.name == "Complete copy")
+        #expect(candidates.allSatisfy { $0.provenance == .jsonLD })
+        #expect(candidates.max(by: { $0.score < $1.score })?.evidence.contains("instructions") == true)
+    }
+
+    @Test func headingsAreNotRecipePayload() {
+        let html = """
+        <html><head><title>Not a recipe</title></head><body>
+          <h2>Ingredients</h2><ul><li>Ingredients</li></ul>
+          <h2>Directions</h2><ol><li>Directions</li></ol>
+        </body></html>
+        """
+
+        #expect(parser.parseGenericHTML(html: html, sourceURL: url) == nil)
+        #expect(parser.parseJSONLD(html: html, sourceURL: url) == nil)
+    }
+
     // MARK: - Tags
 
     @Test func keywordsAndCategoriesBecomeTags() {
