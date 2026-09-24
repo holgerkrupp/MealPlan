@@ -34,6 +34,12 @@ private extension RecipeHTMLNode {
 struct RecipeSchemaParser: RecipeImporter {
 
     var session: URLSession = .shared
+    var aiExtractor: any RecipeAIExtractor
+
+    init(session: URLSession = .shared, aiExtractor: any RecipeAIExtractor = FoundationModelsRecipeAIExtractor()) {
+        self.session = session
+        self.aiExtractor = aiExtractor
+    }
 
     func importRecipe(from url: URL) async throws -> ImportedRecipe {
         try await importExtraction(from: url).recipe
@@ -45,7 +51,24 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     private func extract(fromHTML html: String, sourceURL: URL) async -> RecipeExtractionResult {
-        let parsed = parseRenderedHTML(html, sourceURL: sourceURL)
+        var parsed = parseRenderedHTML(html, sourceURL: sourceURL)
+        if RecipeQualityValidator.needsAI(for: parsed), aiExtractor.availability == .available {
+            let representation = RecipeWebPageRepresentation(
+                html: html,
+                sourceURL: parsed.sourceURL ?? URL(string: "about:blank")!,
+                deterministicResult: .init(
+                    title: parsed.name,
+                    servings: parsed.servings,
+                    prepTimeMinutes: parsed.prepTimeMinutes,
+                    cookTimeMinutes: parsed.cookTimeMinutes,
+                    ingredients: parsed.ingredientLines,
+                    instructions: parsed.instructions
+                )
+            )
+            if let extraction = await aiExtractor.extract(from: representation) {
+                parsed = RecipeAIMerger.merge(extraction, into: parsed, representation: representation)
+            }
+        }
         let recipe = await withImage(parsed, html: html)
         var provenance: [RecipeExtractionField: RecipeExtractionProvenance] = [:]
         for (field, evidence) in recipe.fieldEvidence {
@@ -61,6 +84,17 @@ struct RecipeSchemaParser: RecipeImporter {
             case "instructions": provenance[.instructions] = mapped
             case "image": provenance[.image] = mapped
             default: break
+            }
+        }
+        for field in recipe.aiDerivedFields {
+            switch field {
+            case .title: provenance[.title] = .appleIntelligence
+            case .servings: provenance[.servings] = .appleIntelligence
+            case .prepTime: provenance[.prepTime] = .appleIntelligence
+            case .cookTime: provenance[.cookTime] = .appleIntelligence
+            case .ingredients: provenance[.ingredients] = .appleIntelligence
+            case .instructions: provenance[.instructions] = .appleIntelligence
+            case .category, .cuisine: break
             }
         }
         return RecipeExtractionResult(recipe: recipe, provenance: provenance, evidence: ["parser=combined-rendered-html"])

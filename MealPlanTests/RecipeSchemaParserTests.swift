@@ -6,6 +6,7 @@ struct RecipeSchemaParserTests {
 
     let parser = RecipeSchemaParser()
     let url = URL(string: "https://www.chefkoch.de/rezepte/123/Test.html")!
+    private let completeJSONLD = #"<script type="application/ld+json">{"@type":"Recipe","name":"Spaghetti Bolognese","recipeIngredient":["500 g beef","1 onion"],"recipeInstructions":"Cook the onion and beef."}</script>"#
 
     @Test func extractsPlainJSONLDRecipe() {
         let html = """
@@ -368,5 +369,147 @@ struct RecipeSchemaParserTests {
             "a, b, c, d, e, f, g, h"
         ])
         #expect(tags == ["Vegan"])
+    }
+
+    // MARK: - Apple Intelligence fallback
+
+    @Test func unavailableAILeavesTheDeterministicPartialImportUntouched() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .unavailable, result: .init(
+            ingredients: [RecipeAIField(value: "1 cup invented", evidence: ["1 cup invented"])]
+        ))
+        let html = """
+        <div itemscope itemtype="https://schema.org/Recipe">
+          <h1 itemprop="name">Soup</h1>
+          <li itemprop="recipeIngredient">1 onion</li>
+        </div>
+        """
+
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: html, sourceURL: url)
+
+        #expect(recipe.ingredientLines == ["1 onion"])
+        #expect(recipe.instructions == nil)
+        #expect(recipe.aiDerivedFields.isEmpty)
+        #expect(await mock.callCount == 0)
+    }
+
+    @Test func completeDeterministicRecipeDoesNotInvokeAI() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
+            ingredients: [RecipeAIField(value: "hallucinated", evidence: ["hallucinated"])]
+        ))
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: completeJSONLD, sourceURL: url)
+
+        #expect(recipe.name == "Spaghetti Bolognese")
+        #expect(recipe.ingredientLines.count == 2)
+        #expect(recipe.aiDerivedFields.isEmpty)
+        #expect(await mock.callCount == 0)
+    }
+
+    @Test func partialDeterministicRecipeCanBeCompletedWithGroundedFields() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
+            ingredients: [RecipeAIField(value: "2 tomatoes", evidence: ["2 tomatoes"])],
+            instructions: [RecipeAIField(value: "Mix the onion and tomatoes.", evidence: ["Mix the onion and tomatoes."])]
+        ))
+        let html = """
+        <html><head><title>Tomato soup</title></head><body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Tomato soup</h1>
+            <li itemprop="recipeIngredient">1 onion</li>
+          </div>
+          <h2>Directions</h2><p>Mix the onion and tomatoes.</p>
+        </body></html>
+        """
+
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: html, sourceURL: url)
+
+        #expect(recipe.ingredientLines == ["1 onion", "2 tomatoes"])
+        #expect(recipe.instructions?.contains("Mix the onion and tomatoes.") == true)
+        #expect(recipe.aiDerivedFields.contains(.ingredients))
+        #expect(recipe.aiDerivedFields.contains(.instructions))
+        #expect(recipe.needsReview)
+        #expect(await mock.callCount == 1)
+    }
+
+    @Test func hallucinatedFieldsWithoutGroundingAreRejected() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
+            ingredients: [RecipeAIField(value: "3 cups unicorn dust", evidence: ["3 cups unicorn dust"])],
+            instructions: [RecipeAIField(value: "Teleport the soup.", evidence: ["Teleport the soup."])]
+        ))
+        let html = """
+        <div itemscope itemtype="https://schema.org/Recipe">
+          <h1 itemprop="name">Soup</h1>
+          <li itemprop="recipeIngredient">1 onion</li>
+        </div>
+        """
+
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: html, sourceURL: url)
+
+        #expect(recipe.ingredientLines == ["1 onion"])
+        #expect(recipe.instructions == nil)
+        #expect(recipe.aiDerivedFields.isEmpty)
+    }
+
+    @Test func validJSONLDIngredientsCannotBeOverwrittenByAI() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
+            ingredients: [RecipeAIField(value: "3 invented ingredients", evidence: ["3 invented ingredients"])],
+            instructions: [RecipeAIField(value: "Stir the sauce.", evidence: ["Stir the sauce."])]
+        ))
+        let html = """
+        <script type="application/ld+json">
+        {"@type":"Recipe","name":"Sauce","recipeIngredient":["1 onion","2 tomatoes"],
+         "recipeInstructions":"Stir the sauce."}
+        </script>
+        """
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: html, sourceURL: url)
+
+        #expect(recipe.ingredientLines == ["1 onion", "2 tomatoes"])
+        #expect(recipe.instructions == "Stir the sauce.")
+        #expect(recipe.aiDerivedFields.isEmpty)
+        #expect(await mock.callCount == 0)
+    }
+
+    @Test func headingPlaceholdersCanBeReplacedByGroundedAIContent() async throws {
+        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
+            ingredients: [RecipeAIField(value: "1 cup flour", evidence: ["1 cup flour"])],
+            instructions: [RecipeAIField(value: "Bake until golden.", evidence: ["Bake until golden."])]
+        ))
+        let html = """
+        <html><body>
+          <div itemscope itemtype="https://schema.org/Recipe">
+            <h1 itemprop="name">Cake</h1>
+            <li itemprop="recipeIngredient">Ingredients</li>
+            <p itemprop="recipeInstructions">Directions</p>
+          </div>
+          <h2>Ingredients</h2><p>1 cup flour</p>
+          <h2>Directions</h2><p>Bake until golden.</p>
+        </body></html>
+        """
+        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
+            .importRecipe(fromHTML: html, sourceURL: url)
+
+        #expect(recipe.ingredientLines == ["1 cup flour"])
+        #expect(recipe.instructions?.contains("Bake until golden.") == true)
+        #expect(recipe.aiDerivedFields == [.ingredients, .instructions])
+        #expect(recipe.usedAppleIntelligence)
+    }
+}
+
+private actor CountingRecipeAIExtractor: RecipeAIExtractor {
+    let availability: RecipeAIAvailability
+    let result: RecipeAIExtraction?
+    private(set) var callCount = 0
+
+    init(availability: RecipeAIAvailability, result: RecipeAIExtraction?) {
+        self.availability = availability
+        self.result = result
+    }
+
+    func extract(from representation: RecipeWebPageRepresentation) async -> RecipeAIExtraction? {
+        callCount += 1
+        return result
     }
 }
