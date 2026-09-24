@@ -74,4 +74,78 @@ struct IngredientMatchingTests {
         #expect(IngredientMatching.match("Zwiebel", in: [plural]) === plural)
         #expect(IngredientMatching.match("Lauch", in: [plural, exact]) == nil)
     }
+
+    // MARK: - Explainable candidate results
+
+    @Test func exactNamesAndConfirmedAliasesAreCertain() {
+        let yoghurt = Ingredient(name: "Joghurt")
+        let alias = IngredientAlias(name: "Jogurt", source: .userConfirmed, confidence: 1)
+        alias.ingredient = yoghurt
+        yoghurt.aliases = [alias]
+
+        let exact = IngredientMatching.result(for: "Joghurt", in: [yoghurt])
+        #expect(exact.candidate === yoghurt)
+        #expect(exact.matchClass == .certain)
+        #expect(exact.confidence == 1)
+        #expect(exact.reasons == [.exactName])
+        #expect(exact.isSafeForSilentReuse)
+
+        let confirmedAlias = IngredientMatching.matchResult(for: "Jogurt", in: [yoghurt])
+        #expect(confirmedAlias.candidate === yoghurt)
+        #expect(confirmedAlias.matchClass == .certain)
+        #expect(confirmedAlias.reasons == [.exactAlias])
+        #expect(confirmedAlias.isSafeForAutomaticReuse)
+    }
+
+    @Test func GermanAndEnglishNormalizationCanBeReusedSafely() {
+        let flour = Ingredient(name: "Flour")
+        let german = Ingredient(name: "Mehl")
+        let english = IngredientMatching.result(for: "Bio Mehl nach Geschmack", in: [german])
+        #expect(english.candidate === german)
+        #expect(english.matchClass == .highConfidence)
+        #expect(english.reasons == [.normalizedKey])
+        #expect(english.isSafeForSilentReuse)
+
+        let plural = IngredientMatching.result(for: "eggs", in: [flour, Ingredient(name: "egg")])
+        #expect(plural.candidate?.name == "egg")
+        #expect(plural.matchClass == .highConfidence)
+        #expect(plural.reasons == [.inflection])
+        #expect(plural.isSafeForSilentReuse)
+    }
+
+    @Test func fuzzyAndReorderedCandidatesNeedConfirmation() {
+        let yoghurt = Ingredient(name: "Joghurt")
+        let typo = IngredientMatching.result(for: "Jogurt", in: [yoghurt])
+        #expect(typo.candidate === yoghurt)
+        #expect(typo.matchClass == .needsConfirmation)
+        #expect(typo.reasons == [.spellingDistance])
+        #expect(!typo.isSafeForSilentReuse)
+        #expect(IngredientMatching.match("Jogurt", in: [yoghurt]) == nil)
+
+        let tomatoes = Ingredient(name: "gehackt Tomaten")
+        let reordered = IngredientMatching.result(for: "Tomaten, gehackt", in: [tomatoes])
+        #expect(reordered.candidate === tomatoes)
+        #expect(reordered.matchClass == .needsConfirmation)
+        #expect(reordered.reasons.contains(.normalizedKey))
+        #expect(reordered.reasons.contains(.tokenOverlap))
+        #expect(!reordered.isSafeForAutomaticReuse)
+    }
+
+    @Test func qualifiersAndCollisionsAreNeverSilentlyMerged() {
+        let onion = Ingredient(name: "Zwiebel")
+        let qualified = IngredientMatching.result(for: "rote Zwiebel", in: [onion])
+        #expect(qualified.matchClass == .noMatch)
+        #expect(qualified.candidate == nil)
+        #expect(qualified.reasons.isEmpty)
+
+        let first = Ingredient(name: "Mehl")
+        let second = Ingredient(name: "Mehl")
+        let collision = IngredientMatching.result(for: "Mehl", in: [first, second])
+        #expect(collision.candidate == nil)
+        #expect(collision.candidates.count == 2)
+        #expect(collision.matchClass == .needsConfirmation)
+        #expect(collision.reasons.contains(.candidateCollision))
+        #expect(!collision.isSafeForSilentReuse)
+        #expect(IngredientMatching.match("Mehl", in: [first, second]) == nil)
+    }
 }

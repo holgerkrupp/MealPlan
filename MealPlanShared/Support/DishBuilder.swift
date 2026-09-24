@@ -10,24 +10,13 @@ enum DishBuilder {
     /// ingredient catalogue and tag vocabulary.
     @MainActor
     final class ImportSession {
-        private struct IndexedIngredient {
-            var ingredient: Ingredient
-            var matchingKey: String
-            var offset: Int
-        }
-
-        private var ingredientCount = 0
-        private var ingredientsByKeyLength: [Int: [IndexedIngredient]] = [:]
-        private var exactIngredients: [String: Ingredient] = [:]
-        private var exactAliases: [String: [Ingredient]] = [:]
+        private var ingredientMatcher: IngredientMatcher
         private var resolvedIngredients: [String: Ingredient] = [:]
         fileprivate private(set) var tagVocabulary: [String]
 
         init(household: Household?) {
             tagVocabulary = DishTag.vocabulary(from: household?.dishes ?? [])
-            for ingredient in household?.ingredients ?? [] {
-                index(ingredient)
-            }
+            ingredientMatcher = IngredientMatcher(ingredients: household?.ingredients ?? [])
         }
 
         fileprivate func ingredient(
@@ -39,10 +28,8 @@ enum DishBuilder {
             if !normalized.isEmpty, let cached = resolvedIngredients[normalized] {
                 return cached
             }
-            if !normalized.isEmpty, let existing = matchingIngredient(
-                named: rawName,
-                normalized: normalized
-            ) {
+            let match = ingredientMatcher.result(for: rawName)
+            if let existing = match.candidate, match.isSafeForSilentReuse {
                 resolvedIngredients[normalized] = existing
                 IngredientIdentity.addAlias(
                     named: rawName,
@@ -57,52 +44,9 @@ enum DishBuilder {
             let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
             ingredient.household = household
             context.insert(ingredient)
-            index(ingredient)
+            ingredientMatcher.add(ingredient)
             if !normalized.isEmpty { resolvedIngredients[normalized] = ingredient }
             return ingredient
-        }
-
-        /// Exact names are constant-time. Fuzzy matching only examines keys
-        /// whose lengths are close enough to be within the matcher's edit or
-        /// inflection tolerance, instead of rescanning the entire catalogue.
-        private func matchingIngredient(named rawName: String, normalized: String) -> Ingredient? {
-            if let exact = exactIngredients[normalized] { return exact }
-            if let aliases = exactAliases[normalized], aliases.count == 1 { return aliases[0] }
-            if exactAliases[normalized]?.isEmpty == false { return nil }
-
-            let wanted = IngredientMatching.key(for: rawName)
-            var matches: [IndexedIngredient] = []
-            for length in max(0, wanted.count - 2)...(wanted.count + 2) {
-                for candidate in ingredientsByKeyLength[length] ?? []
-                where IngredientMatching.keysMatch(candidate.matchingKey, wanted) {
-                    matches.append(candidate)
-                }
-            }
-            let distinct = Dictionary(grouping: matches, by: { $0.ingredient.uuid })
-            return distinct.count == 1 ? distinct.values.first?.first?.ingredient : nil
-        }
-
-        private func index(_ ingredient: Ingredient) {
-            let normalized = ingredient.normalizedName
-            if !normalized.isEmpty, exactIngredients[normalized] == nil {
-                exactIngredients[normalized] = ingredient
-            }
-            let key = IngredientMatching.key(for: ingredient.name)
-            ingredientsByKeyLength[key.count, default: []].append(IndexedIngredient(
-                ingredient: ingredient,
-                matchingKey: key,
-                offset: ingredientCount
-            ))
-            for alias in ingredient.aliases ?? [] where !alias.normalizedName.isEmpty {
-                exactAliases[alias.normalizedName, default: []].append(ingredient)
-                let aliasKey = IngredientMatching.key(for: alias.name)
-                ingredientsByKeyLength[aliasKey.count, default: []].append(IndexedIngredient(
-                    ingredient: ingredient,
-                    matchingKey: aliasKey,
-                    offset: ingredientCount
-                ))
-            }
-            ingredientCount += 1
         }
 
         fileprivate func record(tags: [String]) {

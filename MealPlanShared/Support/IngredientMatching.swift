@@ -1,5 +1,271 @@
 import Foundation
 
+/// Why an ingredient was considered a candidate.
+enum IngredientMatchReason: String, CaseIterable, Codable, Sendable {
+    case exactName
+    case exactAlias
+    case normalizedKey
+    case inflection
+    case spellingDistance
+    case tokenOverlap
+    case candidateCollision
+}
+
+/// How much trust an automatic caller can put in a candidate.
+enum IngredientMatchClass: String, CaseIterable, Codable, Sendable {
+    case certain
+    case highConfidence
+    case needsConfirmation
+    case noMatch
+
+    var isSafeForSilentReuse: Bool {
+        switch self {
+        case .certain, .highConfidence: true
+        case .needsConfirmation, .noMatch: false
+        }
+    }
+}
+
+/// The explainable result of matching one recipe spelling against a catalogue.
+///
+/// A result can carry several `candidates` when the catalogue is ambiguous.
+/// In that case `candidate` is deliberately `nil`: callers must not silently
+/// choose one merely because it happened to be first in a SwiftData fetch.
+struct IngredientMatchResult {
+    let query: String
+    let candidate: Ingredient?
+    let candidates: [Ingredient]
+    let confidence: Double
+    let matchClass: IngredientMatchClass
+    let reasons: [IngredientMatchReason]
+
+    var isSafeForSilentReuse: Bool {
+        candidate != nil && matchClass.isSafeForSilentReuse
+    }
+
+    /// A descriptive alias for clients that use the policy wording.
+    var isSafeForAutomaticReuse: Bool { isSafeForSilentReuse }
+
+    var isAmbiguous: Bool { reasons.contains(.candidateCollision) }
+}
+
+/// An indexed ingredient catalogue. Build it once for a bulk import or list
+/// rebuild so each lookup only examines keys whose lengths could match.
+struct IngredientMatcher {
+    private struct Term {
+        let ingredient: Ingredient
+        let normalizedName: String
+        let key: String
+        let isCanonical: Bool
+        let aliasSource: IngredientAliasSource?
+    }
+
+    private struct ScoredCandidate {
+        let ingredient: Ingredient
+        let rank: Int
+        let confidence: Double
+        let matchClass: IngredientMatchClass
+        let reasons: [IngredientMatchReason]
+    }
+
+    private var termsByLength: [Int: [Term]] = [:]
+    private var termsByNormalizedName: [String: [Term]] = [:]
+
+    init(ingredients: [Ingredient] = []) {
+        for ingredient in ingredients { add(ingredient) }
+    }
+
+    mutating func add(_ ingredient: Ingredient) {
+        add(Term(
+            ingredient: ingredient,
+            normalizedName: ingredient.normalizedName,
+            key: IngredientMatching.key(for: ingredient.name),
+            isCanonical: true,
+            aliasSource: nil
+        ))
+        for alias in ingredient.aliases ?? [] where !alias.normalizedName.isEmpty {
+            add(Term(
+                ingredient: ingredient,
+                normalizedName: alias.normalizedName,
+                key: IngredientMatching.key(for: alias.name),
+                isCanonical: false,
+                aliasSource: alias.source
+            ))
+        }
+    }
+
+    func result(for name: String) -> IngredientMatchResult {
+        let normalized = Ingredient.normalize(name)
+        guard !normalized.isEmpty else {
+            return IngredientMatchResult(
+                query: name, candidate: nil, candidates: [], confidence: 0,
+                matchClass: .noMatch, reasons: []
+            )
+        }
+
+        let exactTerms = termsByNormalizedName[normalized] ?? []
+        let exactIngredients = distinctIngredients(exactTerms)
+        if !exactIngredients.isEmpty {
+            let canonical = exactTerms.filter(\.isCanonical)
+            let reason: IngredientMatchReason = canonical.isEmpty ? .exactAlias : .exactName
+            let allConfirmed = exactTerms
+                .filter { !$0.isCanonical }
+                .allSatisfy { $0.aliasSource == .userConfirmed }
+
+            if exactIngredients.count == 1 {
+                let exactClass: IngredientMatchClass
+                let confidence: Double
+                if reason == .exactName || allConfirmed {
+                    exactClass = .certain
+                    confidence = 1
+                } else {
+                    // Imported/automatic aliases are useful evidence, but a
+                    // person has not explicitly confirmed them yet.
+                    exactClass = .needsConfirmation
+                    confidence = 0.92
+                }
+                return IngredientMatchResult(
+                    query: name,
+                    candidate: exactIngredients[0],
+                    candidates: exactIngredients,
+                    confidence: confidence,
+                    matchClass: exactClass,
+                    reasons: [reason]
+                )
+            }
+
+            return collisionResult(
+                query: name,
+                candidates: exactIngredients,
+                confidence: 1,
+                reasons: [reason, .candidateCollision]
+            )
+        }
+
+        let wanted = IngredientMatching.key(for: name)
+        let plausibleTerms = (max(0, wanted.count - 2)...(wanted.count + 2))
+            .flatMap { termsByLength[$0] ?? [] }
+        var bestByIngredient: [ObjectIdentifier: ScoredCandidate] = [:]
+
+        for term in plausibleTerms {
+            guard IngredientMatching.keysMatch(term.key, wanted) else { continue }
+            let scored = score(term: term, query: name, wantedKey: wanted)
+            let id = ObjectIdentifier(term.ingredient)
+            if let previous = bestByIngredient[id], previous.rank <= scored.rank {
+                continue
+            }
+            bestByIngredient[id] = scored
+        }
+
+        let best = bestByIngredient.values.sorted { $0.rank < $1.rank }
+        guard let first = best.first else {
+            return IngredientMatchResult(
+                query: name, candidate: nil, candidates: [], confidence: 0,
+                matchClass: .noMatch, reasons: []
+            )
+        }
+        let tied = best.filter { $0.rank == first.rank }
+        if tied.count > 1 {
+            return collisionResult(
+                query: name,
+                candidates: tied.map(\.ingredient),
+                confidence: first.confidence,
+                reasons: first.reasons + [.candidateCollision]
+            )
+        }
+
+        return IngredientMatchResult(
+            query: name,
+            candidate: first.ingredient,
+            candidates: [first.ingredient],
+            confidence: first.confidence,
+            matchClass: first.matchClass,
+            reasons: first.reasons
+        )
+    }
+
+    func match(_ name: String) -> Ingredient? {
+        let result = result(for: name)
+        return result.isSafeForSilentReuse ? result.candidate : nil
+    }
+
+    private mutating func add(_ term: Term) {
+        guard !term.normalizedName.isEmpty, !term.key.isEmpty else { return }
+        termsByLength[term.key.count, default: []].append(term)
+        termsByNormalizedName[term.normalizedName, default: []].append(term)
+    }
+
+    private func score(term: Term, query: String, wantedKey: String) -> ScoredCandidate {
+        if term.key == wantedKey {
+            let queryTokens = IngredientMatching.tokens(for: query)
+            let candidateTokens = IngredientMatching.tokens(for: term.isCanonical ? term.ingredient.name : term.normalizedName)
+            let reordered = queryTokens != candidateTokens
+                && Set(queryTokens) == Set(candidateTokens)
+            if reordered {
+                return ScoredCandidate(
+                    ingredient: term.ingredient,
+                    rank: 3,
+                    confidence: 0.76,
+                    matchClass: .needsConfirmation,
+                    reasons: [.normalizedKey, .tokenOverlap]
+                )
+            }
+            return ScoredCandidate(
+                ingredient: term.ingredient,
+                rank: 1,
+                confidence: 0.91,
+                matchClass: .highConfidence,
+                reasons: [.normalizedKey]
+            )
+        }
+
+        if IngredientMatching.isInflection(of: wantedKey, term.key)
+            || IngredientMatching.isInflection(of: term.key, wantedKey) {
+            return ScoredCandidate(
+                ingredient: term.ingredient,
+                rank: 2,
+                confidence: 0.88,
+                matchClass: .highConfidence,
+                reasons: [.inflection]
+            )
+        }
+
+        return ScoredCandidate(
+            ingredient: term.ingredient,
+            rank: 4,
+            confidence: 0.62,
+            matchClass: .needsConfirmation,
+            reasons: [.spellingDistance]
+        )
+    }
+
+    private func distinctIngredients(_ terms: [Term]) -> [Ingredient] {
+        var result: [Ingredient] = []
+        var seen: Set<ObjectIdentifier> = []
+        for term in terms {
+            let id = ObjectIdentifier(term.ingredient)
+            if seen.insert(id).inserted { result.append(term.ingredient) }
+        }
+        return result
+    }
+
+    private func collisionResult(
+        query: String,
+        candidates: [Ingredient],
+        confidence: Double,
+        reasons: [IngredientMatchReason]
+    ) -> IngredientMatchResult {
+        IngredientMatchResult(
+            query: query,
+            candidate: nil,
+            candidates: candidates,
+            confidence: confidence,
+            matchClass: .needsConfirmation,
+            reasons: reasons
+        )
+    }
+}
+
 /// Deciding when two ingredient names mean the same thing to buy.
 ///
 /// Recipes arrive from everywhere — typed by hand, scanned, imported from a
@@ -59,27 +325,22 @@ enum IngredientMatching {
     }
 
     /// The catalogue entry that means the same as `name`. Exact canonical
-    /// names win, followed by exact aliases. Fuzzy matching is used only when
-    /// it produces one candidate; a close spelling is not permission to merge
-    /// two plausible ingredients.
+    /// names and confirmed aliases are safe. Fuzzy and reordered candidates
+    /// are returned by `matchResult` for user-facing suggestions, but are not
+    /// silently reused by this compatibility helper.
     static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
-        let normalized = Ingredient.normalize(name)
-        guard !normalized.isEmpty else { return nil }
-        if let exact = ingredients.first(where: { $0.normalizedName == normalized }) {
-            return exact
-        }
-        let aliasMatches = ingredients.filter { ingredient in
-            (ingredient.aliases ?? []).contains { $0.normalizedName == normalized }
-        }
-        if aliasMatches.count == 1 { return aliasMatches[0] }
-        if aliasMatches.count > 1 { return nil }
+        IngredientMatcher(ingredients: ingredients).match(name)
+    }
 
-        let wanted = key(for: name)
-        let candidates = ingredients.filter { ingredient in
-            keysMatch(key(for: ingredient.name), wanted)
-                || (ingredient.aliases ?? []).contains { keysMatch(key(for: $0.name), wanted) }
-        }
-        return candidates.count == 1 ? candidates[0] : nil
+    /// Explain every candidate decision without coupling matching to SwiftUI
+    /// or a model context. For repeated lookups, keep an `IngredientMatcher`.
+    static func matchResult(for name: String, in ingredients: [Ingredient]) -> IngredientMatchResult {
+        IngredientMatcher(ingredients: ingredients).result(for: name)
+    }
+
+    /// Short form for callers that prefer the noun used by the API goal.
+    static func result(for name: String, in ingredients: [Ingredient]) -> IngredientMatchResult {
+        matchResult(for: name, in: ingredients)
     }
 
     // MARK: - Compounds
@@ -129,6 +390,14 @@ enum IngredientMatching {
         name.filter { !$0.isLetter && !$0.isNumber && !$0.isWhitespace }.count
     }
 
+    fileprivate static func tokens(for name: String) -> [String] {
+        let stripped = removingBracketed(Ingredient.normalize(name))
+        return stripped
+            .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
+            .map(String.init)
+            .filter { !filler.contains($0) && !$0.allSatisfy(\.isNumber) }
+    }
+
     /// Drop "(nach Geschmack)" and the like, brackets and all.
     private static func removingBracketed(_ text: String) -> String {
         var result = ""
@@ -145,7 +414,7 @@ enum IngredientMatching {
 
     /// "Zwiebel" / "Zwiebeln", "egg" / "eggs" — one is the other plus a plural
     /// or inflection ending.
-    private static func isInflection(of base: String, _ candidate: String) -> Bool {
+    fileprivate static func isInflection(of base: String, _ candidate: String) -> Bool {
         guard base.count >= 3, candidate.count > base.count, candidate.hasPrefix(base) else {
             return false
         }
