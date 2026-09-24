@@ -1,6 +1,177 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Add ingredient" : {
+
+    },
+    "Add package size" : {
+
+    },
+    "Add size" : {
+
+    },
+    "Amount" : {
+
+    },
+    "Apple Intelligence recovered fields" : {
+
+    },
+    "Built-in sources" : {
+
+    },
+    "Bundled values are read-only defaults. Disable one locally or add a household value; bundled updates never overwrite those choices." : {
+
+    },
+    "category" : {
+
+    },
+    "Chefkoch discovery page" : {
+
+    },
+    "Container" : {
+
+    },
+    "cook time" : {
+
+    },
+    "Cook time (minutes)" : {
+
+    },
+    "Count" : {
+
+    },
+    "cuisine" : {
+
+    },
+    "Dimension" : {
+
+    },
+    "Disable" : {
+
+    },
+    "Disabled" : {
+
+    },
+    "Edited" : {
+
+    },
+    "Enable" : {
+
+    },
+    "Import warning" : {
+
+    },
+    "ingredients" : {
+
+    },
+    "instructions" : {
+
+    },
+    "Instructions" : {
+
+    },
+    "Leftover suggestions" : {
+
+    },
+    "Market" : {
+
+    },
+    "Mass (g)" : {
+
+    },
+    "No enabled sizes for this ingredient" : {
+
+    },
+    "No household" : {
+
+    },
+    "No matching ingredients" : {
+
+    },
+    "Not found" : {
+
+    },
+    "Optional suggestions use typical regional package sizes. They never change recipes, shopping quantities or your plan." : {
+
+    },
+    "Package sizes are typical retail examples, not official standards. The market is independent of the app language; no precise location is used." : {
+
+    },
+    "Package-size market" : {
+
+    },
+    "Preferred" : {
+
+    },
+    "prep time" : {
+
+    },
+    "Prep time (minutes)" : {
+
+    },
+    "Public recipe feeds and discovery pages. MealPlan reads only the index needed to find new recipes." : {
+
+    },
+    "Read from structured recipe data" : {
+
+    },
+    "Read from visible page" : {
+
+    },
+    "Read on device" : {
+
+    },
+    "Recipe discovery page" : {
+
+    },
+    "Recipe feed" : {
+
+    },
+    "Recipe site" : {
+
+    },
+    "Recipe title" : {
+
+    },
+    "Reset" : {
+
+    },
+    "Reset all package sizes" : {
+
+    },
+    "Review recipe" : {
+
+    },
+    "RSS / Atom feed" : {
+
+    },
+    "Search ingredients" : {
+
+    },
+    "servings" : {
+
+    },
+    "Subscribe to (source.name)" : {
+
+    },
+    "Suggest ways to use likely leftovers" : {
+
+    },
+    "This page does not look like a recipe or recipe site." : {
+
+    },
+    "title" : {
+
+    },
+    "Typical package sizes" : {
+
+    },
+    "Use up likely leftovers" : {
+
+    },
+    "Volume (ml)" : {
+
+    },
     "" : {
 
     },
