@@ -8,6 +8,7 @@ struct RecipeDiscoverySource: Identifiable, Hashable, Sendable {
         case openStoveHTML
         case mealDBHTML
         case publicDomainHTML
+        case provider
     }
 
     let id: String
@@ -15,6 +16,16 @@ struct RecipeDiscoverySource: Identifiable, Hashable, Sendable {
     let siteURL: URL
     let contentURL: URL
     let format: Format
+    let detail: String
+
+    init(id: String, name: String, siteURL: URL, contentURL: URL, format: Format, detail: String = "") {
+        self.id = id
+        self.name = name
+        self.siteURL = siteURL
+        self.contentURL = contentURL
+        self.format = format
+        self.detail = detail
+    }
 }
 
 struct RecipeDiscoverySourceResult: Sendable {
@@ -37,21 +48,104 @@ enum RecipeDiscoveryService {
             name: "TheMealDB",
             siteURL: URL(string: "https://www.themealdb.com")!,
             contentURL: URL(string: "https://www.themealdb.com")!,
-            format: .mealDBHTML
+            format: .mealDBHTML,
+            detail: "A public international recipe index."
         ),
         RecipeDiscoverySource(
             id: "openstove",
             name: "OpenStove",
             siteURL: URL(string: "https://openstove.org")!,
             contentURL: URL(string: "https://openstove.org/recipes")!,
-            format: .openStoveHTML
+            format: .openStoveHTML,
+            detail: "Open recipes with public card metadata."
         ),
         RecipeDiscoverySource(
             id: "public-domain-recipes",
             name: "Public Domain Recipes",
             siteURL: URL(string: "https://publicdomainrecipes.com")!,
             contentURL: URL(string: "https://publicdomainrecipes.com")!,
-            format: .publicDomainHTML
+            format: .publicDomainHTML,
+            detail: "A public-domain recipe collection."
+        ),
+        RecipeDiscoverySource(
+            id: "chefkoch",
+            name: "Chefkoch",
+            siteURL: URL(string: "https://www.chefkoch.de")!,
+            contentURL: URL(string: "https://www.chefkoch.de/rezept-des-tages/")!,
+            format: .provider,
+            detail: "Deutschsprachige Rezepte, Rezept des Tages und öffentliche Entdeckungsseiten."
+        ),
+        RecipeDiscoverySource(
+            id: "lecker",
+            name: "LECKER",
+            siteURL: URL(string: "https://www.lecker.de")!,
+            contentURL: URL(string: "https://www.lecker.de")!,
+            format: .feed,
+            detail: "Rezepte, Backideen und Kücheninspiration."
+        ),
+        RecipeDiscoverySource(
+            id: "kuechengotter",
+            name: "Küchengötter",
+            siteURL: URL(string: "https://www.kuechengoetter.de")!,
+            contentURL: URL(string: "https://www.kuechengoetter.de")!,
+            format: .feed,
+            detail: "Erprobte Rezepte aus der Redaktion."
+        ),
+        RecipeDiscoverySource(
+            id: "emmi-kocht-einfach",
+            name: "Emmi kocht einfach",
+            siteURL: URL(string: "https://emmikochteinfach.de")!,
+            contentURL: URL(string: "https://emmikochteinfach.de")!,
+            format: .feed,
+            detail: "Alltagstaugliche Familienküche."
+        ),
+        RecipeDiscoverySource(
+            id: "einfach-backen",
+            name: "Einfach Backen",
+            siteURL: URL(string: "https://www.einfachbacken.de")!,
+            contentURL: URL(string: "https://www.einfachbacken.de")!,
+            format: .feed,
+            detail: "Backrezepte und verständliche Schritt-für-Schritt-Anleitungen."
+        ),
+        RecipeDiscoverySource(
+            id: "einfach-kochen",
+            name: "Einfach Kochen",
+            siteURL: URL(string: "https://www.einfachkochen.de")!,
+            contentURL: URL(string: "https://www.einfachkochen.de")!,
+            format: .feed,
+            detail: "Einfache Rezepte für jeden Tag."
+        ),
+        RecipeDiscoverySource(
+            id: "familienkost",
+            name: "Familienkost",
+            siteURL: URL(string: "https://www.familienkost.de")!,
+            contentURL: URL(string: "https://www.familienkost.de")!,
+            format: .feed,
+            detail: "Familienrezepte für Kinder und Erwachsene."
+        ),
+        RecipeDiscoverySource(
+            id: "essen-und-trinken",
+            name: "essen & trinken",
+            siteURL: URL(string: "https://www.essen-und-trinken.de")!,
+            contentURL: URL(string: "https://www.essen-und-trinken.de")!,
+            format: .feed,
+            detail: "Rezepte und Küchenwissen aus dem Magazin."
+        ),
+        RecipeDiscoverySource(
+            id: "bbc-good-food",
+            name: "BBC Good Food",
+            siteURL: URL(string: "https://www.bbcgoodfood.com")!,
+            contentURL: URL(string: "https://www.bbcgoodfood.com")!,
+            format: .feed,
+            detail: "Public recipe collections from BBC Good Food."
+        ),
+        RecipeDiscoverySource(
+            id: "serious-eats",
+            name: "Serious Eats",
+            siteURL: URL(string: "https://www.seriouseats.com")!,
+            contentURL: URL(string: "https://www.seriouseats.com")!,
+            format: .feed,
+            detail: "Recipe testing, technique and food science."
         ),
     ]
 
@@ -61,20 +155,22 @@ enum RecipeDiscoveryService {
             case failure(Int, String)
         }
 
-        let outcomes = await withTaskGroup(of: Outcome.self) { group in
-            for (index, source) in sources.enumerated() {
-                group.addTask {
-                    do {
-                        return .success(index, try await fetch(source))
-                    } catch {
-                        return .failure(index, source.name)
+        var outcomes: [Outcome] = []
+        for start in stride(from: 0, to: sources.count, by: 4) {
+            let end = min(start + 4, sources.count)
+            let batch = await withTaskGroup(of: Outcome.self) { group in
+                for index in start..<end {
+                    group.addTask {
+                        let source = sources[index]
+                        do { return .success(index, try await fetch(source)) }
+                        catch { return .failure(index, source.name) }
                     }
                 }
+                var collected: [Outcome] = []
+                for await outcome in group { collected.append(outcome) }
+                return collected
             }
-
-            var collected: [Outcome] = []
-            for await outcome in group { collected.append(outcome) }
-            return collected
+            outcomes.append(contentsOf: batch)
         }
 
         var successes: [(Int, RecipeDiscoverySourceResult)] = []
@@ -102,17 +198,19 @@ enum RecipeDiscoveryService {
         let articles: [ParsedFeedArticle]
         switch source.format {
         case .feed:
-            articles = try RecipeFeedParser.parse(
-                data,
-                contentType: http.value(forHTTPHeaderField: "Content-Type"),
-                sourceURL: source.contentURL
-            ).articles
+            let candidate = try await RecipeSiteDiscoveryService.subscriptionCandidates(for: source.contentURL).first
+                ?? RecipeSiteCandidate(title: source.name, siteURL: source.siteURL, contentURL: source.contentURL)
+            articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
         case .openStoveHTML:
             articles = RecipeDiscoveryHTMLParser.openStoveArticles(in: data, baseURL: source.siteURL)
         case .mealDBHTML:
             articles = RecipeDiscoveryHTMLParser.mealDBArticles(in: data, baseURL: source.siteURL)
         case .publicDomainHTML:
             articles = RecipeDiscoveryHTMLParser.publicDomainArticles(in: data, baseURL: source.siteURL)
+        case .provider:
+            let candidate = try await RecipeSiteDiscoveryService.subscriptionCandidates(for: source.contentURL).first
+                ?? RecipeSiteCandidate(title: source.name, siteURL: source.siteURL, contentURL: source.contentURL)
+            articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
         }
 
         guard !articles.isEmpty else { throw RecipeFeedParserError.unsupportedFormat }
@@ -199,6 +297,20 @@ enum RecipeDiscoveryHTMLParser {
                 publishedAt: nil,
                 imageURL: image
             )
+        }.uniquedByURL()
+    }
+
+    static func genericRecipeIndexArticles(in html: String, baseURL: URL) -> [ParsedFeedArticle] {
+        let pattern = #"<a\b[^>]*\bhref\s*=\s*[\"']([^\"']+)[\"'][^>]*>(.*?)</a>"#
+        guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]) else { return [] }
+        return regex.matches(in: html, range: NSRange(html.startIndex..., in: html)).compactMap { match in
+            guard let hrefRange = Range(match.range(at: 1), in: html), let bodyRange = Range(match.range(at: 2), in: html) else { return nil }
+            let href = decodeEntities(String(html[hrefRange]))
+            guard href.lowercased().contains("rezept") || href.lowercased().contains("recipe"),
+                  let url = URL(string: href, relativeTo: baseURL)?.absoluteURL else { return nil }
+            let title = clean(String(html[bodyRange]))
+            guard !title.isEmpty else { return nil }
+            return ParsedFeedArticle(id: url.absoluteString, title: title, url: url, author: nil, summary: nil, body: nil, publishedAt: nil, imageURL: nil)
         }.uniquedByURL()
     }
 

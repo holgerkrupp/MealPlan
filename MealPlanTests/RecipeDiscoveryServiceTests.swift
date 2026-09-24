@@ -4,11 +4,12 @@ import Testing
 
 struct RecipeDiscoveryServiceTests {
     @Test func catalogContainsTheRequestedPublicSources() {
-        #expect(Set(RecipeDiscoveryService.sources.map(\.siteURL.host)) == [
-            "www.themealdb.com",
-            "openstove.org",
-            "publicdomainrecipes.com",
-        ])
+        let names = Set(RecipeDiscoveryService.sources.map(\.name))
+        #expect(names.isSuperset(of: [
+            "Chefkoch", "LECKER", "Küchengötter", "Emmi kocht einfach",
+            "Einfach Backen", "Einfach Kochen", "Familienkost",
+            "essen & trinken", "BBC Good Food", "Serious Eats"
+        ]))
     }
 
     @Test func parsesOpenStoveCards() {

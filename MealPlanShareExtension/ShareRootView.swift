@@ -18,10 +18,13 @@ struct ShareRootView: View {
     /// the plan stripe's ring / filled-square state.
     @State private var plannedByDay: [String: Set<String>] = [:]
     @State private var saveMessage = String(localized: "Saved to MealPlan")
+    @State private var sharedURL: URL?
+    @State private var siteCandidate: RecipeSiteCandidate?
+    @State private var isSubscribing = false
 
     private let container = SharedStore.container(cloudKit: false)
 
-    enum Phase: Equatable { case loading, ready, saving, done, failed(String) }
+    enum Phase: Equatable { case loading, ready, siteReady, ambiguous, saving, done, failed(String) }
 
     var body: some View {
         NavigationStack {
@@ -32,6 +35,10 @@ struct ShareRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
                     ContentUnavailableView(String(localized: "Couldn’t import"), systemImage: "exclamationmark.triangle", description: Text(message))
+                case .siteReady:
+                    siteForm
+                case .ambiguous:
+                    ambiguousForm
                 case .saving:
                     ProgressView(String(localized: "Saving…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -86,6 +93,12 @@ struct ShareRootView: View {
             }
 
             Section {
+                if let siteCandidate {
+                    Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
+                        Task { await subscribeToSite(siteCandidate) }
+                    }
+                    .disabled(isSubscribing)
+                }
                 Toggle(String(localized: "Also plan it"), isOn: $plan.animation(.snappy))
                 if plan {
                     MealPlannerStripCore(
@@ -111,6 +124,54 @@ struct ShareRootView: View {
                 if plan {
                     Text(String(localized: "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day, without using one of your meals."))
                 }
+            }
+        }
+    }
+
+    private var siteForm: some View {
+        Form {
+            Section {
+                Label {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(siteCandidate?.title ?? String(localized: "Recipe site")).font(.headline)
+                        Text(siteCandidate?.detail ?? sharedURL?.host() ?? "")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                    }
+                } icon: {
+                    Image(systemName: "globe")
+                        .foregroundStyle(.tint)
+                }
+            } footer: {
+                Text(String(localized: "MealPlan found a public recipe feed or discovery page. It will keep the source and show future recipes in Discover."))
+            }
+            if let siteCandidate {
+                Section {
+                    Button(String(localized: "Subscribe to recipe site"), systemImage: "dot.radiowaves.left.and.right") {
+                        Task { await subscribeToSite(siteCandidate) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isSubscribing)
+                    if let url = sharedURL {
+                        Link(String(localized: "Open in MealPlan"), destination: url)
+                    }
+                }
+            }
+        }
+    }
+
+    private var ambiguousForm: some View {
+        Form {
+            Section {
+                Text(String(localized: "This shared page could be a recipe or a recipe site."))
+                    .foregroundStyle(.secondary)
+                Button(String(localized: "Import recipe"), systemImage: "fork.knife") {
+                    Task { await importSharedURL() }
+                }
+                Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
+                    Task { await subscribeToSite(siteCandidate ?? .manual(for: sharedURL ?? URL(string: "https://example.com")!)) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(isSubscribing)
             }
         }
     }
@@ -141,12 +202,24 @@ struct ShareRootView: View {
             recipes = [textRecipe(text)]
             phase = .ready
         case .url(let url):
-            do {
-                recipes = [try await RecipeSchemaParser().importRecipe(from: url)]
-                phase = .ready
-            } catch {
-                recipes = [fallbackURLRecipe(url)]
-                phase = .ready
+            sharedURL = url
+            switch await RecipeSiteDiscoveryService.classify(url) {
+            case .recipe:
+                await importSharedURL()
+            case .recipeSite(let candidate):
+                siteCandidate = candidate
+                phase = .siteReady
+            case .feed(let feed):
+                siteCandidate = RecipeSiteCandidate(title: feed.title, siteURL: feed.siteURL, feedURL: feed.feedURL)
+                phase = .siteReady
+            case .ambiguous(let url):
+                sharedURL = url
+                siteCandidate = .manual(for: url)
+                phase = .ambiguous
+            case .unsupported(let url):
+                sharedURL = url
+                siteCandidate = .manual(for: url)
+                await importSharedURL()
             }
         case .paprika(let data):
             do {
@@ -162,6 +235,33 @@ struct ShareRootView: View {
             } catch {
                 phase = .failed(error.localizedDescription)
             }
+        }
+    }
+
+    @MainActor
+    private func importSharedURL() async {
+        guard let url = sharedURL else { return }
+        do {
+            recipes = [try await RecipeSchemaParser().importRecipe(from: url)]
+            phase = .ready
+        } catch {
+            recipes = [fallbackURLRecipe(url)]
+            phase = .ready
+        }
+    }
+
+    @MainActor
+    private func subscribeToSite(_ candidate: RecipeSiteCandidate) async {
+        isSubscribing = true
+        defer { isSubscribing = false }
+        do {
+            let context = container.mainContext
+            let household = try? context.fetch(FetchDescriptor<Household>()).first
+            _ = try await RecipeFeedService.subscribe(to: candidate, household: household, context: context)
+            saveMessage = String(localized: "Subscribed to \(candidate.title)")
+            phase = .done
+        } catch {
+            phase = .failed(error.localizedDescription)
         }
     }
 

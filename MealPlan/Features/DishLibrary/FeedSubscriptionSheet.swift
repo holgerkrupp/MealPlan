@@ -10,6 +10,7 @@ struct FeedSubscriptionSheet: View {
     @State private var address = ""
     @State private var subscribing = false
     @State private var pendingSuggestion: String?
+    @State private var pendingSource: String?
     @State private var errorMessage: String?
     /// The region whose sites are on offer. Empty means "whatever the device
     /// says", which is what almost everyone leaves it at; a deliberate choice
@@ -50,6 +51,38 @@ struct FeedSubscriptionSheet: View {
                     #endif
                 } footer: {
                     Text(String(localized: "MealPlan finds the site’s RSS, Atom or JSON feed automatically."))
+                }
+
+                Section {
+                    ForEach(RecipeDiscoveryService.sources) { source in
+                        HStack(alignment: .top, spacing: 12) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(source.name).font(.headline)
+                                Text(source.detail).font(.subheadline).foregroundStyle(.secondary)
+                                Text(source.siteURL.host() ?? source.siteURL.absoluteString)
+                                    .font(.caption).foregroundStyle(.tertiary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            if pendingSource == source.id {
+                                ProgressView()
+                            } else {
+                                Button {
+                                    Task { await subscribe(to: source) }
+                                } label: {
+                                    Image(systemName: "plus.circle")
+                                        .foregroundStyle(Color.accentColor)
+                                        .imageScale(.large)
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(subscribing)
+                                .accessibilityLabel(Text(String(localized: "Subscribe to (source.name)")))
+                            }
+                        }
+                    }
+                } header: {
+                    Text(String(localized: "Built-in sources"))
+                } footer: {
+                    Text(String(localized: "Public recipe feeds and discovery pages. MealPlan reads only the index needed to find new recipes."))
                 }
 
                 Section {
@@ -153,6 +186,27 @@ struct FeedSubscriptionSheet: View {
         pendingSuggestion = suggestion.id
         _ = await subscribe(to: url)
         pendingSuggestion = nil
+    }
+
+    private func subscribe(to source: RecipeDiscoverySource) async {
+        pendingSource = source.id
+        defer { pendingSource = nil }
+        do {
+            let candidate = try await RecipeSiteDiscoveryService.subscriptionCandidates(for: source.contentURL).first
+                ?? RecipeSiteCandidate(
+                    title: source.name,
+                    siteURL: source.siteURL,
+                    contentURL: source.contentURL,
+                    sourceKind: .websiteDiscovery
+                )
+            _ = try await RecipeFeedService.subscribe(
+                to: candidate,
+                household: appState.currentHousehold,
+                context: context
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 
     @discardableResult
