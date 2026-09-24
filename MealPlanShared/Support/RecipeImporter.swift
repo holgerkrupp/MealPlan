@@ -1,5 +1,32 @@
 import Foundation
 
+/// The source of fields recovered during recipe import. AI-derived fields are
+/// deliberately kept on the in-memory import value so the review UI can call
+/// them out before anything is written to SwiftData.
+enum RecipeFieldProvenance: String, CaseIterable, Hashable, Sendable {
+    case title
+    case servings
+    case prepTime
+    case cookTime
+    case ingredients
+    case instructions
+    case category
+    case cuisine
+
+    var localizedName: String {
+        switch self {
+        case .title: String(localized: "title")
+        case .servings: String(localized: "servings")
+        case .prepTime: String(localized: "prep time")
+        case .cookTime: String(localized: "cook time")
+        case .ingredients: String(localized: "ingredients")
+        case .instructions: String(localized: "instructions")
+        case .category: String(localized: "category")
+        case .cuisine: String(localized: "cuisine")
+        }
+    }
+}
+
 /// Result of trying to turn a URL or file into a dish.
 struct ImportedRecipe: Sendable {
     var name: String
@@ -46,6 +73,12 @@ struct ImportedRecipe: Sendable {
     var nutritionPerServing: NutritionFacts?
     /// True when the data came from HTML guesswork rather than structured markup.
     var needsReview: Bool = true
+    /// Fields that Apple Intelligence recovered after deterministic parsing was
+    /// incomplete. This is not persisted by the importer; it exists to make
+    /// the editable review step explicit and auditable.
+    var aiDerivedFields: Set<RecipeFieldProvenance> = []
+
+    var usedAppleIntelligence: Bool { !aiDerivedFields.isEmpty }
 
     init(name: String, sourceURL: URL? = nil) {
         self.name = name

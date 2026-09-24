@@ -179,6 +179,13 @@ struct RecipeArticleReaderView: View {
         let meals = Array(recipe.mealTypeTags).sorted { $0.rawValue < $1.rawValue }
         if !tags.isEmpty || !meals.isEmpty || recipe.needsReview {
             WrapHStack(spacing: 8) {
+                if recipe.usedAppleIntelligence {
+                    RecipeBadge(
+                        String(localized: "Apple Intelligence recovered fields"),
+                        systemImage: "sparkles",
+                        tint: .purple
+                    )
+                }
                 if recipe.needsReview {
                     RecipeBadge(
                         String(localized: "Read from the page"),

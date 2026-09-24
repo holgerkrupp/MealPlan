@@ -21,6 +21,8 @@ struct RecipeFinderView: View {
     @State private var isImporting = false
     @State private var importError: String?
     @State private var noRecipeFound = false
+    @State private var pendingRecipe: ImportedRecipe?
+    @State private var showingReview = false
 
     private var engine: SearchEngine { SearchEngine.resolved(from: searchEngineRaw) }
 
@@ -69,6 +71,13 @@ struct RecipeFinderView: View {
                 Button(String(localized: "Keep looking"), role: .cancel) {}
             } message: {
                 Text("Open the page with the actual recipe on it, then try again.")
+            }
+            .sheet(isPresented: $showingReview, onDismiss: { pendingRecipe = nil }) {
+                if let pendingRecipe {
+                    WebRecipeImportReviewView(recipe: pendingRecipe) { reviewed in
+                        apply(reviewed)
+                    }
+                }
             }
     }
 
@@ -142,12 +151,23 @@ struct RecipeFinderView: View {
                 noRecipeFound = true
                 return
             }
-            if createsDish { context.insert(dish) }
-            DishBuilder.apply(recipe, to: dish, context: context)
-            dismiss()
+            if recipe.usedAppleIntelligence {
+                // AI-derived data must pass through an editable review before
+                // the existing Dish is mutated.
+                pendingRecipe = recipe
+                showingReview = true
+            } else {
+                apply(recipe)
+            }
         } catch {
             importError = error.localizedDescription
         }
+    }
+
+    private func apply(_ recipe: ImportedRecipe) {
+        if createsDish { context.insert(dish) }
+        DishBuilder.apply(recipe, to: dish, context: context)
+        dismiss()
     }
 
     /// The live DOM, or nil if the page won't hand it over — the caller then
@@ -171,6 +191,79 @@ struct RecipeFinderView: View {
         guard let host = url.host()?.lowercased() else { return false }
         let engines = ["ecosia.org", "duckduckgo.com", "startpage.com", "google.", "bing.com"]
         return engines.contains { host.contains($0) }
+    }
+}
+
+/// Review step for web imports that needed Apple Intelligence. The model only
+/// produces an intermediate value; this view is the last stop before the
+/// importer is allowed to touch a Dish.
+@MainActor
+private struct WebRecipeImportReviewView: View {
+    let recipe: ImportedRecipe
+    let onSave: (ImportedRecipe) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var name: String
+    @State private var ingredients: String
+    @State private var instructions: String
+
+    init(recipe: ImportedRecipe, onSave: @escaping (ImportedRecipe) -> Void) {
+        self.recipe = recipe
+        self.onSave = onSave
+        _name = State(initialValue: recipe.name)
+        _ingredients = State(initialValue: recipe.ingredientLines.joined(separator: "\n"))
+        _instructions = State(initialValue: recipe.instructions ?? "")
+    }
+
+    var body: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    Label(String(localized: "Apple Intelligence recovered part of this recipe."), systemImage: "sparkles")
+                        .foregroundStyle(.purple)
+                    Text(String(localized: "Check the highlighted fields against the source page before saving."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section(String(localized: "Review")) {
+                    TextField(String(localized: "Recipe name"), text: $name)
+                    TextField(String(localized: "Ingredients, one per line"), text: $ingredients, axis: .vertical)
+                        .lineLimit(5...14)
+                    TextField(String(localized: "Method"), text: $instructions, axis: .vertical)
+                        .lineLimit(5...14)
+                }
+
+                if let sourceURL = recipe.sourceURL {
+                    Section(String(localized: "Source")) {
+                        Link(sourceURL.absoluteString, destination: sourceURL)
+                            .font(.footnote)
+                    }
+                }
+            }
+            .navigationTitle(String(localized: "Review recipe"))
+            #if os(iOS)
+            .navigationBarTitleDisplayMode(.inline)
+            #endif
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Use recipe")) {
+                        var reviewed = recipe
+                        reviewed.name = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                        reviewed.ingredientLines = ingredients.components(separatedBy: .newlines)
+                            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                            .filter { !$0.isEmpty }
+                        reviewed.instructions = instructions.trimmingCharacters(in: .whitespacesAndNewlines)
+                        onSave(reviewed)
+                        dismiss()
+                    }
+                    .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }
 

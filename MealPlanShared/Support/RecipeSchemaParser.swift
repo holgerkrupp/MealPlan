@@ -7,6 +7,12 @@ import Foundation
 struct RecipeSchemaParser: RecipeImporter {
 
     var session: URLSession = .shared
+    var aiExtractor: any RecipeAIExtractor
+
+    init(session: URLSession = .shared, aiExtractor: any RecipeAIExtractor = FoundationModelsRecipeAIExtractor()) {
+        self.session = session
+        self.aiExtractor = aiExtractor
+    }
 
     func importRecipe(from url: URL) async throws -> ImportedRecipe {
         let page = try await fetchRecipePage(from: url)
@@ -18,21 +24,21 @@ struct RecipeSchemaParser: RecipeImporter {
         // first refusal so a generic schema parser cannot accidentally turn
         // that compatibility markup into an ingredient list.
         if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        return await finalized(heuristic(html: html, sourceURL: sourceURL), html: html)
     }
 
     /// Parses HTML the caller already has, rather than fetching it. The
@@ -41,21 +47,50 @@ struct RecipeSchemaParser: RecipeImporter {
     /// instead of whatever a fresh anonymous request would return.
     func importRecipe(fromHTML html: String, sourceURL: URL) async throws -> ImportedRecipe {
         if let recipe = parseKptnCook(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseJSONLD(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseChefkoch(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseMicrodata(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
         if let recipe = parseGenericHTML(html: html, sourceURL: sourceURL) {
-            return await withImage(recipe, html: html)
+            return await finalized(recipe, html: html)
         }
-        return await withImage(heuristic(html: html, sourceURL: sourceURL), html: html)
+        return await finalized(heuristic(html: html, sourceURL: sourceURL), html: html)
+    }
+
+    /// Deterministic extraction always has first refusal. The on-device model
+    /// is called only when a required recipe field is genuinely missing or a
+    /// parser produced a heading placeholder.
+    private func finalized(_ recipe: ImportedRecipe, html: String) async -> ImportedRecipe {
+        let enhanced: ImportedRecipe
+        if RecipeQualityValidator.needsAI(for: recipe), aiExtractor.availability == .available {
+            let representation = RecipeWebPageRepresentation(
+                html: html,
+                sourceURL: recipe.sourceURL ?? URL(string: "about:blank")!,
+                deterministicResult: .init(
+                    title: recipe.name,
+                    servings: recipe.servings,
+                    prepTimeMinutes: recipe.prepTimeMinutes,
+                    cookTimeMinutes: recipe.cookTimeMinutes,
+                    ingredients: recipe.ingredientLines,
+                    instructions: recipe.instructions
+                )
+            )
+            if let extraction = await aiExtractor.extract(from: representation) {
+                enhanced = RecipeAIMerger.merge(extraction, into: recipe, representation: representation)
+            } else {
+                enhanced = recipe
+            }
+        } else {
+            enhanced = recipe
+        }
+        return await withImage(enhanced, html: html)
     }
 
     // MARK: - Fetch
