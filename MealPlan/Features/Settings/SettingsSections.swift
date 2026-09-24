@@ -157,6 +157,33 @@ struct NutritionSettingsSection: View {
     }
 }
 
+@MainActor
+struct LeftoverSuggestionsSettingsSection: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        if let household = appState.currentHousehold {
+            Section {
+                Toggle("Suggest ways to use likely leftovers", isOn: enabled(household))
+                NavigationLink {
+                    TypicalPackageSizesView()
+                } label: {
+                    Label("Typical package sizes", systemImage: "shippingbox")
+                }
+            } header: {
+                Text("Leftover suggestions")
+            } footer: {
+                Text("Optional suggestions use typical regional package sizes. They never change recipes, shopping quantities or your plan.")
+            }
+        }
+    }
+
+    private func enabled(_ household: Household) -> Binding<Bool> {
+        return Binding(get: { household.leftoverSuggestionsEnabled }, set: { household.leftoverSuggestionsEnabled = $0; try? context.save() })
+    }
+}
+
 // MARK: - Plan
 
 /// The way into the meal editor where Meals isn't its own pane.

@@ -49,6 +49,7 @@ struct DishPickerView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query(sort: \MealPlanEntry.date) private var plannedEntries: [MealPlanEntry]
 
     @State private var tab: Tab = .cook
     @State private var text = ""
@@ -88,6 +89,25 @@ struct DishPickerView: View {
             if aFits != bFits { return aFits }
             return (a.lastUsedDate ?? .distantPast) < (b.lastUsedDate ?? .distantPast)
         }
+    }
+
+    private var leftoverSuggestions: [LeftoverDishSuggestion] {
+        guard text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let household = appState.currentHousehold,
+              household.leftoverSuggestionsEnabled
+        else { return [] }
+        let leftovers = LeftoverCalculator.calculate(
+            entries: plannedEntries,
+            countryCode: household.packageSizeCountryCode,
+            userOverrides: household.packageSizeOverrides ?? []
+        )
+        return LeftoverDishSuggester.suggestions(
+            for: leftovers,
+            dishes: allDishes,
+            servings: household.scalingServings,
+            countryCode: household.packageSizeCountryCode,
+            userOverrides: household.packageSizeOverrides ?? []
+        )
     }
 
     private var hasExactMatch: Bool {
@@ -228,6 +248,17 @@ struct DishPickerView: View {
     /// shortcut.
     private var dishList: some View {
         List {
+            if !leftoverSuggestions.isEmpty {
+                Section("Use up likely leftovers") {
+                    ForEach(leftoverSuggestions) { suggestion in
+                        Button { planExisting(suggestion.dish) } label: {
+                            leftoverSuggestionRow(suggestion)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+
             if let url {
                 Section {
                     Button {
@@ -333,6 +364,26 @@ struct DishPickerView: View {
                 .foregroundStyle(.tint)
         }
         .padding(.vertical, 2)
+        .contentShape(Rectangle())
+    }
+
+    private func leftoverSuggestionRow(_ suggestion: LeftoverDishSuggestion) -> some View {
+        HStack(spacing: 12) {
+            DishThumbnail(dish: suggestion.dish, size: 44, cornerRadius: 10)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(suggestion.dish.name)
+                    .font(.subheadline.weight(.medium))
+                if let reason = suggestion.reasons.first {
+                    Text(reason)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+            }
+            Spacer(minLength: 0)
+            Image(systemName: "arrow.uturn.down.circle")
+                .foregroundStyle(.tint)
+        }
         .contentShape(Rectangle())
     }
 

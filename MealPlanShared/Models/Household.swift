@@ -27,6 +27,10 @@ final class Household {
     /// calories on the calendar — a plan is a plan whether or not anybody is
     /// counting. Applies everywhere: dish detail, meal cards, day totals.
     var showsNutritionEstimates: Bool = true
+    /// Package-size suggestions are deliberately opt-in and independent of
+    /// the app's language or the device's precise location.
+    var leftoverSuggestionsEnabled: Bool = false
+    var packageSizeCountryCode: String = Household.defaultPackageSizeCountryCode
     /// kcal or kJ. Both are on every European package and which one people
     /// think in is habit, not nationality.
     var energyUnitRaw: String = EnergyUnit.kilocalories.rawValue
@@ -99,8 +103,15 @@ final class Household {
     @Relationship(deleteRule: .cascade, inverse: \RecipeBookmark.household)
     var recipeBookmarks: [RecipeBookmark]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \IngredientPackageSize.household)
+    var packageSizeOverrides: [IngredientPackageSize]? = []
+
     /// The portions a household cooks by default, before anyone changes it.
     static let defaultStandardServings = 2
+
+    static var defaultPackageSizeCountryCode: String {
+        Locale.current.region?.identifier ?? "DE"
+    }
 
     /// `standardServings`, guarded against a zero or negative value arriving
     /// from a corrupted record or an older peer.

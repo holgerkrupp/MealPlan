@@ -36,6 +36,9 @@ struct MealPlanBackup: Codable, Sendable {
     /// The household's ingredient catalogue, keyed by `normalizedName`. Dish
     /// lines and shopping items refer to entries here by that key.
     var ingredients: [PortableIngredient] = []
+    /// User package-size overrides. Bundled catalogue rows are rebuilt from
+    /// the app version; only household-owned rows need to travel in a backup.
+    var packageSizes: [PortablePackageSize] = []
     var dishes: [PortableDish] = []
     var entries: [PortableEntry] = []
     var routines: [PortableRoutine] = []
@@ -76,6 +79,8 @@ struct MealPlanBackup: Codable, Sendable {
         /// `nil` reads back as "shown, in kcal".
         var showsNutritionEstimates: Bool? = nil
         var energyUnitRaw: String? = nil
+        var leftoverSuggestionsEnabled: Bool? = nil
+        var packageSizeCountryCode: String? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -108,6 +113,27 @@ struct MealPlanBackup: Codable, Sendable {
         var nutritionFatGrams: Double? = nil
         var nutritionReferenceRaw: String? = nil
         var nutritionSourceRaw: String? = nil
+    }
+
+    struct PortablePackageSize: Codable, Sendable {
+        var uuid: UUID
+        var modifiedAt: Date
+        var ingredientKey: String
+        var ingredientName: String
+        var countryCode: String
+        var quantityValue: Double
+        var quantityDimensionRaw: String
+        var containerTypeRaw: String
+        var priorityRaw: String
+        var provenanceRaw: String
+        var sourceNote: String?
+        var sourceDate: Date?
+        var sourceVersion: String?
+        var stableBundledID: String?
+        var overridesBundledID: String?
+        var overridesProfile: Bool
+        var isEnabled: Bool
+        var isPreferred: Bool
     }
 
     struct PortableDish: Codable, Sendable {
@@ -315,6 +341,7 @@ struct MealPlanBackup: Codable, Sendable {
         var cookedMeals = 0
         var shoppingItems = 0
         var weekTemplates = 0
+        var packageSizes = 0
         var photos = 0
     }
 
@@ -327,6 +354,7 @@ struct MealPlanBackup: Codable, Sendable {
             cookedMeals: cookedLogs.count,
             shoppingItems: shoppingItems.count,
             weekTemplates: weekTemplates.count,
+            packageSizes: packageSizes.count,
             photos: dishes.reduce(0) { $0 + $1.images.count }
                 + cookedLogs.filter { $0.photoData != nil }.count
         )
@@ -347,6 +375,7 @@ extension MealPlanBackup {
         var mealTypes: [MealType] = []
         var members: [HouseholdMember] = []
         var ingredients: [Ingredient] = []
+        var packageSizes: [IngredientPackageSize] = []
         var dishes: [Dish] = []
         var entries: [MealPlanEntry] = []
         var routines: [MealRoutine] = []
@@ -374,6 +403,7 @@ extension MealPlanBackup {
             mealTypes = try context.fetch(FetchDescriptor<MealType>())
             members = try context.fetch(FetchDescriptor<HouseholdMember>())
             ingredients = try context.fetch(FetchDescriptor<Ingredient>())
+            packageSizes = try context.fetch(FetchDescriptor<IngredientPackageSize>())
             dishes = try context.fetch(FetchDescriptor<Dish>())
             entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
             routines = try context.fetch(FetchDescriptor<MealRoutine>())
@@ -446,7 +476,9 @@ extension MealPlanBackup {
                 didSeedPantryStaples: primary?.didSeedPantryStaples,
                 standardServings: primary?.scalingServings ?? Household.defaultStandardServings,
                 showsNutritionEstimates: primary?.showsNutritionEstimates,
-                energyUnitRaw: primary?.energyUnitRaw
+                energyUnitRaw: primary?.energyUnitRaw,
+                leftoverSuggestionsEnabled: primary?.leftoverSuggestionsEnabled,
+                packageSizeCountryCode: primary?.packageSizeCountryCode
             )
         )
         backup.includesPhotos = includePhotos
@@ -457,6 +489,29 @@ extension MealPlanBackup {
             cloudEnvironment: BuildEnvironment.cloudKit.rawValue,
             deviceName: nil
         )
+
+        backup.packageSizes = rows.packageSizes.map {
+            PortablePackageSize(
+                uuid: $0.uuid,
+                modifiedAt: $0.modifiedAt,
+                ingredientKey: $0.ingredientKey,
+                ingredientName: $0.ingredientName,
+                countryCode: $0.countryCode,
+                quantityValue: $0.quantityValue,
+                quantityDimensionRaw: $0.quantityDimensionRaw,
+                containerTypeRaw: $0.containerTypeRaw,
+                priorityRaw: $0.priorityRaw,
+                provenanceRaw: $0.provenanceRaw,
+                sourceNote: $0.sourceNote,
+                sourceDate: $0.sourceDate,
+                sourceVersion: $0.sourceVersion,
+                stableBundledID: $0.stableBundledID,
+                overridesBundledID: $0.overridesBundledID,
+                overridesProfile: $0.overridesProfile,
+                isEnabled: $0.isEnabled,
+                isPreferred: $0.isPreferred
+            )
+        }
 
         // Meal types are de-duplicated by key the same way `MealType.ensure`
         // does, so a split store doesn't restore two "dinner" meals.

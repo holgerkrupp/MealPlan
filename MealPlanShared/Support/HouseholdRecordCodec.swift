@@ -14,6 +14,7 @@ extension MealType: HouseholdSyncModel {}
 extension Dish: HouseholdSyncModel {}
 extension DishImage: HouseholdSyncModel {}
 extension Ingredient: HouseholdSyncModel {}
+extension IngredientPackageSize: HouseholdSyncModel {}
 extension DishIngredient: HouseholdSyncModel {}
 extension MealPlanEntry: HouseholdSyncModel {}
 extension MealRoutine: HouseholdSyncModel {}
@@ -32,6 +33,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case dish = "MPDish"
     case dishImage = "MPDishImage"
     case ingredient = "MPIngredient"
+    case packageSize = "MPIngredientPackageSize"
     case dishIngredient = "MPDishIngredient"
     case planEntry = "MPMealPlanEntry"
     case routine = "MPMealRoutine"
@@ -48,7 +50,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     var applyPriority: Int {
         switch self {
         case .household: 0
-        case .member, .mealType, .ingredient, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
+        case .member, .mealType, .ingredient, .packageSize, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
         case .dishIngredient, .planEntry, .routine, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
         case .dishImage, .cookedLogImage: 3
         case .deletionMarker: 4
@@ -82,6 +84,8 @@ struct HouseholdPayload: Codable, Sendable {
     var roundsDisplayedAmounts: Bool
     var standardServings: Int
     var showsNutritionEstimates: Bool
+    var leftoverSuggestionsEnabled: Bool?
+    var packageSizeCountryCode: String?
     var energyUnitRaw: String
     var localeIdentifier: String
     var dateCreated: Date
@@ -102,6 +106,25 @@ struct MemberPayload: Codable, Sendable {
     var dateAdded: Date
     var cloudKitParticipantID: String?
     var isActive: Bool
+}
+
+struct IngredientPackageSizePayload: Codable, Sendable {
+    var ingredientKey: String
+    var ingredientName: String
+    var countryCode: String
+    var quantityValue: Double
+    var quantityDimensionRaw: String
+    var containerTypeRaw: String
+    var priorityRaw: String
+    var provenanceRaw: String
+    var sourceNote: String?
+    var sourceDate: Date?
+    var sourceVersion: String?
+    var stableBundledID: String?
+    var overridesBundledID: String?
+    var overridesProfile: Bool
+    var isEnabled: Bool
+    var isPreferred: Bool
 }
 
 struct DishImagePayload: Codable, Sendable {
@@ -171,6 +194,7 @@ enum HouseholdRecordPayload: Codable, Sendable {
     case dish(MealPlanBackup.PortableDish)
     case dishImage(DishImagePayload)
     case ingredient(MealPlanBackup.PortableIngredient)
+    case packageSize(IngredientPackageSizePayload)
     case dishIngredient(DishIngredientPayload)
     case planEntry(PlanEntryPayload)
     case routine(MealPlanBackup.PortableRoutine)
@@ -239,6 +263,8 @@ enum HouseholdRecordCodec {
             roundsDisplayedAmounts: household.roundsDisplayedAmounts,
             standardServings: household.standardServings,
             showsNutritionEstimates: household.showsNutritionEstimates,
+            leftoverSuggestionsEnabled: household.leftoverSuggestionsEnabled,
+            packageSizeCountryCode: household.packageSizeCountryCode,
             energyUnitRaw: household.energyUnitRaw,
             localeIdentifier: household.localeIdentifier,
             dateCreated: household.dateCreated,
@@ -269,6 +295,18 @@ enum HouseholdRecordCodec {
                 nutritionEnergyKcal: ingredient.nutritionEnergyKcal, nutritionProteinGrams: ingredient.nutritionProteinGrams,
                 nutritionCarbGrams: ingredient.nutritionCarbGrams, nutritionFatGrams: ingredient.nutritionFatGrams,
                 nutritionReferenceRaw: ingredient.nutritionReferenceRaw, nutritionSourceRaw: ingredient.nutritionSourceRaw
+            )))
+        }
+        for packageSize in household.packageSizeOverrides ?? [] {
+            try append(.init(type: .packageSize, uuid: packageSize.uuid), packageSize.modifiedAt, .packageSize(.init(
+                ingredientKey: packageSize.ingredientKey, ingredientName: packageSize.ingredientName,
+                countryCode: packageSize.countryCode, quantityValue: packageSize.quantityValue,
+                quantityDimensionRaw: packageSize.quantityDimensionRaw, containerTypeRaw: packageSize.containerTypeRaw,
+                priorityRaw: packageSize.priorityRaw, provenanceRaw: packageSize.provenanceRaw,
+                sourceNote: packageSize.sourceNote, sourceDate: packageSize.sourceDate,
+                sourceVersion: packageSize.sourceVersion, stableBundledID: packageSize.stableBundledID,
+                overridesBundledID: packageSize.overridesBundledID, overridesProfile: packageSize.overridesProfile,
+                isEnabled: packageSize.isEnabled, isPreferred: packageSize.isPreferred
             )))
         }
         for dish in household.dishes ?? [] {
@@ -521,6 +559,7 @@ actor HouseholdSnapshotActor {
         touchModels(household.members ?? [], type: .member)
         touchModels(household.mealTypes ?? [], type: .mealType)
         touchModels(household.ingredients ?? [], type: .ingredient)
+        touchModels(household.packageSizeOverrides ?? [], type: .packageSize)
         touchModels(household.dishes ?? [], type: .dish)
         touchModels((household.dishes ?? []).flatMap { $0.images ?? [] }, type: .dishImage)
         touchModels((household.dishes ?? []).flatMap { $0.ingredients ?? [] }, type: .dishIngredient)

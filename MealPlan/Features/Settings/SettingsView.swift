@@ -52,6 +52,7 @@ struct SettingsView: View {
             HouseholdSettingsSection()
             UnitsSettingsSection()
             NutritionSettingsSection()
+            LeftoverSuggestionsSettingsSection()
             PlanSettingsSection()
             RecipeSearchSettingsSection()
             ConnectionsSettingsSection()
@@ -95,6 +96,7 @@ struct SettingsView: View {
                 UnlockSettingsSection()
                 UnitsSettingsSection()
                 NutritionSettingsSection()
+                LeftoverSuggestionsSettingsSection()
                 RecipeSearchSettingsSection()
             }
         case .household:

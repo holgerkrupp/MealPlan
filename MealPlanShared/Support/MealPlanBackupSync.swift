@@ -37,6 +37,8 @@ enum MealPlanBackupSync {
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? household.didSeedPantryStaples
+        household.leftoverSuggestionsEnabled = backup.household.leftoverSuggestionsEnabled ?? household.leftoverSuggestionsEnabled
+        household.packageSizeCountryCode = backup.household.packageSizeCountryCode ?? household.packageSizeCountryCode
         household.cloudKitShareIdentifier = shareIdentifier
 
         // MARK: Meal types
@@ -80,6 +82,45 @@ enum MealPlanBackupSync {
                 context.delete(model)
             }
         }
+
+        // MARK: Package sizes
+
+        var packageSizes = partition(household.packageSizeOverrides ?? [], by: \.uuid)
+        for stored in backup.packageSizes {
+            let model = packageSizes.map[stored.uuid] ?? insert(
+                IngredientPackageSize(
+                    ingredientKey: stored.ingredientKey,
+                    ingredientName: stored.ingredientName,
+                    countryCode: stored.countryCode,
+                    quantity: Quantity(value: stored.quantityValue, dimension: QuantityDimension(rawValue: stored.quantityDimensionRaw) ?? .mass),
+                    containerType: PackageContainerType(rawValue: stored.containerTypeRaw) ?? .other,
+                    priority: PackageSizePriority(rawValue: stored.priorityRaw) ?? .common,
+                    provenance: PackageSizeProvenance(rawValue: stored.provenanceRaw) ?? .user
+                ),
+                uuid: stored.uuid,
+                into: context,
+                map: &packageSizes.map
+            )
+            model.modifiedAt = stored.modifiedAt
+            model.ingredientKey = stored.ingredientKey
+            model.ingredientName = stored.ingredientName
+            model.countryCode = stored.countryCode
+            model.quantityValue = stored.quantityValue
+            model.quantityDimensionRaw = stored.quantityDimensionRaw
+            model.containerTypeRaw = stored.containerTypeRaw
+            model.priorityRaw = stored.priorityRaw
+            model.provenanceRaw = stored.provenanceRaw
+            model.sourceNote = stored.sourceNote
+            model.sourceDate = stored.sourceDate
+            model.sourceVersion = stored.sourceVersion
+            model.stableBundledID = stored.stableBundledID
+            model.overridesBundledID = stored.overridesBundledID
+            model.overridesProfile = stored.overridesProfile
+            model.isEnabled = stored.isEnabled
+            model.isPreferred = stored.isPreferred
+            model.household = household
+        }
+        deleteMissing(packageSizes, keeping: backup.packageSizes.map(\.uuid), context: context)
 
         // MARK: Dishes (with their images and ingredient lines replaced wholesale)
 
