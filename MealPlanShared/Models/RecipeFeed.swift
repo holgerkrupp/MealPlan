@@ -10,6 +10,12 @@ final class RecipeFeed {
     var title: String = ""
     var siteURLString: String = ""
     var feedURLString: String = ""
+    /// `feed` is the normal RSS/Atom/JSON case. The other two values retain
+    /// enough information to refresh a public collection without pretending it
+    /// has a syndication endpoint.
+    var sourceKindRaw: String = RecipeSiteSourceKind.feed.rawValue
+    var sourceID: String?
+    var contentURLString: String?
     var etag: String?
     var lastModified: String?
     var lastFetchedAt: Date?
@@ -25,14 +31,26 @@ final class RecipeFeed {
     @Relationship(deleteRule: .cascade, inverse: \RecipeFeedItem.feed)
     var items: [RecipeFeedItem]? = []
 
-    init(title: String = "", siteURL: URL, feedURL: URL) {
+    init(
+        title: String = "",
+        siteURL: URL,
+        feedURL: URL? = nil,
+        sourceKind: RecipeSiteSourceKind = .feed,
+        sourceID: String? = nil,
+        contentURL: URL? = nil
+    ) {
         self.title = title
         siteURLString = siteURL.absoluteString
-        feedURLString = feedURL.absoluteString
+        feedURLString = feedURL?.absoluteString ?? ""
+        sourceKindRaw = sourceKind.rawValue
+        self.sourceID = sourceID
+        contentURLString = contentURL?.absoluteString
     }
 
     var siteURL: URL? { URL(string: siteURLString) }
     var feedURL: URL? { URL(string: feedURLString) }
+    var contentURL: URL? { contentURLString.flatMap(URL.init(string:)) ?? siteURL }
+    var sourceKind: RecipeSiteSourceKind { RecipeSiteSourceKind(rawValue: sourceKindRaw) ?? .feed }
 
     var sortedItems: [RecipeFeedItem] {
         (items ?? []).sorted {

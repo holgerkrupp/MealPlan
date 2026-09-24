@@ -58,6 +58,44 @@ enum RecipeFeedService {
         try await subscribe(to: resolveFeed(at: rawURL), household: household, context: context)
     }
 
+    /// Subscribes to a discovered source. A feed-backed candidate is stored as
+    /// a normal feed; a feed-less candidate stores the public index URL and is
+    /// refreshed through the bounded index parser later.
+    @discardableResult
+    static func subscribe(to candidate: RecipeSiteCandidate, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+        if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: {
+            if let sourceID = candidate.providerID, $0.sourceID == sourceID && $0.contentURL == candidate.contentURL { return true }
+            return candidate.feedURL?.absoluteString == $0.feedURLString
+        }) {
+            return existing
+        }
+
+        let feed = RecipeFeed(
+            title: candidate.title,
+            siteURL: candidate.siteURL,
+            feedURL: candidate.feedURL,
+            sourceKind: candidate.sourceKind,
+            sourceID: candidate.providerID ?? candidate.id,
+            contentURL: candidate.contentURL
+        )
+        feed.household = household
+        context.insert(feed)
+
+        if let feedURL = candidate.feedURL {
+            let resolved = try await resolveFeed(at: feedURL)
+            feed.title = resolved.parsed.title.isEmpty ? candidate.title : resolved.parsed.title
+            try await merge(resolved.parsed, into: feed, context: context)
+            markSuccess(feed, response: resolved.response)
+        } else {
+            let articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
+            let parsed = ParsedRecipeFeed(title: candidate.title, homeURL: candidate.siteURL, articles: articles)
+            try await merge(parsed, into: feed, context: context)
+            markSuccess(feed, fetchedAt: .now, status: 200)
+        }
+        try context.save()
+        return feed
+    }
+
     /// Stores a feed the caller has already read, so subscribing from a preview
     /// does not fetch the same pages twice.
     @discardableResult
@@ -92,8 +130,30 @@ enum RecipeFeedService {
     }
 
     static func refresh(_ feed: RecipeFeed, context: ModelContext, force: Bool = false) async throws {
-        guard let url = feed.feedURL else { throw RecipeFeedParserError.invalidURL }
         if !force, let retry = feed.nextRetryAt, retry > .now { return }
+        if feed.feedURL == nil {
+            do {
+                let candidate = RecipeSiteCandidate(
+                    id: feed.sourceID,
+                    title: feed.title,
+                    siteURL: feed.siteURL ?? feed.contentURL ?? URL(string: "https://example.com")!,
+                    contentURL: feed.contentURL,
+                    sourceKind: .websiteDiscovery,
+                    providerID: feed.sourceID
+                )
+                let articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
+                let parsed = ParsedRecipeFeed(title: feed.title, homeURL: feed.siteURL, articles: articles)
+                try await merge(parsed, into: feed, context: context)
+                markSuccess(feed, fetchedAt: .now, status: 200)
+                try context.save()
+            } catch {
+                markFailure(feed, error: error)
+                try? context.save()
+                throw error
+            }
+            return
+        }
+        guard let url = feed.feedURL else { throw RecipeFeedParserError.invalidURL }
         var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalCacheData)
         if let etag = feed.etag { request.setValue(etag, forHTTPHeaderField: "If-None-Match") }
         if let modified = feed.lastModified { request.setValue(modified, forHTTPHeaderField: "If-Modified-Since") }
@@ -195,13 +255,18 @@ enum RecipeFeedService {
     }
 
     private static func markSuccess(_ feed: RecipeFeed, response: HTTPURLResponse) {
+        markSuccess(feed, fetchedAt: .now, status: response.statusCode)
         feed.etag = response.value(forHTTPHeaderField: "ETag") ?? feed.etag
         feed.lastModified = response.value(forHTTPHeaderField: "Last-Modified") ?? feed.lastModified
-        feed.lastFetchedAt = .now
+        feed.lastHTTPStatus = response.statusCode
+    }
+
+    private static func markSuccess(_ feed: RecipeFeed, fetchedAt: Date, status: Int) {
+        feed.lastFetchedAt = fetchedAt
         feed.firstFailureAt = nil
         feed.consecutiveFailures = 0
         feed.nextRetryAt = nil
-        feed.lastHTTPStatus = response.statusCode
+        feed.lastHTTPStatus = status
         feed.lastErrorMessage = nil
     }
 
