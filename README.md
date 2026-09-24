@@ -8,6 +8,8 @@ with other household members.
 
 - Plan meals on a calendar, including eating out and meal routines.
 - Store, edit, search, import, export, and translate recipes.
+- Import recipe text from Photos, screenshots, PDFs, or a live camera scan,
+  with an editable review before it is saved.
 - Build shopping lists from planned meals and pantry staples.
 - Share a household through CloudKit and keep working offline.
 - Cook on Apple Vision Pro with independently placeable ingredient,
