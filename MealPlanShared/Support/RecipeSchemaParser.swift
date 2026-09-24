@@ -1,11 +1,5 @@
 import Foundation
 
-enum RecipeExtractionProvenance: String, Sendable {
-    case jsonLD
-    case microdata
-    case embeddedJSON
-}
-
 /// A structured recipe together with enough context for the importer to make
 /// a deterministic choice when a page publishes more than one representation.
 struct RecipeExtractionCandidate: Sendable {
@@ -42,10 +36,34 @@ struct RecipeSchemaParser: RecipeImporter {
     var session: URLSession = .shared
 
     func importRecipe(from url: URL) async throws -> ImportedRecipe {
+        try await importExtraction(from: url).recipe
+    }
+
+    func importExtraction(from url: URL) async throws -> RecipeExtractionResult {
         let page = try await fetchRecipePage(from: url)
-        let html = page.html
-        let sourceURL = page.url
-        return await withImage(parseRenderedHTML(html, sourceURL: sourceURL), html: html)
+        return await extract(fromHTML: page.html, sourceURL: page.url)
+    }
+
+    private func extract(fromHTML html: String, sourceURL: URL) async -> RecipeExtractionResult {
+        let parsed = parseRenderedHTML(html, sourceURL: sourceURL)
+        let recipe = await withImage(parsed, html: html)
+        var provenance: [RecipeExtractionField: RecipeExtractionProvenance] = [:]
+        for (field, evidence) in recipe.fieldEvidence {
+            let mapped: RecipeExtractionProvenance = switch evidence.source {
+            case .jsonLD: .jsonLD
+            case .microdata: .microdata
+            case .embeddedJSON: .embeddedJSON
+            case .siteMarkup, .semanticHTML, .heuristic: .semanticHTML
+            }
+            switch field {
+            case "name": provenance[.title] = mapped
+            case "ingredients": provenance[.ingredients] = mapped
+            case "instructions": provenance[.instructions] = mapped
+            case "image": provenance[.image] = mapped
+            default: break
+            }
+        }
+        return RecipeExtractionResult(recipe: recipe, provenance: provenance, evidence: ["parser=combined-rendered-html"])
     }
 
     /// Parses HTML the caller already has, rather than fetching it. The
@@ -53,7 +71,11 @@ struct RecipeSchemaParser: RecipeImporter {
     /// actually looking at — cookie banners dismissed, lazy content rendered —
     /// instead of whatever a fresh anonymous request would return.
     func importRecipe(fromHTML html: String, sourceURL: URL) async throws -> ImportedRecipe {
-        return await withImage(parseRenderedHTML(html, sourceURL: sourceURL), html: html)
+        try await importExtraction(fromHTML: html, sourceURL: sourceURL).recipe
+    }
+
+    func importExtraction(fromHTML html: String, sourceURL: URL) async throws -> RecipeExtractionResult {
+        await extract(fromHTML: html, sourceURL: sourceURL)
     }
 
     /// Structured data remains authoritative, but a page can have a useful
