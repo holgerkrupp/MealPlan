@@ -69,4 +69,115 @@ struct RecipeImportFromHTMLTests {
         #expect(parsed.name == "Hackfleisch")
         #expect(parsed.quantity?.value == 500)
     }
+
+    @Test func semanticFallbackReadsEnglishRecipeSections() async throws {
+        let html = """
+        <article class="recipe-card">
+          <h1>Weeknight Pasta</h1>
+          <h2>Ingredients</h2>
+          <ul><li>250 g pasta</li><li>Salt to taste</li></ul>
+          <h2>Instructions</h2>
+          <ol><li>Boil the pasta.</li><li>Season and serve.</li></ol>
+        </article>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.name == "Weeknight Pasta")
+        #expect(recipe.ingredientLines == ["250 g pasta", "Salt to taste"])
+        #expect(recipe.instructions?.contains("1. Boil the pasta.") == true)
+        #expect(recipe.instructions?.contains("2. Season and serve.") == true)
+        #expect(recipe.fieldEvidence["ingredients"]?.source == .semanticHTML)
+        #expect(recipe.fieldEvidence["instructions"]?.source == .semanticHTML)
+    }
+
+    @Test func semanticFallbackSupportsGermanSubsectionsAndParagraphSteps() async throws {
+        let html = """
+        <main class="recipe">
+          <h1>Linsensuppe</h1>
+          <h2>Zutaten</h2>
+          <h3>Für die Sauce</h3>
+          <ul><li>1 Zwiebel</li><li>Salz</li></ul>
+          <h2>Zubereitung</h2>
+          <div><p>Zwiebel würfeln.</p><p>Alles in einem Topf kochen.</p></div>
+        </main>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.ingredientLines == ["1 Zwiebel", "Salz"])
+        #expect(recipe.ingredientLines.contains("Für die Sauce") == false)
+        #expect(recipe.instructions?.contains("1. Zwiebel würfeln.") == true)
+        #expect(recipe.instructions?.contains("2. Alles in einem Topf kochen.") == true)
+    }
+
+    @Test func semanticFallbackIgnoresNavigationAndEmptyHeadings() async throws {
+        let html = """
+        <body>
+          <nav><a href="#ingredients">Ingredients</a></nav>
+          <article><h2>Ingredients</h2><h2>Directions</h2></article>
+          <footer><h2>Ingredients</h2><ul><li>Newsletter</li></ul></footer>
+        </body>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.ingredientLines.isEmpty)
+        #expect((recipe.instructions ?? "").isEmpty)
+    }
+
+    @Test func semanticFallbackRejectsPageChromeAroundRecipeCard() async throws {
+        let html = """
+        <body>
+          <aside class="related-recipes"><h2>Ingredients</h2><ul><li>Click here to subscribe</li></ul></aside>
+          <article class="recipe-card">
+            <h1>Chili</h1><h2>Ingredients</h2>
+            <ul><li>400 g beans</li><li>1 onion</li></ul>
+            <h2>Method</h2><p>Stir the beans and simmer.</p>
+          </article>
+          <section class="comments"><h2>Instructions</h2><p>Leave a comment.</p></section>
+        </body>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.ingredientLines == ["400 g beans", "1 onion"])
+        #expect(recipe.instructions == "1. Stir the beans and simmer.")
+    }
+
+    @Test func semanticFallbackAugmentsPlaceholderStructuredFields() async throws {
+        let html = """
+        <html><head><script type="application/ld+json">
+        {"@type":"Recipe","name":"Rendered Stew","recipeIngredient":["Ingredients"],"recipeInstructions":"Directions"}
+        </script></head><body>
+          <article class="recipe-card"><h2>Ingredients</h2><ul><li>2 carrots</li><li>1 onion</li></ul>
+          <h2>Directions</h2><ol><li>Chop the vegetables.</li><li>Simmer until tender.</li></ol></article>
+        </body></html>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.ingredientLines == ["2 carrots", "1 onion"])
+        #expect(recipe.instructions?.contains("Chop the vegetables.") == true)
+        #expect(recipe.fieldEvidence["ingredients"]?.source == .semanticHTML)
+        #expect(recipe.fieldEvidence["instructions"]?.source == .semanticHTML)
+    }
+
+    @Test func credibleStructuredFieldsOutrankVisibleHeuristics() async throws {
+        let html = """
+        <html><head><script type="application/ld+json">
+        {"@type":"Recipe","name":"Structured Soup","recipeIngredient":["500 g pumpkin"],"recipeInstructions":"Blend the pumpkin."}
+        </script></head><body>
+          <article class="recipe-card"><h2>Ingredients</h2><ul><li>1 onion</li></ul>
+          <h2>Instructions</h2><ol><li>Fry the onion.</li></ol></article>
+        </body></html>
+        """
+
+        let recipe = try await RecipeSchemaParser().importRecipe(fromHTML: html, sourceURL: source)
+
+        #expect(recipe.ingredientLines == ["500 g pumpkin"])
+        #expect(recipe.instructions == "Blend the pumpkin.")
+        #expect(recipe.fieldEvidence["ingredients"]?.source == .jsonLD)
+        #expect(recipe.fieldEvidence["instructions"]?.source == .jsonLD)
+    }
 }
