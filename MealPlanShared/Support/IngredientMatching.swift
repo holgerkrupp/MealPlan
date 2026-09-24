@@ -326,12 +326,48 @@ enum IngredientMatching {
         return editDistance(Array(a), Array(b), limit: tolerance) <= tolerance
     }
 
+    /// Applies household-learned decisions before falling back to the
+    /// deterministic spelling rules. A keep-separate decision always wins so
+    /// a later fuzzy match cannot silently undo an explicit choice.
+    static func keysMatch(_ a: String, _ b: String, rules: [IngredientMatchRule]) -> Bool {
+        if rules.contains(where: { $0.kind == .keepSeparate && $0.applies(to: a, and: b) }) {
+            return false
+        }
+        if rules.contains(where: { $0.kind == .alias && $0.applies(to: a, and: b) }) {
+            return true
+        }
+        return keysMatch(a, b)
+    }
+
     /// The catalogue entry that means the same as `name`. Exact canonical
     /// names and confirmed aliases are safe. Fuzzy and reordered candidates
     /// are returned by `matchResult` for user-facing suggestions, but are not
     /// silently reused by this compatibility helper.
     static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
         IngredientMatcher(ingredients: ingredients).match(name)
+    }
+
+    /// Rule-aware compatibility lookup used by shopping-list rebuilds and
+    /// manual additions. Explainable matching remains available through the
+    /// matcher APIs above; this helper only returns a safe candidate.
+    static func match(_ name: String, in ingredients: [Ingredient], rules: [IngredientMatchRule]) -> Ingredient? {
+        let normalized = Ingredient.normalize(name)
+        guard !normalized.isEmpty else { return nil }
+        if let exact = ingredients.first(where: { Ingredient.normalize($0.name) == normalized && !$0.rejectsMatch(for: name) }) {
+            return exact
+        }
+        let wanted = key(for: name)
+        if let alias = ingredients.first(where: { ingredient in
+            (ingredient.aliases ?? []).contains {
+                Ingredient.normalize($0.name) == normalized && $0.ingredient?.rejectsMatch(for: name) != true
+            }
+        }) {
+            return alias
+        }
+        return ingredients.first { ingredient in
+            !ingredient.rejectsMatch(for: name)
+                && keysMatch(key(for: ingredient.name), wanted, rules: rules)
+        }
     }
 
     /// Explain every candidate decision without coupling matching to SwiftUI

@@ -39,6 +39,8 @@ struct MealPlanBackup: Codable, Sendable {
     /// User package-size overrides. Bundled catalogue rows are rebuilt from
     /// the app version; only household-owned rows need to travel in a backup.
     var packageSizes: [PortablePackageSize] = []
+    /// User-confirmed ingredient aliases and keep-separate decisions.
+    var matchRules: [PortableIngredientMatchRule] = []
     var dishes: [PortableDish] = []
     var entries: [PortableEntry] = []
     var routines: [PortableRoutine] = []
@@ -148,6 +150,13 @@ struct MealPlanBackup: Codable, Sendable {
         var overridesProfile: Bool
         var isEnabled: Bool
         var isPreferred: Bool
+    }
+
+    struct PortableIngredientMatchRule: Codable, Sendable {
+        var uuid: UUID
+        var leftKey: String
+        var rightKey: String
+        var kindRaw: String
     }
 
     struct PortableDish: Codable, Sendable {
@@ -390,6 +399,7 @@ extension MealPlanBackup {
         var members: [HouseholdMember] = []
         var ingredients: [Ingredient] = []
         var packageSizes: [IngredientPackageSize] = []
+        var matchRules: [IngredientMatchRule] = []
         var dishes: [Dish] = []
         var entries: [MealPlanEntry] = []
         var routines: [MealRoutine] = []
@@ -418,6 +428,7 @@ extension MealPlanBackup {
             members = try context.fetch(FetchDescriptor<HouseholdMember>())
             ingredients = try context.fetch(FetchDescriptor<Ingredient>())
             packageSizes = try context.fetch(FetchDescriptor<IngredientPackageSize>())
+            matchRules = try context.fetch(FetchDescriptor<IngredientMatchRule>())
             dishes = try context.fetch(FetchDescriptor<Dish>())
             entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
             routines = try context.fetch(FetchDescriptor<MealRoutine>())
@@ -546,6 +557,11 @@ extension MealPlanBackup {
                 overridesProfile: $0.overridesProfile,
                 isEnabled: $0.isEnabled,
                 isPreferred: $0.isPreferred
+            )
+        }
+        backup.matchRules = rows.matchRules.map {
+            PortableIngredientMatchRule(
+                uuid: $0.uuid, leftKey: $0.leftKey, rightKey: $0.rightKey, kindRaw: $0.kindRaw
             )
         }
 

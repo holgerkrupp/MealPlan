@@ -16,6 +16,7 @@ extension DishImage: HouseholdSyncModel {}
 extension Ingredient: HouseholdSyncModel {}
 extension IngredientAlias: HouseholdSyncModel {}
 extension IngredientPackageSize: HouseholdSyncModel {}
+extension IngredientMatchRule: HouseholdSyncModel {}
 extension DishIngredient: HouseholdSyncModel {}
 extension MealPlanEntry: HouseholdSyncModel {}
 extension MealRoutine: HouseholdSyncModel {}
@@ -36,6 +37,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case ingredient = "MPIngredient"
     case ingredientAlias = "MPIngredientAlias"
     case packageSize = "MPIngredientPackageSize"
+    case ingredientMatchRule = "MPIngredientMatchRule"
     case dishIngredient = "MPDishIngredient"
     case planEntry = "MPMealPlanEntry"
     case routine = "MPMealRoutine"
@@ -52,7 +54,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     var applyPriority: Int {
         switch self {
         case .household: 0
-        case .member, .mealType, .ingredient, .ingredientAlias, .packageSize, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
+        case .member, .mealType, .ingredient, .ingredientAlias, .packageSize, .ingredientMatchRule, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
         case .dishIngredient, .planEntry, .routine, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
         case .dishImage, .cookedLogImage: 3
         case .deletionMarker: 4
@@ -160,6 +162,12 @@ struct IngredientAliasPayload: Codable, Sendable {
     var confidence: Double?
 }
 
+struct IngredientMatchRulePayload: Codable, Sendable {
+    var leftKey: String
+    var rightKey: String
+    var kindRaw: String
+}
+
 struct PlanEntryPayload: Codable, Sendable {
     var value: MealPlanBackup.PortableEntry
     var placementModifiedAt: Date
@@ -206,6 +214,7 @@ enum HouseholdRecordPayload: Codable, Sendable {
     case ingredient(MealPlanBackup.PortableIngredient)
     case ingredientAlias(IngredientAliasPayload)
     case packageSize(IngredientPackageSizePayload)
+    case ingredientMatchRule(IngredientMatchRulePayload)
     case dishIngredient(DishIngredientPayload)
     case planEntry(PlanEntryPayload)
     case routine(MealPlanBackup.PortableRoutine)
@@ -326,6 +335,11 @@ enum HouseholdRecordCodec {
                 sourceVersion: packageSize.sourceVersion, stableBundledID: packageSize.stableBundledID,
                 overridesBundledID: packageSize.overridesBundledID, overridesProfile: packageSize.overridesProfile,
                 isEnabled: packageSize.isEnabled, isPreferred: packageSize.isPreferred
+            )))
+        }
+        for rule in household.matchRules ?? [] {
+            try append(.init(type: .ingredientMatchRule, uuid: rule.uuid), rule.modifiedAt, .ingredientMatchRule(.init(
+                leftKey: rule.leftKey, rightKey: rule.rightKey, kindRaw: rule.kindRaw
             )))
         }
         for dish in household.dishes ?? [] {
@@ -580,6 +594,7 @@ actor HouseholdSnapshotActor {
         touchModels(household.ingredients ?? [], type: .ingredient)
         touchModels((household.ingredients ?? []).flatMap { $0.aliases ?? [] }, type: .ingredientAlias)
         touchModels(household.packageSizeOverrides ?? [], type: .packageSize)
+        touchModels(household.matchRules ?? [], type: .ingredientMatchRule)
         touchModels(household.dishes ?? [], type: .dish)
         touchModels((household.dishes ?? []).flatMap { $0.images ?? [] }, type: .dishImage)
         touchModels((household.dishes ?? []).flatMap { $0.ingredients ?? [] }, type: .dishIngredient)

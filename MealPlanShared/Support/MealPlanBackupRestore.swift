@@ -59,6 +59,7 @@ enum MealPlanBackupRestore {
         try deleteAll(Dish.self, in: context)
         try deleteAll(IngredientAlias.self, in: context)
         try deleteAll(IngredientPackageSize.self, in: context)
+        try deleteAll(IngredientMatchRule.self, in: context)
         try deleteAll(Ingredient.self, in: context)
         try deleteAll(MealType.self, in: context)
         try deleteAll(HouseholdMember.self, in: context)
@@ -172,6 +173,16 @@ enum MealPlanBackupRestore {
             packageSize.isPreferred = stored.isPreferred
             packageSize.household = household
             context.insert(packageSize)
+        }
+
+        for stored in backup.matchRules {
+            let rule = IngredientMatchRule()
+            rule.uuid = stored.uuid
+            rule.leftKey = stored.leftKey
+            rule.rightKey = stored.rightKey
+            rule.kindRaw = stored.kindRaw
+            rule.household = household
+            context.insert(rule)
         }
 
         var dishes: [UUID: Dish] = [:]
