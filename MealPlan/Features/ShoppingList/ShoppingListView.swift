@@ -72,6 +72,12 @@ struct ShoppingListView: View {
         @Bindable var appState = appState
 
         List {
+            #if os(iOS)
+            FullPageScreenshotBridge()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            #endif
+
             Section {
                 Picker(String(localized: "For"), selection: $appState.shoppingRange) {
                     ForEach(ShoppingRangeOption.allCases) { Text($0.localizedName).tag($0) }
@@ -125,7 +131,8 @@ struct ShoppingListView: View {
                             onToggle: { toggle(item) },
                             onCategoryChange: { changeCategory(item, to: $0) },
                             onCustomAisle: { beginCustomAisle(for: item) },
-                            onSetStaple: { setStaple(item, $0) }
+                            onSetStaple: { setStaple(item, $0) },
+                            onMarkOwned: { markOwned(item) }
                         )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
@@ -374,6 +381,23 @@ struct ShoppingListView: View {
             item.isChecked.toggle()
         }
         try? context.save()
+    }
+
+    private func markOwned(_ item: ShoppingListItem) {
+        guard let household = appState.currentHousehold else { return }
+        let ingredient = item.ingredient ?? {
+            let created = Ingredient(name: item.name, category: item.category)
+            created.household = household
+            context.insert(created)
+            item.ingredient = created
+            return created
+        }()
+        household.inventoryEnabled = true
+        let quantity = item.canonicalValue.flatMap { value in
+            item.dimension.map { Quantity(value: value, dimension: $0) }
+        }
+        ingredient.markInventory(.have, quantity: quantity)
+        regenerate()
     }
 
     private func addManualItem() {

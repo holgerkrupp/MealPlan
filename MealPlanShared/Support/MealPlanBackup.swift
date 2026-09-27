@@ -83,6 +83,8 @@ struct MealPlanBackup: Codable, Sendable {
         var energyUnitRaw: String? = nil
         var leftoverSuggestionsEnabled: Bool? = nil
         var packageSizeCountryCode: String? = nil
+        var unitPresentationOverrideRaw: String? = nil
+        var inventoryEnabled: Bool? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -98,6 +100,13 @@ struct MealPlanBackup: Codable, Sendable {
         var roleRaw: String
         var isCurrentUser: Bool
         var dateAdded: Date
+        var allergies: [String] = []
+        var mustAvoidIngredients: [String] = []
+        var dietaryPatterns: [String] = []
+        var dislikes: [String] = []
+        var favorites: [String] = []
+        var preferredCuisines: [String] = []
+        var spiceTolerance: Int?
     }
 
     struct PortableIngredient: Codable, Sendable {
@@ -115,6 +124,13 @@ struct MealPlanBackup: Codable, Sendable {
         var nutritionFatGrams: Double? = nil
         var nutritionReferenceRaw: String? = nil
         var nutritionSourceRaw: String? = nil
+        var inventoryModeRaw: String? = nil
+        var inventoryCanonicalValue: Double? = nil
+        var inventoryDimensionRaw: String? = nil
+        var inventoryBestBefore: Date? = nil
+        var inventoryStorageLocationRaw: String? = nil
+        var inventoryCustomStorageLocation: String? = nil
+        var inventoryUpdatedAt: Date? = nil
         /// Optional for compatibility with backups written before aliases.
         var aliases: [PortableIngredientAlias]? = nil
         /// Optional for compatibility with backups written before ingredient
@@ -192,6 +208,12 @@ struct MealPlanBackup: Codable, Sendable {
         var statedProteinGramsPerServing: Double? = nil
         var statedCarbGramsPerServing: Double? = nil
         var statedFatGramsPerServing: Double? = nil
+        var statedSaturatedFatGramsPerServing: Double? = nil
+        var statedFiberGramsPerServing: Double? = nil
+        var statedSugarGramsPerServing: Double? = nil
+        var statedSodiumMilligramsPerServing: Double? = nil
+        var statedCholesterolMilligramsPerServing: Double? = nil
+        var statedNutritionProvenanceRaw: String? = nil
         /// The recipe's own language and the translation saved beside it.
         /// Optional so backups written before translation existed decode, and
         /// so an older MealPlan reading a newer file simply ignores them.
@@ -246,6 +268,7 @@ struct MealPlanBackup: Codable, Sendable {
         var placeLatitude: Double?
         var placeLongitude: Double?
         var routineUUID: UUID?
+        var participatingMemberUUIDs: [String] = []
     }
 
     struct PortableRoutine: Codable, Sendable {
@@ -485,6 +508,13 @@ extension MealPlanBackup {
                     nutritionFatGrams: ingredient.nutritionFatGrams,
                     nutritionReferenceRaw: ingredient.nutritionReferenceRaw,
                     nutritionSourceRaw: ingredient.nutritionSourceRaw,
+                    inventoryModeRaw: ingredient.inventoryModeRaw,
+                    inventoryCanonicalValue: ingredient.inventoryCanonicalValue,
+                    inventoryDimensionRaw: ingredient.inventoryDimensionRaw,
+                    inventoryBestBefore: ingredient.inventoryBestBefore,
+                    inventoryStorageLocationRaw: ingredient.inventoryStorageLocationRaw,
+                    inventoryCustomStorageLocation: ingredient.inventoryCustomStorageLocation,
+                    inventoryUpdatedAt: ingredient.inventoryUpdatedAt,
                     aliases: aliases.isEmpty ? nil : aliases,
                     rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,
                     pendingMergeSuggestionsData: ingredient.pendingMergeSuggestionsData
@@ -525,7 +555,9 @@ extension MealPlanBackup {
                 showsNutritionEstimates: primary?.showsNutritionEstimates,
                 energyUnitRaw: primary?.energyUnitRaw,
                 leftoverSuggestionsEnabled: primary?.leftoverSuggestionsEnabled,
-                packageSizeCountryCode: primary?.packageSizeCountryCode
+                packageSizeCountryCode: primary?.packageSizeCountryCode,
+                unitPresentationOverrideRaw: primary?.unitPresentationOverrideRaw,
+                inventoryEnabled: primary?.inventoryEnabled
             )
         )
         backup.includesPhotos = includePhotos
@@ -586,7 +618,14 @@ extension MealPlanBackup {
                 name: $0.name,
                 roleRaw: $0.roleRaw,
                 isCurrentUser: $0.isCurrentUser,
-                dateAdded: $0.dateAdded
+                dateAdded: $0.dateAdded,
+                allergies: $0.allergies,
+                mustAvoidIngredients: $0.mustAvoidIngredients,
+                dietaryPatterns: $0.dietaryPatterns,
+                dislikes: $0.dislikes,
+                favorites: $0.favorites,
+                preferredCuisines: $0.preferredCuisines,
+                spiceTolerance: $0.spiceTolerance
             )
         }
 
@@ -622,6 +661,12 @@ extension MealPlanBackup {
                 statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
                 statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
                 statedFatGramsPerServing: dish.statedFatGramsPerServing,
+                statedSaturatedFatGramsPerServing: dish.statedSaturatedFatGramsPerServing,
+                statedFiberGramsPerServing: dish.statedFiberGramsPerServing,
+                statedSugarGramsPerServing: dish.statedSugarGramsPerServing,
+                statedSodiumMilligramsPerServing: dish.statedSodiumMilligramsPerServing,
+                statedCholesterolMilligramsPerServing: dish.statedCholesterolMilligramsPerServing,
+                statedNutritionProvenanceRaw: dish.statedNutritionProvenanceRaw,
                 recipeLanguageCode: dish.recipeLanguageCode,
                 translationLanguageCode: dish.translationLanguageCode,
                 translatedName: dish.translatedName,
@@ -671,7 +716,8 @@ extension MealPlanBackup {
                 placeAddress: entry.placeAddress,
                 placeLatitude: entry.placeLatitude,
                 placeLongitude: entry.placeLongitude,
-                routineUUID: entry.routineUUID
+                routineUUID: entry.routineUUID,
+                participatingMemberUUIDs: entry.participatingMemberUUIDs
             )
         }
 

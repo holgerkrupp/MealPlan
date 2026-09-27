@@ -171,4 +171,15 @@ struct UnitConversionTests {
         let unknown = UnitConversion.weight(fromVolume: 1000, ingredientName: "Marshmallows")
         #expect(unknown.known == false)
     }
+
+    @Test func systemDefaultFollowsLocale() {
+        #expect(UnitConversion.system(for: Locale(identifier: "en_US")) == .imperial)
+        #expect(UnitConversion.system(for: Locale(identifier: "de_DE")) == .metric)
+        #expect(UnitConversion.system(for: Locale(identifier: "en_GB")) == .imperial)
+    }
+
+    @Test func durationFormattingIsSemanticAndLocaleAware() {
+        #expect(UnitConversion.duration(minutes: 90, locale: Locale(identifier: "en_US")).contains("1 hr"))
+        #expect(UnitConversion.duration(minutes: 90, locale: Locale(identifier: "de_DE")).contains("1 Std"))
+    }
 }

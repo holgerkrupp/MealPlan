@@ -31,6 +31,7 @@ struct NutritionSummaryView: View {
             if estimate.isTrustworthy {
                 perServing
                 macros
+                extendedNutrition
                 if targetServings != 1 {
                     Text("For \(targetServings) servings: \(NutritionFormatting.energy(estimate.facts.scaled(by: Double(targetServings)), unit: unit))")
                         .font(.caption)
@@ -54,7 +55,9 @@ struct NutritionSummaryView: View {
     private var header: some View {
         HStack(alignment: .firstTextBaseline) {
             Text(String(localized: "Nutrition")).font(.headline)
-            Text(String(localized: "Estimate"))
+            Text(dish.statedNutritionProvenanceRaw == RecipeNutritionProvenance.imported.rawValue
+                 ? String(localized: "From recipe")
+                 : String(localized: "Estimate"))
                 .font(.caption2.weight(.semibold))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
@@ -94,6 +97,27 @@ struct NutritionSummaryView: View {
             Text(NutritionFormatting.grams(value))
                 .font(.subheadline.weight(.medium))
                 .monospacedDigit()
+        }
+    }
+
+    @ViewBuilder
+    private var extendedNutrition: some View {
+        let facts = estimate.facts
+        let values: [(String, String)] = [
+            (String(localized: "Saturated fat"), NutritionFormatting.grams(facts.saturatedFatGrams)),
+            (String(localized: "Fiber"), NutritionFormatting.grams(facts.fiberGrams)),
+            (String(localized: "Sugar"), NutritionFormatting.grams(facts.sugarGrams)),
+            (String(localized: "Sodium"), "\(Int(facts.sodiumMilligrams.rounded())) mg"),
+            (String(localized: "Cholesterol"), "\(Int(facts.cholesterolMilligrams.rounded())) mg")
+        ]
+        if !values.isEmpty && (facts.saturatedFatGrams > 0 || facts.fiberGrams > 0 || facts.sugarGrams > 0 || facts.sodiumMilligrams > 0 || facts.cholesterolMilligrams > 0) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 5) {
+                ForEach(values, id: \.0) { label, value in
+                    LabeledContent(label, value: value)
+                        .font(.caption)
+                }
+            }
+            .padding(.top, 2)
         }
     }
 

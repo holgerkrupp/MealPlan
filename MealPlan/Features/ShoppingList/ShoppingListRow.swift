@@ -9,6 +9,7 @@ struct ShoppingListRow: View {
     var onCustomAisle: () -> Void
     /// Make this line's ingredient a household staple, or stop it being one.
     var onSetStaple: (Bool) -> Void
+    var onMarkOwned: () -> Void
 
     private var isStaple: Bool { item.ingredient?.isPantryStaple == true }
 
@@ -73,6 +74,9 @@ struct ShoppingListRow: View {
                     Label(String(localized: "Custom aisle…"), systemImage: "text.badge.plus")
                 }
                 Divider()
+                Button(action: onMarkOwned) {
+                    Label(String(localized: "Already have this"), systemImage: "checkmark.seal")
+                }
                 if isStaple {
                     Button {
                         onSetStaple(false)
@@ -113,14 +117,16 @@ struct ShoppingListRow: View {
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},
-            onSetStaple: { _ in }
+            onSetStaple: { _ in },
+            onMarkOwned: {}
         )
         ShoppingListRow(
             item: PreviewData.checkedShoppingItem,
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},
-            onSetStaple: { _ in }
+            onSetStaple: { _ in },
+            onMarkOwned: {}
         )
     }
     .modelContainer(PreviewData.container)

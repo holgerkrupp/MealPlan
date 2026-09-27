@@ -368,6 +368,22 @@ struct NutritionEstimatorTests {
         #expect(facts.fatGrams == 22)
     }
 
+    @Test func readsExtendedSchemaOrgNutrition() throws {
+        let facts = try #require(RecipeSchemaParser.nutrition([
+            "calories": "540 kcal",
+            "saturatedFatContent": "6 g",
+            "fiberContent": "8 g",
+            "sugarContent": "12 g",
+            "sodiumContent": "900 mg",
+            "cholesterolContent": "40 mg"
+        ]))
+        #expect(facts.saturatedFatGrams == 6)
+        #expect(facts.fiberGrams == 8)
+        #expect(facts.sugarGrams == 12)
+        #expect(facts.sodiumMilligrams == 900)
+        #expect(facts.cholesterolMilligrams == 40)
+    }
+
     @Test func convertsKilojoulesFromARecipe() throws {
         let facts = try #require(RecipeSchemaParser.nutrition(["calories": "2200 kJ"]))
         #expect(abs(facts.energyKcal - 525.8) < 0.5)

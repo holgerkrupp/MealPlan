@@ -71,6 +71,12 @@ final class Dish {
     var statedProteinGramsPerServing: Double?
     var statedCarbGramsPerServing: Double?
     var statedFatGramsPerServing: Double?
+    var statedSaturatedFatGramsPerServing: Double?
+    var statedFiberGramsPerServing: Double?
+    var statedSugarGramsPerServing: Double?
+    var statedSodiumMilligramsPerServing: Double?
+    var statedCholesterolMilligramsPerServing: Double?
+    var statedNutritionProvenanceRaw: String?
 
     // MARK: Translation
     //
@@ -196,15 +202,26 @@ final class Dish {
             energyKcal: statedEnergyKcalPerServing,
             proteinGrams: statedProteinGramsPerServing ?? 0,
             carbGrams: statedCarbGramsPerServing ?? 0,
-            fatGrams: statedFatGramsPerServing ?? 0
+            fatGrams: statedFatGramsPerServing ?? 0,
+            saturatedFatGrams: statedSaturatedFatGramsPerServing ?? 0,
+            fiberGrams: statedFiberGramsPerServing ?? 0,
+            sugarGrams: statedSugarGramsPerServing ?? 0,
+            sodiumMilligrams: statedSodiumMilligramsPerServing ?? 0,
+            cholesterolMilligrams: statedCholesterolMilligramsPerServing ?? 0
         )
     }
 
-    func setStatedNutritionPerServing(_ facts: NutritionFacts?) {
+    func setStatedNutritionPerServing(_ facts: NutritionFacts?, provenance: RecipeNutritionProvenance = .imported) {
         statedEnergyKcalPerServing = facts?.energyKcal
         statedProteinGramsPerServing = facts?.proteinGrams
         statedCarbGramsPerServing = facts?.carbGrams
         statedFatGramsPerServing = facts?.fatGrams
+        statedSaturatedFatGramsPerServing = facts?.saturatedFatGrams
+        statedFiberGramsPerServing = facts?.fiberGrams
+        statedSugarGramsPerServing = facts?.sugarGrams
+        statedSodiumMilligramsPerServing = facts?.sodiumMilligrams
+        statedCholesterolMilligramsPerServing = facts?.cholesterolMilligrams
+        statedNutritionProvenanceRaw = facts == nil ? nil : provenance.rawValue
     }
 
     /// True while the dish holds nothing anybody typed: no name, and no

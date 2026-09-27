@@ -10,6 +10,10 @@ final class Household {
     var modifiedAt: Date = Date.now
     var name: String = ""
     var unitSystemRaw: String = UnitSystem.metric.rawValue
+    /// `nil` is treated as the system default for stores created before this
+    /// setting existed. The value is household-shared, while locale itself is
+    /// chosen by each device when formatting.
+    var unitPresentationOverrideRaw: String?
     /// Whether displayed scaled and converted quantities use kitchen-friendly
     /// increments. Defaults on for both new and migrated households.
     var roundsDisplayedAmounts: Bool = true
@@ -30,6 +34,9 @@ final class Household {
     /// Package-size suggestions are deliberately opt-in and independent of
     /// the app's language or the device's precise location.
     var leftoverSuggestionsEnabled: Bool = false
+    /// Inventory is entirely optional. When false, it cannot change a
+    /// generated shopping list even if an ingredient carries old state.
+    var inventoryEnabled: Bool = false
     var packageSizeCountryCode: String = Household.defaultPackageSizeCountryCode
     /// kcal or kJ. Both are on every European package and which one people
     /// think in is habit, not nationality.
@@ -154,6 +161,19 @@ final class Household {
     var unitSystem: UnitSystem {
         get { UnitSystem(rawValue: unitSystemRaw) ?? .metric }
         set { unitSystemRaw = newValue.rawValue }
+    }
+
+    var unitPresentationOverride: UnitPresentationOverride {
+        get { unitPresentationOverrideRaw.flatMap(UnitPresentationOverride.init(rawValue:)) ?? .systemDefault }
+        set { unitPresentationOverrideRaw = newValue.rawValue }
+    }
+
+    var presentationUnitSystem: UnitSystem {
+        UnitConversion.system(
+            locale: Locale(identifier: localeIdentifier),
+            override: unitPresentationOverride,
+            original: unitSystem
+        )
     }
 
     var calendarStyle: CalendarStyle {

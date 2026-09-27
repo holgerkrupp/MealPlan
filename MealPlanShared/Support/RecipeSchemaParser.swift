@@ -497,7 +497,18 @@ struct RecipeSchemaParser: RecipeImporter {
             energyKcal: energy,
             proteinGrams: measurement(dict["proteinContent"]) ?? 0,
             carbGrams: measurement(dict["carbohydrateContent"]) ?? 0,
-            fatGrams: measurement(dict["fatContent"]) ?? 0
+            fatGrams: measurement(dict["fatContent"]) ?? 0,
+            saturatedFatGrams: measurement(dict["saturatedFatContent"]) ?? 0,
+            fiberGrams: measurement(dict["fiberContent"]) ?? 0,
+            sugarGrams: measurement(dict["sugarContent"]) ?? 0,
+            sodiumMilligrams: measurement(dict["sodiumContent"]).map { value in
+                let raw = (string(dict["sodiumContent"]) ?? "").lowercased()
+                return raw.contains("g") && !raw.contains("mg") ? value * 1_000 : value
+            } ?? 0,
+            cholesterolMilligrams: measurement(dict["cholesterolContent"]).map { value in
+                let raw = (string(dict["cholesterolContent"]) ?? "").lowercased()
+                return raw.contains("g") && !raw.contains("mg") ? value * 1_000 : value
+            } ?? 0
         )
     }
 

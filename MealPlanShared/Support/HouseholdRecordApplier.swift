@@ -62,6 +62,8 @@ enum HouseholdRecordApplier {
             household.standardServings = value.standardServings
             household.showsNutritionEstimates = value.showsNutritionEstimates
             household.leftoverSuggestionsEnabled = value.leftoverSuggestionsEnabled ?? false
+            household.unitPresentationOverrideRaw = value.unitPresentationOverrideRaw
+            household.inventoryEnabled = value.inventoryEnabled ?? false
             household.packageSizeCountryCode = value.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
             household.energyUnitRaw = value.energyUnitRaw
             household.localeIdentifier = value.localeIdentifier
@@ -82,6 +84,13 @@ enum HouseholdRecordApplier {
             model.dateAdded = value.dateAdded
             model.cloudKitParticipantID = value.cloudKitParticipantID
             model.isActive = value.isActive
+            model.allergies = value.allergies ?? []
+            model.mustAvoidIngredients = value.mustAvoidIngredients ?? []
+            model.dietaryPatterns = value.dietaryPatterns ?? []
+            model.dislikes = value.dislikes ?? []
+            model.favorites = value.favorites ?? []
+            model.preferredCuisines = value.preferredCuisines ?? []
+            model.spiceTolerance = value.spiceTolerance
             model.modifiedAt = modifiedAt
             model.household = household
 
@@ -107,6 +116,13 @@ enum HouseholdRecordApplier {
             model.nutritionFatGrams = value.nutritionFatGrams
             model.nutritionReferenceRaw = value.nutritionReferenceRaw
             model.nutritionSourceRaw = value.nutritionSourceRaw
+            model.inventoryModeRaw = value.inventoryModeRaw ?? InventoryMode.none.rawValue
+            model.inventoryCanonicalValue = value.inventoryCanonicalValue
+            model.inventoryDimensionRaw = value.inventoryDimensionRaw
+            model.inventoryBestBefore = value.inventoryBestBefore
+            model.inventoryStorageLocationRaw = value.inventoryStorageLocationRaw
+            model.inventoryCustomStorageLocation = value.inventoryCustomStorageLocation
+            model.inventoryUpdatedAt = value.inventoryUpdatedAt
             model.rejectedMatchKeys = value.rejectedMatchKeys ?? []
             model.pendingMergeSuggestionsData = value.pendingMergeSuggestionsData
             model.modifiedAt = modifiedAt

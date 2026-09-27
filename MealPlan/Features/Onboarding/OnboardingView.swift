@@ -102,6 +102,7 @@ struct OnboardingView: View {
                 String(localized: "In Safari or any other app, tap Share and choose MealPlan — ingredients, steps, and the photo come along when the page offers them."),
                 String(localized: "While sharing you can put the new dish straight onto a day in your plan."),
                 String(localized: "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once."),
+                String(localized: "Moving from Mealime? Use only recipe links or files that you can export or share from your account; unsupported private data is never silently claimed to migrate."),
                 String(localized: "No share sheet? Open a dish and use “Find a recipe” to fetch it from a website, or scan a cookbook page or PDF.")
             ]
         )
@@ -114,6 +115,7 @@ struct OnboardingView: View {
             bullets: [
                 String(localized: "On iPhone and iPad, share a recipe page from Safari or another app straight to MealPlan — it appears here through iCloud."),
                 String(localized: "Open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once."),
+                String(localized: "Moving from Mealime? Bring over public recipe links or an official export you can access; private account data and grocery history are not imported."),
                 String(localized: "Open a dish and use “Find a recipe” to fetch ingredients and steps from a website."),
                 String(localized: "Export your recipes any time to hand them to someone else or keep a backup.")
             ]

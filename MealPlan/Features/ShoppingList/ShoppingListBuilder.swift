@@ -218,6 +218,13 @@ enum ShoppingListBuilder {
         let entries = (try? context.fetch(FetchDescriptor(predicate: predicate))) ?? []
         let staples = Set(household.pantryStaples.map { IngredientMatching.key(for: $0.name) })
         let aggregated = aggregate(entries, stapleKeys: staples, matchRules: household.matchRules ?? [])
+            .compactMap { line in
+                guard household.inventoryEnabled,
+                      let ingredient = IngredientMatching.match(
+                        line.name, in: household.ingredients ?? [], rules: household.matchRules ?? []
+                      ) else { return line }
+                return subtractingInventory(line, ingredient: ingredient)
+            }
 
         // Remember what was already ticked off, under the same key the merging
         // uses — a line that comes back spelled differently is still the one
@@ -259,6 +266,29 @@ enum ShoppingListBuilder {
         }
 
         try? context.save()
+    }
+
+    /// Subtract only confirmed, compatible inventory. A simple `have` flag
+    /// without a quantity omits the line; `low` and `out` remain visible.
+    /// The caller decides whether inventory is enabled for the household.
+    static func subtractingInventory(_ line: AggregatedLine, ingredient: Ingredient) -> AggregatedLine? {
+        switch ingredient.inventoryMode {
+        case .none, .low, .out:
+            return line
+        case .have:
+            guard let required = line.quantity else { return nil }
+            guard let owned = ingredient.inventoryQuantity else { return nil }
+            guard owned.dimension == required.dimension else { return line }
+            let remaining = required.value - owned.value
+            guard remaining > 0.000_001 else {
+                return line.additionalQuantities.isEmpty && line.unmeasuredCount == 0 ? nil : {
+                    var copy = line; copy.quantity = nil; return copy
+                }()
+            }
+            var copy = line
+            copy.quantity = Quantity(value: remaining, dimension: required.dimension)
+            return copy
+        }
     }
 
     /// Put a line on the list by hand, the way the "Add an item" field does.

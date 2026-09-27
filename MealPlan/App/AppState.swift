@@ -119,7 +119,7 @@ final class AppState {
     var currentMemberName: String = DeviceOwner.name
 
     var unitSystem: UnitSystem {
-        currentHousehold?.unitSystem ?? .metric
+        currentHousehold?.presentationUnitSystem ?? UnitConversion.system(for: .current)
     }
 
     var roundsDisplayedAmounts: Bool {

@@ -67,6 +67,14 @@ struct DishPickerView: View {
         tab == .cook ? $text : $placeQuery
     }
 
+    private var preferenceFilteredDishes: [Dish] {
+        guard let household = appState.currentHousehold else { return allDishes }
+        let profiled = (household.members ?? []).filter { member in
+            member.isActive && (!member.allergies.isEmpty || !member.mustAvoidIngredients.isEmpty || !member.dietaryPatterns.isEmpty || !member.dislikes.isEmpty)
+        }
+        return profiled.isEmpty ? allDishes : FoodProfileMatcher.allowedDishes(allDishes, for: profiled)
+    }
+
     private var url: URL? {
         guard query.contains("."), !query.contains(" ") else { return nil }
         let candidate = query.hasPrefix("http") ? query : "https://\(query)"
@@ -75,7 +83,7 @@ struct DishPickerView: View {
     }
 
     private var results: [DishSearch.Result] {
-        DishSearch.rank(query.isEmpty ? suggestions : allDishes, query: query)
+        DishSearch.rank(query.isEmpty ? suggestions : preferenceFilteredDishes, query: query)
     }
 
     /// What the list shows before anything is typed: dishes tagged for this
@@ -83,7 +91,7 @@ struct DishPickerView: View {
     /// than everything beginning with "A".
     private var suggestions: [Dish] {
         let tag = MealTypeTag(rawValue: mealKey)
-        return allDishes.sorted { a, b in
+        return preferenceFilteredDishes.sorted { a, b in
             let aFits = tag.map(a.mealTypeTags.contains) ?? false
             let bFits = tag.map(b.mealTypeTags.contains) ?? false
             if aFits != bFits { return aFits }
@@ -103,7 +111,7 @@ struct DishPickerView: View {
         )
         return LeftoverDishSuggester.suggestions(
             for: leftovers,
-            dishes: allDishes,
+            dishes: preferenceFilteredDishes,
             servings: household.scalingServings,
             countryCode: household.packageSizeCountryCode,
             userOverrides: household.packageSizeOverrides ?? []
@@ -111,7 +119,7 @@ struct DishPickerView: View {
     }
 
     private var hasExactMatch: Bool {
-        DishSearch.hasExactMatch(allDishes, name: query)
+        DishSearch.hasExactMatch(preferenceFilteredDishes, name: query)
     }
 
     private var usesCompactLandscapeHeader: Bool {

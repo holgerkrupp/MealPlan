@@ -24,6 +24,9 @@ final class MealPlanEntry {
     var plannedByName: String?
     var lastEditedByName: String?
     var lastEditedDate: Date?
+    /// Empty means the meal applies to the whole household. When populated it
+    /// names the explicitly participating members for preference filtering.
+    var participatingMemberUUIDs: [String] = []
 
     /// Set when this meal is eaten out instead of cooked at home. The place is
     /// optional — "we're eating out" is a plan in itself.

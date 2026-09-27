@@ -55,6 +55,12 @@ struct DishDetailView: View {
     private var detailContent: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                #if os(iOS)
+                FullPageScreenshotBridge()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                #endif
+
                 if !usesCoverHero {
                     imageStrip
                 }
@@ -388,10 +394,10 @@ struct DishDetailView: View {
     private var timeRow: some View {
         HStack(spacing: 20) {
             if let prep = dish.prepTimeMinutes {
-                metric(String(localized: "Prep"), "\(prep) min")
+                metric(String(localized: "Prep"), UnitConversion.duration(minutes: prep))
             }
             if let cook = dish.cookTimeMinutes {
-                metric(String(localized: "Cook"), "\(cook) min")
+                metric(String(localized: "Cook"), UnitConversion.duration(minutes: cook))
             }
             metric(String(localized: "Recipe"), String(localized: "\(dish.servings) servings"))
         }
@@ -496,7 +502,7 @@ struct DishDetailView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(sibling.name)
                                 if let minutes = sibling.totalTimeMinutes {
-                                    Text(String(localized: "\(minutes) min"))
+                                    Text(UnitConversion.duration(minutes: minutes))
                                         .font(.caption)
                                         .foregroundStyle(.secondary)
                                 }

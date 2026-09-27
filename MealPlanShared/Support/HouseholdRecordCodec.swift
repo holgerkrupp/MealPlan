@@ -89,6 +89,8 @@ struct HouseholdPayload: Codable, Sendable {
     var standardServings: Int
     var showsNutritionEstimates: Bool
     var leftoverSuggestionsEnabled: Bool?
+    var unitPresentationOverrideRaw: String?
+    var inventoryEnabled: Bool?
     var packageSizeCountryCode: String?
     var energyUnitRaw: String
     var localeIdentifier: String
@@ -110,6 +112,13 @@ struct MemberPayload: Codable, Sendable {
     var dateAdded: Date
     var cloudKitParticipantID: String?
     var isActive: Bool
+    var allergies: [String]? = nil
+    var mustAvoidIngredients: [String]? = nil
+    var dietaryPatterns: [String]? = nil
+    var dislikes: [String]? = nil
+    var favorites: [String]? = nil
+    var preferredCuisines: [String]? = nil
+    var spiceTolerance: Int? = nil
 }
 
 struct IngredientPackageSizePayload: Codable, Sendable {
@@ -284,6 +293,8 @@ enum HouseholdRecordCodec {
             standardServings: household.standardServings,
             showsNutritionEstimates: household.showsNutritionEstimates,
             leftoverSuggestionsEnabled: household.leftoverSuggestionsEnabled,
+            unitPresentationOverrideRaw: household.unitPresentationOverrideRaw,
+            inventoryEnabled: household.inventoryEnabled,
             packageSizeCountryCode: household.packageSizeCountryCode,
             energyUnitRaw: household.energyUnitRaw,
             localeIdentifier: household.localeIdentifier,
@@ -300,7 +311,11 @@ enum HouseholdRecordCodec {
         for member in household.members ?? [] {
             try append(.init(type: .member, uuid: member.uuid), member.modifiedAt, .member(MemberPayload(
                 name: member.name, roleRaw: member.roleRaw, dateAdded: member.dateAdded,
-                cloudKitParticipantID: member.cloudKitParticipantID, isActive: member.isActive
+                cloudKitParticipantID: member.cloudKitParticipantID, isActive: member.isActive,
+                allergies: member.allergies, mustAvoidIngredients: member.mustAvoidIngredients,
+                dietaryPatterns: member.dietaryPatterns, dislikes: member.dislikes,
+                favorites: member.favorites, preferredCuisines: member.preferredCuisines,
+                spiceTolerance: member.spiceTolerance
             )))
         }
         for meal in household.mealTypes ?? [] {
@@ -315,6 +330,13 @@ enum HouseholdRecordCodec {
                 nutritionEnergyKcal: ingredient.nutritionEnergyKcal, nutritionProteinGrams: ingredient.nutritionProteinGrams,
                 nutritionCarbGrams: ingredient.nutritionCarbGrams, nutritionFatGrams: ingredient.nutritionFatGrams,
                 nutritionReferenceRaw: ingredient.nutritionReferenceRaw, nutritionSourceRaw: ingredient.nutritionSourceRaw,
+                inventoryModeRaw: ingredient.inventoryModeRaw,
+                inventoryCanonicalValue: ingredient.inventoryCanonicalValue,
+                inventoryDimensionRaw: ingredient.inventoryDimensionRaw,
+                inventoryBestBefore: ingredient.inventoryBestBefore,
+                inventoryStorageLocationRaw: ingredient.inventoryStorageLocationRaw,
+                inventoryCustomStorageLocation: ingredient.inventoryCustomStorageLocation,
+                inventoryUpdatedAt: ingredient.inventoryUpdatedAt,
                 rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,
                 pendingMergeSuggestionsData: ingredient.pendingMergeSuggestionsData
             )))

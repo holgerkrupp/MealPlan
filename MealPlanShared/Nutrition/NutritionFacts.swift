@@ -21,6 +21,11 @@ struct NutritionFacts: Equatable, Sendable, Codable {
     var proteinGrams: Double = 0
     var carbGrams: Double = 0
     var fatGrams: Double = 0
+    var saturatedFatGrams: Double = 0
+    var fiberGrams: Double = 0
+    var sugarGrams: Double = 0
+    var sodiumMilligrams: Double = 0
+    var cholesterolMilligrams: Double = 0
 
     static let zero = NutritionFacts()
 
@@ -28,12 +33,22 @@ struct NutritionFacts: Equatable, Sendable, Codable {
         energyKcal: Double = 0,
         proteinGrams: Double = 0,
         carbGrams: Double = 0,
-        fatGrams: Double = 0
+        fatGrams: Double = 0,
+        saturatedFatGrams: Double = 0,
+        fiberGrams: Double = 0,
+        sugarGrams: Double = 0,
+        sodiumMilligrams: Double = 0,
+        cholesterolMilligrams: Double = 0
     ) {
         self.energyKcal = energyKcal
         self.proteinGrams = proteinGrams
         self.carbGrams = carbGrams
         self.fatGrams = fatGrams
+        self.saturatedFatGrams = saturatedFatGrams
+        self.fiberGrams = fiberGrams
+        self.sugarGrams = sugarGrams
+        self.sodiumMilligrams = sodiumMilligrams
+        self.cholesterolMilligrams = cholesterolMilligrams
     }
 
     /// Shorthand for the bundled table, which is written per 100 g:
@@ -52,7 +67,12 @@ struct NutritionFacts: Equatable, Sendable, Codable {
             energyKcal: lhs.energyKcal + rhs.energyKcal,
             proteinGrams: lhs.proteinGrams + rhs.proteinGrams,
             carbGrams: lhs.carbGrams + rhs.carbGrams,
-            fatGrams: lhs.fatGrams + rhs.fatGrams
+            fatGrams: lhs.fatGrams + rhs.fatGrams,
+            saturatedFatGrams: lhs.saturatedFatGrams + rhs.saturatedFatGrams,
+            fiberGrams: lhs.fiberGrams + rhs.fiberGrams,
+            sugarGrams: lhs.sugarGrams + rhs.sugarGrams,
+            sodiumMilligrams: lhs.sodiumMilligrams + rhs.sodiumMilligrams,
+            cholesterolMilligrams: lhs.cholesterolMilligrams + rhs.cholesterolMilligrams
         )
     }
 
@@ -66,7 +86,12 @@ struct NutritionFacts: Equatable, Sendable, Codable {
             energyKcal: energyKcal * factor,
             proteinGrams: proteinGrams * factor,
             carbGrams: carbGrams * factor,
-            fatGrams: fatGrams * factor
+            fatGrams: fatGrams * factor,
+            saturatedFatGrams: saturatedFatGrams * factor,
+            fiberGrams: fiberGrams * factor,
+            sugarGrams: sugarGrams * factor,
+            sodiumMilligrams: sodiumMilligrams * factor,
+            cholesterolMilligrams: cholesterolMilligrams * factor
         )
     }
 

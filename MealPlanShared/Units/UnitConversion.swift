@@ -5,6 +5,42 @@ import Foundation
 /// conversion.
 enum UnitConversion {
 
+    /// Foundation's measurement system includes locale conventions such as
+    /// UK usage. MealPlan intentionally maps those to its cooking display
+    /// policy without using GPS, storefront country, or hard-coded UI tests.
+    static func system(for locale: Locale) -> UnitSystem {
+        switch locale.measurementSystem {
+        case .us, .uk: .imperial
+        default: .metric
+        }
+    }
+
+    static func system(
+        locale: Locale = .current,
+        override: UnitPresentationOverride,
+        original: UnitSystem = .metric
+    ) -> UnitSystem {
+        switch override {
+        case .systemDefault: system(for: locale)
+        case .originalRecipe: original
+        case .metric: .metric
+        case .imperial: .imperial
+        }
+    }
+
+    /// Locale-aware duration formatting used by recipe metadata and previews.
+    /// The stored value remains semantic minutes; only this string is localized.
+    static func duration(minutes: Int, locale: Locale = .current) -> String {
+        guard minutes > 0 else { return "" }
+        let formatter = DateComponentsFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.calendar?.locale = locale
+        formatter.allowedUnits = [.hour, .minute]
+        formatter.unitsStyle = .abbreviated
+        formatter.zeroFormattingBehavior = .dropAll
+        return formatter.string(from: TimeInterval(minutes * 60)) ?? "(minutes) min"
+    }
+
     // MARK: - Quantity display
 
     /// A formatted amount plus whether the value is an approximation.

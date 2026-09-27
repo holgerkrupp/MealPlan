@@ -58,9 +58,9 @@ struct UnitsSettingsSection: View {
     var body: some View {
         if let household = appState.currentHousehold {
             Section {
-                Picker(String(localized: "Show amounts in"), selection: unitSystem(household)) {
-                    ForEach(UnitSystem.allCases) { system in
-                        Text(system.localizedName).tag(system)
+                Picker(String(localized: "Show amounts in"), selection: unitPresentation(household)) {
+                    ForEach(UnitPresentationOverride.allCases) { setting in
+                        Text(setting.localizedName).tag(setting)
                     }
                 }
                 Toggle(
@@ -75,14 +75,14 @@ struct UnitsSettingsSection: View {
         }
     }
 
-    private func unitSystem(_ household: Household) -> Binding<UnitSystem> {
+    private func unitPresentation(_ household: Household) -> Binding<UnitPresentationOverride> {
         Binding(
-            get: { household.unitSystem },
+            get: { household.unitPresentationOverride },
             set: { value in
-                household.unitSystem = value
+                household.unitPresentationOverride = value
                 ShoppingListBuilder.refreshDisplayText(
                     for: household.shoppingItems ?? [],
-                    system: value,
+                    system: household.presentationUnitSystem,
                     roundsAmounts: household.roundsDisplayedAmounts
                 )
                 try? context.save()
@@ -97,7 +97,7 @@ struct UnitsSettingsSection: View {
                 household.roundsDisplayedAmounts = value
                 ShoppingListBuilder.refreshDisplayText(
                     for: household.shoppingItems ?? [],
-                    system: household.unitSystem,
+                    system: household.presentationUnitSystem,
                     roundsAmounts: value
                 )
                 try? context.save()
@@ -298,6 +298,12 @@ struct ConnectionsSettingsSection: View {
                     Label(String(localized: "Bring!"), systemImage: "cart")
                 }
             }
+
+            NavigationLink {
+                SiriPhrasesView()
+            } label: {
+                Label(String(localized: "Siri & Shortcuts"), systemImage: "waveform")
+            }
         } header: {
             Text(String(localized: "Connections"))
         } footer: {
@@ -317,6 +323,86 @@ struct ConnectionsSettingsSection: View {
               appState.currentHousehold?.isConnectedToBring == true
         else { return String(localized: "Not connected") }
         return name
+    }
+}
+
+// MARK: - Siri
+
+/// The phrases exposed through App Intents. Keep this page close to the
+/// registered shortcuts so people can discover the wording Siri understands.
+@MainActor
+struct SiriPhrasesView: View {
+    var body: some View {
+        Form {
+            Section {
+                Text("You can say these phrases to Siri. Siri asks for the dish, day, or meal when a detail is missing.")
+            }
+
+            Section("Plan meals") {
+                phraseRow(
+                    "Hey Siri, put pizza in meals in Meals",
+                    detail: "Plans a saved dish for a chosen day and meal."
+                )
+                phraseRow(
+                    "Hey Siri, put a dish in meals in Meals",
+                    detail: "Lets Siri collect the dish, day, and meal, and creates the dish if needed."
+                )
+                phraseRow(
+                    "Hey Siri, plan a meal in Meals",
+                    detail: "Plans a saved dish after Siri asks for the missing details."
+                )
+                phraseRow(
+                    "Hey Siri, add a dish to the plan in Meals",
+                    detail: "Another way to start planning a saved dish."
+                )
+                phraseRow(
+                    "Hey Siri, add a dish to the meal plan in Meals",
+                    detail: "Starts planning a dish and asks for any missing details."
+                )
+            }
+
+            Section("Add dishes") {
+                phraseRow(
+                    "Hey Siri, add a dish to Meals",
+                    detail: "Creates a new dish in your library."
+                )
+                phraseRow(
+                    "Hey Siri, new dish in Meals",
+                    detail: "Creates a new dish in your library."
+                )
+            }
+
+            Section("Ask about your plan") {
+                phraseRow(
+                    "Hey Siri, what is planned today in Meals",
+                    detail: "Reads today's planned meals aloud."
+                )
+                phraseRow(
+                    "Hey Siri, what are we eating today in Meals",
+                    detail: "Another way to ask what is planned today."
+                )
+                phraseRow(
+                    "Hey Siri, show this week's plan in Meals",
+                    detail: "Reads the current week's plan aloud."
+                )
+                phraseRow(
+                    "Hey Siri, what are we eating this week in Meals",
+                    detail: "Another way to ask about this week's plan."
+                )
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(String(localized: "Siri & Shortcuts"))
+    }
+
+    private func phraseRow(_ phrase: String, detail: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(phrase)
+            Text(detail)
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+        }
+        .padding(.vertical, 3)
     }
 }
 

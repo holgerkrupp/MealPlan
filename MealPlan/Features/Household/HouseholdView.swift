@@ -144,6 +144,16 @@ struct HouseholdSettingsView: View {
                 }
 
                 Section {
+                    NavigationLink {
+                        FoodProfilesView(members: members)
+                    } label: {
+                        Label("Food profiles", systemImage: "fork.knife.circle")
+                    }
+                } footer: {
+                    Text("Optional preferences help MealPlan filter and rank recipes. Nothing is inferred, and every profile can be removed.")
+                }
+
+                Section {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
                     ForEach(members) { member in
                         memberRow(member, removable: canRemoveMembers(from: household) && HouseholdCloudSharingService.canRemove(member))
@@ -247,6 +257,68 @@ struct HouseholdSettingsView: View {
         } catch {
             removalErrorMessage = error.localizedDescription
         }
+    }
+}
+
+@MainActor
+private struct FoodProfilesView: View {
+    var members: [HouseholdMember]
+
+    var body: some View {
+        List(members) { member in
+            NavigationLink {
+                FoodProfileEditor(member: member)
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(member.name)
+                    let count = member.allergies.count + member.mustAvoidIngredients.count + member.dislikes.count + member.favorites.count
+                    Text(count == 0 ? String(localized: "No preferences") : String(localized: "\(count) preferences"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Food profiles")
+    }
+}
+
+@MainActor
+private struct FoodProfileEditor: View {
+    @Bindable var member: HouseholdMember
+    @Environment(\.modelContext) private var context
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Allergies (comma separated)", text: arrayBinding(\.allergies))
+                TextField("Must avoid (comma separated)", text: arrayBinding(\.mustAvoidIngredients))
+            } header: {
+                Text("Hard exclusions")
+            } footer: {
+                Text("Recipes containing these terms are filtered out for this person.")
+            }
+
+            Section {
+                TextField("Dislikes (comma separated)", text: arrayBinding(\.dislikes))
+                TextField("Favorites (comma separated)", text: arrayBinding(\.favorites))
+                TextField("Preferred cuisines (comma separated)", text: arrayBinding(\.preferredCuisines))
+                TextField("Dietary patterns (comma separated)", text: arrayBinding(\.dietaryPatterns))
+            } header: {
+                Text("Preferences")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(member.name)
+    }
+
+    private func arrayBinding(_ keyPath: ReferenceWritableKeyPath<HouseholdMember, [String]>) -> Binding<String> {
+        Binding(
+            get: { member[keyPath: keyPath].joined(separator: ", ") },
+            set: {
+                member[keyPath: keyPath] = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                try? context.save()
+            }
+        )
     }
 }
 

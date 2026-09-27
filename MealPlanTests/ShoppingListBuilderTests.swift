@@ -208,4 +208,33 @@ struct ShoppingListBuilderTests {
         let lines = ShoppingListBuilder.aggregate([MealPlanEntry(date: .now, slot: .dinner, dish: d)])
         #expect(lines.isEmpty)
     }
+
+    @Test func confirmedInventorySubtractsOnlyCompatibleAmounts() {
+        let ingredient = Ingredient(name: "Flour", category: .pantry)
+        ingredient.markInventory(.have, quantity: .grams(300))
+        let line = AggregatedLine(
+            name: "Flour", normalizedName: "flour", category: .pantry,
+            quantity: .grams(500)
+        )
+        #expect(ShoppingListBuilder.subtractingInventory(line, ingredient: ingredient)?.quantity == .grams(200))
+
+        ingredient.inventoryQuantity = .millilitres(300)
+        #expect(ShoppingListBuilder.subtractingInventory(line, ingredient: ingredient)?.quantity == .grams(500))
+    }
+
+    @Test func profileHardExclusionIsExplainable() {
+        let dish = dish("Pasta", servings: 2)
+        line(dish, "Peanuts", 10, .mass)
+        let member = HouseholdMember(name: "Alex")
+        member.allergies = ["peanut"]
+        let result = FoodProfileMatcher.evaluate(dish: dish, for: member)
+        #expect(!result.isAllowed)
+        #expect(!result.hardReasons.isEmpty)
+    }
+
+    @Test func migrationQueueCanonicalizesTrackingParameters() {
+        let a = URL(string: "https://Example.com/recipe?utm_source=share&id=4")!
+        let b = URL(string: "https://example.com/recipe?id=4&utm_medium=social")!
+        #expect(RecipeMigrationQueue.uniqueURLs([a, b]).count == 1)
+    }
 }

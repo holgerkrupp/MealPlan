@@ -25,7 +25,8 @@ enum MealPlanBackupRestore {
     @discardableResult
     static func replaceEverything(
         with backup: MealPlanBackup,
-        context: ModelContext
+        context: ModelContext,
+        householdUUID: UUID? = nil
     ) throws -> MealPlanBackup.Contents {
         // A restore is thousands of deletes and inserts; registering all of it
         // for undo would blow past the main context's 20 levels and hold every
@@ -36,7 +37,7 @@ enum MealPlanBackupRestore {
 
         try deleteEverything(in: context)
         try context.save()
-        insert(backup, into: context)
+        insert(backup, into: context, householdUUID: householdUUID)
         try context.save()
         return backup.contents
     }
@@ -76,9 +77,17 @@ enum MealPlanBackupRestore {
     // MARK: - Inserting
 
     @MainActor
-    private static func insert(_ backup: MealPlanBackup, into context: ModelContext) {
+    private static func insert(
+        _ backup: MealPlanBackup,
+        into context: ModelContext,
+        householdUUID: UUID? = nil
+    ) {
         let household = Household(name: backup.household.name)
-        household.uuid = backup.household.uuid
+        // A backup can cross CloudKit environments. Development and
+        // Production may already contain different records for the same UUID;
+        // using a fresh identity prevents a restore from reusing that stale
+        // zone when the new build starts syncing.
+        household.uuid = householdUUID ?? backup.household.uuid
         household.unitSystemRaw = backup.household.unitSystemRaw
         household.roundsDisplayedAmounts = backup.household.roundsDisplayedAmounts
         household.calendarStyleRaw = CalendarStyle.week.rawValue
@@ -87,6 +96,8 @@ enum MealPlanBackupRestore {
         household.energyUnitRaw = backup.household.energyUnitRaw ?? EnergyUnit.kilocalories.rawValue
         household.leftoverSuggestionsEnabled = backup.household.leftoverSuggestionsEnabled ?? false
         household.packageSizeCountryCode = backup.household.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
+        household.unitPresentationOverrideRaw = backup.household.unitPresentationOverrideRaw
+        household.inventoryEnabled = backup.household.inventoryEnabled ?? false
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         // A restored library brings its own staples with it; an older file
@@ -114,6 +125,13 @@ enum MealPlanBackupRestore {
                 isCurrentUser: stored.isCurrentUser
             )
             member.dateAdded = stored.dateAdded
+            member.allergies = stored.allergies
+            member.mustAvoidIngredients = stored.mustAvoidIngredients
+            member.dietaryPatterns = stored.dietaryPatterns
+            member.dislikes = stored.dislikes
+            member.favorites = stored.favorites
+            member.preferredCuisines = stored.preferredCuisines
+            member.spiceTolerance = stored.spiceTolerance
             member.household = household
             context.insert(member)
         }
@@ -133,6 +151,13 @@ enum MealPlanBackupRestore {
             ingredient.nutritionFatGrams = stored.nutritionFatGrams
             ingredient.nutritionReferenceRaw = stored.nutritionReferenceRaw
             ingredient.nutritionSourceRaw = stored.nutritionSourceRaw
+            ingredient.inventoryModeRaw = stored.inventoryModeRaw ?? InventoryMode.none.rawValue
+            ingredient.inventoryCanonicalValue = stored.inventoryCanonicalValue
+            ingredient.inventoryDimensionRaw = stored.inventoryDimensionRaw
+            ingredient.inventoryBestBefore = stored.inventoryBestBefore
+            ingredient.inventoryStorageLocationRaw = stored.inventoryStorageLocationRaw
+            ingredient.inventoryCustomStorageLocation = stored.inventoryCustomStorageLocation
+            ingredient.inventoryUpdatedAt = stored.inventoryUpdatedAt
             ingredient.rejectedMatchKeys = stored.rejectedMatchKeys ?? []
             ingredient.pendingMergeSuggestionsData = stored.pendingMergeSuggestionsData
             ingredient.household = household
@@ -217,6 +242,7 @@ enum MealPlanBackupRestore {
             entry.placeLatitude = stored.placeLatitude
             entry.placeLongitude = stored.placeLongitude
             entry.routineUUID = stored.routineUUID
+            entry.participatingMemberUUIDs = stored.participatingMemberUUIDs
             entry.household = household
             context.insert(entry)
             entries[stored.uuid] = entry
@@ -379,6 +405,12 @@ enum MealPlanBackupRestore {
         dish.statedProteinGramsPerServing = stored.statedProteinGramsPerServing
         dish.statedCarbGramsPerServing = stored.statedCarbGramsPerServing
         dish.statedFatGramsPerServing = stored.statedFatGramsPerServing
+        dish.statedSaturatedFatGramsPerServing = stored.statedSaturatedFatGramsPerServing
+        dish.statedFiberGramsPerServing = stored.statedFiberGramsPerServing
+        dish.statedSugarGramsPerServing = stored.statedSugarGramsPerServing
+        dish.statedSodiumMilligramsPerServing = stored.statedSodiumMilligramsPerServing
+        dish.statedCholesterolMilligramsPerServing = stored.statedCholesterolMilligramsPerServing
+        dish.statedNutritionProvenanceRaw = stored.statedNutritionProvenanceRaw
         dish.recipeLanguageCode = stored.recipeLanguageCode
         dish.translationLanguageCode = stored.translationLanguageCode
         dish.translatedName = stored.translatedName

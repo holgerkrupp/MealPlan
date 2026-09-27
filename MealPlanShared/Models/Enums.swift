@@ -196,6 +196,55 @@ enum UnitSystem: String, CaseIterable, Identifiable, Codable, Sendable {
     }
 }
 
+/// How recipe quantities are presented. `systemDefault` follows the effective
+/// Apple locale/measurement settings; the other cases are display-only
+/// overrides and never rewrite canonical recipe data.
+enum UnitPresentationOverride: String, CaseIterable, Identifiable, Codable, Sendable {
+    case systemDefault
+    case originalRecipe
+    case metric
+    case imperial
+
+    var id: String { rawValue }
+
+    var localizedName: String {
+        switch self {
+        case .systemDefault: String(localized: "System Default")
+        case .originalRecipe: String(localized: "Original Recipe Units")
+        case .metric: UnitSystem.metric.localizedName
+        case .imperial: UnitSystem.imperial.localizedName
+        }
+    }
+}
+
+/// Optional lightweight inventory state for an ingredient. It is deliberately
+/// small enough to use without maintaining stock counts for every item.
+enum InventoryMode: String, CaseIterable, Identifiable, Codable, Sendable {
+    case none, have, low, out
+    var id: String { rawValue }
+    var localizedName: String {
+        switch self {
+        case .none: String(localized: "Not tracked")
+        case .have: String(localized: "Have")
+        case .low: String(localized: "Low")
+        case .out: String(localized: "Out")
+        }
+    }
+}
+
+enum InventoryStorageLocation: String, CaseIterable, Identifiable, Codable, Sendable {
+    case pantry, fridge, freezer, custom
+    var id: String { rawValue }
+    var localizedName: String {
+        switch self {
+        case .pantry: String(localized: "Pantry")
+        case .fridge: String(localized: "Fridge")
+        case .freezer: String(localized: "Freezer")
+        case .custom: String(localized: "Other")
+        }
+    }
+}
+
 // MARK: - Calendar style
 
 enum CalendarStyle: String, CaseIterable, Identifiable, Codable, Sendable {

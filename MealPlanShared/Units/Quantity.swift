@@ -2,7 +2,7 @@ import Foundation
 
 /// An amount in the canonical unit for its dimension:
 /// mass → grams, volume → millilitres, count → pieces.
-struct Quantity: Equatable, Sendable {
+struct Quantity: Equatable, Codable, Sendable {
     var value: Double
     var dimension: QuantityDimension
 

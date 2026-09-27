@@ -16,6 +16,14 @@ final class Ingredient {
     /// Pantry staples are normally on hand and are omitted when rebuilding a
     /// generated shopping list. They can still be added manually.
     var isPantryStaple: Bool = false
+    // MARK: Optional inventory
+    var inventoryModeRaw: String = InventoryMode.none.rawValue
+    var inventoryCanonicalValue: Double?
+    var inventoryDimensionRaw: String?
+    var inventoryBestBefore: Date?
+    var inventoryStorageLocationRaw: String?
+    var inventoryCustomStorageLocation: String?
+    var inventoryUpdatedAt: Date?
     /// Normalized matcher keys the household explicitly decided not to merge
     /// into this ingredient. Keeping the spelling-level decision on the
     /// canonical row makes it durable without making the fuzzy matcher trust
@@ -65,6 +73,34 @@ final class Ingredient {
     var category: IngredientCategory {
         get { IngredientCategory(rawValue: categoryRaw) ?? .other }
         set { categoryRaw = newValue.rawValue }
+    }
+
+    var inventoryMode: InventoryMode {
+        get { InventoryMode(rawValue: inventoryModeRaw) ?? .none }
+        set { inventoryModeRaw = newValue.rawValue; inventoryUpdatedAt = .now }
+    }
+
+    var inventoryDimension: QuantityDimension? {
+        get { inventoryDimensionRaw.flatMap(QuantityDimension.init(rawValue:)) }
+        set { inventoryDimensionRaw = newValue?.rawValue }
+    }
+
+    var inventoryQuantity: Quantity? {
+        get {
+            guard let value = inventoryCanonicalValue, let dimension = inventoryDimension else { return nil }
+            return Quantity(value: value, dimension: dimension)
+        }
+        set {
+            inventoryCanonicalValue = newValue?.value
+            inventoryDimension = newValue?.dimension
+            inventoryUpdatedAt = .now
+        }
+    }
+
+    func markInventory(_ mode: InventoryMode, quantity: Quantity? = nil, bestBefore: Date? = nil) {
+        inventoryMode = mode
+        inventoryQuantity = quantity
+        inventoryBestBefore = bestBefore
     }
 
     // MARK: - Nutrition

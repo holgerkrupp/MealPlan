@@ -12,6 +12,10 @@ enum RecipeExtractionSource: String, Sendable, Equatable {
     case heuristic
 }
 
+enum RecipeNutritionProvenance: String, CaseIterable, Codable, Sendable {
+    case imported, manuallyEntered, calculated
+}
+
 struct RecipeFieldEvidence: Sendable, Equatable {
     var source: RecipeExtractionSource
     /// A short, human-readable locator such as "h2 Ingredients" or
@@ -389,6 +393,54 @@ enum RecipeImportError: LocalizedError {
 /// Turns a recipe URL into an `ImportedRecipe`.
 protocol RecipeImporter: Sendable {
     func importRecipe(from url: URL) async throws -> ImportedRecipe
+}
+
+struct RecipeMigrationResult: Sendable {
+    var imported: [ImportedRecipe]
+    var failures: [(url: URL, message: String)]
+}
+
+/// A generic, non-Mealime-specific URL migration queue. It accepts only
+/// user-provided URLs, deduplicates canonical sources, and keeps failures for
+/// review instead of silently dropping partial recipes.
+enum RecipeMigrationQueue {
+    static func canonicalURL(_ url: URL) -> URL {
+        guard var components = URLComponents(url: url, resolvingAgainstBaseURL: false) else { return url }
+        let scheme = components.scheme?.lowercased()
+        let host = components.host?.lowercased()
+        let queryItems = components.queryItems?.filter {
+            !["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term", "fbclid"].contains($0.name.lowercased())
+        }
+        components.scheme = scheme
+        components.host = host
+        components.queryItems = queryItems
+        return components.url ?? url
+    }
+
+    static func uniqueURLs(_ urls: [URL]) -> [URL] {
+        var seen = Set<URL>()
+        return urls.filter { seen.insert(canonicalURL($0)).inserted }
+    }
+
+    static func importURLs(
+        _ urls: [URL],
+        importer: any RecipeImporter,
+        progress: (@Sendable (_ completed: Int, _ total: Int) -> Void)? = nil
+    ) async -> RecipeMigrationResult {
+        let work = uniqueURLs(urls)
+        var imported: [ImportedRecipe] = []
+        var failures: [(url: URL, message: String)] = []
+        for (index, url) in work.enumerated() {
+            do {
+                let recipe = try await importer.importRecipe(from: url)
+                imported.append(recipe)
+            } catch {
+                failures.append((url: url, message: error.localizedDescription))
+            }
+            progress?(index + 1, work.count)
+        }
+        return RecipeMigrationResult(imported: imported, failures: failures)
+    }
 }
 
 /// Records only the URL + site name. Kept as a fallback / for tests.
