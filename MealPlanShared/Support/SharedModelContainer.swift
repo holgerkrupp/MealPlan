@@ -15,12 +15,6 @@ enum SharedStore {
 
     static let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "persistence")
 
-    /// Whether the store that was opened is actually mirroring to CloudKit, or
-    /// quietly fell back to the local App-Group file because the container
-    /// couldn't be reached (an unprovisioned entitlement, no iCloud account).
-    /// Written once while the container is built and only read afterwards.
-    nonisolated(unsafe) private(set) static var isMirroringToCloudKit = false
-
     static var models: [any PersistentModel.Type] {
         [
             Household.self,
@@ -73,10 +67,15 @@ enum SharedStore {
             return try! ModelContainer(for: schema, configurations: [config])
         }
 
+        // SwiftData force-casts non-optional UUID properties while it
+        // materializes rows. Repair legacy NULL UUIDs before opening the store,
+        // otherwise backup and restore can crash before their error handling
+        // gets a chance to run.
+        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+
         // CKSyncEngine is the only CloudKit writer. Keeping SwiftData's
         // private mirror enabled here would create a second conflict path for
         // the same models and cannot address the shared database.
-        isMirroringToCloudKit = false
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {
             return try ModelContainer(for: schema, configurations: [local])
@@ -91,6 +90,7 @@ enum SharedStore {
     static func containerIfAvailable() -> ModelContainer? {
         LenientSecureUnarchiveTransformer.register()
         let schema = makeSchema()
+        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {
             return try ModelContainer(for: schema, configurations: [local])

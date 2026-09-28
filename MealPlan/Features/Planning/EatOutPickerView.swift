@@ -28,6 +28,12 @@ struct EatOutPickerView: View {
         query.trimmingCharacters(in: .whitespacesAndNewlines).count >= 2
     }
 
+    /// The typed name can still be planned when Maps has no matching place.
+    private var typedPlaceName: String? {
+        let name = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        return name.isEmpty ? nil : name
+    }
+
     /// The most recent distinct restaurants from earlier plans.
     private var recentPlaces: [PlaceOption] {
         var seen = Set<String>()
@@ -117,6 +123,31 @@ struct EatOutPickerView: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    if let typedPlaceName,
+                       !model.isSearching,
+                       model.results.isEmpty {
+                        Button {
+                            plan(name: typedPlaceName, address: nil, latitude: nil, longitude: nil)
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "plus.circle.fill")
+                                    .font(.title3)
+                                    .foregroundStyle(.tint)
+                                    .frame(width: 34)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(String(localized: "Add “\(typedPlaceName)”"))
+                                    Text(String(localized: "Plan this place without a map match"))
+                                        .font(.caption)
+                                        .foregroundStyle(.secondary)
+                                }
+                                Spacer(minLength: 0)
+                            }
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(appState.isGuest)
+                    }
+
                     ForEach(searchPlaces) { place in
                         Button {
                             select(place)
@@ -130,6 +161,31 @@ struct EatOutPickerView: View {
                         .buttonStyle(.plain)
                         .listRowBackground(selectedPlaceID == place.id ? Color.accentColor.opacity(0.12) : Color.clear)
                     }
+                }
+            }
+
+            if let typedPlaceName, !isSearchable {
+                Section {
+                    Button {
+                        plan(name: typedPlaceName, address: nil, latitude: nil, longitude: nil)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "plus.circle.fill")
+                                .font(.title3)
+                                .foregroundStyle(.tint)
+                                .frame(width: 34)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "Add “\(typedPlaceName)”"))
+                                Text(String(localized: "Plan this place without a map match"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(appState.isGuest)
                 }
             }
 

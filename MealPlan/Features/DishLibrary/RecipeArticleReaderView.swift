@@ -44,6 +44,12 @@ struct RecipeArticleReaderView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
+                #if os(iOS)
+                FullPageScreenshotBridge()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                #endif
+
                 heroImage
                 headline
 

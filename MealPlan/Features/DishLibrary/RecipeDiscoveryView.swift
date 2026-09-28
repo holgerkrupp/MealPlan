@@ -61,6 +61,12 @@ struct RecipeDiscoveryView: View {
 
     var body: some View {
         ScrollView {
+            #if os(iOS)
+            FullPageScreenshotBridge()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            #endif
+
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
                 if loadingDiscovery && snapshot.allArticles.isEmpty {
                     ProgressView()

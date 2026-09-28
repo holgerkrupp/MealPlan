@@ -37,6 +37,12 @@ struct DishVariantGroupView: View {
 
     var body: some View {
         ScrollView {
+            #if os(iOS)
+            FullPageScreenshotBridge()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            #endif
+
             if members.isEmpty {
                 ContentUnavailableView(
                     String(localized: "No variants left"),

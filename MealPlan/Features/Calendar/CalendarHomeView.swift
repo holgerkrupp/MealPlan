@@ -289,6 +289,12 @@ private struct PlanScrollView: View {
     var body: some View {
         ScrollViewReader { proxy in
             ScrollView {
+                #if os(iOS)
+                FullPageScreenshotBridge()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                #endif
+
                 LazyVStack(spacing: 16) {
                     ForEach(paginator.weekStarts, id: \.self) { weekStart in
                         WeekSectionView(

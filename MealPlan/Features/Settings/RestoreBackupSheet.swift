@@ -26,6 +26,19 @@ struct RestoreBackupSheet: View {
 
     private var contents: MealPlanBackup.Contents { backup.backup.contents }
 
+    private var sourceCloudEnvironment: CloudKitEnvironment? {
+        guard let raw = backup.backup.origin?.cloudEnvironment,
+              let environment = CloudKitEnvironment(rawValue: raw),
+              environment != .unknown else { return nil }
+        return environment
+    }
+
+    private var isCrossEnvironmentRestore: Bool {
+        guard let sourceCloudEnvironment,
+              BuildEnvironment.cloudKit != .unknown else { return false }
+        return sourceCloudEnvironment != BuildEnvironment.cloudKit
+    }
+
     var body: some View {
         NavigationStack {
             Group {
@@ -71,6 +84,11 @@ struct RestoreBackupSheet: View {
                 Text(errorMessage ?? "")
             }
         }
+        #if os(macOS)
+        .frame(minWidth: 560, minHeight: 500)
+        #else
+        .presentationDetents([.medium, .large])
+        #endif
     }
 
     // MARK: - Details
@@ -78,7 +96,8 @@ struct RestoreBackupSheet: View {
     private var details: some View {
         List {
             Section {
-                LabeledContent(String(localized: "Family"), value: backup.backup.household.name)
+                LabeledContent(String(localized: "Household"), value: backup.backup.household.name)
+                LabeledContent(String(localized: "Sync mode"), value: backupSyncMode)
                 LabeledContent(String(localized: "Written")) {
                     Text(backup.backup.exportedAt, format: .dateTime.day().month().year().hour().minute())
                 }
@@ -92,6 +111,21 @@ struct RestoreBackupSheet: View {
                             value: origin.build.map { "\(version) (\($0))" } ?? version
                         )
                     }
+                }
+                if contents.households > 1 {
+                    LabeledContent(
+                        String(localized: "Households in file"),
+                        value: String(contents.households)
+                    )
+                }
+                if isCrossEnvironmentRestore {
+                    Label {
+                        Text(crossEnvironmentNotice)
+                    } icon: {
+                        Image(systemName: "arrow.triangle.2.circlepath.icloud")
+                            .foregroundStyle(.orange)
+                    }
+                    .font(.footnote)
                 }
             } header: {
                 Text("This file")
@@ -112,6 +146,17 @@ struct RestoreBackupSheet: View {
                 )
             }
 
+            Section(String(localized: "Current device")) {
+                LabeledContent(
+                    String(localized: "Household"),
+                    value: appState.currentHousehold?.name ?? String(localized: "None")
+                )
+                LabeledContent(String(localized: "Sync mode"), value: currentSyncMode)
+                LabeledContent(String(localized: "Dishes"), value: "\(count(Dish.self))")
+                LabeledContent(String(localized: "Planned meals"), value: "\(count(MealPlanEntry.self))")
+                LabeledContent(String(localized: "Cooked meals"), value: "\(count(CookedLog.self))")
+            }
+
             Section {
                 Label {
                     Text(replaceWarning)
@@ -125,11 +170,33 @@ struct RestoreBackupSheet: View {
     }
 
     private var replaceWarning: String {
-        if SharedStore.isMirroringToCloudKit {
-            String(localized: "Everything now on this device is deleted first, including anything already synced to this iCloud database on your other devices. This can’t be undone.")
-        } else {
-            String(localized: "Everything now on this device is deleted first. This can’t be undone.")
+        if isCrossEnvironmentRestore,
+           let sourceCloudEnvironment {
+            return "This backup came from the " + sourceCloudEnvironment.localizedName + " iCloud environment, while this build uses " + BuildEnvironment.cloudKit.localizedName + ". Everything now on this device is deleted first, and the restore creates a new household here so stale records from the other environment are not reused. This can’t be undone."
         }
+        return String(localized: "Everything now on this device is deleted first. The restored household is then used for this build’s iCloud environment. This can’t be undone.")
+    }
+
+    private var crossEnvironmentNotice: String {
+        guard let sourceCloudEnvironment else { return "" }
+        return "Different iCloud environment: " + sourceCloudEnvironment.localizedName + " → " + BuildEnvironment.cloudKit.localizedName + ". A new household identity will be created here."
+    }
+
+    private var backupSyncMode: String {
+        guard let environment = backup.backup.origin?.cloudEnvironment,
+              !environment.isEmpty,
+              environment != CloudKitEnvironment.unknown.rawValue else {
+            return String(localized: "Backup file")
+        }
+        return "iCloud · CKSyncEngine (" + environment + ")"
+    }
+
+    private var currentSyncMode: String {
+        "iCloud · CKSyncEngine (" + BuildEnvironment.cloudKit.localizedName + ")"
+    }
+
+    private func count<T: PersistentModel>(_ type: T.Type) -> Int {
+        (try? context.fetchCount(FetchDescriptor<T>())) ?? 0
     }
 
     // MARK: - Work
@@ -141,10 +208,29 @@ struct RestoreBackupSheet: View {
         // progress view on screen before the main thread stops answering.
         try? await Task.sleep(for: .milliseconds(50))
         do {
-            try MealPlanBackupRestore.replaceEverything(with: backup.backup, context: context)
+            // Do not let the save observer turn the replacement into a stream
+            // of deletes and re-uploads against the old household while the
+            // store is being rewritten.
+            let oldLocators = (try? context.fetch(FetchDescriptor<Household>()))?
+                .compactMap { HouseholdShareLocator.decode($0.cloudKitShareIdentifier) } ?? []
+            await HouseholdRecordSyncService.shared.stop()
+            for locator in oldLocators {
+                HouseholdRecordSyncService.shared.discardState(for: locator)
+            }
+
+            try MealPlanBackupRestore.replaceEverything(
+                with: backup.backup,
+                context: context,
+                householdUUID: isCrossEnvironmentRestore ? UUID() : nil
+            )
             // `currentHousehold` pointed at one of the deleted objects, and the
             // restored plan needs its routines scheduled forward again.
             appState.bootstrap(context: context)
+            if let household = appState.currentHousehold {
+                // The restored backup intentionally has no share locator. The
+                // next round creates a clean solo zone for its household UUID.
+                try? await HouseholdCloudSharingService.synchronize(household, context: context)
+            }
             // The dinner reminder was scheduled against meals that no longer
             // exist.
             MealNotificationScheduler.shared.settingsChanged(context: context)

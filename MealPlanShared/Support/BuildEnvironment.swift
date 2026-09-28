@@ -38,16 +38,38 @@ enum BuildEnvironment {
             return .unknown
             #endif
         }
+        // This entitlement is the authoritative environment selected for the
+        // push/iCloud container. It is present in both iOS and macOS signed
+        // builds, including profiles whose container-environment value is an
+        // array containing both Development and Production.
+        if let apsEnvironment = entitlements["aps-environment"] as? String {
+            switch apsEnvironment {
+            case "development": return .development
+            case "production": return .production
+            default: break
+            }
+        }
+
+        if let debuggable = entitlements["get-task-allow"] as? Bool {
+            return debuggable ? .development : .production
+        }
+
         switch entitlements["com.apple.developer.icloud-container-environment"] {
         case let value as String:
             return CloudKitEnvironment(rawValue: value) ?? .unknown
-        case let values as [String] where values.count == 1:
-            return CloudKitEnvironment(rawValue: values[0]) ?? .unknown
+        case let values as [String]:
+            // Xcode-managed profiles commonly advertise both environments;
+            // without get-task-allow, Development is the only safe choice for
+            // a locally signed profile that includes it.
+            if values.contains(CloudKitEnvironment.development.rawValue) {
+                return .development
+            }
+            if values.contains(CloudKitEnvironment.production.rawValue) {
+                return .production
+            }
+            return .unknown
         default:
             break
-        }
-        if let debuggable = entitlements["get-task-allow"] as? Bool {
-            return debuggable ? .development : .production
         }
         return .unknown
     }()

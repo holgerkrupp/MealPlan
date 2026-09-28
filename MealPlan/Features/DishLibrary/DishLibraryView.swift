@@ -124,6 +124,12 @@ private struct DishLibraryContent: View {
         let canLoadMore = fetchLimit.map { allDishes.count >= $0 } ?? false
 
         ScrollView {
+            #if os(iOS)
+            FullPageScreenshotBridge()
+                .frame(width: 0, height: 0)
+                .accessibilityHidden(true)
+            #endif
+
             TagFilterStrip(
                 filter: $appState.dishFilter,
                 tags: popularTags,

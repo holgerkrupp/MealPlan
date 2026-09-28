@@ -113,6 +113,7 @@ enum HouseholdSharingError: LocalizedError {
     case inviteeNotFound(String)
     case cannotInviteYourself
     case legacyShareNotConverted
+    case differentCloudKitEnvironment(source: String, target: String)
     /// This device's Apple Account is no longer on the household's share.
     /// `RootView` answers it by moving to a household of its own.
     case accessRemoved
@@ -133,6 +134,7 @@ enum HouseholdSharingError: LocalizedError {
         case .inviteeNotFound(let address): String(localized: "iCloud couldn’t find an Apple Account for “\(address)”. Check it for typos, or try another email address or phone number they use with their Apple Account.")
         case .cannotInviteYourself: String(localized: "That’s your own Apple Account. Your other devices signed in to it get the household automatically.")
         case .legacyShareNotConverted: String(localized: "Some people who joined with the old link couldn’t be moved to personal invitations. Use Create New Invitation, then invite everyone again.")
+        case .differentCloudKitEnvironment(let source, let target): "This invitation belongs to the " + source + " iCloud environment, but this app uses " + target + ". Install the same build source on both devices, or restore the backup into the target environment before inviting again."
         case .accessRemoved: String(localized: "You no longer have access to this household.")
         }
     }
@@ -201,6 +203,7 @@ struct CloudShareDeliveryGate {
 @MainActor
 enum HouseholdCloudSharingService {
     private static let householdIDKey = "householdID"
+    private static let cloudEnvironmentKey = "cloudEnvironment"
 
     static func isOwner(shareIdentifier: String?) -> Bool? {
         HouseholdShareLocator.decode(shareIdentifier)?.isOwner
@@ -291,6 +294,9 @@ enum HouseholdCloudSharingService {
         // invitation UI is opened so future participants can fetch the root
         // record by ID without relying on any CloudKit query indexes.
         share[householdIDKey] = household.uuid.uuidString as CKRecordValue
+        if BuildEnvironment.cloudKit != .unknown {
+            share[cloudEnvironmentKey] = BuildEnvironment.cloudKit.rawValue as CKRecordValue
+        }
         try await convertToPersonalInvitations(share, container: container)
         let savedShare = try await save(share, to: database)
 
@@ -494,6 +500,17 @@ enum HouseholdCloudSharingService {
                 throw error
             }
             acceptedShare = existingShare
+        }
+
+        if let sourceEnvironment = acceptedShare[cloudEnvironmentKey] as? String,
+           let source = CloudKitEnvironment(rawValue: sourceEnvironment),
+           source != .unknown,
+           BuildEnvironment.cloudKit != .unknown,
+           source != BuildEnvironment.cloudKit {
+            throw HouseholdSharingError.differentCloudKitEnvironment(
+                source: source.localizedName,
+                target: BuildEnvironment.cloudKit.localizedName
+            )
         }
 
         progress(.downloading(0))

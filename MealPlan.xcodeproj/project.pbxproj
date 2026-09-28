@@ -83,6 +83,20 @@
 			);
 			target = 000000000000000100000000 /* MealPlan */;
 		};
+		48BE4F44306A458000551B11 /* Exceptions for "MealPlan" folder in "MealPlanShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = EE0000000000000000000001 /* MealPlanShareExtension */;
+		};
+		48BE4F45306A458000551B11 /* Exceptions for "MealPlan" folder in "MealPlanWidgets" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Assets.xcassets,
+			);
+			target = DD0000000000000000000001 /* MealPlanWidgets */;
+		};
 		DD00000000000000000000E9 /* Exceptions for "MealPlanWidgets" folder in "MealPlanWidgets" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -104,6 +118,8 @@
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
 				000000000000000000000E10 /* Exceptions for "MealPlan" folder in "MealPlan" target */,
+				48BE4F44306A458000551B11 /* Exceptions for "MealPlan" folder in "MealPlanShareExtension" target */,
+				48BE4F45306A458000551B11 /* Exceptions for "MealPlan" folder in "MealPlanWidgets" target */,
 			);
 			path = MealPlan;
 			sourceTree = "<group>";
@@ -556,10 +572,11 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Pumpkin;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -607,7 +624,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -629,10 +646,11 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIcon;
+				ASSETCATALOG_COMPILER_APPICON_NAME = Pumpkin;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				ENABLE_APP_SANDBOX = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
@@ -680,7 +698,7 @@
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
 				"LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]" = "@executable_path/../Frameworks";
 				MACOSX_DEPLOYMENT_TARGET = 26.0;
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				REGISTER_APP_GROUPS = YES;
@@ -704,7 +722,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -714,7 +732,7 @@
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = de.holgerkrupp.mealplan;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -736,7 +754,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -746,7 +764,7 @@
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = de.holgerkrupp.mealplan;
 				INFOPLIST_KEY_WKRunsIndependentlyOfCompanionApp = NO;
 				LD_RUNPATH_SEARCH_PATHS = "@executable_path/Frameworks";
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.watchkitapp;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = watchos;
@@ -768,7 +786,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = MealPlanWidgets/MealPlanWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlanWidgets/Info.plist;
@@ -778,7 +796,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.Widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -798,7 +816,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = MealPlanWidgets/MealPlanWidgets.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlanWidgets/Info.plist;
@@ -808,7 +826,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.Widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -828,7 +846,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = MealPlanShareExtension/MealPlanShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlanShareExtension/Info.plist;
@@ -839,7 +857,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;
@@ -859,7 +877,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = MealPlanShareExtension/MealPlanShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 20;
+				CURRENT_PROJECT_VERSION = 30;
 				DEVELOPMENT_TEAM = 46D3VYP253;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = MealPlanShareExtension/Info.plist;
@@ -869,7 +887,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2026.1;
+				MARKETING_VERSION = 2026.3;
 				PRODUCT_BUNDLE_IDENTIFIER = de.holgerkrupp.mealplan.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SDKROOT = iphoneos;

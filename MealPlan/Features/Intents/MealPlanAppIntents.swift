@@ -265,6 +265,60 @@ struct PlanMealIntent: AppIntent {
     }
 }
 
+// MARK: - Natural-language meal planning
+
+/// Plans a dish named in the request, creating a lightweight library entry
+/// when the household has not saved that dish yet. This is intentionally a
+/// separate intent from `PlanMealIntent`: entity parameters are excellent for
+/// Shortcuts, while Siri needs to accept a new dish name such as “pizza”.
+struct PutDishInMealsIntent: AppIntent {
+    static var title: LocalizedStringResource { "Put Dish in Meals" }
+    static var description: IntentDescription {
+        IntentDescription("Adds a named dish to a chosen day and meal in the meal plan.")
+    }
+
+    @Parameter(title: "Dish", requestValueDialog: "What should I put in the meals?")
+    var dishName: String
+
+    @Parameter(title: "Day", requestValueDialog: "Which day should I plan it for?")
+    var date: Date
+
+    @Parameter(title: "Meal", requestValueDialog: "Which meal should I add it to?")
+    var meal: MealTypeEntity
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("Put \(\.$dishName) in meals for \(\.$date) \(\.$meal)")
+    }
+
+    @MainActor
+    func perform() async throws -> some IntentResult & ProvidesDialog & ReturnsValue<MealPlanEntryEntity> {
+        try MealPlanIntentResolver.requireEditingAllowed()
+        try await MealPlanIntentResolver.requirePlanningAllowed(on: date)
+
+        let context = MealPlanIntentStore.context
+        let household = MealPlanIntentStore.household()
+        let mealModel = try MealPlanIntentResolver.meal(for: meal)
+        let dish = try MealPlanIntentResolver.dish(named: dishName, household: household)
+        let entry = MealPlanner.plan(
+            dish: dish,
+            on: date,
+            mealKey: mealModel.key,
+            household: household,
+            memberName: DeviceOwner.name,
+            context: context
+        )
+
+        await MealPlanIntentResolver.index(entry)
+        SharedStore.reloadWidgets()
+
+        let day = date.formatted(date: .abbreviated, time: .omitted)
+        return .result(
+            value: MealPlanEntryEntity(entry: entry, meal: mealModel),
+            dialog: "Put “\(dish.name)” in meals for \(day) \(mealModel.name)."
+        )
+    }
+}
+
 // MARK: - Ask about the plan
 
 struct GetMealPlanIntent: AppIntent {
@@ -531,10 +585,23 @@ struct MealPlanShortcuts: AppShortcutsProvider {
         AppShortcut(
             intent: PlanMealIntent(),
             phrases: [
+                "Put \(\.$dish) in meals in \(.applicationName)",
                 "Plan a meal in \(.applicationName)",
                 "Add a dish to the plan in \(.applicationName)",
             ],
             shortTitle: "Plan Meal",
+            systemImageName: "calendar.badge.plus"
+        )
+        AppShortcut(
+            intent: PutDishInMealsIntent(),
+            phrases: [
+                // App Shortcut phrases support only one dynamic entity slot.
+                // Keep the dish name free-form so Siri can create a new
+                // library item, and let it fill or ask for all three values.
+                "Put a dish in meals in \(.applicationName)",
+                "Add a dish to the meal plan in \(.applicationName)",
+            ],
+            shortTitle: "Put Dish in Meals",
             systemImageName: "calendar.badge.plus"
         )
         AppShortcut(

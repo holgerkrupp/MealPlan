@@ -65,9 +65,7 @@ struct DataTransferView: View {
             }
             LabeledContent(
                 String(localized: "Syncing"),
-                value: SharedStore.isMirroringToCloudKit
-                    ? String(localized: "On")
-                    : String(localized: "This device only")
+                value: String(localized: "iCloud")
             )
         } header: {
             Text("iCloud")

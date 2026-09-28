@@ -49,6 +49,9 @@ struct SettingsView: View {
     private var stacked: some View {
         Form {
             UnlockSettingsSection()
+            #if os(iOS)
+            AppIconSettingsSection()
+            #endif
             HouseholdSettingsSection()
             UnitsSettingsSection()
             NutritionSettingsSection()
@@ -94,6 +97,9 @@ struct SettingsView: View {
         case .general:
             paneForm {
                 UnlockSettingsSection()
+                #if os(iOS)
+                AppIconSettingsSection()
+                #endif
                 UnitsSettingsSection()
                 NutritionSettingsSection()
                 LeftoverSuggestionsSettingsSection()
