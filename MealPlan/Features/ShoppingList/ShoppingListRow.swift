@@ -1,9 +1,44 @@
 import SwiftUI
 import SwiftData
 
+struct ShoppingListRowSnapshot: Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let displayText: String?
+    let sourceDishNames: [String]
+    let isChecked: Bool
+    let isManual: Bool
+    let isStaple: Bool
+    let category: IngredientCategory
+    let aisleName: String
+    let sortIndex: Int
+
+    @MainActor
+    init(_ item: ShoppingListItem) {
+        id = item.uuid
+        name = item.name
+        displayText = item.displayText
+        sourceDishNames = item.sourceDishNames
+        isChecked = item.isChecked
+        isManual = item.isManual
+        isStaple = item.ingredient?.isPantryStaple == true
+        category = item.category
+        aisleName = item.aisleName
+        sortIndex = item.sortIndex
+    }
+}
+
+struct ShoppingListRowGroup: Identifiable {
+    let name: String
+    let sortOrder: Int
+    let items: [ShoppingListRowSnapshot]
+
+    var id: String { name }
+}
+
 @MainActor
 struct ShoppingListRow: View {
-    @Bindable var item: ShoppingListItem
+    let snapshot: ShoppingListRowSnapshot
     var onToggle: () -> Void
     var onCategoryChange: (IngredientCategory) -> Void
     var onCustomAisle: () -> Void
@@ -11,27 +46,27 @@ struct ShoppingListRow: View {
     var onSetStaple: (Bool) -> Void
     var onMarkOwned: () -> Void
 
-    private var isStaple: Bool { item.ingredient?.isPantryStaple == true }
+    private var isStaple: Bool { snapshot.isStaple }
 
     var body: some View {
         HStack(spacing: 12) {
             Button(action: onToggle) {
                 HStack(spacing: 12) {
-                    Image(systemName: item.isChecked ? "checkmark.circle.fill" : "circle")
+                    Image(systemName: snapshot.isChecked ? "checkmark.circle.fill" : "circle")
                         .font(.title3)
-                        .foregroundStyle(item.isChecked ? .green : .secondary)
+                        .foregroundStyle(snapshot.isChecked ? .green : .secondary)
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(item.name)
-                            .strikethrough(item.isChecked)
-                            .foregroundStyle(item.isChecked ? .secondary : .primary)
-                        if let amount = item.displayText, !amount.isEmpty {
+                        Text(snapshot.name)
+                            .strikethrough(snapshot.isChecked)
+                            .foregroundStyle(snapshot.isChecked ? .secondary : .primary)
+                        if let amount = snapshot.displayText, !amount.isEmpty {
                             Text(amount)
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
-                        if !item.sourceDishNames.isEmpty {
-                            Text(item.sourceDishNames.joined(separator: ", "))
+                        if !snapshot.sourceDishNames.isEmpty {
+                            Text(snapshot.sourceDishNames.joined(separator: ", "))
                                 .font(.caption2)
                                 .foregroundStyle(.tertiary)
                                 .lineLimit(1)
@@ -45,10 +80,10 @@ struct ShoppingListRow: View {
             .buttonStyle(.plain)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
-            .accessibilityValue(item.isChecked
+            .accessibilityValue(snapshot.isChecked
                 ? String(localized: "Checked off")
                 : String(localized: "Not checked off"))
-            .accessibilityAddTraits(item.isChecked ? .isSelected : [])
+            .accessibilityAddTraits(snapshot.isChecked ? .isSelected : [])
             .accessibilityHint(InteractionWording.checkOffHint)
 
             if isStaple {
@@ -56,7 +91,7 @@ struct ShoppingListRow: View {
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
                     .accessibilityLabel(String(localized: "Pantry staple"))
-            } else if item.isManual {
+            } else if snapshot.isManual {
                 Image(systemName: "hand.draw")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
@@ -64,7 +99,7 @@ struct ShoppingListRow: View {
             }
             Menu {
                 Picker(String(localized: "Aisle"), selection: Binding(
-                    get: { item.category }, set: { onCategoryChange($0) }
+                    get: { snapshot.category }, set: { onCategoryChange($0) }
                 )) {
                     ForEach(IngredientCategory.allCases) { category in
                         Label(category.localizedName, systemImage: category.symbolName).tag(category)
@@ -98,13 +133,13 @@ struct ShoppingListRow: View {
             }
             .buttonStyle(.plain)
             .help(String(localized: "Change the aisle, or mark as a pantry staple"))
-            .accessibilityLabel(String(localized: "Options for \(item.name)"))
+            .accessibilityLabel(String(localized: "Options for \(snapshot.name)"))
         }
     }
 
     private var accessibilityLabel: String {
-        var parts = [item.name]
-        if let amount = item.displayText, !amount.isEmpty { parts.append(amount) }
+        var parts = [snapshot.name]
+        if let amount = snapshot.displayText, !amount.isEmpty { parts.append(amount) }
         if isStaple { parts.append(String(localized: "Pantry staple")) }
         return parts.joined(separator: ", ")
     }
@@ -113,7 +148,7 @@ struct ShoppingListRow: View {
 #Preview {
     List {
         ShoppingListRow(
-            item: PreviewData.shoppingItem,
+            snapshot: ShoppingListRowSnapshot(PreviewData.shoppingItem),
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},
@@ -121,7 +156,7 @@ struct ShoppingListRow: View {
             onMarkOwned: {}
         )
         ShoppingListRow(
-            item: PreviewData.checkedShoppingItem,
+            snapshot: ShoppingListRowSnapshot(PreviewData.checkedShoppingItem),
             onToggle: {},
             onCategoryChange: { _ in },
             onCustomAisle: {},

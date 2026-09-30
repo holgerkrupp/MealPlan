@@ -86,6 +86,18 @@ final class HouseholdRecordSyncService {
     private var isApplyingRemoteChanges = false
     private(set) var lastError: Error?
 
+    /// CKSyncEngine is an Objective-C reference type whose public SDK
+    /// annotations vary by OS release. The detached operation boundary is
+    /// intentional and all access through this bridge is limited to the
+    /// engine's async fetch/send methods.
+    private final class CloudEngineBridge: @unchecked Sendable {
+        let engine: CKSyncEngine
+
+        init(_ engine: CKSyncEngine) {
+            self.engine = engine
+        }
+    }
+
     private init() {}
 
     var isReadOnly: Bool { locator?.isReadOnly == true }
@@ -295,21 +307,27 @@ final class HouseholdRecordSyncService {
         needsLocalScan = false
     }
 
-    /// Runs every explicit engine operation behind the previous one. A task
-    /// chain is enough here: the service is MainActor-isolated and completed
-    /// tasks release their captured predecessor, so the chain stays bounded.
+    /// Runs every explicit engine operation behind the previous one. The
+    /// operation itself must cross a detached task boundary: CKSyncEngine
+    /// rejects fetch/send calls that inherit a delegate callback's task
+    /// lineage, even when the calls are otherwise serialized.
     private func performCloudOperation(fetch: Bool, send: Bool) async {
         let previous = cloudOperationTask
-        let task = Task { @MainActor [weak self] in
+        guard let engine = self.engine, let locator = self.locator else { return }
+        let bridge = CloudEngineBridge(engine)
+        let zoneID = locator.zoneID
+        let maySend = send && !locator.isReadOnly
+
+        let detached = Task.detached(priority: .utility) {
             await previous?.value
-            guard !Task.isCancelled, let self, let engine = self.engine, let locator = self.locator else { return }
+            guard !Task.isCancelled else { return nil as Error? }
             var operationError: Error?
 
             if fetch {
                 do {
-                    var options = CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([locator.zoneID]))
-                    options.prioritizedZoneIDs = [locator.zoneID]
-                    try await engine.fetchChanges(options)
+                    var options = CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([zoneID]))
+                    options.prioritizedZoneIDs = [zoneID]
+                    try await bridge.engine.fetchChanges(options)
                 } catch {
                     operationError = error
                 }
@@ -317,15 +335,20 @@ final class HouseholdRecordSyncService {
 
             // A first-time owner may not have a server zone to fetch yet. Still
             // run the send so pending zone creation can establish it.
-            if send, !locator.isReadOnly {
+            if maySend {
                 do {
-                    try await engine.sendChanges(.init(scope: .zoneIDs([locator.zoneID])))
+                    await Task.yield()
+                    try await bridge.engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
                 } catch {
-                    operationError = error
+                    if operationError == nil { operationError = error }
                 }
             }
 
-            self.lastError = operationError
+            return operationError
+        }
+        let task = Task { @MainActor [weak self] in
+            let error = await detached.value
+            if let self { self.lastError = error }
         }
         cloudOperationTask = task
         await task.value
@@ -339,50 +362,53 @@ final class HouseholdRecordSyncService {
         defer { isApplyingRemoteChanges = false }
 
         var local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
-        for modification in changes.modifications.sorted(by: { priority($0.record) < priority($1.record) }) {
-            let record = modification.record
-            guard record.recordID.zoneID == locator.zoneID,
-                  let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
-                  let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data else { continue }
+        try withoutUndoRegistration(in: context) {
+            for modification in changes.modifications.sorted(by: { priority($0.record) < priority($1.record) }) {
+                let record = modification.record
+                guard record.recordID.zoneID == locator.zoneID,
+                      let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
+                      let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data else { continue }
 
-            metadata.systemFields[identity.recordName] = encodeSystemFields(record)
-            if identity.type == .deletionMarker {
-                if case .deletionMarker(let marker) = try HouseholdRecordCodec.decode(payloadData) {
-                    HouseholdRecordApplier.delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
+                metadata.systemFields[identity.recordName] = encodeSystemFields(record)
+                if identity.type == .deletionMarker {
+                    if case .deletionMarker(let marker) = try HouseholdRecordCodec.decode(payloadData) {
+                        HouseholdRecordApplier.delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
+                    }
+                    metadata.fingerprints[identity.recordName] = fingerprint(payloadData)
+                    continue
                 }
-                metadata.fingerprints[identity.recordName] = fingerprint(payloadData)
-                continue
+
+                let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
+                let serverAssetData = serverAsset?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                let resolution = try HouseholdRecordConflictResolver.resolve(
+                    local: local[identity.recordName],
+                    server: record,
+                    serverAssetData: serverAssetData,
+                    serverHasAsset: serverAsset != nil
+                )
+                try HouseholdRecordApplier.apply(
+                    payloadData: resolution.payloadData,
+                    identity: identity,
+                    modifiedAt: resolution.modifiedAt,
+                    assetData: resolution.assetData,
+                    household: household,
+                    context: context
+                )
+                if resolution.shouldUpload, !locator.isReadOnly {
+                    engine?.state.add(pendingRecordZoneChanges: [.saveRecord(record.recordID)])
+                }
+            }
+            for deletion in changes.deletions where deletion.recordID.zoneID == locator.zoneID {
+                if let identity = HouseholdRecordIdentity(recordType: deletion.recordType, recordName: deletion.recordID.recordName) {
+                    HouseholdRecordApplier.delete(type: identity.type, uuid: identity.uuid, context: context)
+                    metadata.fingerprints.removeValue(forKey: identity.recordName)
+                    metadata.groupFingerprints.removeValue(forKey: identity.recordName)
+                    metadata.systemFields.removeValue(forKey: identity.recordName)
+                }
             }
 
-            let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
-            let serverAssetData = serverAsset?.fileURL.flatMap { try? Data(contentsOf: $0) }
-            let resolution = try HouseholdRecordConflictResolver.resolve(
-                local: local[identity.recordName],
-                server: record,
-                serverAssetData: serverAssetData,
-                serverHasAsset: serverAsset != nil
-            )
-            try HouseholdRecordApplier.apply(
-                payloadData: resolution.payloadData,
-                identity: identity,
-                modifiedAt: resolution.modifiedAt,
-                assetData: resolution.assetData,
-                household: household,
-                context: context
-            )
-            if resolution.shouldUpload, !locator.isReadOnly {
-                engine?.state.add(pendingRecordZoneChanges: [.saveRecord(record.recordID)])
-            }
+            try context.save()
         }
-        for deletion in changes.deletions where deletion.recordID.zoneID == locator.zoneID {
-            if let identity = HouseholdRecordIdentity(recordType: deletion.recordType, recordName: deletion.recordID.recordName) {
-                HouseholdRecordApplier.delete(type: identity.type, uuid: identity.uuid, context: context)
-                metadata.fingerprints.removeValue(forKey: identity.recordName)
-                metadata.groupFingerprints.removeValue(forKey: identity.recordName)
-                metadata.systemFields.removeValue(forKey: identity.recordName)
-            }
-        }
-        try context.save()
         local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
         for snapshot in local.values {
             metadata.fingerprints[snapshot.identity.recordName] = snapshot.fingerprint
@@ -432,8 +458,10 @@ final class HouseholdRecordSyncService {
             serverAssetData: serverAssetData,
             serverHasAsset: serverAsset != nil
         )
-        try HouseholdRecordApplier.apply(payloadData: resolution.payloadData, identity: identity, modifiedAt: resolution.modifiedAt, assetData: resolution.assetData, household: household, context: context)
-        try context.save()
+        try withoutUndoRegistration(in: context) {
+            try HouseholdRecordApplier.apply(payloadData: resolution.payloadData, identity: identity, modifiedAt: resolution.modifiedAt, assetData: resolution.assetData, household: household, context: context)
+            try context.save()
+        }
         metadata.systemFields[identity.recordName] = encodeSystemFields(server)
         if resolution.shouldUpload { engine.state.add(pendingRecordZoneChanges: [.saveRecord(server.recordID)]) }
     }

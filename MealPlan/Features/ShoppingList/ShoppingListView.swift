@@ -19,7 +19,7 @@ struct ShoppingListView: View {
     @State private var showingPantryStaples = false
     @State private var confirmingClearAll = false
     @State private var showingPrint = false
-    @State private var customAisleItem: ShoppingListItem?
+    @State private var customAisleItemID: UUID?
     @State private var customAisleName = ""
     @AppStorage("shoppingList.hideCheckedItems") private var hideCheckedItems = false
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
@@ -55,8 +55,22 @@ struct ShoppingListView: View {
         }
     }
 
-    /// Shared with the printed list — see `ShoppingListGrouping`.
-    private var grouped: [ShoppingAisle] { ShoppingListGrouping.aisles(visibleItems) }
+    /// Convert the live query into value snapshots before building rows. A
+    /// rebuild may delete a model while SwiftUI still has an old row in its
+    /// render tree; rows must never read that invalidated model again.
+    private var groupedSnapshots: [ShoppingListRowGroup] {
+        let snapshots = visibleItems.map { ShoppingListRowSnapshot($0) }
+        return Dictionary(grouping: snapshots, by: \.aisleName)
+            .map { name, values in
+                ShoppingListRowGroup(
+                    name: name,
+                    sortOrder: values.map { $0.category.sortOrder }.min()
+                        ?? IngredientCategory.other.sortOrder,
+                    items: values.sorted { $0.sortIndex < $1.sortIndex }
+                )
+            }
+            .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+    }
 
     /// An empty KptnCook ingredient list is intentional when the site did
     /// not provide reliable rows. Surface that omission above the generated
@@ -123,16 +137,16 @@ struct ShoppingListView: View {
                 )
             }
 
-            ForEach(grouped, id: \.name) { group in
+            ForEach(groupedSnapshots) { group in
                 Section(group.name) {
                     ForEach(group.items) { item in
                         ShoppingListRow(
-                            item: item,
-                            onToggle: { toggle(item) },
-                            onCategoryChange: { changeCategory(item, to: $0) },
-                            onCustomAisle: { beginCustomAisle(for: item) },
-                            onSetStaple: { setStaple(item, $0) },
-                            onMarkOwned: { markOwned(item) }
+                            snapshot: item,
+                            onToggle: { toggle(item.id) },
+                            onCategoryChange: { changeCategory(item.id, to: $0) },
+                            onCustomAisle: { beginCustomAisle(for: item.id) },
+                            onSetStaple: { setStaple(item.id, $0) },
+                            onMarkOwned: { markOwned(item.id) }
                         )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
@@ -302,7 +316,7 @@ struct ShoppingListView: View {
         }
         .alert(
             String(localized: "Custom aisle"),
-            isPresented: Binding(get: { customAisleItem != nil }, set: { if !$0 { customAisleItem = nil } })
+            isPresented: Binding(get: { customAisleItemID != nil }, set: { if !$0 { customAisleItemID = nil } })
         ) {
             TextField(String(localized: "Aisle name"), text: $customAisleName)
             Button(String(localized: "Save")) { saveCustomAisle() }
@@ -348,7 +362,7 @@ struct ShoppingListView: View {
 
     private var shareText: String {
         var lines: [String] = [String(localized: "Shopping list")]
-        for group in grouped {
+        for group in groupedSnapshots {
             lines.append("")
             lines.append(group.name.uppercased())
             for item in group.items where !item.isChecked {
@@ -376,14 +390,20 @@ struct ShoppingListView: View {
         Task { await autoSyncWithBring() }
     }
 
-    private func toggle(_ item: ShoppingListItem) {
-        withAnimation {
-            item.isChecked.toggle()
-        }
+    private func currentItem(_ id: UUID) -> ShoppingListItem? {
+        items.first { $0.uuid == id }
+    }
+
+    private func toggle(_ id: UUID) {
+        guard let item = currentItem(id) else { return }
+        withAnimation { item.isChecked.toggle() }
+        item.checkStateModifiedAt = .now
+        item.modifiedAt = item.checkStateModifiedAt
         try? context.save()
     }
 
-    private func markOwned(_ item: ShoppingListItem) {
+    private func markOwned(_ id: UUID) {
+        guard let item = currentItem(id) else { return }
         guard let household = appState.currentHousehold else { return }
         let ingredient = item.ingredient ?? {
             let created = Ingredient(name: item.name, category: item.category)
@@ -418,18 +438,22 @@ struct ShoppingListView: View {
         ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
     }
 
-    private func delete(_ offsets: IndexSet, in list: [ShoppingListItem]) {
-        for index in offsets where list.indices.contains(index) {
-            context.delete(list[index])
+    private func delete(_ offsets: IndexSet, in list: [ShoppingListRowSnapshot]) {
+        withoutUndoRegistration(in: context) {
+            for index in offsets where list.indices.contains(index) {
+                if let item = currentItem(list[index].id) { context.delete(item) }
+            }
+            try? context.save()
         }
-        try? context.save()
     }
 
     private func clearChecked() {
-        for item in items where item.isChecked {
-            context.delete(item)
+        withoutUndoRegistration(in: context) {
+            for item in items where item.isChecked {
+                context.delete(item)
+            }
+            try? context.save()
         }
-        try? context.save()
         Task { await autoSyncWithBring() }
     }
 
@@ -437,10 +461,12 @@ struct ShoppingListView: View {
     /// Generated lines come back with the next rebuild; manual ones don't, so
     /// this asks first.
     private func clearAll() {
-        for item in items {
-            context.delete(item)
+        withoutUndoRegistration(in: context) {
+            for item in items {
+                context.delete(item)
+            }
+            try? context.save()
         }
-        try? context.save()
         Task { await autoSyncWithBring() }
     }
 
@@ -474,7 +500,8 @@ struct ShoppingListView: View {
         await bringService.syncQuietly(household: household, context: context)
     }
 
-    private func changeCategory(_ item: ShoppingListItem, to category: IngredientCategory) {
+    private func changeCategory(_ id: UUID, to category: IngredientCategory) {
+        guard let item = currentItem(id) else { return }
         item.category = category
         item.customAisleName = nil
         item.ingredient?.category = category
@@ -483,48 +510,52 @@ struct ShoppingListView: View {
         try? context.save()
     }
 
-    private func beginCustomAisle(for item: ShoppingListItem) {
+    private func beginCustomAisle(for id: UUID) {
+        guard let item = currentItem(id) else { return }
         customAisleName = item.customAisleName ?? ""
-        customAisleItem = item
+        customAisleItemID = id
     }
 
     private func saveCustomAisle() {
-        guard let item = customAisleItem else { return }
+        guard let id = customAisleItemID, let item = currentItem(id) else { return }
         let trimmed = customAisleName.trimmingCharacters(in: .whitespacesAndNewlines)
         item.customAisleName = trimmed.isEmpty ? nil : trimmed
         item.ingredient?.customAisleName = item.customAisleName
         try? context.save()
-        customAisleItem = nil
+        customAisleItemID = nil
     }
 
     private func clearCustomAisle() {
-        guard let item = customAisleItem else { return }
+        guard let id = customAisleItemID, let item = currentItem(id) else { return }
         item.customAisleName = nil
         item.ingredient?.customAisleName = nil
         try? context.save()
-        customAisleItem = nil
+        customAisleItemID = nil
     }
 
     /// Promote a line to a household staple (or take it back off the list of
     /// them). A line that was planned onto the list is dropped along the way —
     /// the point of a staple is that it isn't bought week by week — while a
     /// line the family added by hand stays, because they asked for it.
-    private func setStaple(_ item: ShoppingListItem, _ isStaple: Bool) {
+    private func setStaple(_ id: UUID, _ isStaple: Bool) {
+        guard let item = currentItem(id) else { return }
         guard let household = appState.currentHousehold else { return }
-        if let ingredient = item.ingredient {
-            ingredient.isPantryStaple = isStaple
-        } else if isStaple {
-            item.ingredient = PantryStaples.add(
-                named: item.name,
-                category: item.category,
-                to: household,
-                context: context
-            )
+        withoutUndoRegistration(in: context) {
+            if let ingredient = item.ingredient {
+                ingredient.isPantryStaple = isStaple
+            } else if isStaple {
+                item.ingredient = PantryStaples.add(
+                    named: item.name,
+                    category: item.category,
+                    to: household,
+                    context: context
+                )
+            }
+            if isStaple, !item.isManual {
+                context.delete(item)
+            }
+            try? context.save()
         }
-        if isStaple, !item.isManual {
-            context.delete(item)
-        }
-        try? context.save()
     }
 
     #if os(iOS)

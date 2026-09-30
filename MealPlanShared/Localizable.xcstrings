@@ -4797,7 +4797,7 @@
     "Anyone" : {
 
     },
-    "App icon" : {
+    "App Icon" : {
 
     },
     "App version" : {
@@ -4839,6 +4839,9 @@
           }
         }
       }
+    },
+    "Appearance" : {
+
     },
     "Apple Intelligence is still getting ready. Try again in a little while." : {
 
@@ -20599,6 +20602,9 @@
           }
         }
       }
+    },
+    "Moving from Mealime? Bring over public recipe links or an official export you can access; private account data and grocery history are not imported." : {
+
     },
     "Moving from Mealime? Use only recipe links or files that you can export or share from your account; unsupported private data is never silently claimed to migrate." : {
 

@@ -119,6 +119,17 @@ enum SharedStore {
     }
 }
 
+/// Remote reconciliation, maintenance, and derived-list rebuilds are not
+/// user edits. Disabling registration for the complete mutation/save avoids
+/// SwiftData trying to snapshot deleted objects for the UI undo manager.
+@MainActor
+func withoutUndoRegistration<T>(in context: ModelContext, _ operation: () throws -> T) rethrows -> T {
+    let previous = context.undoManager
+    context.undoManager = nil
+    defer { context.undoManager = previous }
+    return try operation()
+}
+
 extension Notification.Name {
     /// Posted after app data that can appear in widgets, Spotlight, or Siri
     /// changes. The main app debounces it before refreshing its semantic index.

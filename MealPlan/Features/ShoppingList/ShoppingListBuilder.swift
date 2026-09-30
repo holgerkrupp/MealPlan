@@ -226,46 +226,102 @@ enum ShoppingListBuilder {
                 return subtractingInventory(line, ingredient: ingredient)
             }
 
-        // Remember what was already ticked off, under the same key the merging
-        // uses — a line that comes back spelled differently is still the one
-        // the family already crossed out.
         let existing = household.shoppingItems ?? []
-        var checkedByKey: [String: Bool] = [:]
-        for item in existing where !item.isManual {
-            checkedByKey[IngredientMatching.key(for: item.name)] = item.isChecked
-        }
-
-        // Replace generated items, keep manual ones.
-        for item in existing where !item.isManual {
-            context.delete(item)
-        }
-
         let catalogue = household.ingredients ?? []
-        for (index, line) in aggregated.enumerated() {
-            let item = ShoppingListItem(name: line.name, category: line.category)
-            item.household = household
-            item.canonicalValue = line.quantity?.value
-            item.dimension = line.quantity?.dimension
-            item.additionalQuantities = line.additionalQuantities
-            item.unmeasuredCount = line.unmeasuredCount
-            item.isApproximate = line.isApproximate
-            item.displayUnit = line.displayUnit
-            item.displayText = displayText(
-                for: line,
-                system: system,
-                roundsAmounts: roundsAmounts
-            )
-            item.sourceDishNames = line.sourceDishNames
-            item.ingredient = IngredientMatching.match(line.name, in: catalogue, rules: household.matchRules ?? [])
-            item.customAisleName = line.customAisleName
-            item.isChecked = checkedByKey[IngredientMatching.key(for: line.name)] ?? false
-            item.rangeStart = range.start
-            item.rangeEnd = range.end
-            item.sortIndex = line.category.sortOrder * 1000 + index
-            context.insert(item)
+
+        withoutUndoRegistration(in: context) {
+            // Reconcile generated rows in place. A live SwiftUI row can still
+            // be rendering while this save completes; preserving unchanged
+            // models avoids invalidating every backing object at once.
+            var existingByKey = Dictionary(
+                grouping: existing.filter { !$0.isManual },
+                by: { IngredientMatching.key(for: $0.name) }
+            ).mapValues { bucket in
+                bucket.sorted { $0.uuid.uuidString < $1.uuid.uuidString }
+            }
+
+            for (index, line) in aggregated.enumerated() {
+                let key = IngredientMatching.key(for: line.name)
+                let item: ShoppingListItem
+                if var bucket = existingByKey[key], let reused = bucket.first {
+                    item = reused
+                    bucket.removeFirst()
+                    existingByKey[key] = bucket
+                } else {
+                    item = ShoppingListItem(name: line.name, category: line.category)
+                    item.household = household
+                    context.insert(item)
+                }
+
+                update(
+                    item,
+                    from: line,
+                    index: index,
+                    range: range,
+                    system: system,
+                    roundsAmounts: roundsAmounts,
+                    catalogue: catalogue,
+                    matchRules: household.matchRules ?? []
+                )
+            }
+
+            // Repair duplicate old rows and remove generated ingredients that
+            // no longer belong to the selected range. Manual rows are absent
+            // from the buckets and therefore survive unchanged.
+            for stale in existingByKey.values.flatMap({ $0 }) {
+                context.delete(stale)
+            }
+
+            try? context.save()
+        }
+    }
+
+    @MainActor
+    private static func update(
+        _ item: ShoppingListItem,
+        from line: AggregatedLine,
+        index: Int,
+        range: DayRange,
+        system: UnitSystem,
+        roundsAmounts: Bool,
+        catalogue: [Ingredient],
+        matchRules: [IngredientMatchRule]
+    ) {
+        let ingredient = IngredientMatching.match(line.name, in: catalogue, rules: matchRules)
+        let rendered = displayText(for: line, system: system, roundsAmounts: roundsAmounts)
+        var changed = false
+
+        func assign<T: Equatable>(_ old: T, _ new: T, _ set: () -> Void) {
+            if old != new { set(); changed = true }
         }
 
-        try? context.save()
+        assign(item.name, line.name) { item.name = line.name }
+        assign(item.normalizedName, line.normalizedName) { item.normalizedName = line.normalizedName }
+        assign(item.categoryRaw, line.category.rawValue) { item.categoryRaw = line.category.rawValue }
+        assign(item.canonicalValue, line.quantity?.value) { item.canonicalValue = line.quantity?.value }
+        assign(item.dimension, line.quantity?.dimension) { item.dimension = line.quantity?.dimension }
+        assign(item.additionalQuantities, line.additionalQuantities) { item.additionalQuantities = line.additionalQuantities }
+        assign(item.unmeasuredCount, line.unmeasuredCount) { item.unmeasuredCount = line.unmeasuredCount }
+        assign(item.isApproximate, line.isApproximate) { item.isApproximate = line.isApproximate }
+        assign(item.displayUnit, line.displayUnit) { item.displayUnit = line.displayUnit }
+        assign(item.displayText, rendered) { item.displayText = rendered }
+        assign(item.sourceDishNames, line.sourceDishNames) { item.sourceDishNames = line.sourceDishNames }
+        assign(item.customAisleName, line.customAisleName) { item.customAisleName = line.customAisleName }
+        assign(item.rangeStart, range.start) { item.rangeStart = range.start }
+        assign(item.rangeEnd, range.end) { item.rangeEnd = range.end }
+        assign(item.sortIndex, line.category.sortOrder * 1000 + index) {
+            item.sortIndex = line.category.sortOrder * 1000 + index
+        }
+        if item.ingredient?.uuid != ingredient?.uuid {
+            item.ingredient = ingredient
+            changed = true
+        }
+
+        if changed {
+            let now = Date.now
+            item.contentModifiedAt = now
+            item.modifiedAt = now
+        }
     }
 
     /// Subtract only confirmed, compatible inventory. A simple `have` flag

@@ -2,6 +2,129 @@ import SwiftUI
 import SwiftData
 import AppIntents
 
+/// Value-only undo data for a planned meal. SwiftData's automatic undo keeps
+/// the deleted model graph alive while saving; on recent OS releases that can
+/// trap while creating an undo snapshot. Restoring from values preserves the
+/// UI undo behavior without retaining the deleted `MealPlanEntry`.
+struct MealPlanEntryUndoSnapshot {
+    struct CookedLogSnapshot {
+        let uuid: UUID
+        let modifiedAt: Date
+        let date: Date
+        let dishName: String?
+        let servings: Int?
+        let photoData: Data?
+    }
+
+    let uuid: UUID
+    let modifiedAt: Date
+    let placementModifiedAt: Date
+    let contentModifiedAt: Date
+    let date: Date
+    let mealSlotRaw: String
+    let servingsOverride: Int?
+    let note: String?
+    let sortIndex: Int
+    let reactionRaw: String?
+    let skipped: Bool
+    let prepReminder: Bool
+    let plannedByName: String?
+    let lastEditedByName: String?
+    let lastEditedDate: Date?
+    let participatingMemberUUIDs: [String]
+    let isEatingOut: Bool
+    let placeName: String?
+    let placeAddress: String?
+    let placeLatitude: Double?
+    let placeLongitude: Double?
+    let routineUUID: UUID?
+    let dishUUID: UUID?
+    let householdUUID: UUID?
+    let cookedLog: CookedLogSnapshot?
+
+    init(_ entry: MealPlanEntry) {
+        uuid = entry.uuid
+        modifiedAt = entry.modifiedAt
+        placementModifiedAt = entry.placementModifiedAt
+        contentModifiedAt = entry.contentModifiedAt
+        date = entry.date
+        mealSlotRaw = entry.mealSlotRaw
+        servingsOverride = entry.servingsOverride
+        note = entry.note
+        sortIndex = entry.sortIndex
+        reactionRaw = entry.reactionRaw
+        skipped = entry.skipped
+        prepReminder = entry.prepReminder
+        plannedByName = entry.plannedByName
+        lastEditedByName = entry.lastEditedByName
+        lastEditedDate = entry.lastEditedDate
+        participatingMemberUUIDs = entry.participatingMemberUUIDs
+        isEatingOut = entry.isEatingOut
+        placeName = entry.placeName
+        placeAddress = entry.placeAddress
+        placeLatitude = entry.placeLatitude
+        placeLongitude = entry.placeLongitude
+        routineUUID = entry.routineUUID
+        dishUUID = entry.dish?.uuid
+        householdUUID = entry.household?.uuid
+        cookedLog = entry.cookedLog.map {
+            CookedLogSnapshot(
+                uuid: $0.uuid,
+                modifiedAt: $0.modifiedAt,
+                date: $0.date,
+                dishName: $0.dishName,
+                servings: $0.servings,
+                photoData: $0.photoData
+            )
+        }
+    }
+
+    @MainActor
+    func restore(in context: ModelContext) throws {
+        let existing = try context.fetch(FetchDescriptor<MealPlanEntry>())
+        guard !existing.contains(where: { $0.uuid == uuid }) else { return }
+        let households = try context.fetch(FetchDescriptor<Household>())
+        let household = households.first { $0.uuid == householdUUID }
+        let dishes = try context.fetch(FetchDescriptor<Dish>())
+        let dish = dishes.first { $0.uuid == dishUUID }
+
+        let entry = MealPlanEntry(date: date, mealKey: mealSlotRaw, dish: dish)
+        entry.uuid = uuid
+        entry.modifiedAt = modifiedAt
+        entry.placementModifiedAt = placementModifiedAt
+        entry.contentModifiedAt = contentModifiedAt
+        entry.servingsOverride = servingsOverride
+        entry.note = note
+        entry.sortIndex = sortIndex
+        entry.reactionRaw = reactionRaw
+        entry.skipped = skipped
+        entry.prepReminder = prepReminder
+        entry.plannedByName = plannedByName
+        entry.lastEditedByName = lastEditedByName
+        entry.lastEditedDate = lastEditedDate
+        entry.participatingMemberUUIDs = participatingMemberUUIDs
+        entry.isEatingOut = isEatingOut
+        entry.placeName = placeName
+        entry.placeAddress = placeAddress
+        entry.placeLatitude = placeLatitude
+        entry.placeLongitude = placeLongitude
+        entry.routineUUID = routineUUID
+        entry.household = household
+        context.insert(entry)
+
+        if let cookedLog {
+            let log = CookedLog(date: cookedLog.date, dish: dish, servings: cookedLog.servings)
+            log.uuid = cookedLog.uuid
+            log.modifiedAt = cookedLog.modifiedAt
+            log.dishName = cookedLog.dishName
+            log.photoData = cookedLog.photoData
+            log.entry = entry
+            log.household = household
+            context.insert(log)
+        }
+    }
+}
+
 /// One meal (Breakfast, Lunch, …) on one day, shown as its own card in the
 /// day's row. Each meal gets a stable accent colour; an empty card shows the
 /// meal's glyph in the background, a filled one shows the dish photo edge to
@@ -388,13 +511,19 @@ struct MealCard: View {
     }
 
     private func remove(_ entry: MealPlanEntry) {
+        let snapshot = MealPlanEntryUndoSnapshot(entry)
         let name = entry.displayTitle
-        context.delete(entry)
-        try? context.save()
+        try? withoutUndoRegistration(in: context) {
+            context.delete(entry)
+            try context.save()
+        }
         SharedStore.reloadWidgets()
-        let undo = context.undoManager
         appState.offerUndo(String(localized: "Removed “\(name)”")) {
-            undo?.undo(); try? context.save()
+            try? withoutUndoRegistration(in: context) {
+                try snapshot.restore(in: context)
+                try context.save()
+            }
+            SharedStore.reloadWidgets()
         }
     }
 

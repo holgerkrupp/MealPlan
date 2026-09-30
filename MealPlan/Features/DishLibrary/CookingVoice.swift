@@ -152,16 +152,20 @@ final class CookingVoiceController {
     /// Asks for speech + microphone permission. Cooking Mode calls this before
     /// the first `start()` and reverts its toggle if it returns false.
     func requestAuthorization() async -> Bool {
-        let speechAuthorized = await withCheckedContinuation { continuation in
+        let speechAuthorized = await Self.speechAuthorization()
+        guard speechAuthorized else { return false }
+        return await Self.microphoneAuthorization()
+    }
+
+    private nonisolated static func speechAuthorization() async -> Bool {
+        await withCheckedContinuation { continuation in
             SFSpeechRecognizer.requestAuthorization { status in
                 continuation.resume(returning: status == .authorized)
             }
         }
-        guard speechAuthorized else { return false }
-        return await requestMicrophone()
     }
 
-    private func requestMicrophone() async -> Bool {
+    private nonisolated static func microphoneAuthorization() async -> Bool {
         #if os(iOS)
         return await withCheckedContinuation { continuation in
             AVAudioApplication.requestRecordPermission { continuation.resume(returning: $0) }
@@ -230,22 +234,43 @@ final class CookingVoiceController {
         input.removeTap(onBus: 0)
         // The tap runs on a realtime audio thread; it only forwards buffers to
         // the request (safe to call from any thread) and touches nothing else.
-        input.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
-            request.append(buffer)
-        }
+        input.installTap(
+            onBus: 0,
+            bufferSize: 1024,
+            format: format,
+            block: Self.makeAudioTap(request: request)
+        )
         audioEngine.prepare()
         try audioEngine.start()
 
-        task = recognizer.recognitionTask(with: request) { [weak self] result, error in
-            // The handler arrives off the main actor; pull out only Sendable
-            // values and finish the work back on the main actor.
-            let transcript = result?.bestTranscription.formattedString
-            let finished = error != nil || (result?.isFinal ?? false)
-            Task { @MainActor in
-                guard let self else { return }
-                if let transcript { self.consume(transcript) }
-                if finished { self.scheduleRestart() }
+        task = recognizer.recognitionTask(
+            with: request,
+            resultHandler: Self.makeRecognitionHandler { [weak self] transcript, finished in
+                // The handler arrives off the main actor; pull out only Sendable
+                // values and finish the work back on the main actor.
+                Task { @MainActor [weak self] in
+                    guard let self else { return }
+                    if let transcript { self.consume(transcript) }
+                    if finished { self.scheduleRestart() }
+                }
             }
+        )
+    }
+
+    private nonisolated static func makeAudioTap(
+        request: SFSpeechAudioBufferRecognitionRequest
+    ) -> AVAudioNodeTapBlock {
+        { buffer, _ in request.append(buffer) }
+    }
+
+    private nonisolated static func makeRecognitionHandler(
+        _ handler: @escaping @Sendable (String?, Bool) -> Void
+    ) -> (SFSpeechRecognitionResult?, Error?) -> Void {
+        { result, error in
+            handler(
+                result?.bestTranscription.formattedString,
+                error != nil || (result?.isFinal ?? false)
+            )
         }
     }
 

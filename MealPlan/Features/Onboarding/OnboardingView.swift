@@ -15,10 +15,16 @@ struct OnboardingView: View {
     @State private var selectedPage = 0
     @State private var selectedStarterIDs: Set<String> = []
     @State private var configuredStarterDefaults = false
+    private let pages: [OnboardingPage]
 
-    private var pages: [OnboardingPage] {
+    init() {
+        pages = Self.makePages()
+    }
+
+    private static func makePages() -> [OnboardingPage] {
         [
             OnboardingPage(
+                id: .welcome,
                 title: String(localized: "Welcome to MealPlan"),
                 summary: String(localized: "MealPlan keeps your family’s week of meals, the dishes you cook, and the shopping that follows in one place."),
                 systemImage: "fork.knife.circle.fill",
@@ -30,6 +36,7 @@ struct OnboardingView: View {
                 ]
             ),
             OnboardingPage(
+                id: .plan,
                 title: String(localized: "Plan the week"),
                 summary: String(localized: "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty."),
                 systemImage: "calendar",
@@ -42,6 +49,7 @@ struct OnboardingView: View {
                 ]
             ),
             OnboardingPage(
+                id: .dishes,
                 title: String(localized: "Your dishes"),
                 summary: String(localized: "Dishes are the heart of the app: everything you plan, cook, and shop for comes from your library."),
                 systemImage: "fork.knife",
@@ -53,6 +61,7 @@ struct OnboardingView: View {
                 ]
             ),
             OnboardingPage(
+                id: .starterDishes,
                 title: String(localized: "Start with a few dishes"),
                 summary: String(localized: "Pick any familiar dishes you want in your library on day one."),
                 systemImage: "sparkles",
@@ -60,8 +69,9 @@ struct OnboardingView: View {
                 bullets: [],
                 isStarterPicker: true
             ),
-            sharingPage,
+            makeSharingPage(),
             OnboardingPage(
+                id: .shopping,
                 title: String(localized: "Shopping list"),
                 summary: String(localized: "The shopping list is built from the days you plan to cook, so it matches what is actually on the calendar."),
                 systemImage: "cart",
@@ -74,6 +84,7 @@ struct OnboardingView: View {
                 ]
             ),
             OnboardingPage(
+                id: .household,
                 title: String(localized: "Cook together"),
                 summary: String(localized: "MealPlan is made for a household, not just one cook. Everything is stored on your device and shared through iCloud."),
                 systemImage: "person.2.fill",
@@ -91,9 +102,10 @@ struct OnboardingView: View {
     /// Sharing a recipe page is the fastest way into the library, so it gets a
     /// page of its own. The share extension is iPhone/iPad only, so the Mac
     /// gets the routes that exist there.
-    private var sharingPage: OnboardingPage {
+    private static func makeSharingPage() -> OnboardingPage {
         #if os(iOS)
         OnboardingPage(
+            id: .sharing,
             title: String(localized: "Share recipes into MealPlan"),
             summary: String(localized: "Found a recipe on a website, in another recipe app, or in a message? Share it to MealPlan instead of typing it in again."),
             systemImage: "square.and.arrow.up",
@@ -108,6 +120,7 @@ struct OnboardingView: View {
         )
         #else
         OnboardingPage(
+            id: .sharing,
             title: String(localized: "Bring recipes in"),
             summary: String(localized: "Recipes rarely start in MealPlan. Bring them in from the web, from other recipe apps, and from your iPhone."),
             systemImage: "square.and.arrow.down",
@@ -197,14 +210,40 @@ struct OnboardingView: View {
     }
 }
 
+private enum OnboardingPageID: String, Hashable, Sendable {
+    case welcome
+    case plan
+    case dishes
+    case starterDishes
+    case sharing
+    case shopping
+    case household
+}
+
 private struct OnboardingPage: Identifiable {
-    let id = UUID()
+    let id: OnboardingPageID
     let title: String
     let summary: String
     let systemImage: String
     let tint: Color
     let bullets: [String]
     var isStarterPicker = false
+}
+
+private struct OnboardingBulletRow: View {
+    let text: String
+    let tint: Color
+
+    var body: some View {
+        Label {
+            Text(text)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+        } icon: {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(tint)
+        }
+    }
 }
 
 private struct StarterDishesOnboardingPage: View {
@@ -286,15 +325,8 @@ private struct OnboardingPageView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(page.bullets, id: \.self) { bullet in
-                        Label {
-                            Text(bullet)
-                                .font(.body)
-                                .fixedSize(horizontal: false, vertical: true)
-                        } icon: {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(page.tint)
-                        }
+                    ForEach(Array(page.bullets.enumerated()), id: \.offset) { _, bullet in
+                        OnboardingBulletRow(text: bullet, tint: page.tint)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -318,6 +350,7 @@ private struct OnboardingPageView: View {
 
 #Preview("One page") {
     OnboardingPageView(page: OnboardingPage(
+        id: .plan,
         title: String(localized: "Plan the week"),
         summary: String(localized: "The plan shows one card per meal per day. Fill the cards you care about and leave the rest empty."),
         systemImage: "calendar",

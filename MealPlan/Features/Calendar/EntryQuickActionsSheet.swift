@@ -261,14 +261,19 @@ struct EntryQuickActionsSheet: View {
     }
 
     private func remove() {
+        let snapshot = MealPlanEntryUndoSnapshot(entry)
         let name = entry.displayTitle
-        context.delete(entry)
-        save()
+        try? withoutUndoRegistration(in: context) {
+            context.delete(entry)
+            try context.save()
+        }
         SharedStore.reloadWidgets()
-        let undoManager = context.undoManager
         appState.offerUndo(String(localized: "Removed “\(name)”")) {
-            undoManager?.undo()
-            try? context.save()
+            try? withoutUndoRegistration(in: context) {
+                try snapshot.restore(in: context)
+                try context.save()
+            }
+            SharedStore.reloadWidgets()
         }
         close()
     }

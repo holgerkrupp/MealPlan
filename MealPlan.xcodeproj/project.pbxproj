@@ -9,6 +9,7 @@
 /* Begin PBXBuildFile section */
 		483FD9E0304AECEB000857EF /* SFSymbolSelector in Frameworks */ = {isa = PBXBuildFile; productRef = 483FD9DF304AECEB000857EF /* SFSymbolSelector */; };
 		489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */ = {isa = PBXBuildFile; productRef = 489FB59E3044985000B8D666 /* ESADesignKit */; };
+		AB000000000000000000000D /* AppIcon.icon in MealPlanWatch Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000000E /* AppIcon.icon */; };
 		BB000000000000000000000C /* MealPlanWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* MealPlanWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DD000000000000000000000C /* MealPlanWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MealPlanWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EE000000000000000000000C /* MealPlanShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000008 /* MealPlanShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -69,6 +70,7 @@
 
 /* Begin PBXFileReference section */
 		000000000000000000000120 /* MealPlan.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MealPlan.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB000000000000000000000E /* AppIcon.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = MealPlan/AppIcon.icon; sourceTree = SOURCE_ROOT; };
 		BB0000000000000000000008 /* MealPlanWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MealPlanWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD0000000000000000000008 /* MealPlanWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MealPlanWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EE0000000000000000000008 /* MealPlanShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = MealPlanShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -402,6 +404,7 @@
 		BB0000000000000000000004 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			files = (
+				AB000000000000000000000D /* AppIcon.icon in MealPlanWatch Resources */,
 			);
 		};
 		DD0000000000000000000004 /* Resources */ = {
@@ -572,7 +575,7 @@
 		000000000000000111000000 /* Debug configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = (AppIcon, Avocado, Cinamon, Lemon, Strawberry);
 				ASSETCATALOG_COMPILER_APPICON_NAME = Pumpkin;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
@@ -646,7 +649,7 @@
 		000000000000000112000000 /* Release configuration for PBXNativeTarget "MealPlan" */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
-				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = AppIcon;
+				ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES = (AppIcon, Avocado, Cinamon, Lemon, Strawberry);
 				ASSETCATALOG_COMPILER_APPICON_NAME = Pumpkin;
 				CODE_SIGN_ENTITLEMENTS = MealPlan/MealPlan.entitlements;
 				CODE_SIGN_STYLE = Automatic;
