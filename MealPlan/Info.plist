@@ -35,6 +35,37 @@
 			</array>
 		</dict>
 	</array>
+	<key>CFBundleIcons</key>
+	<dict>
+		<key>CFBundleAlternateIcons</key>
+		<dict>
+			<key>AppIcon</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>AppIcon</string>
+			</dict>
+			<key>Avocado</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>Avocado</string>
+			</dict>
+			<key>Cinamon</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>Cinamon</string>
+			</dict>
+			<key>Lemon</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>Lemon</string>
+			</dict>
+			<key>Strawberry</key>
+			<dict>
+				<key>CFBundleIconName</key>
+				<string>Strawberry</string>
+			</dict>
+		</dict>
+	</dict>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -144,36 +175,5 @@
 			</dict>
 		</dict>
 	</array>
-	<key>CFBundleIcons</key>
-	<dict>
-		<key>CFBundleAlternateIcons</key>
-		<dict>
-			<key>AppIcon</key>
-			<dict>
-				<key>CFBundleIconName</key>
-				<string>AppIcon</string>
-			</dict>
-			<key>Avocado</key>
-			<dict>
-				<key>CFBundleIconName</key>
-				<string>Avocado</string>
-			</dict>
-			<key>Cinamon</key>
-			<dict>
-				<key>CFBundleIconName</key>
-				<string>Cinamon</string>
-			</dict>
-			<key>Lemon</key>
-			<dict>
-				<key>CFBundleIconName</key>
-				<string>Lemon</string>
-			</dict>
-			<key>Strawberry</key>
-			<dict>
-				<key>CFBundleIconName</key>
-				<string>Strawberry</string>
-			</dict>
-		</dict>
-	</dict>
 </dict>
 </plist>

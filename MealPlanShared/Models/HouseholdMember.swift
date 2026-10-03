@@ -15,6 +15,13 @@ final class HouseholdMember {
     var roleRaw: String = MemberRole.editor.rawValue
     var isCurrentUser: Bool = false
     var dateAdded: Date = Date.now
+    /// Clock for values owned by CloudKit's `CKShare`: participant identity,
+    /// display name, role and active/current projection.
+    var shareMetadataModifiedAt: Date = Date.now
+    /// Independent clock for household-authored food preferences. Keeping it
+    /// separate avoids a share refresh clobbering a profile edit (and vice
+    /// versa) during a mixed-version rollout.
+    var profileModifiedAt: Date = Date.now
 
     // Optional, explicitly entered food profile. Hard exclusions are kept
     // separate from soft preferences so a suggestion can explain its choice.
@@ -38,6 +45,11 @@ final class HouseholdMember {
     var role: MemberRole {
         get { MemberRole(rawValue: roleRaw) ?? .editor }
         set { roleRaw = newValue.rawValue }
+    }
+
+    func markProfileModified(at date: Date = .now) {
+        profileModifiedAt = date
+        modifiedAt = date
     }
 }
 

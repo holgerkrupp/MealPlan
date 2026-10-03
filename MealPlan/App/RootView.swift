@@ -3,7 +3,7 @@ import SwiftData
 import CloudKit
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
-    case plan, dishes, shopping, settings
+    case plan, dishes, shopping, fridge, settings
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: String(localized: "Plan")
         case .dishes: String(localized: "Dishes")
         case .shopping: String(localized: "Shopping list")
+        case .fridge: String(localized: "Fridge")
         case .settings: String(localized: "Settings")
         }
     }
@@ -21,6 +22,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: "calendar"
         case .dishes: "fork.knife"
         case .shopping: "cart"
+        case .fridge: "refrigerator"
         case .settings: "gearshape"
         }
     }
@@ -29,9 +31,9 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
     /// has a Settings window of its own, reached with ⌘, like every other app.
     static var navigationCases: [AppSection] {
         #if os(macOS)
-        allCases.filter { $0 != .settings }
+        allCases.filter { $0 != .settings && $0 != .fridge }
         #else
-        allCases
+        allCases.filter { $0 != .fridge }
         #endif
     }
 }
@@ -43,6 +45,8 @@ struct RootView: View {
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
     @AppStorage(OnboardingPreferenceKeys.didCompleteOnboarding) private var didCompleteOnboarding = false
+    @AppStorage(FridgeExperienceSettings.enabledKey) private var fridgeExperienceEnabled = false
+    @AppStorage(FridgeExperienceSettings.simulatedFoldableKey) private var simulatedFoldable = false
     @State private var selection: AppSection? = .plan
     @State private var showOnboarding = false
     @State private var didEvaluateOnboarding = false
@@ -77,6 +81,9 @@ struct RootView: View {
                 selection = requested
                 appState.requestedSection = nil
             }
+        }
+        .onChange(of: showsFridge) { _, visible in
+            if !visible, selection == .fridge { selection = .plan }
         }
         .alert(
             String(localized: "Recipe import"),
@@ -121,6 +128,9 @@ struct RootView: View {
         .task { await acceptPendingCloudShares() }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
             Task { await acceptPendingCloudShares() }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanCollaborationRefreshRequested)) { _ in
+            Task { await synchronizeHousehold() }
         }
         .task(id: appState.currentHousehold?.uuid) {
             await synchronizeHousehold()
@@ -277,7 +287,10 @@ struct RootView: View {
                 progress: appState.updateCloudProgress
             )
             appState.currentHousehold = household
-            appState.isGuest = isGuest
+            appState.collaboration.reconcile(
+                household: household,
+                role: isGuest ? .viewOnly : .editor
+            )
             // Mirrors the household-specific half of `AppState.bootstrap`
             // rather than calling it outright: bootstrap re-fetches
             // "the first household", which could pick a different local
@@ -362,7 +375,11 @@ struct RootView: View {
             // saves schedule their own sends. A minute-by-minute full safety
             // scan only competes with foreground reads and can overlap an
             // engine callback on current iOS betas.
-            try await HouseholdCloudSharingService.synchronize(household, context: context)
+            try await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                household: household,
+                context: context,
+                session: appState.collaboration
+            )
         } catch HouseholdSharingError.accessRemoved {
             await moveToOwnHousehold(from: household)
         } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
@@ -384,7 +401,7 @@ struct RootView: View {
         do {
             let own = try await HouseholdCloudSharingService.startOwnHousehold(afterLosingAccessTo: household, context: context)
             appState.currentHousehold = own
-            appState.isGuest = false
+            appState.collaboration.restore(for: own)
             MealType.ensure(for: own, context: context)
             lostHouseholdName = name
         } catch {
@@ -436,6 +453,11 @@ struct RootView: View {
             Tab(AppSection.shopping.title, systemImage: AppSection.shopping.symbol, value: .shopping) {
                 NavigationStack { ShoppingListView() }
             }
+            if showsFridge {
+                Tab(AppSection.fridge.title, systemImage: AppSection.fridge.symbol, value: .fridge) {
+                    NavigationStack { FridgeExperienceView() }
+                }
+            }
             Tab(AppSection.settings.title, systemImage: AppSection.settings.symbol, value: .settings) {
                 NavigationStack { SettingsView(layout: .stacked) }
             }
@@ -445,7 +467,7 @@ struct RootView: View {
     private var splitView: some View {
         NavigationSplitView {
             List(selection: $selection) {
-                ForEach(AppSection.navigationCases) { section in
+                ForEach(visibleNavigationCases) { section in
                     Label(section.title, systemImage: section.symbol)
                         .tag(section)
                 }
@@ -460,10 +482,21 @@ struct RootView: View {
                 case .plan: PlanView()
                 case .dishes: DishLibraryView()
                 case .shopping: ShoppingListView()
+                case .fridge: FridgeExperienceView()
                 case .settings: SettingsView(layout: .stacked)
                 }
             }
         }
+    }
+
+    private var showsFridge: Bool {
+        FridgeExperienceSettings.isPhoneInterface
+            && fridgeExperienceEnabled
+            && (FoldingDeviceStateProvider.current.isFoldable || simulatedFoldable)
+    }
+
+    private var visibleNavigationCases: [AppSection] {
+        AppSection.navigationCases + (showsFridge ? [.fridge] : [])
     }
 }
 

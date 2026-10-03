@@ -56,6 +56,7 @@ struct SettingsView: View {
             UnitsSettingsSection()
             NutritionSettingsSection()
             LeftoverSuggestionsSettingsSection()
+            FridgeExperienceSettingsSection()
             PlanSettingsSection()
             RecipeSearchSettingsSection()
             ConnectionsSettingsSection()
@@ -103,6 +104,7 @@ struct SettingsView: View {
                 UnitsSettingsSection()
                 NutritionSettingsSection()
                 LeftoverSuggestionsSettingsSection()
+                FridgeExperienceSettingsSection()
                 RecipeSearchSettingsSection()
             }
         case .household:

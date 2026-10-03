@@ -97,6 +97,16 @@ struct MealPlanApp: App {
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         Task {
                             await calendarStore.applicationBecameActive()
+                            if let household = appState.currentHousehold {
+                                // The same coalesced refresh handles an
+                                // extension-side App Group write, a push, or
+                                // a role/removal change while we were away.
+                                try? await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                                    household: household,
+                                    context: container.mainContext,
+                                    session: appState.collaboration
+                                )
+                            }
                             if !appState.isGuest {
                                 await RecipeFeedBackgroundRefresh.run(context: container.mainContext)
                             }
@@ -244,6 +254,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
     ) {
         Task {
             await HouseholdRecordSyncService.shared.fetchChanges()
+            NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
             completionHandler(.newData)
         }
     }
@@ -287,7 +298,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
 
     func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
-        Task { await HouseholdRecordSyncService.shared.fetchChanges() }
+        Task {
+            await HouseholdRecordSyncService.shared.fetchChanges()
+            NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
+        }
     }
 }
 #endif

@@ -212,6 +212,7 @@ enum ShoppingListBuilder {
         roundsAmounts: Bool = true,
         context: ModelContext
     ) {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return }
         let start = range.start
         let end = range.end
         let predicate = #Predicate<MealPlanEntry> { $0.date >= start && $0.date < end && $0.skipped == false }
@@ -362,6 +363,7 @@ enum ShoppingListBuilder {
         roundsAmounts: Bool = true,
         context: ModelContext
     ) -> ShoppingListItem? {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 

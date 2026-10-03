@@ -257,7 +257,12 @@ struct ShareRootView: View {
         do {
             let context = container.mainContext
             let household = try? context.fetch(FetchDescriptor<Household>()).first
+            guard HouseholdMutationAuthorization.canMutate(household: household) else {
+                phase = .failed(HouseholdSharingError.readOnlyHousehold.localizedDescription)
+                return
+            }
             _ = try await RecipeFeedService.subscribe(to: candidate, household: household, context: context)
+            HouseholdStoreGeneration.markDirty()
             saveMessage = String(localized: "Subscribed to \(candidate.title)")
             phase = .done
         } catch {
@@ -301,7 +306,15 @@ struct ShareRootView: View {
         phase = .saving
         let context = container.mainContext
         let household = try? context.fetch(FetchDescriptor<Household>()).first
-        let member = DeviceOwnerName.value
+        guard HouseholdMutationAuthorization.canMutate(household: household) else {
+            phase = .failed(HouseholdSharingError.readOnlyHousehold.localizedDescription)
+            return
+        }
+        let member = household.flatMap { household in
+            HouseholdCollaborationStore.load(for: household.uuid).flatMap { snapshot in
+                (snapshot.memberID != nil || snapshot.participantID != nil) ? snapshot.displayName : nil
+            }
+        } ?? DeviceOwnerName.value
         let result = RecipeImportCommitter.importAll(
             recipes, household: household, createdByName: member, context: context
         )
@@ -313,6 +326,7 @@ struct ShareRootView: View {
         saveMessage = result.isEmpty
             ? String(localized: "Already in MealPlan")
             : String(localized: "Saved \(result.imported) recipes to MealPlan")
+        HouseholdStoreGeneration.markDirty()
         phase = .done
     }
 

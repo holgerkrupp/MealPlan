@@ -10,6 +10,9 @@ import SwiftData
 struct MealCalendarContextRow: View {
     let day: Date
     let meals: [DayMeal]
+    /// A lazy week can be constructed before it is on screen. Do not derive
+    /// calendar chips from the store until the containing week is visible.
+    var isVisible = true
 
     @Environment(CalendarContextStore.self) private var store: CalendarContextStore?
     @State private var showingDetail = false
@@ -17,7 +20,8 @@ struct MealCalendarContextRow: View {
     private static let maxChips = 2
 
     private var contexts: [MealPlanningContext] {
-        store?.contexts(for: day, meals: meals) ?? []
+        guard isVisible else { return [] }
+        return store?.contexts(for: day, meals: meals) ?? []
     }
 
     var body: some View {

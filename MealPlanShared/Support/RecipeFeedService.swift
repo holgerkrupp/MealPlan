@@ -63,6 +63,7 @@ enum RecipeFeedService {
     /// refreshed through the bounded index parser later.
     @discardableResult
     static func subscribe(to candidate: RecipeSiteCandidate, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { throw HouseholdSharingError.readOnlyHousehold }
         if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: {
             if let sourceID = candidate.providerID, $0.sourceID == sourceID && $0.contentURL == candidate.contentURL { return true }
             return candidate.feedURL?.absoluteString == $0.feedURLString
@@ -100,6 +101,7 @@ enum RecipeFeedService {
     /// does not fetch the same pages twice.
     @discardableResult
     static func subscribe(to resolved: ResolvedFeed, household: Household?, context: ModelContext) async throws -> RecipeFeed {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { throw HouseholdSharingError.readOnlyHousehold }
         if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: { $0.feedURLString == resolved.feedURL.absoluteString }) {
             return existing
         }
@@ -130,6 +132,7 @@ enum RecipeFeedService {
     }
 
     static func refresh(_ feed: RecipeFeed, context: ModelContext, force: Bool = false) async throws {
+        guard HouseholdMutationAuthorization.canMutate(household: feed.household) else { return }
         if !force, let retry = feed.nextRetryAt, retry > .now { return }
         if feed.feedURL == nil {
             do {

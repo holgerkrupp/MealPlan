@@ -426,6 +426,22 @@ enum HouseholdCloudSharingService {
         }
     }
 
+    /// Changes an existing participant in place. This intentionally edits the
+    /// current `CKShare` instead of generating a new URL, so accepted members
+    /// and pending invitees retain their invitation and participant identity.
+    static func setPermission(
+        forParticipantWithID participantID: String,
+        canEdit: Bool,
+        in household: Household,
+        context: ModelContext
+    ) async throws -> HouseholdShareInvitation {
+        try await modifyShare(of: household, context: context, unlessOwner: .onlyOwnerCanInvite) { share in
+            guard let participant = share.participants.first(where: { $0.participantID == participantID }),
+                  participant.role != .owner else { throw HouseholdSharingError.memberNotRemovable }
+            participant.permission = canEdit ? .readWrite : .readOnly
+        }
+    }
+
     static func removeMember(_ member: HouseholdMember, from household: Household, context: ModelContext) async throws {
         guard canRemove(member), let participantID = member.cloudKitParticipantID else {
             throw HouseholdSharingError.memberNotRemovable
@@ -595,7 +611,11 @@ enum HouseholdCloudSharingService {
     /// zone, never for a network or server failure (see
     /// `indicatesLostAccess(_:)`), because the answer to it replaces the
     /// household on this device.
-    static func synchronize(_ household: Household, context: ModelContext) async throws {
+    static func synchronize(
+        _ household: Household,
+        context: ModelContext,
+        session: HouseholdCollaborationSession? = nil
+    ) async throws {
         let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
         var syncError: Error?
         do {
@@ -612,13 +632,43 @@ enum HouseholdCloudSharingService {
         }
         let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
         let database = locator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
-        let lostAccess: Bool
+        var lostAccess = false
         do {
             let share = try await fetchRecord(shareID, from: database) as? CKShare
             let isStillOnShare = share?.currentUserParticipant.map { $0.acceptanceStatus == .accepted } ?? true
             lostAccess = !locator.isOwner && !isStillOnShare
             if let share, !lostAccess {
+                let current = share.currentUserParticipant
+                let role: HouseholdCollaborationRole = locator.isOwner || current?.role == .owner
+                    ? .owner
+                    : (current?.permission == .readOnly ? .viewOnly : .editor)
+                var corrected = locator
+                corrected.isReadOnly = role == .viewOnly
+                if household.cloudKitShareIdentifier != (try? HouseholdShareLocator.encode(corrected)) {
+                    household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(corrected)
+                    household.modifiedAt = .now
+                }
                 refreshMembers(from: share, household: household, context: context)
+                // `refreshMembers` saves its cache as well. A second save here
+                // is harmless and ensures the corrected locator commits with
+                // the same local transaction.
+                try context.save()
+                let formatter = PersonNameComponentsFormatter()
+                let fallback = current?.userIdentity.nameComponents
+                    .map { formatter.string(from: $0) }
+                    .flatMap { $0.isEmpty ? nil : $0 }
+                if let session {
+                    session.reconcile(household: household, role: role, participantID: current?.participantID, fallbackName: fallback)
+                } else {
+                    let member = (household.members ?? []).first { $0.cloudKitParticipantID == current?.participantID }
+                    HouseholdCollaborationStore.store(.init(
+                        householdID: household.uuid,
+                        role: role,
+                        memberID: member?.uuid,
+                        participantID: current?.participantID,
+                        displayName: member?.name ?? fallback ?? String(localized: "Me")
+                    ))
+                }
             }
         } catch {
             lostAccess = !locator.isOwner && indicatesLostAccess(error)
@@ -705,7 +755,7 @@ enum HouseholdCloudSharingService {
         }
     }
 
-    private static func refreshMembers(from share: CKShare, household: Household, context: ModelContext) {
+    static func refreshMembers(from share: CKShare, household: Household, context: ModelContext) {
         let currentID = share.currentUserParticipant?.participantID
         let accepted = share.participants.filter { $0.acceptanceStatus == .accepted || $0.role == .owner }
         let acceptedIDs = Set(accepted.map(\.participantID))
@@ -715,7 +765,9 @@ enum HouseholdCloudSharingService {
             if member.isActive || member.isCurrentUser {
                 member.isActive = false
                 member.isCurrentUser = false
-                member.modifiedAt = .now
+                let now = Date.now
+                member.shareMetadataModifiedAt = now
+                member.modifiedAt = now
             }
         }
         for participant in accepted {
@@ -739,7 +791,9 @@ enum HouseholdCloudSharingService {
                 member.role = role
                 member.isCurrentUser = isCurrentUser
                 member.isActive = true
-                member.modifiedAt = .now
+                let now = Date.now
+                member.shareMetadataModifiedAt = now
+                member.modifiedAt = now
             }
         }
         try? context.save()

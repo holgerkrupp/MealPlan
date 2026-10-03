@@ -1,4 +1,5 @@
 import Foundation
+import SwiftData
 
 /// How a day's estimate sits next to the rest of its week.
 ///
@@ -108,6 +109,10 @@ struct WeekNutritionSummary: Sendable {
         dishEstimates[dish.uuid]
     }
 
+    func estimate(for dishUUID: UUID) -> NutritionEstimate? {
+        dishEstimates[dishUUID]
+    }
+
     private static func perPerson(
         for entries: [MealPlanEntry],
         dishEstimates: [UUID: NutritionEstimate]
@@ -137,5 +142,22 @@ struct WeekNutritionSummary: Sendable {
             return (sorted[middle - 1] + sorted[middle]) / 2
         }
         return sorted[middle]
+    }
+}
+
+/// Performs the relationship-heavy nutrition calculation on SwiftData's
+/// model executor. The calendar only asks for it after its week is visible,
+/// and the view receives a value result rather than live recipe models.
+@ModelActor
+actor WeekNutritionSummaryLoader {
+    func load(from start: Date, to end: Date) -> WeekNutritionSummary {
+        let descriptor = FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate<MealPlanEntry> { entry in
+                entry.date >= start && entry.date < end
+            },
+            sortBy: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)]
+        )
+        let entries = (try? modelContext.fetch(descriptor)) ?? []
+        return WeekNutritionSummary(entries: entries)
     }
 }

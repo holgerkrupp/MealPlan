@@ -136,6 +136,8 @@ enum IngredientIdentity {
 
 enum IngredientMergeError: Error, Equatable {
     case sameIngredient
+    case differentHouseholds
+    case noReversibleMerge
 }
 
 /// Re-points every dependent row before removing a duplicate catalogue entry.
@@ -148,6 +150,18 @@ enum IngredientMergeService {
         context: ModelContext
     ) throws {
         guard duplicate !== canonical else { throw IngredientMergeError.sameIngredient }
+        guard let household = canonical.household, household === duplicate.household else {
+            throw IngredientMergeError.differentHouseholds
+        }
+        var audit: IngredientMergeAuditRecord? = IngredientMergeAuditRecord(
+                id: UUID(), createdAt: .now, canonicalUUID: canonical.uuid,
+                canonicalNameBefore: canonical.name, canonicalNormalizedNameBefore: canonical.normalizedName,
+                duplicate: .init(duplicate),
+                dishIngredientUUIDs: (duplicate.dishIngredients ?? []).map(\.uuid),
+                shoppingItemUUIDs: (duplicate.shoppingItems ?? []).map(\.uuid),
+                aliasesAddedToCanonical: [], revertedAt: nil
+        )
+        let originalCanonicalAliasIDs = Set((canonical.aliases ?? []).map(\.uuid))
 
         let undoManager = context.undoManager
         undoManager?.beginUndoGrouping()
@@ -175,6 +189,9 @@ enum IngredientMergeService {
             context: context
         )
 
+        audit?.aliasesAddedToCanonical = (canonical.aliases ?? []).map(\.uuid)
+            .filter { !originalCanonicalAliasIDs.contains($0) }
+
         for alias in duplicate.aliases ?? [] {
             guard alias.ingredient !== canonical else { continue }
             alias.ingredient = canonical
@@ -201,10 +218,104 @@ enum IngredientMergeService {
             $0.candidateUUID != duplicate.uuid
         }
 
-        // Persist the reassignment first. If deletion fails, the duplicate is
-        // still present but no recipe or shopping relationship is lost.
-        try context.save()
+        if let audit {
+            var trail = household.ingredientMergeAuditTrail
+            trail.append(audit)
+            if trail.count > 50 { trail.removeFirst(trail.count - 50) }
+            household.ingredientMergeAuditTrail = trail
+        }
+
+        // A single store save makes the repointing and deletion atomic from
+        // the user's point of view: a failure leaves the durable graph as it
+        // was before the confirmed merge.
         context.delete(duplicate)
         try context.save()
+        IngredientIntegrityDiagnostics.record(.mergeCompleted, detail: "relationships=\(audit?.dishIngredientUUIDs.count ?? 0)")
+    }
+
+    /// Recreates the newest confirmed merge that has not already been
+    /// reversed. It only moves rows that still point at the original
+    /// canonical ingredient, so later deliberate edits are left untouched.
+    @discardableResult
+    static func reverseLatestMerge(in household: Household, context: ModelContext) throws -> Ingredient {
+        var trail = household.ingredientMergeAuditTrail
+        guard let index = trail.lastIndex(where: { $0.revertedAt == nil }),
+              let canonical = (household.ingredients ?? []).first(where: { $0.uuid == trail[index].canonicalUUID })
+        else { throw IngredientMergeError.noReversibleMerge }
+        var audit = trail[index]
+        let restored = restore(audit.duplicate, in: household, context: context)
+
+        let lineIDs = Set(audit.dishIngredientUUIDs)
+        for line in try context.fetch(FetchDescriptor<DishIngredient>())
+        where lineIDs.contains(line.uuid) && line.ingredient === canonical {
+            line.ingredient = restored
+        }
+        let itemIDs = Set(audit.shoppingItemUUIDs)
+        for item in try context.fetch(FetchDescriptor<ShoppingListItem>())
+        where itemIDs.contains(item.uuid) && item.ingredient === canonical {
+            item.ingredient = restored
+        }
+
+        let originalAliasIDs = Set(audit.duplicate.aliases.map(\.uuid))
+        let allAliases = try context.fetch(FetchDescriptor<IngredientAlias>())
+        let survivingAliases = allAliases.filter { originalAliasIDs.contains($0.uuid) }
+        for alias in survivingAliases {
+            alias.ingredient = restored
+        }
+        let survivingIDs = Set(survivingAliases.map(\.uuid))
+        for saved in audit.duplicate.aliases where !survivingIDs.contains(saved.uuid) {
+            let alias = IngredientAlias(name: saved.name)
+            alias.uuid = saved.uuid
+            alias.sourceRaw = saved.sourceRaw
+            alias.confidence = saved.confidence
+            alias.ingredient = restored
+            context.insert(alias)
+        }
+        for alias in canonical.aliases ?? [] where audit.aliasesAddedToCanonical.contains(alias.uuid) {
+            context.delete(alias)
+        }
+        // Do not overwrite a later rename made after the merge.
+        if canonical.name != audit.canonicalNameBefore,
+           canonical.normalizedName != audit.canonicalNormalizedNameBefore {
+            canonical.name = audit.canonicalNameBefore
+            canonical.normalizedName = audit.canonicalNormalizedNameBefore
+        }
+        canonical.modifiedAt = .now
+        audit.revertedAt = .now
+        trail[index] = audit
+        household.ingredientMergeAuditTrail = trail
+        try context.save()
+        IngredientIntegrityDiagnostics.record(.mergeReversed, detail: "relationships=\(audit.dishIngredientUUIDs.count)")
+        return restored
+    }
+
+    private static func restore(
+        _ snapshot: IngredientMergeAuditRecord.IngredientSnapshot,
+        in household: Household,
+        context: ModelContext
+    ) -> Ingredient {
+        let ingredient = Ingredient(name: snapshot.name)
+        ingredient.uuid = snapshot.uuid
+        ingredient.normalizedName = snapshot.normalizedName
+        ingredient.categoryRaw = snapshot.categoryRaw
+        ingredient.customAisleName = snapshot.customAisleName
+        ingredient.isPantryStaple = snapshot.isPantryStaple
+        ingredient.inventoryModeRaw = snapshot.inventoryModeRaw
+        ingredient.inventoryCanonicalValue = snapshot.inventoryCanonicalValue
+        ingredient.inventoryDimensionRaw = snapshot.inventoryDimensionRaw
+        ingredient.inventoryBestBefore = snapshot.inventoryBestBefore
+        ingredient.inventoryStorageLocationRaw = snapshot.inventoryStorageLocationRaw
+        ingredient.inventoryCustomStorageLocation = snapshot.inventoryCustomStorageLocation
+        ingredient.nutritionEnergyKcal = snapshot.nutritionEnergyKcal
+        ingredient.nutritionProteinGrams = snapshot.nutritionProteinGrams
+        ingredient.nutritionCarbGrams = snapshot.nutritionCarbGrams
+        ingredient.nutritionFatGrams = snapshot.nutritionFatGrams
+        ingredient.nutritionReferenceRaw = snapshot.nutritionReferenceRaw
+        ingredient.nutritionSourceRaw = snapshot.nutritionSourceRaw
+        ingredient.rejectedMatchKeys = snapshot.rejectedMatchKeys
+        ingredient.pendingMergeSuggestionsData = snapshot.pendingMergeSuggestionsData
+        ingredient.household = household
+        context.insert(ingredient)
+        return ingredient
     }
 }

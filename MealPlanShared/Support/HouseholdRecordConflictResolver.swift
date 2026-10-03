@@ -13,6 +13,27 @@ struct HouseholdRecordResolution: Sendable {
 
 @MainActor
 enum HouseholdRecordConflictResolver {
+    /// A tombstone carries the only reliable server-side deletion clock. A
+    /// newer local record is an edit/add and must be uploaded instead of
+    /// being removed by the stale delete.
+    static func shouldPreserveLocalForDeletion(
+        local: LocalHouseholdRecord?,
+        deletedAt: Date
+    ) -> Bool {
+        local.map { $0.modifiedAt > deletedAt } ?? false
+    }
+
+    /// Raw CK deletions have no deletion timestamp. Preserve anything that is
+    /// pending or differs from the last acknowledged server value.
+    static func shouldPreserveLocalForRawDeletion(
+        local: LocalHouseholdRecord?,
+        acknowledgedFingerprint: String?,
+        isPending: Bool
+    ) -> Bool {
+        guard let local else { return false }
+        return isPending || acknowledgedFingerprint != local.fingerprint
+    }
+
     /// Resolves a fetched/server record against the current local record. The
     /// return value is always applied locally; `shouldUpload` asks the engine
     /// to submit the merged/local winner using the server change tag.
@@ -36,6 +57,15 @@ enum HouseholdRecordConflictResolver {
         let serverPayload = try HouseholdRecordCodec.decode(serverData)
 
         switch (localPayload, serverPayload) {
+        case (.member(let lhs), .member(let rhs)):
+            let merged = merge(lhs, rhs, localModifiedAt: local.modifiedAt, serverModifiedAt: serverDate)
+            let data = try HouseholdRecordCodec.encode(HouseholdRecordPayload.member(merged))
+            return .init(
+                payloadData: data,
+                modifiedAt: max(local.modifiedAt, serverDate),
+                shouldUpload: data != serverData,
+                assetData: nil
+            )
         case (.planEntry(let lhs), .planEntry(let rhs)):
             let merged = merge(lhs, rhs)
             let data = try HouseholdRecordCodec.encode(HouseholdRecordPayload.planEntry(merged))
@@ -104,6 +134,39 @@ enum HouseholdRecordConflictResolver {
             ingredientID: content.ingredientID,
             contentModifiedAt: max(lhs.contentModifiedAt, rhs.contentModifiedAt),
             checkStateModifiedAt: max(lhs.checkStateModifiedAt, rhs.checkStateModifiedAt)
+        )
+    }
+
+    /// `CKShare` metadata and food preferences are unrelated conflict domains.
+    /// Older payloads have no per-domain clocks, so their record timestamp is
+    /// used conservatively for both domains during the silent upgrade path.
+    static func merge(
+        _ lhs: MemberPayload,
+        _ rhs: MemberPayload,
+        localModifiedAt: Date,
+        serverModifiedAt: Date
+    ) -> MemberPayload {
+        let lhsMetadata = lhs.shareMetadataModifiedAt ?? localModifiedAt
+        let rhsMetadata = rhs.shareMetadataModifiedAt ?? serverModifiedAt
+        let lhsProfile = lhs.profileModifiedAt ?? localModifiedAt
+        let rhsProfile = rhs.profileModifiedAt ?? serverModifiedAt
+        let metadata = lhsMetadata >= rhsMetadata ? lhs : rhs
+        let profile = lhsProfile >= rhsProfile ? lhs : rhs
+        return .init(
+            name: metadata.name,
+            roleRaw: metadata.roleRaw,
+            dateAdded: metadata.dateAdded,
+            cloudKitParticipantID: metadata.cloudKitParticipantID,
+            isActive: metadata.isActive,
+            allergies: profile.allergies,
+            mustAvoidIngredients: profile.mustAvoidIngredients,
+            dietaryPatterns: profile.dietaryPatterns,
+            dislikes: profile.dislikes,
+            favorites: profile.favorites,
+            preferredCuisines: profile.preferredCuisines,
+            spiceTolerance: profile.spiceTolerance,
+            shareMetadataModifiedAt: max(lhsMetadata, rhsMetadata),
+            profileModifiedAt: max(lhsProfile, rhsProfile)
         )
     }
 

@@ -70,13 +70,6 @@ enum ShoppingListWidgetStore {
             predicate: #Predicate { $0.uuid == uuid }
         )
         guard let item = try? context.fetch(descriptor).first else { return }
-        item.isChecked.toggle()
-        // The same three stamps the app writes, so a tick made here merges
-        // against one made on another device exactly as one made in the app.
-        let now = Date.now
-        item.checkStateModifiedAt = now
-        item.modifiedAt = now
-        try? context.save()
-        SharedStore.reloadWidgets()
+        ShoppingListMutationService.setChecked(item, checked: !item.isChecked, context: context)
     }
 }

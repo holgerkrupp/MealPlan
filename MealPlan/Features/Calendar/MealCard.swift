@@ -2,6 +2,72 @@ import SwiftUI
 import SwiftData
 import AppIntents
 
+/// The small, value-only representation the calendar needs to draw a meal.
+/// Keeping this boundary between SwiftData and SwiftUI is important: a lazy
+/// card can outlive, or be rebuilt around, the model that produced it without
+/// retaining a faulting object graph on the main actor.
+struct DishValueSnapshot: Identifiable, Sendable {
+    let uuid: UUID
+    let persistentID: PersistentIdentifier?
+    let modifiedAt: Date
+    let name: String
+    let glyph: DishGlyph?
+    let needsReview: Bool
+
+    var id: UUID { uuid }
+
+    init(_ dish: Dish) {
+        uuid = dish.uuid
+        persistentID = DishPhotoLoading.persistentID(for: dish)
+        modifiedAt = dish.modifiedAt
+        name = dish.name
+        glyph = dish.glyph
+        needsReview = dish.needsReview
+    }
+}
+
+struct MealPlanEntrySnapshot: Identifiable, Sendable {
+    let uuid: UUID
+    let modifiedAt: Date
+    let date: Date
+    let mealKey: String
+    let sortIndex: Int
+    let servingsOverride: Int?
+    let skipped: Bool
+    let prepReminder: Bool
+    let plannedByName: String?
+    let reactionRaw: String?
+    let routineUUID: UUID?
+    let isEatingOut: Bool
+    let placeName: String?
+    let dish: DishValueSnapshot?
+
+    var id: UUID { uuid }
+    var reaction: Reaction? { reactionRaw.flatMap(Reaction.init(rawValue:)) }
+    var displayTitle: String {
+        if let dish { return dish.name }
+        if isEatingOut { return placeName ?? String(localized: "Eating out") }
+        return String(localized: "(dish removed)")
+    }
+
+    init(_ entry: MealPlanEntry) {
+        uuid = entry.uuid
+        modifiedAt = entry.modifiedAt
+        date = entry.date
+        mealKey = entry.mealKey
+        sortIndex = entry.sortIndex
+        servingsOverride = entry.servingsOverride
+        skipped = entry.skipped
+        prepReminder = entry.prepReminder
+        plannedByName = entry.plannedByName
+        reactionRaw = entry.reactionRaw
+        routineUUID = entry.routineUUID
+        isEatingOut = entry.isEatingOut
+        placeName = entry.placeName
+        dish = entry.dish.map(DishValueSnapshot.init)
+    }
+}
+
 /// Value-only undo data for a planned meal. SwiftData's automatic undo keeps
 /// the deleted model graph alive while saving; on recent OS releases that can
 /// trap while creating an undo snapshot. Restoring from values preserves the
@@ -136,7 +202,7 @@ struct MealCard: View {
     let mealKey: String
     let title: String
     let symbolName: String
-    let entries: [MealPlanEntry]
+    let entries: [MealPlanEntrySnapshot]
     var nutritionSummary: WeekNutritionSummary? = nil
 
     @Environment(AppState.self) private var appState
@@ -189,10 +255,11 @@ struct MealCard: View {
     private var isPlanningLocked: Bool { !purchaseManager.canPlan(on: date) }
 
     var body: some View {
-        // Resolve the relationship once for this render. The image data stays
-        // externally stored until `CachedDishPhoto` requests it.
-        let backdropImage = entries.lazy.compactMap { $0.dish?.primaryImage }.first
-        let showsBackdrop = backdropImage != nil
+        // The snapshot contains only scalar dish metadata and its persistent
+        // identity. Photo bytes are resolved by CachedDishPhoto off the main
+        // actor.
+        let backdropDish = entries.lazy.compactMap(\.dish).first
+        let showsBackdrop = backdropDish != nil
 
         return VStack(alignment: .leading, spacing: 8) {
             header(showsBackdrop: showsBackdrop)
@@ -287,7 +354,7 @@ struct MealCard: View {
         )
         // Drawn as a background so the oversized backdrop glyph can't set the
         // card's height — the content alone decides how tall the card is.
-        .background { cardBackground(backdropImage) }
+        .background { cardBackground(backdropDish) }
         .clipShape(RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: Self.cornerRadius, style: .continuous)
@@ -330,8 +397,16 @@ struct MealCard: View {
         }
     }
 
-    private func showDetails(for entry: MealPlanEntry) {
-        selectedEntry = entry
+    private func showDetails(for entry: MealPlanEntrySnapshot) {
+        selectedEntry = liveEntry(for: entry.uuid)
+    }
+
+    private func liveEntry(for uuid: UUID) -> MealPlanEntry? {
+        try? context.fetch(
+            FetchDescriptor<MealPlanEntry>(
+                predicate: #Predicate<MealPlanEntry> { $0.uuid == uuid }
+            )
+        ).first
     }
 
     private var picker: some View {
@@ -347,30 +422,29 @@ struct MealCard: View {
     // MARK: - Background
 
     @ViewBuilder
-    private func cardBackground(_ backdropImage: DishImage?) -> some View {
-        if let backdropImage {
-            CachedDishPhoto(
-                image: backdropImage,
-                cacheKey: "\(backdropImage.persistentModelID.hashValue)-\(backdropImage.modifiedAt.timeIntervalSinceReferenceDate)",
-                maxPixelSize: 900
-            )
+    private func cardBackground(_ dish: DishValueSnapshot?) -> some View {
+        ZStack(alignment: .bottomTrailing) {
+            Rectangle().fill(.background)
+            Rectangle().fill(accent.opacity(colorScheme == .dark ? 0.28 : 0.16))
+            backdropSymbol
+                .offset(x: 22, y: 20)
+
+            if let dish, let dishID = dish.persistentID {
+                CachedDishPhoto(
+                    dishID: dishID,
+                    dishUUID: dish.uuid,
+                    cacheKey: "dish-" + dish.uuid.uuidString + "-" + dish.modifiedAt.timeIntervalSinceReferenceDate.description,
+                    maxPixelSize: 900
+                )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(
                     LinearGradient(
-                        // Top stop deepened so the white meal title stays legible
-                        // over a bright photo; the bottom already covers the row.
                         colors: [.black.opacity(0.30), .black.opacity(0.42), .black.opacity(0.72)],
                         startPoint: .top,
                         endPoint: .bottom
                     )
                 )
                 .clipped()
-        } else {
-            ZStack(alignment: .bottomTrailing) {
-                Rectangle().fill(.background)
-                Rectangle().fill(accent.opacity(colorScheme == .dark ? 0.28 : 0.16))
-                backdropSymbol
-                    .offset(x: 22, y: 20)
             }
         }
     }
@@ -416,7 +490,7 @@ struct MealCard: View {
     /// dropping it elsewhere on the plan moves this meal rather than planning a
     /// second helping of the same dish. `name` doubles as the plain-text
     /// representation when the drag ends up in another app.
-    private func dragPayload(_ entry: MealPlanEntry) -> DishReference {
+    private func dragPayload(_ entry: MealPlanEntrySnapshot) -> DishReference {
         DishReference(
             dishUUID: entry.dish?.uuid ?? UUID(),
             name: entry.displayTitle,
@@ -427,10 +501,18 @@ struct MealCard: View {
     /// What travels under the finger or pointer. Worth spelling out: the
     /// automatic preview snapshots the row as it sits on the card, which on a
     /// photo card is white text over nothing.
-    private func dragPreview(_ entry: MealPlanEntry) -> some View {
+    private func dragPreview(_ entry: MealPlanEntrySnapshot) -> some View {
         HStack(spacing: 8) {
-            if entry.dish != nil {
-                DishThumbnail(dish: entry.dish, size: 28, cornerRadius: 6)
+            if let dish = entry.dish {
+                DishThumbnail(
+                    dishID: dish.persistentID,
+                    dishUUID: dish.uuid,
+                    cacheKey: "dish-" + dish.uuid.uuidString,
+                    glyph: dish.glyph,
+                    tint: DishGlyph.tint(forName: dish.name),
+                    size: 28,
+                    cornerRadius: 6
+                )
             } else {
                 Image(systemName: "storefront")
                     .font(.subheadline)
@@ -469,14 +551,14 @@ struct MealCard: View {
     // MARK: - Context menu
 
     @ViewBuilder
-    private func entryMenu(_ entry: MealPlanEntry) -> some View {
+    private func entryMenu(_ entry: MealPlanEntrySnapshot) -> some View {
         Button {
             repeatNextWeek(entry)
         } label: {
             Label(String(localized: "Repeat next week"), systemImage: "arrow.uturn.forward")
         }
         Button {
-            selectedEntry = entry
+            showDetails(for: entry)
         } label: {
             Label(String(localized: "Edit / reschedule…"), systemImage: "slider.horizontal.3")
         }
@@ -496,25 +578,22 @@ struct MealCard: View {
         }
     }
 
-    private func repeatNextWeek(_ entry: MealPlanEntry) {
+    private func repeatNextWeek(_ entry: MealPlanEntrySnapshot) {
         let target = entry.date.adding(weeks: 1)
         guard purchaseManager.canPlan(on: target) else {
             showingPaywall = true
             return
         }
-        MealPlanner.repeatEntry(
-            entry,
-            weeksAhead: 1,
-            memberName: appState.currentMemberName,
-            context: context
-        )
+        guard let liveEntry = liveEntry(for: entry.uuid) else { return }
+        MealPlanner.repeatEntry(liveEntry, weeksAhead: 1, memberName: appState.currentMemberName, context: context)
     }
 
-    private func remove(_ entry: MealPlanEntry) {
-        let snapshot = MealPlanEntryUndoSnapshot(entry)
+    private func remove(_ entry: MealPlanEntrySnapshot) {
+        guard let liveEntry = liveEntry(for: entry.uuid) else { return }
+        let snapshot = MealPlanEntryUndoSnapshot(liveEntry)
         let name = entry.displayTitle
         try? withoutUndoRegistration(in: context) {
-            context.delete(entry)
+            context.delete(liveEntry)
             try context.save()
         }
         SharedStore.reloadWidgets()
@@ -529,8 +608,7 @@ struct MealCard: View {
 
     // MARK: - Entry row
 
-    private func entryRow(_ entry: MealPlanEntry, showsBackdrop: Bool) -> some View {
-        let hasOwnImage = entry.dish?.primaryImage != nil
+    private func entryRow(_ entry: MealPlanEntrySnapshot, showsBackdrop: Bool) -> some View {
         let isEatingOut = entry.dish == nil && entry.isEatingOut
 
         return HStack(spacing: 8) {
@@ -540,8 +618,18 @@ struct MealCard: View {
                     .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white.opacity(0.85)) : AnyShapeStyle(accent))
                     .frame(width: showsBackdrop ? 18 : 34)
             } else if !showsBackdrop {
-                DishThumbnail(dish: entry.dish, size: 34, cornerRadius: 8)
-            } else if !hasOwnImage {
+                if let dish = entry.dish {
+                    DishThumbnail(
+                        dishID: dish.persistentID,
+                        dishUUID: dish.uuid,
+                        cacheKey: "dish-" + dish.uuid.uuidString,
+                        glyph: dish.glyph,
+                        tint: DishGlyph.tint(forName: dish.name),
+                        size: 34,
+                        cornerRadius: 8
+                    )
+                }
+            } else {
                 switch entry.dish?.glyph {
                 case .emoji(let value):
                     Text(value).font(.caption).frame(width: 18)
@@ -576,10 +664,11 @@ struct MealCard: View {
                             .accessibilityLabel(String(localized: "Repeating meal"))
                     }
                     if entry.servingsOverride != nil {
-                        Label(String(localized: "\(entry.effectiveServings)"), systemImage: "person.2")
+                        let servings = entry.servingsOverride ?? 1
+                        Label(String(localized: "\(servings)"), systemImage: "person.2")
                             .labelStyle(.titleAndIcon)
-                            .help(String(localized: "\(entry.effectiveServings) servings"))
-                            .accessibilityLabel(String(localized: "\(entry.effectiveServings) servings"))
+                            .help(String(localized: "\(servings) servings"))
+                            .accessibilityLabel(String(localized: "\(servings) servings"))
                     }
                     if entry.prepReminder {
                         Image(systemName: "bell")
@@ -605,7 +694,7 @@ struct MealCard: View {
                     // put it there is what makes tomorrow plannable.
                     if appState.showsNutritionEstimates,
                        let dish = entry.dish,
-                       let estimate = nutritionSummary?.estimate(for: dish) {
+                       let estimate = nutritionSummary?.estimate(for: dish.uuid) {
                         MealNutritionCaption(estimate: estimate, unit: appState.energyUnit)
                     }
                 }
@@ -626,7 +715,7 @@ struct MealCard: View {
         mealKey: PreviewData.mealType.key,
         title: PreviewData.mealType.name,
         symbolName: PreviewData.mealType.symbolName,
-        entries: PreviewData.entries(on: .now, mealKey: PreviewData.mealType.key)
+        entries: PreviewData.entries(on: .now, mealKey: PreviewData.mealType.key).map(MealPlanEntrySnapshot.init)
     )
     .frame(width: 220)
     .padding()

@@ -20,8 +20,11 @@ enum IngredientMatchClass: String, CaseIterable, Codable, Sendable {
 
     var isSafeForSilentReuse: Bool {
         switch self {
-        case .certain, .highConfidence: true
-        case .needsConfirmation, .noMatch: false
+        // A persistent recipe relationship is much costlier to get wrong than
+        // a transient shopping-list grouping. Only an exact canonical name or
+        // a person-confirmed alias is proof enough to create it automatically.
+        case .certain: true
+        case .highConfidence, .needsConfirmation, .noMatch: false
         }
     }
 }
@@ -340,7 +343,7 @@ enum IngredientMatching {
     }
 
     /// The catalogue entry that means the same as `name`. Exact canonical
-    /// names and confirmed aliases are safe. Fuzzy and reordered candidates
+    /// names and confirmed aliases are safe. Normalized-key, inflection, fuzzy and reordered candidates
     /// are returned by `matchResult` for user-facing suggestions, but are not
     /// silently reused by this compatibility helper.
     static func match(_ name: String, in ingredients: [Ingredient]) -> Ingredient? {
@@ -353,21 +356,23 @@ enum IngredientMatching {
     static func match(_ name: String, in ingredients: [Ingredient], rules: [IngredientMatchRule]) -> Ingredient? {
         let normalized = Ingredient.normalize(name)
         guard !normalized.isEmpty else { return nil }
-        if let exact = ingredients.first(where: { Ingredient.normalize($0.name) == normalized && !$0.rejectsMatch(for: name) }) {
-            return exact
-        }
         let wanted = key(for: name)
-        if let alias = ingredients.first(where: { ingredient in
-            (ingredient.aliases ?? []).contains {
-                Ingredient.normalize($0.name) == normalized && $0.ingredient?.rejectsMatch(for: name) != true
-            }
-        }) {
-            return alias
-        }
-        return ingredients.first { ingredient in
+        // An explicit household alias is the one exception to the normal
+        // safety threshold. It is still ambiguous when it names more than one
+        // catalogue row, and a keep-separate decision always takes priority.
+        let explicit = ingredients.filter { ingredient in
             !ingredient.rejectsMatch(for: name)
-                && keysMatch(key(for: ingredient.name), wanted, rules: rules)
+                && rules.contains { $0.kind == .alias && $0.applies(to: wanted, and: key(for: ingredient.name)) }
+                && !rules.contains { $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: ingredient.name)) }
         }
+        if explicit.count == 1 { return explicit[0] }
+        if explicit.count > 1 { return nil }
+        let result = IngredientMatcher(ingredients: ingredients).result(for: name)
+        guard let candidate = result.candidate, result.isSafeForSilentReuse else { return nil }
+        guard !rules.contains(where: {
+            $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: candidate.name))
+        }) else { return nil }
+        return candidate
     }
 
     /// Explain every candidate decision without coupling matching to SwiftUI

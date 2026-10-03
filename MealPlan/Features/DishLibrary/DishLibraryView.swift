@@ -45,6 +45,7 @@ private struct DishLibraryContent: View {
     @State private var showingRecipeScanner = false
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
+    @State private var requestedDish: Dish?
     /// Driven by the menu bar's Find command so ⌘F lands in the search field.
     @State private var isSearchPresented = false
     @State private var availableTags: [String] = []
@@ -207,7 +208,7 @@ private struct DishLibraryContent: View {
                     }
                 }
             }
-            ToolbarItemGroup(placement: .secondaryAction) {
+            ToolbarItemGroup(placement: .primaryAction) {
                 DishFilterMenu(
                     filter: $appState.dishFilter,
                     availableTags: availableTags
@@ -236,6 +237,9 @@ private struct DishLibraryContent: View {
                 DishEditorView(dish: dish, isNew: true)
             }
             .dismissesOnOutsideClick()
+        }
+        .detailPresentation(item: $requestedDish, route: { .recipe($0.uuid) }) { dish in
+            NavigationStack { DishDetailView(dish: dish) }
         }
         .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
         .detailPresentation(item: $importingFile, route: { .importRecipes($0.url) }) {
@@ -276,6 +280,11 @@ private struct DishLibraryContent: View {
             guard let request = appState.pendingAddDish else { return }
             appState.pendingAddDish = nil
             await handleAddRequest(request)
+        }
+        .task(id: appState.requestedDishID) {
+            guard let id = appState.requestedDishID else { return }
+            appState.requestedDishID = nil
+            requestedDish = allDishes.first { $0.uuid == id }
         }
     }
 

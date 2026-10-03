@@ -21,6 +21,11 @@ enum MealPlanner {
         memberName: String,
         context: ModelContext
     ) -> MealPlanEntry {
+        guard HouseholdMutationAuthorization.canMutate(household: household ?? dish.household) else {
+            // Keep this source-compatible for App Intents while ensuring no
+            // model object is inserted or saved for a view-only household.
+            return MealPlanEntry(date: date, mealKey: mealKey, dish: dish)
+        }
         let entry = MealPlanEntry(date: date, mealKey: mealKey, dish: dish)
         entry.household = household
         // An override is only worth storing when it differs from the standard
@@ -68,6 +73,9 @@ enum MealPlanner {
         memberName: String,
         context: ModelContext
     ) -> MealPlanEntry {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else {
+            return MealPlanEntry(date: date, mealKey: mealKey, dish: nil)
+        }
         let entry = MealPlanEntry(date: date, mealKey: mealKey, dish: nil)
         entry.household = household
         entry.isEatingOut = true
@@ -86,6 +94,7 @@ enum MealPlanner {
 
     @MainActor
     static func move(_ entry: MealPlanEntry, to date: Date, mealKey: String, memberName: String, context: ModelContext) {
+        guard HouseholdMutationAuthorization.canMutate(household: entry.household) else { return }
         entry.date = date.startOfDay
         entry.mealKey = mealKey
         entry.sortIndex = nextSortIndex(for: date, mealKey: mealKey, context: context)
@@ -225,6 +234,7 @@ extension MealPlanner {
         memberName: String,
         context: ModelContext
     ) -> Bool {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return false }
         // A meal dragged off the plan is identified by its entry; the dish it
         // points at may well be planned on other days too.
         let entry = reference.sourceEntryUUID.flatMap { self.entry(uuid: $0, context: context) }

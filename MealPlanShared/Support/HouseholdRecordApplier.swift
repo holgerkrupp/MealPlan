@@ -13,7 +13,12 @@ enum HouseholdRecordApplier {
         switch identity.type {
         case .household:
             if let model = find(Household.self, identity.uuid, context) { model.modifiedAt = date }
-        case .member: touch(HouseholdMember.self, identity.uuid, date, context)
+        case .member:
+            if let model = find(HouseholdMember.self, identity.uuid, context) {
+                if changedGroups.contains("shareMetadata") { model.shareMetadataModifiedAt = date }
+                if changedGroups.contains("profile") { model.profileModifiedAt = date }
+                model.modifiedAt = date
+            }
         case .mealType: touch(MealType.self, identity.uuid, date, context)
         case .dish: touch(Dish.self, identity.uuid, date, context)
         case .dishImage: touch(DishImage.self, identity.uuid, date, context)
@@ -69,6 +74,7 @@ enum HouseholdRecordApplier {
             household.localeIdentifier = value.localeIdentifier
             household.dateCreated = value.dateCreated
             household.didSeedPantryStaples = value.didSeedPantryStaples
+            household.ingredientMergeAuditData = value.ingredientMergeAuditData
             household.unlockedByPurchase = value.unlockedByPurchase ?? false
             household.bringListUuid = value.bringListUuid
             household.bringListName = value.bringListName
@@ -91,6 +97,8 @@ enum HouseholdRecordApplier {
             model.favorites = value.favorites ?? []
             model.preferredCuisines = value.preferredCuisines ?? []
             model.spiceTolerance = value.spiceTolerance
+            model.shareMetadataModifiedAt = value.shareMetadataModifiedAt ?? modifiedAt
+            model.profileModifiedAt = value.profileModifiedAt ?? modifiedAt
             model.modifiedAt = modifiedAt
             model.household = household
 

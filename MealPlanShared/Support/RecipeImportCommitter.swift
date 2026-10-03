@@ -12,6 +12,9 @@ enum RecipeImportCommitter {
         var imported: Int = 0
         var variants: Int = 0
         var skipped: Int = 0
+        /// A parser may have produced valid dishes while the store rejected
+        /// their save. Callers must not present that as a completed import.
+        var persistenceFailed: Bool = false
         /// Dishes created, in the order they were imported.
         var dishes: [Dish] = []
 
@@ -19,7 +22,10 @@ enum RecipeImportCommitter {
 
         /// A sentence for the alert / confirmation the user sees.
         var summary: String {
-            switch (imported, variants, skipped) {
+            if persistenceFailed {
+                return String(localized: "The imported recipes could not be saved. Please try again.")
+            }
+            return switch (imported, variants, skipped) {
             // One recipe is what arrives when somebody shares a dish, and
             // "Imported 1 recipes." is no way to say thank you for it.
             case (1, 0, 0) where dishes.count == 1:
@@ -53,6 +59,7 @@ enum RecipeImportCommitter {
         createdByName: String?,
         context: ModelContext
     ) -> Result {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return Result() }
         var result = Result()
         let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
         var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
@@ -71,13 +78,13 @@ enum RecipeImportCommitter {
             ) {
                 unsavedCount += 1
                 if unsavedCount >= saveBatchSize {
-                    try? context.save()
+                    if !persist(context) { result.persistenceFailed = true }
                     unsavedCount = 0
                 }
             }
         }
 
-        try? context.save()
+        if !persist(context) { result.persistenceFailed = true }
         return result
     }
 
@@ -93,6 +100,7 @@ enum RecipeImportCommitter {
         context: ModelContext,
         progress: (Int, Int) -> Void = { _, _ in }
     ) async -> Result {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return Result() }
         var result = Result()
         let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
         var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
@@ -112,7 +120,7 @@ enum RecipeImportCommitter {
             ) {
                 unsavedCount += 1
                 if unsavedCount >= saveBatchSize {
-                    try? context.save()
+                    if !persist(context) { result.persistenceFailed = true }
                     unsavedCount = 0
                 }
             }
@@ -124,7 +132,7 @@ enum RecipeImportCommitter {
             }
         }
 
-        try? context.save()
+        if !persist(context) { result.persistenceFailed = true }
         return result
     }
 
@@ -200,5 +208,16 @@ enum RecipeImportCommitter {
             return recipes
         }
         return try PaprikaArchive.recipes(from: data)
+    }
+
+    @MainActor
+    private static func persist(_ context: ModelContext) -> Bool {
+        do {
+            try context.save()
+            return true
+        } catch {
+            IngredientIntegrityDiagnostics.record(.persistenceSaveFailed, detail: "recipe-import")
+            return false
+        }
     }
 }

@@ -184,6 +184,60 @@ struct LeftoverSuggestionsSettingsSection: View {
     }
 }
 
+// MARK: - Fridge Experience
+
+@MainActor
+struct FridgeExperienceSettingsSection: View {
+    @AppStorage(FridgeExperienceSettings.enabledKey) private var enabled = false
+    @AppStorage(FridgeExperienceSettings.simulatedFoldableKey) private var simulatedFoldable = false
+    @AppStorage(FridgeExperienceSettings.simulatedPostureKey) private var simulatedPosture = FoldingPosture.closed.rawValue
+
+    private var simulatedPostureBinding: Binding<FoldingPosture> {
+        Binding(
+            get: { FoldingPosture(rawValue: simulatedPosture) ?? .closed },
+            set: { simulatedPosture = $0.rawValue }
+        )
+    }
+
+    var body: some View {
+        if FridgeExperienceSettings.isPhoneInterface {
+            Section {
+                Toggle(String(localized: "Fridge Experience"), isOn: $enabled)
+                if enabled {
+                    NavigationLink {
+                        FridgeExperienceView()
+                    } label: {
+                        Label(String(localized: "Open Fridge"), systemImage: "refrigerator")
+                    }
+                    #if DEBUG
+                    Toggle(String(localized: "Simulate Duo hardware"), isOn: $simulatedFoldable)
+                    if simulatedFoldable {
+                        Picker(String(localized: "Preview posture"), selection: simulatedPostureBinding) {
+                            ForEach([FoldingPosture.closed, .partiallyOpen, .open], id: \.self) { posture in
+                                Text(posture.localizedName).tag(posture)
+                            }
+                        }
+                    }
+                    #endif
+                    if !FoldingDeviceStateProvider.current.isFoldable && !simulatedFoldable {
+                        Label(String(localized: "Foldable hardware not detected. MealPlan stays in its standard interface."), systemImage: "info.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    } else {
+                        Label(String(localized: "Fridge is available as an optional tab. The standard MealPlan tabs remain available."), systemImage: "checkmark.circle")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            } header: {
+                Text(String(localized: "Experimental"))
+            } footer: {
+                Text(String(localized: "Fridge is a playful presentation of the existing plan, shopping list and ingredient inventory. It never replaces or creates a second source of truth."))
+            }
+        }
+    }
+}
+
 // MARK: - Plan
 
 /// The way into the meal editor where Meals isn't its own pane.
@@ -389,6 +443,51 @@ struct SiriPhrasesView: View {
                     "Hey Siri, what are we eating this week in Meals",
                     detail: "Another way to ask about this week's plan."
                 )
+            }
+
+            Section("Shopping") {
+                phraseRow("Hey Siri, add milk to my shopping list in Meals", detail: "Adds an item and optional amount to the shared shopping list.")
+                phraseRow("Hey Siri, what do I need to buy in Meals", detail: "Reads the current shopping list, with unchecked items first.")
+                phraseRow("Hey Siri, mark milk as bought in Meals", detail: "Completes a matching shopping item for everyone in the household.")
+                phraseRow("Hey Siri, put tomatoes back on the list in Meals", detail: "Reopens a completed shopping item.")
+            }
+
+            Section("Recipes and cooking") {
+                phraseRow("Hey Siri, find a recipe with chicken in Meals", detail: "Searches saved dishes by name, ingredient, category, and tags.")
+                phraseRow("Hey Siri, open the chicken recipe in Meals", detail: "Opens the matching dish in MealPlan.")
+                phraseRow("Hey Siri, start cooking chicken curry in Meals", detail: "Starts cooking mode for a saved dish.")
+                phraseRow("Hey Siri, what is the current cooking step in Meals", detail: "Reads the active cooking step and progress.")
+                phraseRow("Hey Siri, start a ten minute timer in Meals", detail: "Starts, pauses, resumes, cancels, or finishes a cooking timer.")
+            }
+
+            Section("Pantry and inventory") {
+                phraseRow("Hey Siri, we have six eggs in Meals", detail: "Sets the pantry quantity for an ingredient.")
+                phraseRow("Hey Siri, we are out of olive oil in Meals", detail: "Marks an ingredient as out of stock.")
+                phraseRow("Hey Siri, what am I running low on in Meals", detail: "Lists low and out-of-stock ingredients.")
+                phraseRow("Hey Siri, what expires soon in Meals", detail: "Lists ingredients approaching their best-before date.")
+                phraseRow("Hey Siri, add out of stock ingredients to my shopping list in Meals", detail: "Adds low or out-of-stock ingredients without duplicating existing items.")
+            }
+
+            Section("Routines and templates") {
+                phraseRow("Hey Siri, what meal routines do we have in Meals", detail: "Lists saved recurring meal routines.")
+                phraseRow("Hey Siri, pause Taco Tuesday in Meals", detail: "Pauses a routine without deleting it.")
+                phraseRow("Hey Siri, resume Taco Tuesday in Meals", detail: "Resumes a paused routine.")
+                phraseRow("Hey Siri, apply the holiday week template in Meals", detail: "Applies a saved week template, optionally replacing the selected range.")
+            }
+
+            Section("Leftovers and nutrition") {
+                phraseRow("Hey Siri, what leftovers will we have this week in Meals", detail: "Estimates leftovers from planned servings and household size.")
+                phraseRow("Hey Siri, what can I cook with leftovers in Meals", detail: "Suggests saved dishes using likely leftover ingredients.")
+                phraseRow("Hey Siri, how much protein is in today's plan in Meals", detail: "Reports estimated nutrition for a day, week, or selected range.")
+            }
+
+            Section("Shortcuts") {
+                Text("The same actions are available in the Shortcuts app, where you can combine them with reminders, timers, and automations.")
+                phraseRow("Shopping List", detail: "Get, add, complete, reopen, remove, clear, or regenerate shopping items.")
+                phraseRow("Recipes", detail: "Search and open saved dishes.")
+                phraseRow("Cooking", detail: "Start cooking, navigate steps, and control timers.")
+                phraseRow("Pantry", detail: "Update inventory and find low or expiring ingredients.")
+                phraseRow("Routines and nutrition", detail: "Manage routines and templates, inspect leftovers, and read nutrition estimates.")
             }
         }
         .formStyle(.grouped)

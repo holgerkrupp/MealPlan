@@ -219,6 +219,42 @@ struct HouseholdRecordSyncTests {
         #expect(resolution.shouldUpload)
     }
 
+    @Test func staleDeletionCannotRemoveNewerLocalRecord() throws {
+        let localDate = Date(timeIntervalSince1970: 200)
+        let local = LocalHouseholdRecord(
+            identity: .init(type: .recipeBookmark, uuid: UUID()),
+            householdID: UUID(),
+            modifiedAt: localDate,
+            payloadData: Data("local".utf8)
+        )
+
+        #expect(HouseholdRecordConflictResolver.shouldPreserveLocalForDeletion(
+            local: local, deletedAt: Date(timeIntervalSince1970: 100)
+        ))
+        #expect(!HouseholdRecordConflictResolver.shouldPreserveLocalForDeletion(
+            local: local, deletedAt: Date(timeIntervalSince1970: 300)
+        ))
+    }
+
+    @Test func rawDeletionPreservesPendingLocalRecord() {
+        let local = LocalHouseholdRecord(
+            identity: .init(type: .dish, uuid: UUID()),
+            householdID: UUID(),
+            modifiedAt: .now,
+            payloadData: Data("local".utf8)
+        )
+
+        #expect(HouseholdRecordConflictResolver.shouldPreserveLocalForRawDeletion(
+            local: local, acknowledgedFingerprint: local.fingerprint, isPending: true
+        ))
+        #expect(!HouseholdRecordConflictResolver.shouldPreserveLocalForRawDeletion(
+            local: local, acknowledgedFingerprint: local.fingerprint, isPending: false
+        ))
+        #expect(!HouseholdRecordConflictResolver.shouldPreserveLocalForRawDeletion(
+            local: nil, acknowledgedFingerprint: nil, isPending: false
+        ))
+    }
+
     @Test func newerLocalPhotoKeepsItsOwnAssetDuringConflict() throws {
         let imageID = UUID()
         let dishID = UUID()

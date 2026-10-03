@@ -5,10 +5,17 @@ import Foundation
 // MARK: - Intent resolution
 
 @MainActor
-private enum MealPlanIntentResolver {
+enum MealPlanIntentResolver {
     static var context: ModelContext { MealPlanIntentStore.context }
 
     static func requireEditingAllowed() throws {
+        guard HouseholdMutationAuthorization.canMutate(household: MealPlanIntentStore.household()) else {
+            throw NSError(
+                domain: "MealPlan.AppIntents",
+                code: 6,
+                userInfo: [NSLocalizedDescriptionKey: String(localized: "You have view-only access to this meal plan.")]
+            )
+        }
         let members = try context.fetch(FetchDescriptor<HouseholdMember>())
         if members.contains(where: { $0.isCurrentUser && $0.role == .guest }) {
             throw NSError(
@@ -85,7 +92,7 @@ private enum MealPlanIntentResolver {
 
         let dish = Dish(name: name)
         dish.household = household
-        dish.createdByName = DeviceOwner.name
+        dish.createdByName = MealPlanIntentStore.currentMemberName
         context.insert(dish)
         DishBuilder.addSuggestedTags(to: dish, household: household)
         try context.save()
@@ -168,7 +175,7 @@ struct AddDishIntent: AppIntent {
         try MealPlanIntentResolver.requireEditingAllowed()
         let context = MealPlanIntentStore.context
         let household = MealPlanIntentStore.household()
-        let member = DeviceOwner.name
+        let member = MealPlanIntentStore.currentMemberName
 
         let dish: Dish
         if let url {
@@ -252,7 +259,7 @@ struct PlanMealIntent: AppIntent {
             servings: servings,
             note: note,
             household: MealPlanIntentStore.household(),
-            memberName: DeviceOwner.name,
+            memberName: MealPlanIntentStore.currentMemberName,
             context: context
         )
         await MealPlanIntentResolver.index(entry)
@@ -304,7 +311,7 @@ struct PutDishInMealsIntent: AppIntent {
             on: date,
             mealKey: mealModel.key,
             household: household,
-            memberName: DeviceOwner.name,
+            memberName: MealPlanIntentStore.currentMemberName,
             context: context
         )
 
@@ -437,7 +444,7 @@ struct CreatePlannedMealIntent {
             mealKey: meal.key,
             note: note.map { String($0.characters) },
             household: household,
-            memberName: DeviceOwner.name,
+            memberName: MealPlanIntentStore.currentMemberName,
             context: context
         )
 
@@ -456,7 +463,7 @@ struct CreatePlannedMealIntent {
                 household: household,
                 context: context,
                 through: PurchaseManager.shared.latestPlanningDate(),
-                memberName: DeviceOwner.name
+                memberName: MealPlanIntentStore.currentMemberName
             )
         }
 
@@ -518,13 +525,13 @@ struct UpdatePlannedMealIntent {
                 entry,
                 to: effectiveDate,
                 mealKey: meal?.key ?? entry.mealKey,
-                memberName: DeviceOwner.name,
+                memberName: MealPlanIntentStore.currentMemberName,
                 context: context
             )
         }
         if let note { entry.note = note }
         if case .address(let address) = location { entry.placeAddress = address }
-        entry.lastEditedByName = DeviceOwner.name
+        entry.lastEditedByName = MealPlanIntentStore.currentMemberName
         entry.lastEditedDate = .now
         try context.save()
         SharedStore.reloadWidgets()
@@ -621,6 +628,36 @@ struct MealPlanShortcuts: AppShortcutsProvider {
             ],
             shortTitle: "This Week’s Plan",
             systemImageName: "calendar"
+        )
+        AppShortcut(
+            intent: AddShoppingItemIntent(),
+            phrases: ["Add an item to my shopping list in \(.applicationName)"],
+            shortTitle: "Add Shopping Item",
+            systemImageName: "cart.badge.plus"
+        )
+        AppShortcut(
+            intent: GetShoppingListIntent(),
+            phrases: ["What do I need to buy in \(.applicationName)"],
+            shortTitle: "Shopping List",
+            systemImageName: "cart"
+        )
+        AppShortcut(
+            intent: SearchDishesIntent(),
+            phrases: ["Find a recipe in \(.applicationName)"],
+            shortTitle: "Search Recipes",
+            systemImageName: "magnifyingglass"
+        )
+        AppShortcut(
+            intent: GetCurrentCookingStepIntent(),
+            phrases: ["What is the current cooking step in \(.applicationName)"],
+            shortTitle: "Current Cooking Step",
+            systemImageName: "frying.pan"
+        )
+        AppShortcut(
+            intent: GetLowStockIngredientsIntent(),
+            phrases: ["What am I running low on in \(.applicationName)"],
+            shortTitle: "Low Stock",
+            systemImageName: "shippingbox"
         )
     }
 }

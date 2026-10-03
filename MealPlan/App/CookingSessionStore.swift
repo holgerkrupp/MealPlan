@@ -15,6 +15,8 @@ import AppKit
 @Observable
 @MainActor
 final class CookingSessionStore {
+    static let shared = CookingSessionStore()
+
     private(set) var session: CookingSessionState?
 
     private let defaults: UserDefaults

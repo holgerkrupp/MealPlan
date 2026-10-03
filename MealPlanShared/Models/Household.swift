@@ -52,6 +52,10 @@ final class Household {
     /// staples (salt, pepper, water, …). Seeded once, for a household created
     /// on this device; clearing a staple afterwards has to stick.
     var didSeedPantryStaples: Bool = false
+    /// A bounded, local audit trail for confirmed ingredient merges. It is
+    /// deliberately stored with the household so a merge can be reviewed and
+    /// reversed even after the process (and its `UndoManager`) has gone away.
+    var ingredientMergeAuditData: Data?
     /// `true` once any device in this household has completed the one-time
     /// App Store unlock. Synced like every other household field, so a
     /// purchase made by one member unlocks unlimited planning for everyone
@@ -150,6 +154,16 @@ final class Household {
         (ingredients ?? [])
             .filter(\.isPantryStaple)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    var ingredientMergeAuditTrail: [IngredientMergeAuditRecord] {
+        get {
+            guard let ingredientMergeAuditData else { return [] }
+            return (try? JSONDecoder().decode([IngredientMergeAuditRecord].self, from: ingredientMergeAuditData)) ?? []
+        }
+        set {
+            ingredientMergeAuditData = try? JSONEncoder().encode(newValue)
+        }
     }
 
     init(name: String = "") {

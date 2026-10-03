@@ -182,7 +182,7 @@ struct ShoppingListView: View {
                 }
                 .disabled(items.isEmpty)
             }
-            ToolbarItem(placement: .secondaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button {
                         showingPantryStaples = true
@@ -396,10 +396,9 @@ struct ShoppingListView: View {
 
     private func toggle(_ id: UUID) {
         guard let item = currentItem(id) else { return }
-        withAnimation { item.isChecked.toggle() }
-        item.checkStateModifiedAt = .now
-        item.modifiedAt = item.checkStateModifiedAt
-        try? context.save()
+        withAnimation {
+            ShoppingListMutationService.setChecked(item, checked: !item.isChecked, context: context)
+        }
     }
 
     private func markOwned(_ id: UUID) {
@@ -439,20 +438,15 @@ struct ShoppingListView: View {
     }
 
     private func delete(_ offsets: IndexSet, in list: [ShoppingListRowSnapshot]) {
+        let ids = offsets.compactMap { list.indices.contains($0) ? list[$0].id : nil }
         withoutUndoRegistration(in: context) {
-            for index in offsets where list.indices.contains(index) {
-                if let item = currentItem(list[index].id) { context.delete(item) }
-            }
-            try? context.save()
+            ShoppingListMutationService.delete(ids: ids, context: context)
         }
     }
 
     private func clearChecked() {
         withoutUndoRegistration(in: context) {
-            for item in items where item.isChecked {
-                context.delete(item)
-            }
-            try? context.save()
+            ShoppingListMutationService.clearCompleted(from: items, context: context)
         }
         Task { await autoSyncWithBring() }
     }
@@ -461,11 +455,9 @@ struct ShoppingListView: View {
     /// Generated lines come back with the next rebuild; manual ones don't, so
     /// this asks first.
     private func clearAll() {
+        let ids = items.map(\.uuid)
         withoutUndoRegistration(in: context) {
-            for item in items {
-                context.delete(item)
-            }
-            try? context.save()
+            ShoppingListMutationService.delete(ids: ids, context: context)
         }
         Task { await autoSyncWithBring() }
     }

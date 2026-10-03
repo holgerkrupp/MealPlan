@@ -29,7 +29,10 @@ enum CloudBootstrapState: Equatable {
 @Observable
 @MainActor
 final class AppState {
-    let cookingSession = CookingSessionStore()
+    let cookingSession = CookingSessionStore.shared
+    /// Durable projection of the current share participant. This replaces the
+    /// old transient guest flag; it is restored before any network refresh.
+    let collaboration = HouseholdCollaborationSession()
     var currentHousehold: Household?
     var selectedDate: Date = Date.now.startOfDay
     var dishFilter = DishFilter()
@@ -40,11 +43,14 @@ final class AppState {
     var shoppingCustomStart: Date = Date.now.startOfDay
     var shoppingCustomEnd: Date = Date.now.startOfDay.adding(days: 6)
 
-    /// True when this device joined a household as a view-only guest.
-    var isGuest: Bool = false
+    /// Compatibility name for older view code. New code should use
+    /// `collaboration.canEdit` / `collaboration.role`.
+    var isGuest: Bool { collaboration.isViewOnly }
 
     /// The section a deep link / App Intent wants shown.
     var requestedSection: AppSection?
+    /// A recipe hand-off from Open Dish intent or a deep link.
+    var requestedDishID: UUID?
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
@@ -114,9 +120,13 @@ final class AppState {
         undoOffer = UndoOffer(message: message, action: action)
     }
 
-    /// The name to attribute new plans / edits to. Filled from the CloudKit
-    /// share participant when sharing is set up, otherwise the device owner.
-    var currentMemberName: String = DeviceOwner.name
+    /// The name to attribute new plans / edits to. It comes from the durable
+    /// participant session whenever possible, rather than a device name.
+    var currentMemberName: String {
+        guard let snapshot = collaboration.snapshot,
+              snapshot.memberID != nil || snapshot.participantID != nil else { return DeviceOwner.name }
+        return snapshot.displayName
+    }
 
     var unitSystem: UnitSystem {
         currentHousehold?.presentationUnitSystem ?? UnitConversion.system(for: .current)
@@ -167,6 +177,9 @@ final class AppState {
             isNewHousehold = true
         }
         if let household = currentHousehold {
+            let migrationSucceeded = HouseholdCollaborationMigration.migrateIfNeeded()
+            collaboration.restore(for: household)
+            if !migrationSucceeded { collaboration.failClosedForUnknownMigrationFormat() }
             // Only a household this device just created: a family that has been
             // planning for a while must not have ingredients disappear off its
             // shopping list because of an update.
@@ -276,6 +289,9 @@ final class AppState {
             if let date { selectedDate = date.startOfDay }
             if dishName != nil { pendingAddDish = PendingAddDish(url: nil, name: dishName) }
             requestedSection = .plan
+        case .dish(let id):
+            requestedDishID = id
+            requestedSection = .dishes
         case .joinNearby(let code):
             // Adding someone nearby is iPhone and iPad only: the Mac app
             // ships without the local-network entitlement it would need.

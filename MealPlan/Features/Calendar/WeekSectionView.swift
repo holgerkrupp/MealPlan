@@ -6,7 +6,7 @@ struct WeekSectionView: View {
     let weekStart: Date
     let style: CalendarStyle
     let mealTypes: [MealType]
-    let entries: [MealPlanEntry]
+    let entries: [MealPlanEntrySnapshot]
     var onDayVisibilityChange: (Bool, String) -> Void
 
     @Environment(AppState.self) private var appState
@@ -16,6 +16,7 @@ struct WeekSectionView: View {
     @Environment(CalendarContextStore.self) private var calendarStore: CalendarContextStore?
     @State private var showingPaywall = false
     @State private var nutritionSummary: WeekNutritionSummary?
+    @State private var isActuallyVisible = false
     /// The day whose "plan an extra" picker is up. Presented from here rather
     /// than from a meal card: a day with no extra yet has no card to tap.
     @State private var extraPickerDay: IdentifiableDate?
@@ -36,7 +37,7 @@ struct WeekSectionView: View {
         weekStart: Date,
         style: CalendarStyle,
         mealTypes: [MealType] = [],
-        entries: [MealPlanEntry] = [],
+        entries: [MealPlanEntrySnapshot] = [],
         onDayVisibilityChange: @escaping (Bool, String) -> Void = { _, _ in }
     ) {
         self.weekStart = weekStart
@@ -138,7 +139,11 @@ struct WeekSectionView: View {
                             // visually secondary to them. Extras are left out:
                             // they have no time window of their own, so they
                             // would only repeat a real meal's chip.
-                            MealCalendarContextRow(day: day, meals: dayMeals.filter { !$0.isExtra })
+                            MealCalendarContextRow(
+                                day: day,
+                                meals: dayMeals.filter { !$0.isExtra },
+                                isVisible: isActuallyVisible
+                            )
 
                             LazyVGrid(
                                 columns: mealColumns,
@@ -170,13 +175,19 @@ struct WeekSectionView: View {
             }
         }
         .padding(.vertical, 8)
-        .task {
-            // Tell the calendar layer which week is on screen, so it only ever
-            // queries the days the planner actually shows.
-            calendarStore?.requestWeek(weekStart)
+        .onScrollVisibilityChange(threshold: 0.05) { visible in
+            guard visible != isActuallyVisible else { return }
+            isActuallyVisible = visible
+            // Calendar context is requested only after this week has actually
+            // entered the viewport. Lazy construction alone is not visibility.
+            if visible { calendarStore?.requestWeek(weekStart) }
         }
-        .task(id: nutritionCacheKey) {
+        .task(id: "\(nutritionCacheKey)-\(isActuallyVisible)") {
             guard appState.showsNutritionEstimates else {
+                nutritionSummary = nil
+                return
+            }
+            guard isActuallyVisible else {
                 nutritionSummary = nil
                 return
             }
@@ -185,7 +196,13 @@ struct WeekSectionView: View {
             // does not spend time calculating summaries nobody will see.
             try? await Task.sleep(for: .milliseconds(750))
             guard !Task.isCancelled else { return }
-            nutritionSummary = WeekNutritionSummary(entries: entries)
+            let loader = WeekNutritionSummaryLoader(modelContainer: context.container)
+            let summary = await loader.load(
+                from: weekStart,
+                to: weekStart.adding(days: 7, calendar: Date.mondayCalendar)
+            )
+            guard !Task.isCancelled else { return }
+            nutritionSummary = summary
         }
         .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
@@ -296,15 +313,15 @@ struct WeekSectionView: View {
 /// is scrolling. Order inside a bucket is the query's own
 /// (`date`, `sortIndex`), so the cards need no further sorting.
 private struct WeekEntryBuckets {
-    private var byDay: [String: [String: [MealPlanEntry]]] = [:]
+    private var byDay: [String: [String: [MealPlanEntrySnapshot]]] = [:]
 
-    init(entries: [MealPlanEntry]) {
+    init(entries: [MealPlanEntrySnapshot]) {
         for entry in entries {
             byDay[entry.date.dayID, default: [:]][entry.mealKey, default: []].append(entry)
         }
     }
 
-    func entries(on dayID: String, mealKey: String) -> [MealPlanEntry] {
+    func entries(on dayID: String, mealKey: String) -> [MealPlanEntrySnapshot] {
         byDay[dayID]?[mealKey] ?? []
     }
 

@@ -358,6 +358,16 @@ struct HouseholdSharingView: View {
                 ProgressView()
                     .controlSize(.small)
             } else {
+                Menu {
+                    Button(person.canEdit ? String(localized: "Make View Only") : String(localized: "Allow Editing")) {
+                        Task { await changePermission(for: person, canEdit: !person.canEdit) }
+                    }
+                } label: {
+                    Label(String(localized: "Access"), systemImage: person.canEdit ? "pencil.circle" : "eye.circle")
+                        .labelStyle(.iconOnly)
+                }
+                .buttonStyle(.borderless)
+                .accessibilityLabel(person.canEdit ? String(localized: "Change to view only") : String(localized: "Allow editing"))
                 Button(role: .destructive) {
                     participantPendingRemoval = person
                 } label: {
@@ -475,6 +485,21 @@ struct HouseholdSharingView: View {
         defer { busyParticipantID = nil }
         do {
             invitation = try await HouseholdCloudSharingService.removeParticipant(withID: person.id, from: household, context: modelContext)
+        } catch {
+            actionErrorMessage = error.localizedDescription
+        }
+    }
+
+    private func changePermission(for person: HouseholdShareParticipant, canEdit: Bool) async {
+        busyParticipantID = person.id
+        defer { busyParticipantID = nil }
+        do {
+            invitation = try await HouseholdCloudSharingService.setPermission(
+                forParticipantWithID: person.id,
+                canEdit: canEdit,
+                in: household,
+                context: modelContext
+            )
         } catch {
             actionErrorMessage = error.localizedDescription
         }

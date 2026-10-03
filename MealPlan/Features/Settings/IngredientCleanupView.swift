@@ -11,6 +11,7 @@ struct IngredientCleanupView: View {
     @State private var showingBatchConfirmation = false
     @State private var showingBatchError = false
     @State private var batchErrorMessage = ""
+    @State private var integrityAudit: IngredientIntegrityAudit?
 
     private var suggestions: [IngredientCleanupSuggestion] {
         // Reading the query keeps this view invalidated after a merge or a
@@ -25,6 +26,8 @@ struct IngredientCleanupView: View {
 
     var body: some View {
         List {
+            integritySection
+
             if suggestions.isEmpty {
                 ContentUnavailableView(
                     String(localized: "No possible duplicates"),
@@ -83,6 +86,50 @@ struct IngredientCleanupView: View {
         }
     }
 
+    @ViewBuilder
+    private var integritySection: some View {
+        Section {
+            Button {
+                guard let household = appState.currentHousehold else { return }
+                integrityAudit = IngredientIntegrityAuditor.audit(household: household, context: context)
+            } label: {
+                Label(String(localized: "Check ingredient data"), systemImage: "checkmark.shield")
+            }
+
+            if let household = appState.currentHousehold,
+               household.ingredientMergeAuditTrail.contains(where: { $0.revertedAt == nil }) {
+                Button(String(localized: "Reverse last ingredient merge")) {
+                    reverseLatestMerge(in: household)
+                }
+            }
+
+            if let integrityAudit {
+                if integrityAudit.issues.isEmpty {
+                    Label(String(localized: "No integrity issues found"), systemImage: "checkmark.circle")
+                        .foregroundStyle(.green)
+                } else {
+                    Text(String(localized: "\(integrityAudit.issues.count) issues found"))
+                        .foregroundStyle(.secondary)
+                    let safeIssues = integrityAudit.issues.filter(\.isSafeToRepair)
+                    if !safeIssues.isEmpty {
+                        Button(String(localized: "Repair \(safeIssues.count) safe issues")) {
+                            repair(integrityAudit)
+                        }
+                    }
+                    if integrityAudit.issues.contains(where: { !$0.isSafeToRepair }) {
+                        Text("Potential duplicates and broken links are reported for review; this repair never merges or deletes data.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        } header: {
+            Text(String(localized: "Data integrity"))
+        } footer: {
+            Text("Checks existing recipe and shopping-list links plus catalogue search keys. Automatic repair is limited to rebuilding stale search keys.")
+        }
+    }
+
     private func suggestionRow(_ suggestion: IngredientCleanupSuggestion) -> some View {
         VStack(alignment: .leading, spacing: 5) {
             HStack {
@@ -109,6 +156,27 @@ struct IngredientCleanupView: View {
 
     private func percentage(_ value: Double) -> String {
         String(localized: "(Int((value * 100).rounded()))% match")
+    }
+
+    private func repair(_ audit: IngredientIntegrityAudit) {
+        guard let household = appState.currentHousehold else { return }
+        do {
+            _ = try IngredientIntegrityRepairService.repairSafely(audit, in: household, context: context)
+            integrityAudit = IngredientIntegrityAuditor.audit(household: household, context: context)
+        } catch {
+            batchErrorMessage = String(localized: "The safe repairs could not be saved.")
+            showingBatchError = true
+        }
+    }
+
+    private func reverseLatestMerge(in household: Household) {
+        do {
+            _ = try IngredientMergeService.reverseLatestMerge(in: household, context: context)
+            integrityAudit = IngredientIntegrityAuditor.audit(household: household, context: context)
+        } catch {
+            batchErrorMessage = String(localized: "The last ingredient merge could not be reversed.")
+            showingBatchError = true
+        }
     }
 
     private func reasonText(for suggestion: IngredientCleanupSuggestion) -> String {

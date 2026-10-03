@@ -81,6 +81,28 @@ struct DishThumbnail: View {
         self.cornerRadius = cornerRadius
     }
 
+    /// Snapshot-backed initializer for scrolling surfaces. It deliberately
+    /// takes the dish identity and placeholder values separately, so creating
+    /// a thumbnail never reads the Dish.images relationship on the main actor.
+    init(
+        dishID: PersistentIdentifier?, dishUUID: UUID?, cacheKey: String,
+        glyph: DishGlyph? = nil, tint: Color = .gray,
+        size: CGFloat = 56, cornerRadius: CGFloat = 12,
+        width: CGFloat? = nil, height: CGFloat? = nil
+    ) {
+        self.dishID = dishID
+        self.dishUUID = dishUUID
+        self.dishCacheKey = dishID == nil ? nil : cacheKey
+        self.imageRecord = nil
+        self.rawData = nil
+        self.glyph = glyph
+        self.tint = tint
+        self.width = width ?? size
+        self.height = height ?? size
+        self.size = max(self.width, self.height)
+        self.cornerRadius = cornerRadius
+    }
+
     /// Photo, glyph and tint all taken from the dish.
     init(
         dish: Dish?, size: CGFloat = 56, cornerRadius: CGFloat = 12,

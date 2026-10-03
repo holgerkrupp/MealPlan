@@ -97,20 +97,22 @@ struct IngredientMatchingTests {
         #expect(confirmedAlias.isSafeForAutomaticReuse)
     }
 
-    @Test func GermanAndEnglishNormalizationCanBeReusedSafely() {
+    @Test func normalizedAndInflectedNamesNeedConfirmationBeforePersistentReuse() {
         let flour = Ingredient(name: "Flour")
         let german = Ingredient(name: "Mehl")
         let english = IngredientMatching.result(for: "Bio Mehl nach Geschmack", in: [german])
         #expect(english.candidate === german)
         #expect(english.matchClass == .highConfidence)
         #expect(english.reasons == [.normalizedKey])
-        #expect(english.isSafeForSilentReuse)
+        #expect(!english.isSafeForSilentReuse)
+        #expect(IngredientMatching.match("Bio Mehl nach Geschmack", in: [german]) == nil)
 
         let plural = IngredientMatching.result(for: "eggs", in: [flour, Ingredient(name: "egg")])
         #expect(plural.candidate?.name == "egg")
         #expect(plural.matchClass == .highConfidence)
         #expect(plural.reasons == [.inflection])
-        #expect(plural.isSafeForSilentReuse)
+        #expect(!plural.isSafeForSilentReuse)
+        #expect(IngredientMatching.match("eggs", in: [flour, Ingredient(name: "egg")]) == nil)
     }
 
     @Test func fuzzyAndReorderedCandidatesNeedConfirmation() {
@@ -147,5 +149,14 @@ struct IngredientMatchingTests {
         #expect(collision.reasons.contains(.candidateCollision))
         #expect(!collision.isSafeForSilentReuse)
         #expect(IngredientMatching.match("Mehl", in: [first, second]) == nil)
+    }
+
+    @Test func ruleAwareLookupDoesNotTurnAFuzzyGuessIntoAnAutomaticMatch() {
+        let yoghurt = Ingredient(name: "Joghurt")
+        let unrelatedRule = IngredientMatchRule(leftName: "Milch", rightName: "Milk", kind: .alias)
+        #expect(IngredientMatching.match("Jogurt", in: [yoghurt], rules: [unrelatedRule]) == nil)
+
+        let explicitRule = IngredientMatchRule(leftName: "Jogurt", rightName: "Joghurt", kind: .alias)
+        #expect(IngredientMatching.match("Jogurt", in: [yoghurt], rules: [explicitRule]) === yoghurt)
     }
 }

@@ -28,6 +28,18 @@ final class CalendarPaginator {
     var firstWeek: Date { weekStarts.first ?? Self.normalizedWeek(of: .now) }
     var lastWeek: Date { weekStarts.last ?? Self.normalizedWeek(of: .now) }
 
+    /// The half-open date range fetched for the currently materialized window.
+    /// The extra seven days include the final week's Sunday.
+    var queryRange: DateInterval {
+        let start = firstWeek.startOfDay
+        let end = lastWeek.adding(days: 7, calendar: calendar).startOfDay
+        return DateInterval(start: start, end: end)
+    }
+
+    var queryWindowID: String {
+        "\(firstWeek.timeIntervalSinceReferenceDate)-\(lastWeek.timeIntervalSinceReferenceDate)"
+    }
+
     func extendPast() {
         guard let first = weekStarts.first else { return }
         let newWeeks = (1...step).reversed().map {

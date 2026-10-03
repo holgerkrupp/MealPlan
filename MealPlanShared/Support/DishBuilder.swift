@@ -10,8 +10,11 @@ enum DishBuilder {
     /// ingredient catalogue and tag vocabulary.
     @MainActor
     final class ImportSession {
+        fileprivate let identifier = UUID()
         private var ingredientMatcher: IngredientMatcher
         private var resolvedIngredients: [String: Ingredient] = [:]
+        private var newlyCreatedIngredientIDs: Set<UUID> = []
+        private var metadataInitializedIngredientIDs: Set<UUID> = []
         fileprivate private(set) var tagVocabulary: [String]
 
         init(household: Household?) {
@@ -26,6 +29,9 @@ enum DishBuilder {
         ) -> Ingredient {
             let normalized = Ingredient.normalize(rawName)
             if !normalized.isEmpty, let cached = resolvedIngredients[normalized] {
+                IngredientIntegrityDiagnostics.record(
+                    .importIngredientResolution, importSessionID: identifier, ingredientUUID: cached.uuid, reusedIngredient: true
+                )
                 return cached
             }
             let match = ingredientMatcher.result(for: rawName)
@@ -38,16 +44,59 @@ enum DishBuilder {
                     confidence: 0.8,
                     context: context
                 )
+                IngredientIntegrityDiagnostics.record(
+                    .importIngredientResolution, importSessionID: identifier, ingredientUUID: existing.uuid,
+                    matchClass: match.matchClass, matchReasons: match.reasons, reusedIngredient: true
+                )
                 return existing
             }
 
             let ingredient = Ingredient(name: rawName.isEmpty ? String(localized: "Ingredient") : rawName)
             ingredient.household = household
             context.insert(ingredient)
+            newlyCreatedIngredientIDs.insert(ingredient.uuid)
+            IngredientIntegrityDiagnostics.record(
+                .importedNewIngredient, importSessionID: identifier, ingredientUUID: ingredient.uuid,
+                matchClass: match.matchClass, matchReasons: match.reasons, reusedIngredient: false,
+                queuedMergeSuggestion: match.matchClass == .needsConfirmation
+            )
             IngredientIdentity.queueMergeSuggestion(for: rawName, result: match, on: ingredient)
+            if !ingredient.pendingMergeSuggestions.isEmpty {
+                IngredientIntegrityDiagnostics.record(
+                    .mergeSuggestionQueued, importSessionID: identifier, ingredientUUID: ingredient.uuid,
+                    matchClass: match.matchClass, matchReasons: match.reasons, queuedMergeSuggestion: true
+                )
+            }
             ingredientMatcher.add(ingredient)
             if !normalized.isEmpty { resolvedIngredients[normalized] = ingredient }
             return ingredient
+        }
+
+        /// Import payloads describe a recipe line, not an authority to rewrite
+        /// a household-wide catalogue row. Only a row created by this import
+        /// session receives source metadata; reused ingredients retain every
+        /// setting made for the other recipes that already use them.
+        fileprivate func applyImportedMetadata(_ value: ImportedIngredient, to ingredient: Ingredient) {
+            guard newlyCreatedIngredientIDs.contains(ingredient.uuid),
+                  metadataInitializedIngredientIDs.insert(ingredient.uuid).inserted
+            else {
+                let conflicts = [
+                    ingredient.category != value.category,
+                    ingredient.customAisleName != value.customAisleName,
+                    value.isPantryStaple && !ingredient.isPantryStaple,
+                    value.nutrition != nil && ingredient.nutritionFacts != value.nutrition,
+                ].filter { $0 }.count
+                if conflicts > 0 {
+                    IngredientIntegrityDiagnostics.record(.ignoredImportedMetadataForExistingIngredient, detail: "fields=\(conflicts)")
+                }
+                return
+            }
+            ingredient.category = value.category
+            ingredient.customAisleName = value.customAisleName
+            ingredient.isPantryStaple = value.isPantryStaple
+            if let facts = value.nutrition {
+                ingredient.setNutrition(facts, reference: value.nutritionReference, source: .imported)
+            }
         }
 
         fileprivate func record(tags: [String]) {
@@ -71,6 +120,7 @@ enum DishBuilder {
         // flagged for review so the cook is asked to name it properly.
         let importedName = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
         let dish = Dish(name: importedName.isEmpty ? fallbackName(for: recipe) : importedName)
+        let ingredientSession = importSession ?? ImportSession(household: household)
         dish.household = household
         dish.createdByName = createdByName
         dish.sourceURL = recipe.sourceURL
@@ -99,6 +149,7 @@ enum DishBuilder {
             dish.glyphIsAuto = false
         }
         context.insert(dish)
+        IngredientIntegrityDiagnostics.record(.importDishCreated, importSessionID: ingredientSession.identifier, dishUUID: dish.uuid)
 
         for (index, imageData) in ([recipe.imageData].compactMap { $0 } + recipe.additionalImageData).enumerated() {
             let image = DishImage(data: imageData, sortIndex: index, isPrimary: index == 0)
@@ -108,20 +159,12 @@ enum DishBuilder {
 
         if let structured = recipe.structuredIngredients {
             for (index, value) in structured.enumerated() {
-                let ingredient = importSession?.ingredient(
+                let ingredient = ingredientSession.ingredient(
                     named: value.name,
                     household: household,
                     context: context
-                ) ?? upsertIngredient(named: value.name, household: household, context: context)
-                ingredient.category = value.category
-                ingredient.customAisleName = value.customAisleName
-                ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
-                // Only fill a gap: a household that has typed its own values
-                // for an ingredient keeps them when a recipe arrives with
-                // different ones.
-                if ingredient.nutritionFacts == nil, let facts = value.nutrition {
-                    ingredient.setNutrition(facts, reference: value.nutritionReference, source: .imported)
-                }
+                )
+                ingredientSession.applyImportedMetadata(value, to: ingredient)
                 let line = DishIngredient(
                     canonicalValue: value.canonicalValue,
                     dimension: value.dimension,
@@ -134,15 +177,19 @@ enum DishBuilder {
                 line.dish = dish
                 line.ingredient = ingredient
                 context.insert(line)
+                IngredientIntegrityDiagnostics.record(
+                    .importIngredientResolution, importSessionID: ingredientSession.identifier, dishUUID: dish.uuid,
+                    dishIngredientUUID: line.uuid, ingredientUUID: ingredient.uuid
+                )
             }
         } else {
             for (index, rawLine) in recipe.ingredientLines.enumerated() {
                 let parsed = GermanUnitParser.parse(rawLine)
-                let ingredient = importSession?.ingredient(
+                let ingredient = ingredientSession.ingredient(
                     named: parsed.name,
                     household: household,
                     context: context
-                ) ?? upsertIngredient(named: parsed.name, household: household, context: context)
+                )
                 let line = DishIngredient(
                     canonicalValue: parsed.quantity?.value,
                     dimension: parsed.quantity?.dimension,
@@ -155,6 +202,10 @@ enum DishBuilder {
                 line.dish = dish
                 line.ingredient = ingredient
                 context.insert(line)
+                IngredientIntegrityDiagnostics.record(
+                    .importIngredientResolution, importSessionID: ingredientSession.identifier, dishUUID: dish.uuid,
+                    dishIngredientUUID: line.uuid, ingredientUUID: ingredient.uuid
+                )
             }
         }
 
@@ -169,7 +220,7 @@ enum DishBuilder {
         )
         importSession?.record(tags: dish.tagNames)
 
-        if savesChanges { try? context.save() }
+        if savesChanges { persist(context) }
         return dish
     }
 
@@ -251,7 +302,7 @@ enum DishBuilder {
             dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
         )
         addSuggestedTags(to: dish, household: dish.household)
-        try? context.save()
+        persist(context)
     }
 
     /// Replaces the web-sourced portion of an existing recipe. Unlike
@@ -296,12 +347,7 @@ enum DishBuilder {
                         household: dish.household,
                         context: context
                     )
-                    ingredient.category = value.category
-                    ingredient.customAisleName = value.customAisleName
-                    ingredient.isPantryStaple = ingredient.isPantryStaple || value.isPantryStaple
-                    if ingredient.nutritionFacts == nil, let facts = value.nutrition {
-                        ingredient.setNutrition(facts, reference: value.nutritionReference, source: .imported)
-                    }
+                    importSession.applyImportedMetadata(value, to: ingredient)
                     let line = DishIngredient(
                         canonicalValue: value.canonicalValue,
                         dimension: value.dimension,
@@ -350,7 +396,7 @@ enum DishBuilder {
             dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
         )
         addSuggestedTags(to: dish, household: dish.household)
-        try? context.save()
+        persist(context)
     }
 
     /// Replaces the photo the app shows for a dish while retaining any
@@ -451,7 +497,7 @@ enum DishBuilder {
         }
 
         DishVariants.join(copy, with: dish)
-        try? context.save()
+        persist(context)
         return copy
     }
 
@@ -483,5 +529,14 @@ enum DishBuilder {
             source: .imported,
             confidence: 0.8
         )
+    }
+
+    @MainActor
+    private static func persist(_ context: ModelContext) {
+        do {
+            try context.save()
+        } catch {
+            IngredientIntegrityDiagnostics.record(.persistenceSaveFailed, detail: "dish-import")
+        }
     }
 }

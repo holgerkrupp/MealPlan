@@ -35,7 +35,7 @@ struct WeekStripView: View {
     /// down from the calendar rather than queried here: a `@Query` whose
     /// predicate follows `weekStart` needed the whole strip to be rebuilt —
     /// and refetched — every time the plan scrolled across a week boundary.
-    let entries: [MealPlanEntry]
+    let entries: [MealPlanEntrySnapshot]
     let mealTypes: [MealType]
 
     /// The `dayID` a drag is currently hovering over, if any.
@@ -54,7 +54,7 @@ struct WeekStripView: View {
         weekStart: Binding<Date>,
         selectedDate: Date,
         visibleDayIDs: Set<String>,
-        entries: [MealPlanEntry],
+        entries: [MealPlanEntrySnapshot],
         mealTypes: [MealType],
         onDropDish: @escaping ([DishReference], Date) -> Bool = { _, _ in false },
         isPickingDate: Binding<Bool> = .constant(false),

@@ -16,6 +16,13 @@ enum MealPlanIntentStore {
         try? context.fetch(FetchDescriptor<Household>()).first
     }
 
+    /// App Intents run without `AppState`; use the same App Group participant
+    /// projection as the Share Extension instead of attributing a change to a
+    /// particular device.
+    static var currentMemberName: String {
+        household().flatMap { HouseholdCollaborationStore.load(for: $0.uuid)?.displayName } ?? DeviceOwner.name
+    }
+
     static func mealTypes() -> [MealType] {
         let meals = (try? context.fetch(FetchDescriptor<MealType>(
             sortBy: [SortDescriptor(\.sortOrder), SortDescriptor(\.name)]

@@ -28,6 +28,7 @@ records the design decisions that led there.
 | `MealPlanShared/Support/HouseholdRecordConflictResolver.swift` | Decides what wins when the same record changed in two places. |
 | `MealPlanShared/Support/HouseholdCloudBootstrapService.swift` | Finds and downloads a household this Apple Account already owns. |
 | `MealPlanShared/Support/HouseholdCloudSharingService.swift` | Creates, replaces, and accepts invitations; keeps the member roster. |
+| `MealPlanShared/Support/HouseholdCollaborationSession.swift` | Persists the last known access projection, migration marker, and App Group write generation. |
 | `MealPlan/Features/Household/CloudSharingView.swift` | The invitation sheet: access, add someone nearby, invite by Apple Account, the people on the share, link, re-issue. |
 | `MealPlan/Features/Household/NearbyInvite.swift` | The in-person hand-off over MultipeerConnectivity, iOS only: single-use code, owner (`NearbyInviteHost`) and invitee (`NearbyInviteGuest`) sides. The code and message helpers stay cross-platform so the tests cover them. |
 | `MealPlan/Features/Household/JoinNearbyHouseholdView.swift` | The invitee's "Join a Household Nearby" screen (iOS only). |
@@ -115,6 +116,58 @@ state must never share a key either.
 A sync round happens on launch and whenever the active household changes
 (`RootView.synchronizeHousehold`), after a debounced local scan, when CloudKit
 sends a push, and right before and after an invitation is created or accepted.
+
+### Durable access, foreground refresh, and extension writes
+
+The app does not infer access from a transient "guest" flag. A
+`HouseholdCollaborationSession` restores the last known owner/editor/view-only
+role from the persisted locator and a versioned App Group snapshot before the
+network is available. The locator always wins over a stale cache when it says
+view-only. Once online, a coalesced collaboration refresh fetches the current
+`CKShare`, updates the locator, member cache, session, and participant
+attribution together. Launch, foreground, CloudKit pushes, invitation changes,
+and explicit sync all use that same refresh path. A missing share/zone means a
+participant was removed; ordinary network failures never do.
+
+The Share Extension and widgets never own `CKSyncEngine`. After an extension
+commit, it increments a tiny App Group store-generation counter. The main app
+compares that counter during activation/sync, performs one debounced scan and
+send, and therefore discovers an import or "also plan it" write without a
+second unrelated edit. The extension also reads the cached participant display
+name and refuses shared writes for a view-only session.
+
+Owner-only permission changes edit the existing `CKShare.Participant` in
+place. They preserve the share, link, participant identity, and accepted or
+pending invitation; the affected device learns the new permission through the
+normal refresh path.
+
+### Silent migration and member conflict domains
+
+Collaboration sidecar data uses a small monotonic version envelope. Its
+migration is offline-safe, idempotent, and restart-safe: it neither changes
+SwiftData rows nor performs CloudKit operations. Unknown newer metadata fails
+closed instead of deleting or reinterpreting data. Existing sync metadata
+continues to decode its old fingerprint shape; ambiguous legacy fingerprints
+request a conservative re-evaluation/upload and only a CloudKit acknowledgement
+advances the acknowledged baseline.
+
+`HouseholdMember` tracks independent clocks for share-owned metadata
+(participant identity, role, active/current state, display name) and household
+food-profile fields. Old member payloads omit those clocks and decode using the
+record timestamp for both, so mixed old/new devices remain compatible. A role
+refresh and a food-profile edit merge by their separate clocks; neither
+rewrites historical meal/dish attribution.
+
+These upgrades are strictly in place. They retain the existing household UUID,
+SwiftData store, custom zone, healthy `CKShare`, share link, participant IDs,
+member UUIDs, serialized engine state, tombstones, and unsent local content.
+No reset, re-invite, re-acceptance, or export/import is needed.
+
+For support builds, the App Group also retains a short rolling,
+privacy-safe diagnostic trail: zone name, private/shared scope, effective
+role, pending count, and lifecycle event (activation, scan, fetch, send or
+send failure). It never contains recipe text, ingredients, email addresses,
+phone numbers, or member names.
 
 ### Resolving conflicts
 

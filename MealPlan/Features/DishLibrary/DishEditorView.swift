@@ -25,6 +25,7 @@ struct DishEditorView: View {
     @State private var sourceURLText = ""
     @State private var appLinkURLText = ""
     @State private var duplicateDish: Dish?
+    @State private var saveError: String?
     /// What the recipe read like when the editor opened. A saved translation
     /// describes those words, so changing them drops it — a stale translation
     /// in the kitchen is worse than none.
@@ -95,6 +96,14 @@ struct DishEditorView: View {
                 primaryButton: .default(Text("Save anyway")) { save(checkDuplicates: false) },
                 secondaryButton: .cancel(Text("Keep editing"))
             )
+        }
+        .alert(
+            String(localized: "Could not save recipe"),
+            isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(saveError ?? String(localized: "The recipe is still open. Check your connection or try saving again."))
         }
     }
 
@@ -494,8 +503,15 @@ struct DishEditorView: View {
             return
         }
         if dish.household == nil { dish.household = appState.currentHousehold }
-        try? context.save()
-        dismiss()
+        do {
+            try context.save()
+            dismiss()
+        } catch {
+            // Keep the editor open. A recipe is user-created primary content;
+            // dismissing after a failed save makes it look as if it was
+            // safely stored and lets a later sync/relaunch lose it.
+            saveError = error.localizedDescription
+        }
     }
 
     /// Removes a new dish nobody filled in. Deliberately narrow: it asks for

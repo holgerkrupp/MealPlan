@@ -104,6 +104,7 @@ enum MealPlanBackupRestore {
         // that already has an ingredient catalogue counts as set up too, so the
         // defaults aren't seeded over the top of it.
         household.didSeedPantryStaples = backup.household.didSeedPantryStaples ?? !backup.ingredients.isEmpty
+        household.ingredientMergeAuditData = backup.household.ingredientMergeAuditData
         context.insert(household)
 
         for stored in backup.mealTypes {

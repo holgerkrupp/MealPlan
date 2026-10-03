@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import MealPlan
 
 /// The order the shop is walked in.
@@ -8,6 +9,7 @@ import Foundation
 /// list, and the shopping widget (and through `WatchSnapshotBuilder`, the
 /// watch) — so a change here moves all of them at once. That is the point of
 /// it being one call, and the reason it is worth pinning down.
+@MainActor
 struct ShoppingListGroupingTests {
 
     private func item(
@@ -80,5 +82,21 @@ struct ShoppingListGroupingTests {
         let grouped = ShoppingListGrouping.aisles(items).flatMap(\.items)
         #expect(grouped.count == items.count)
         #expect(Set(grouped.map(\.name)) == Set(items.map(\.name)))
+    }
+
+    @Test func rowSnapshotRemainsReadableAfterItsModelIsDeleted() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let item = ShoppingListItem(name: "Onions", category: .produce)
+        item.sourceDishNames = ["Soup"]
+        item.displayText = "3"
+        context.insert(item)
+
+        let snapshot = ShoppingListRowSnapshot(item)
+        context.delete(item)
+
+        #expect(snapshot.name == "Onions")
+        #expect(snapshot.sourceDishNames == ["Soup"])
+        #expect(snapshot.displayText == "3")
     }
 }

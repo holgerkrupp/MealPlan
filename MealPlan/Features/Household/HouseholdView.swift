@@ -316,6 +316,7 @@ private struct FoodProfileEditor: View {
             get: { member[keyPath: keyPath].joined(separator: ", ") },
             set: {
                 member[keyPath: keyPath] = $0.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+                member.markProfileModified()
                 try? context.save()
             }
         )

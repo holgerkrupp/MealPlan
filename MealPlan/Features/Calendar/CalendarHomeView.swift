@@ -10,8 +10,6 @@ struct CalendarHomeView: View {
     @Environment(\.modelContext) private var context
     @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
     private var mealTypes: [MealType]
-    @Query(sort: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)])
-    private var planEntries: [MealPlanEntry]
     /// The Monday-based week sitting at the top of the plan. Written by the
     /// scroll view only when it actually changes weeks, so ordinary scrolling
     /// no longer re-runs this body — and with it the week grouping over every
@@ -32,32 +30,14 @@ struct CalendarHomeView: View {
     /// First day of the week shown in the strip above the plan. Follows the
     /// user's locale, unlike the Monday-based week sections below it.
     @State private var stripWeekStart: Date = Date.now.startOfWeek(calendar: .current)
+    /// The same window drives both the lazy sections and the query below. A
+    /// store-wide entry query defeats lazy scrolling even when the stack only
+    /// builds a handful of weeks.
+    @State private var paginator = CalendarPaginator()
+    @State private var loadedEntries: [MealPlanEntrySnapshot] = []
 
     var body: some View {
         VStack(spacing: 0) {
-            // No `.id(stripWeekStart)` here: it used to force a full teardown
-            // and refetch of the strip on every week the plan scrolled past.
-            // The strip now takes its week's meals as a plain value instead of
-            // querying them itself, so it simply updates — and animates.
-            TrackedWeekStrip(
-                weekStart: $stripWeekStart,
-                selectedDate: appState.selectedDate,
-                visibilityTracker: visibilityTracker,
-                entries: stripEntries,
-                mealTypes: mealTypes,
-                onDropDish: { references, day in drop(references, on: day) },
-                isPickingDate: $showingDatePicker,
-                onJumpToDate: { goTo($0) }
-            ) { day in
-                goTo(day)
-            }
-            .padding(.horizontal, MacLayout.gutter)
-            .padding(.top, 4)
-            .padding(.bottom, 8)
-            .background(.bar)
-
-            Divider()
-
             if let latestFreeDate = purchaseManager.latestPlanningDate() {
                 Button { showingPaywall = true } label: {
                     Label {
@@ -85,9 +65,33 @@ struct CalendarHomeView: View {
                 )
             }
 
-            plan
+            LoadedMealPlanEntriesView(
+                range: paginator.queryRange,
+                onUpdate: { loadedEntries = $0 }
+            )
+            .id(paginator.queryWindowID)
+            .frame(width: 0, height: 0)
+
+            TrackedWeekStrip(
+                weekStart: $stripWeekStart,
+                selectedDate: appState.selectedDate,
+                visibilityTracker: visibilityTracker,
+                entries: loadedEntries,
+                mealTypes: mealTypes,
+                onDropDish: { references, day in drop(references, on: day) },
+                isPickingDate: $showingDatePicker,
+                onJumpToDate: { goTo($0) }
+            ) { day in
+                goTo(day)
+            }
+            .padding(.horizontal, MacLayout.gutter)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+            .background(.bar)
+
+            Divider()
+            plan(entries: loadedEntries)
         }
-        .task(id: planEntries.count) { MealPlanTips.updatePlannedMealCount(planEntries.count) }
         // The Plan menu only works while the calendar is on screen; switching
         // to another section drops this value and greys the menu out.
         .focusedSceneValue(\.planCommands, PlanCommands(
@@ -102,20 +106,16 @@ struct CalendarHomeView: View {
     }
 
     /// The scrolling list of week sections below the week strip.
-    private var plan: some View {
-        // One live query feeds the whole lazy calendar. A query in every week
-        // makes SwiftData install and update many fetch observers while the
-        // scroll view is creating and recycling sections.
-        //
-        // The grouping happens here, above `PlanScrollView`, on purpose: the
-        // scroll position changes many times a second and lives inside that
-        // child, so it no longer drags a pass over every planned meal in the
-        // store along with it.
-        let entriesByWeek = Dictionary(grouping: planEntries) {
+    private func plan(entries: [MealPlanEntrySnapshot]) -> some View {
+        // The grouping happens above `PlanScrollView`, on purpose: the scroll
+        // position changes many times a second and lives inside that child,
+        // so it no longer drags a pass over every planned meal in the store.
+        let entriesByWeek = Dictionary(grouping: entries) {
             CalendarPaginator.normalizedWeek(of: $0.date)
         }
 
         return PlanScrollView(
+            paginator: paginator,
             entriesByWeek: entriesByWeek,
             mealTypes: mealTypes,
             jumpTarget: $jumpTarget,
@@ -136,7 +136,7 @@ struct CalendarHomeView: View {
             ToolbarItem(placement: .navigation) {
                 Button(String(localized: "Today")) { goTo(.now) }
             }
-            ToolbarItem(placement: .secondaryAction) {
+            ToolbarItem(placement: .primaryAction) {
                 Menu {
                     Button(String(localized: "Share Images"), systemImage: "photo.stack") {
                         showingShareImages = true
@@ -249,12 +249,51 @@ struct CalendarHomeView: View {
         jumpTarget = day
     }
 
-    /// The strip's own week, cut out of the one store-wide query. The plan's
-    /// sections are Monday-based while the strip follows the user's locale, so
-    /// this is a separate slice rather than one of the week buckets.
-    private var stripEntries: [MealPlanEntry] {
-        let end = stripWeekStart.adding(days: 7)
-        return planEntries.filter { $0.date >= stripWeekStart && $0.date < end }
+}
+
+/// One bounded SwiftData query feeds the strip and the currently loaded lazy
+/// sections. Rebuilding this view when the paginator grows changes the query
+/// predicate, so SwiftData never observes the entire meal-plan history.
+@MainActor
+private struct LoadedMealPlanEntriesView: View {
+    let range: DateInterval
+    @Query private var models: [MealPlanEntry]
+    let onUpdate: ([MealPlanEntrySnapshot]) -> Void
+
+    init(range: DateInterval, onUpdate: @escaping ([MealPlanEntrySnapshot]) -> Void) {
+        self.range = range
+        self.onUpdate = onUpdate
+        let start = range.start
+        let end = range.end
+        _models = Query(
+            filter: #Predicate<MealPlanEntry> { entry in
+                entry.date >= start && entry.date < end
+            },
+            sort: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)]
+        )
+    }
+
+    var body: some View {
+        Color.clear
+            .task(id: revision) {
+                // The live models stop here. Everything below this boundary
+                // renders immutable values and cannot fault a relationship
+                // while a lazy card is being constructed.
+                onUpdate(models.map(MealPlanEntrySnapshot.init))
+                MealPlanTips.updatePlannedMealCount(models.count)
+            }
+    }
+
+    private var revision: Int {
+        var hasher = Hasher()
+        hasher.combine(models.count)
+        for model in models {
+            hasher.combine(model.uuid)
+            hasher.combine(model.modifiedAt)
+            hasher.combine(model.dish?.uuid)
+            hasher.combine(model.dish?.modifiedAt)
+        }
+        return hasher.finalize()
     }
 }
 
@@ -267,7 +306,8 @@ struct CalendarHomeView: View {
 /// writes.
 @MainActor
 private struct PlanScrollView: View {
-    let entriesByWeek: [Date: [MealPlanEntry]]
+    let paginator: CalendarPaginator
+    let entriesByWeek: [Date: [MealPlanEntrySnapshot]]
     let mealTypes: [MealType]
     /// A day the calendar wants brought into view; cleared once handled.
     @Binding var jumpTarget: Date?
@@ -275,7 +315,6 @@ private struct PlanScrollView: View {
     /// Reports the Monday-based week at the top, only when it changes.
     var onFocusWeekChange: (Date) -> Void
 
-    @State private var paginator = CalendarPaginator()
     @State private var anchorWeek: Date? = CalendarPaginator.normalizedWeek(of: .now)
     @State private var didSettle = false
 
@@ -395,7 +434,7 @@ private struct TrackedWeekStrip: View {
     @Binding var weekStart: Date
     let selectedDate: Date
     let visibilityTracker: PlanVisibilityTracker
-    let entries: [MealPlanEntry]
+    let entries: [MealPlanEntrySnapshot]
     let mealTypes: [MealType]
     var onDropDish: ([DishReference], Date) -> Bool
     @Binding var isPickingDate: Bool

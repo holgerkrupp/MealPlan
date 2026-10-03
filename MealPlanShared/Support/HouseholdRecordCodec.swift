@@ -96,6 +96,9 @@ struct HouseholdPayload: Codable, Sendable {
     var localeIdentifier: String
     var dateCreated: Date
     var didSeedPantryStaples: Bool
+    /// Bounded local merge history. Optional so records produced before the
+    /// integrity work can still be decoded on a newer device.
+    var ingredientMergeAuditData: Data? = nil
     /// Optional so household records written before the household unlock
     /// existed still decode; `nil` reads back as "not unlocked".
     var unlockedByPurchase: Bool?
@@ -119,6 +122,10 @@ struct MemberPayload: Codable, Sendable {
     var favorites: [String]? = nil
     var preferredCuisines: [String]? = nil
     var spiceTolerance: Int? = nil
+    /// Optional for records written before collaboration metadata/profile
+    /// clocks existed. Their enclosing record timestamp is used on decode.
+    var shareMetadataModifiedAt: Date? = nil
+    var profileModifiedAt: Date? = nil
 }
 
 struct IngredientPackageSizePayload: Codable, Sendable {
@@ -300,6 +307,7 @@ enum HouseholdRecordCodec {
             localeIdentifier: household.localeIdentifier,
             dateCreated: household.dateCreated,
             didSeedPantryStaples: household.didSeedPantryStaples,
+            ingredientMergeAuditData: household.ingredientMergeAuditData,
             unlockedByPurchase: household.unlockedByPurchase,
             bringListUuid: household.bringListUuid,
             bringListName: household.bringListName,
@@ -315,8 +323,13 @@ enum HouseholdRecordCodec {
                 allergies: member.allergies, mustAvoidIngredients: member.mustAvoidIngredients,
                 dietaryPatterns: member.dietaryPatterns, dislikes: member.dislikes,
                 favorites: member.favorites, preferredCuisines: member.preferredCuisines,
-                spiceTolerance: member.spiceTolerance
-            )))
+                spiceTolerance: member.spiceTolerance,
+                shareMetadataModifiedAt: member.shareMetadataModifiedAt,
+                profileModifiedAt: member.profileModifiedAt
+            )), groups: [
+                "shareMetadata": member.shareMetadataModifiedAt.timeIntervalSinceReferenceDate.description,
+                "profile": member.profileModifiedAt.timeIntervalSinceReferenceDate.description
+            ])
         }
         for meal in household.mealTypes ?? [] {
             try append(.init(type: .mealType, uuid: meal.uuid), meal.modifiedAt, .mealType(.init(

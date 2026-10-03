@@ -127,4 +127,99 @@ struct IngredientIdentityTests {
         #expect(canonical.nutritionFacts?.energyKcal == 60)
         #expect((canonical.aliases ?? []).contains { $0.normalizedName == "jogurt" })
     }
+
+    /// Regression for the Paprika incident: a structured import reused an
+    /// existing exact ingredient, then overwrote the catalogue metadata used
+    /// by an unrelated recipe.
+    @Test func PaprikaImportNeverMutatesSharedIngredientMetadata() throws {
+        IngredientIntegrityDiagnostics.resetForTesting()
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let paprika = Ingredient(name: "Paprika", category: .produce)
+        paprika.customAisleName = "Vegetables"
+        paprika.isPantryStaple = false
+        paprika.setNutrition(.init(energyKcal: 31, proteinGrams: 1, carbGrams: 6, fatGrams: 0.3))
+        let unrelated = Dish(name: "Stuffed peppers")
+        let unrelatedLine = DishIngredient(rawText: "2 Paprika")
+        unrelatedLine.dish = unrelated
+        unrelatedLine.ingredient = paprika
+        household.ingredients = [paprika]
+        household.dishes = [unrelated]
+        paprika.household = household
+        unrelated.household = household
+        context.insert(household)
+        context.insert(paprika)
+        context.insert(unrelated)
+        context.insert(unrelatedLine)
+        try context.save()
+
+        var imported = ImportedRecipe(name: "Paprika spice mix")
+        imported.importedSourceApp = "Paprika"
+        imported.structuredIngredients = [ImportedIngredient(
+            name: "Paprika", category: .spices, customAisleName: "Spice rack", isPantryStaple: true,
+            canonicalValue: 10, dimension: .mass, displayUnit: "g", isApproximate: false,
+            note: nil, rawText: "10 g Paprika", nutrition: .init(energyKcal: 282), nutritionReference: .per100Grams
+        )]
+        let importedDish = DishBuilder.makeDish(from: imported, household: household, createdByName: nil, context: context)
+
+        #expect(unrelatedLine.ingredient === paprika)
+        #expect(importedDish.sortedIngredients.first?.ingredient === paprika)
+        #expect(paprika.category == .produce)
+        #expect(paprika.customAisleName == "Vegetables")
+        #expect(!paprika.isPantryStaple)
+        #expect(paprika.nutritionFacts?.energyKcal == 31)
+        #expect(IngredientIntegrityDiagnostics.recent.contains { $0.kind == .ignoredImportedMetadataForExistingIngredient })
+    }
+
+    @Test func structuredImportInitializesOnlyItsNewIngredient() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        context.insert(household)
+        try context.save()
+        var imported = ImportedRecipe(name: "New recipe")
+        imported.structuredIngredients = [ImportedIngredient(
+            name: "Szechuan pepper", category: .spices, customAisleName: "Spice rack", isPantryStaple: true,
+            canonicalValue: 5, dimension: .mass, displayUnit: "g", isApproximate: false,
+            note: nil, rawText: "5 g Szechuan pepper", nutrition: .init(energyKcal: 251), nutritionReference: .per100Grams
+        )]
+        let dish = DishBuilder.makeDish(from: imported, household: household, createdByName: nil, context: context)
+        let ingredient = try #require(dish.sortedIngredients.first?.ingredient)
+        #expect(ingredient.category == .spices)
+        #expect(ingredient.customAisleName == "Spice rack")
+        #expect(ingredient.isPantryStaple)
+        #expect(ingredient.nutritionFacts?.energyKcal == 251)
+    }
+
+    @Test func mergeHistoryCanRestoreTheDuplicateAndRelationships() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let canonical = Ingredient(name: "Joghurt")
+        let duplicate = Ingredient(name: "Jogurt", category: .dairy)
+        let dish = Dish(name: "Breakfast")
+        let line = DishIngredient(rawText: "Jogurt")
+        line.dish = dish
+        line.ingredient = duplicate
+        household.ingredients = [canonical, duplicate]
+        household.dishes = [dish]
+        canonical.household = household
+        duplicate.household = household
+        dish.household = household
+        context.insert(household)
+        context.insert(canonical)
+        context.insert(duplicate)
+        context.insert(dish)
+        context.insert(line)
+        try context.save()
+
+        try IngredientMergeService.merge(duplicate: duplicate, into: canonical, context: context)
+        #expect(household.ingredientMergeAuditTrail.count == 1)
+        let restored = try IngredientMergeService.reverseLatestMerge(in: household, context: context)
+        #expect(restored.name == "Jogurt")
+        #expect(restored.category == .dairy)
+        #expect(line.ingredient === restored)
+        #expect(household.ingredientMergeAuditTrail[0].revertedAt != nil)
+    }
 }
