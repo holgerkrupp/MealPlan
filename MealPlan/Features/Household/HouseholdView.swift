@@ -97,6 +97,16 @@ struct HouseholdSettingsView: View {
                     }
                 }
 
+                Section {
+                    NavigationLink {
+                        HouseholdRecoveryView()
+                    } label: {
+                        Label(String(localized: "Household Recovery"), systemImage: "arrow.triangle.2.circlepath.icloud")
+                    }
+                } footer: {
+                    Text("Choose an exact iCloud household to restore on this device, safely reset this device, or recover an owner household moved to Recently Deleted.")
+                }
+
                 #if os(iOS)
                 Section {
                     Button {

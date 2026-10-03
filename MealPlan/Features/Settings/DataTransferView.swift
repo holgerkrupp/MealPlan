@@ -29,6 +29,7 @@ struct DataTransferView: View {
             contentsSection
             backupSection
             restoreSection
+            recoverySection
         }
         .navigationTitle(String(localized: "Data"))
         .formStyle(.grouped)
@@ -124,6 +125,18 @@ struct DataTransferView: View {
             Text(appState.isGuest
                  ? String(localized: "You joined this household as a guest, so you can’t replace its data.")
                  : String(localized: "Replaces everything currently on this device with the contents of the backup. You’ll see what’s in the file before anything is changed."))
+        }
+    }
+
+    private var recoverySection: some View {
+        Section {
+            NavigationLink {
+                HouseholdRecoveryView()
+            } label: {
+                Label(String(localized: "Household Recovery"), systemImage: "arrow.triangle.2.circlepath.icloud")
+            }
+        } footer: {
+            Text("Restore one exact household already in iCloud, safely reset only this device, or recover an accidentally deleted owner household. Recovery creates a timestamped safety backup before changing this device.")
         }
     }
 

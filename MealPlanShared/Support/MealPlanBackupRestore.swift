@@ -35,8 +35,12 @@ enum MealPlanBackupRestore {
         context.undoManager = nil
         defer { context.undoManager = undoManager }
 
+        // Keep deletion and insertion in one save. Besides being less noisy
+        // for the sync observer, this means a failed write cannot commit an
+        // empty store between the two phases. Household recovery keeps its own
+        // preflight backup as a second line of defence, but a normal backup
+        // restore deserves the same atomic local replacement.
         try deleteEverything(in: context)
-        try context.save()
         insert(backup, into: context, householdUUID: householdUUID)
         try context.save()
         return backup.contents
