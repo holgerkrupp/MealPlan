@@ -36,6 +36,9 @@ struct HouseholdSharingView: View {
     @State private var participantPendingRemoval: HouseholdShareParticipant?
     @State private var didCopyLink = false
     @State private var isConfirmingNewInvitation = false
+    @State private var invitationPreparationTask: Task<Void, Never>?
+    @State private var invitationPreparationDeadline: Task<Void, Never>?
+    @State private var invitationPreparationAttempt: UUID?
 
     var body: some View {
         NavigationStack {
@@ -60,6 +63,13 @@ struct HouseholdSharingView: View {
                         )
 
                         if isOwner {
+                            Button {
+                                prepareInvitation()
+                            } label: {
+                                Label("Retry", systemImage: "arrow.clockwise")
+                            }
+                            .buttonStyle(.borderedProminent)
+
                             Button {
                                 isConfirmingNewInvitation = true
                             } label: {
@@ -86,7 +96,8 @@ struct HouseholdSharingView: View {
         #if os(macOS)
         .frame(minWidth: 460, minHeight: 640)
         #endif
-        .task { await prepareInvitation() }
+        .task { prepareInvitation() }
+        .onDisappear { cancelInvitationPreparation() }
         #if os(iOS)
         .onDisappear { nearbyHost?.stop() }
         #endif
@@ -433,18 +444,67 @@ struct HouseholdSharingView: View {
             : String(localized: "Withdraw the invitation for \(person.displayName)?")
     }
 
-    private func prepareInvitation() async {
+    private func prepareInvitation() {
+        cancelInvitationPreparation()
         isPreparing = true
-        do {
-            invitation = try await HouseholdCloudSharingService.prepareInvitation(for: household, context: modelContext)
-            errorMessage = nil
-            #if os(iOS)
-            startNearbyIfNeeded()
-            #endif
-        } catch {
-            errorMessage = error.localizedDescription
+        let attempt = UUID()
+        invitationPreparationAttempt = attempt
+
+        invitationPreparationTask = Task { @MainActor in
+            do {
+                let prepared = try await HouseholdCloudSharingService.prepareInvitation(for: household, context: modelContext)
+                guard !Task.isCancelled, invitationPreparationAttempt == attempt else { return }
+                invitationPreparationDeadline?.cancel()
+                invitation = prepared
+                errorMessage = nil
+                isPreparing = false
+                #if os(iOS)
+                startNearbyIfNeeded()
+                #endif
+            } catch {
+                guard !Task.isCancelled, invitationPreparationAttempt == attempt else { return }
+                invitationPreparationDeadline?.cancel()
+                recordInvitationPreparationFailure(error)
+            }
         }
+
+        invitationPreparationDeadline = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .seconds(20))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled, invitationPreparationAttempt == attempt else { return }
+            invitationPreparationTask?.cancel()
+            recordInvitationPreparationFailure(LegacyInvitationPreparationTimeout())
+        }
+    }
+
+    private func cancelInvitationPreparation() {
+        invitationPreparationTask?.cancel()
+        invitationPreparationDeadline?.cancel()
+        invitationPreparationTask = nil
+        invitationPreparationDeadline = nil
+        invitationPreparationAttempt = nil
+    }
+
+    private func recordInvitationPreparationFailure(_ error: Error) {
+        LegacyHouseholdDiagnostics.record(
+            event: "legacyInvitationPreparationFailed",
+            activeHouseholdID: household.uuid,
+            error: error
+        )
+        errorMessage = error.localizedDescription
         isPreparing = false
+        invitationPreparationTask = nil
+        invitationPreparationDeadline = nil
+        invitationPreparationAttempt = nil
+    }
+
+    private struct LegacyInvitationPreparationTimeout: LocalizedError {
+        var errorDescription: String? {
+            String(localized: "iCloud is taking too long to prepare this invitation. Check your connection and try again.")
+        }
     }
 
     #if os(iOS)

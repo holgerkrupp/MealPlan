@@ -13,6 +13,9 @@ struct HouseholdSettingsView: View {
     @State private var memberPendingRemoval: HouseholdMember?
     @State private var removingMemberID: UUID?
     @State private var removalErrorMessage: String?
+    @State private var isConfirmingLegacyRecovery = false
+    @State private var isReconcilingLegacyHouseholds = false
+    @State private var legacyRecoveryErrorMessage: String?
 
     /// People who currently have access. Someone removed from the share keeps
     /// an inactive row (see `HouseholdCloudSharingService.refreshMembers`) so
@@ -97,6 +100,28 @@ struct HouseholdSettingsView: View {
                     }
                 }
 
+                if case .reviewRequired = appState.legacyHouseholdRecovery {
+                    Section {
+                        Label("Another household needs review", systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(.orange)
+                        Button {
+                            isConfirmingLegacyRecovery = true
+                        } label: {
+                            if isReconcilingLegacyHouseholds {
+                                HStack {
+                                    ProgressView()
+                                    Text("Copying household data…")
+                                }
+                            } else {
+                                Label("Review and Copy Household Data", systemImage: "arrow.triangle.merge")
+                            }
+                        }
+                        .disabled(isReconcilingLegacyHouseholds)
+                    } footer: {
+                        Text("MealPlan found more than one populated household for this Apple Account. Copying moves this device to the active shared household and retains every original iCloud zone as a backup.")
+                    }
+                }
+
                 #if os(iOS)
                 Section {
                     Button {
@@ -169,6 +194,18 @@ struct HouseholdSettingsView: View {
                         #endif
                     }
                 }
+
+                #if DEBUG
+                Section {
+                    NavigationLink {
+                        LegacyHouseholdDiagnosticsView()
+                    } label: {
+                        Label("Collaboration Diagnostics", systemImage: "ladybug")
+                    }
+                } footer: {
+                    Text("Shows identifiers, scopes, pending counts and errors only; no recipe or member data.")
+                }
+                #endif
             } else {
                 ContentUnavailableView(
                     String(localized: "Setting up…"),
@@ -211,6 +248,37 @@ struct HouseholdSettingsView: View {
             Button(String(localized: "OK")) {}
         } message: { message in
             Text(message)
+        }
+        .confirmationDialog(
+            String(localized: "Copy household data into the canonical household?"),
+            isPresented: $isConfirmingLegacyRecovery,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Copy and Switch Household")) {
+                Task { await reconcileLegacyHouseholds() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("MealPlan will use the already shared household when one exists, then copy recipes, plans, shopping items and other unmatched data from the other household zones. It will not delete any CloudKit zone. If two records have the same identity, this device’s version is kept so you can review it later.")
+        }
+        .alert(
+            String(localized: "Couldn’t Reconcile Households"),
+            isPresented: Binding(get: { legacyRecoveryErrorMessage != nil }, set: { if !$0 { legacyRecoveryErrorMessage = nil } }),
+            presenting: legacyRecoveryErrorMessage
+        ) { _ in
+            Button(String(localized: "OK")) {}
+        } message: { message in
+            Text(message)
+        }
+    }
+
+    private func reconcileLegacyHouseholds() async {
+        isReconcilingLegacyHouseholds = true
+        defer { isReconcilingLegacyHouseholds = false }
+        do {
+            try await appState.reconcileLegacyHouseholds(context: context)
+        } catch {
+            legacyRecoveryErrorMessage = error.localizedDescription
         }
     }
 
