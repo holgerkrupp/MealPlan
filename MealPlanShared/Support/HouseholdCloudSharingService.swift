@@ -276,8 +276,8 @@ enum HouseholdCloudSharingService {
         var locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         guard locator.isOwner else { throw HouseholdSharingError.onlyOwnerCanInvite }
 
-        try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
         let database = container.privateCloudDatabase
+        try await ensureSharePrerequisites(for: household, locator: locator, database: database)
         let share: CKShare
         if let shareID = locator.shareRecordID {
             guard let fetched = try await fetchRecord(shareID, from: database) as? CKShare else {
@@ -308,6 +308,48 @@ enum HouseholdCloudSharingService {
         try context.save()
 
         return try invitation(from: savedShare)
+    }
+
+    /// Creates only the legacy zone/root needed by `CKShare`. In particular it
+    /// does not await `CKSyncEngine`'s full record scan/upload chain: that
+    /// chain can be retried independently after the share UI is already ready.
+    private static func ensureSharePrerequisites(
+        for household: Household,
+        locator: HouseholdShareLocator,
+        database: CKDatabase
+    ) async throws {
+        // Re-saving an existing zone is rejected on some CloudKit server
+        // versions. Inspecting zones first makes this idempotent on an owner’s
+        // second device as well as after an interrupted first invitation.
+        let zoneExists = try await database.allRecordZones().contains { $0.zoneID == locator.zoneID }
+        if !zoneExists {
+            let zone = CKRecordZone(zoneID: locator.zoneID)
+            let zones = try await database.modifyRecordZones(saving: [zone], deleting: [])
+            guard let save = zones.saveResults[locator.zoneID] else {
+                throw HouseholdSharingError.cloudKitDidNotReturnRecord
+            }
+            _ = try save.get()
+        }
+
+        let rootID = CKRecord.ID(
+            recordName: HouseholdRecordIdentity(type: .household, uuid: household.uuid).recordName,
+            zoneID: locator.zoneID
+        )
+        do {
+            _ = try await fetchRecord(rootID, from: database)
+        } catch let error as CKError where error.code == .unknownItem {
+            let root = try HouseholdRecordCodec.rootRecord(for: household, zoneID: locator.zoneID)
+            let saved = try await database.modifyRecords(
+                saving: [root],
+                deleting: [],
+                savePolicy: .ifServerRecordUnchanged,
+                atomically: true
+            )
+            guard let result = saved.saveResults[rootID] else {
+                throw HouseholdSharingError.cloudKitDidNotReturnRecord
+            }
+            _ = try result.get()
+        }
     }
 
     /// Adds the person behind `address` to the share at the chosen access.
