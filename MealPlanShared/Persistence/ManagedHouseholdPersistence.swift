@@ -182,14 +182,21 @@ final class ManagedHouseholdPersistence {
         uuid: UUID = UUID()
     ) throws -> NSManagedObject {
         guard let store = stores[scope] else { throw ManagedHouseholdPersistenceError.notLoaded }
-        guard let description = NSEntityDescription.entity(forEntityName: entity.rawValue, in: context) else {
-            throw ManagedHouseholdPersistenceError.entityMissing(entity)
+
+        // The migration currently uses the main view context, but this API also
+        // accepts contexts returned by newBackgroundContext(). Always perform
+        // object creation and store assignment on the context's own queue so a
+        // future background importer cannot violate Core Data confinement.
+        return try context.performAndWait {
+            guard let description = NSEntityDescription.entity(forEntityName: entity.rawValue, in: context) else {
+                throw ManagedHouseholdPersistenceError.entityMissing(entity)
+            }
+            let object = NSManagedObject(entity: description, insertInto: context)
+            context.assign(object, to: store)
+            object.setValue(uuid, forKey: "uuid")
+            object.setValue(Date.now, forKey: "modifiedAt")
+            return object
         }
-        let object = NSManagedObject(entity: description, insertInto: context)
-        context.assign(object, to: store)
-        object.setValue(uuid, forKey: "uuid")
-        object.setValue(Date.now, forKey: "modifiedAt")
-        return object
     }
 
     func storeScope(for object: NSManagedObject) -> ManagedHouseholdStoreScope? {
