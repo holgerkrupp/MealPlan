@@ -147,8 +147,11 @@ private final class MigrationFixture: LegacyHouseholdMigrationSource {
     static func standard() -> MigrationFixture { MigrationFixture() }
 
     func inventory() throws -> ManagedHouseholdMigrationInventory {
-        var identifiers = Dictionary(uniqueKeysWithValues: ManagedHouseholdEntity.allCases.map { ($0, Set<UUID>()) })
-        for record in records { identifiers[record.entity, default: []].insert(record.uuid) }
+        var identifiers = Dictionary(uniqueKeysWithValues: ManagedHouseholdEntity.allCases.map { ($0, [UUID]()) })
+        for record in records { identifiers[record.entity, default: []].append(record.uuid) }
+        for entity in ManagedHouseholdEntity.allCases {
+            identifiers[entity]?.sort { $0.uuidString < $1.uuidString }
+        }
         return .init(identifiersByEntity: identifiers)
     }
 
