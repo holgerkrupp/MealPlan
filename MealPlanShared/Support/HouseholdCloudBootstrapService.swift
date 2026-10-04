@@ -270,7 +270,9 @@ enum HouseholdCloudBootstrapService {
         HouseholdCloudSharingService.mergeDishes(from: placeholder, into: household)
 
         // Same rule `mergeDishes` applies to a dish's ingredients: join the
-        // restored household's ingredient of that name, or move over.
+        // restored household's ingredient of that name, or move over. Preserve
+        // every standalone ingredient too; the old implementation only moved
+        // ingredients reached through shopping items and then deleted the rest.
         var ingredientsByName = [String: Ingredient](
             (household.ingredients ?? []).map { ($0.normalizedName, $0) },
             uniquingKeysWith: { first, _ in first }
@@ -285,6 +287,51 @@ enum HouseholdCloudBootstrapService {
                 ingredientsByName[ingredient.normalizedName] = ingredient
             }
         }
+
+        for ingredient in placeholder.ingredients ?? [] where ingredient.household === placeholder {
+            if let match = ingredientsByName[ingredient.normalizedName], match !== ingredient {
+                // Preserve references and independently synced aliases before
+                // the placeholder household is cascade-deleted.
+                for line in ingredient.dishIngredients ?? [] { line.ingredient = match }
+                for item in ingredient.shoppingItems ?? [] { item.ingredient = match }
+                for alias in ingredient.aliases ?? [] { alias.ingredient = match }
+
+                // If the local standalone row is newer, its inventory/nutrition
+                // settings are the best representation of the user's offline
+                // edits. Copy those scalar settings onto the canonical row.
+                if ingredient.modifiedAt > match.modifiedAt {
+                    match.name = ingredient.name
+                    match.normalizedName = ingredient.normalizedName
+                    match.categoryRaw = ingredient.categoryRaw
+                    match.customAisleName = ingredient.customAisleName
+                    match.isPantryStaple = ingredient.isPantryStaple
+                    match.inventoryModeRaw = ingredient.inventoryModeRaw
+                    match.inventoryCanonicalValue = ingredient.inventoryCanonicalValue
+                    match.inventoryDimensionRaw = ingredient.inventoryDimensionRaw
+                    match.inventoryBestBefore = ingredient.inventoryBestBefore
+                    match.inventoryStorageLocationRaw = ingredient.inventoryStorageLocationRaw
+                    match.inventoryCustomStorageLocation = ingredient.inventoryCustomStorageLocation
+                    match.inventoryUpdatedAt = ingredient.inventoryUpdatedAt
+                    match.rejectedMatchKeys = ingredient.rejectedMatchKeys
+                    match.pendingMergeSuggestionsData = ingredient.pendingMergeSuggestionsData
+                    match.nutritionEnergyKcal = ingredient.nutritionEnergyKcal
+                    match.nutritionProteinGrams = ingredient.nutritionProteinGrams
+                    match.nutritionCarbGrams = ingredient.nutritionCarbGrams
+                    match.nutritionFatGrams = ingredient.nutritionFatGrams
+                    match.nutritionReferenceRaw = ingredient.nutritionReferenceRaw
+                    match.nutritionSourceRaw = ingredient.nutritionSourceRaw
+                    match.modifiedAt = ingredient.modifiedAt
+                }
+            } else {
+                ingredient.household = household
+                ingredientsByName[ingredient.normalizedName] = ingredient
+            }
+        }
+
+        // These household-owned rows were previously omitted entirely and were
+        // cascade-deleted with the old household during reconciliation.
+        for rule in placeholder.matchRules ?? [] { rule.household = household }
+        for package in placeholder.packageSizeOverrides ?? [] { package.household = household }
 
         for entry in placeholder.entries ?? [] { entry.household = household }
         for log in placeholder.cookedLogs ?? [] { log.household = household }
