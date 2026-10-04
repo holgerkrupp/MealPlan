@@ -39,12 +39,17 @@ enum HouseholdRecoveryIndex {
         record["isShared"] = NSNumber(value: candidate.isShared)
         record["cloudEnvironment"] = BuildEnvironment.cloudKit.rawValue as CKRecordValue
 
-        _ = try await database.modifyRecords(
+        let modification = try await database.modifyRecords(
             saving: [record],
             deleting: [],
             savePolicy: .changedKeys,
-            atomically: true
+            atomically: false
         )
+        guard let saveResult = modification.saveResults[recordID] else {
+            throw HouseholdSharingError.cloudKitDidNotReturnRecord
+        }
+        _ = try saveResult.get()
+
         var recovered = candidate
         recovered.source = .recentlyDeleted
         recovered.deletedAt = date
@@ -57,7 +62,27 @@ enum HouseholdRecoveryIndex {
     /// SwiftData store, so another device can restore an accidental deletion.
     static func recentlyDeletedHouseholds() async throws -> [HouseholdRecoveryCandidate] {
         let database = CKContainer(identifier: SharedStore.cloudKitContainerID).privateCloudDatabase
-        let records = try await allRecords(in: CKRecordZone.default().zoneID, from: database)
+        let query = CKQuery(recordType: recordType, predicate: NSPredicate(value: true))
+        var records: [CKRecord] = []
+
+        var page = try await database.records(
+            matching: query,
+            inZoneWith: nil,
+            desiredKeys: nil,
+            resultsLimit: 100
+        )
+        while true {
+            for (_, result) in page.matchResults {
+                records.append(try result.get())
+            }
+            guard let cursor = page.queryCursor else { break }
+            page = try await database.records(
+                continuingMatchFrom: cursor,
+                desiredKeys: nil,
+                resultsLimit: 100
+            )
+        }
+
         return records.compactMap(candidate(from:)).sorted {
             ($0.deletedAt ?? .distantPast) > ($1.deletedAt ?? .distantPast)
         }
@@ -233,6 +258,12 @@ enum HouseholdRecoveryService {
             appState.bootstrap(context: context, planningThrough: nil)
 
             let didRestartSync = await restartSync(for: restored, context: context)
+            if candidate.source == .recentlyDeleted {
+                // A successful restore must leave the deletion lifecycle before
+                // the household is presented as active again. If this fails,
+                // the surrounding rollback keeps the still-indexed zone safe.
+                try await HouseholdRecoveryIndex.removeRecoveryEntry(for: candidate)
+            }
             HouseholdSyncDiagnostics.record(event: "householdRecoveryRestored", locator: candidate.locator)
             SharedStore.reloadWidgets()
             return .init(
