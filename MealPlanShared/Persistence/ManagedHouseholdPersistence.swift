@@ -338,11 +338,10 @@ private enum ManagedHouseholdModel {
         entity.name = mappedEntity.rawValue
         entity.managedObjectClassName = NSStringFromClass(NSManagedObject.self)
         entity.properties = attributes(for: mappedEntity).map(\.description)
-        // UUIDs are retained from SwiftData and are the stable identity used
-        // by migration, diagnostics, deep links, and cross-process handoff.
-        // The constraint applies inside each physical store; objects are
-        // deliberately routed to a store before their first save.
-        entity.uniquenessConstraints = [["uuid"]]
+        // UUIDs are retained from SwiftData and remain the stable domain
+        // identity, but CloudKit-backed Core Data stores do not support unique
+        // constraints. The repository/migration layer validates uniqueness
+        // explicitly before activation instead of encoding it in the model.
         return entity
     }
 
@@ -473,7 +472,11 @@ private struct ManagedHouseholdAttribute {
     let optional: Bool
     let externalBinary: Bool
 
-    static let uuid = ManagedHouseholdAttribute("uuid", .UUIDAttributeType, optional: false)
+    // CloudKit mirroring requires every non-optional attribute to have a
+    // model default. UUID has no safe static default (one constant would break
+    // identity), so persistence keeps it optional while insert/migration always
+    // assigns and verifies a UUID before a record becomes canonical.
+    static let uuid = ManagedHouseholdAttribute("uuid", .UUIDAttributeType, optional: true)
     static let modifiedAt = ManagedHouseholdAttribute("modifiedAt", .dateAttributeType, optional: false)
 
     static func string(_ name: String, optional: Bool = false) -> Self {
