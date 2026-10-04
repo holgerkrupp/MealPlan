@@ -260,6 +260,16 @@ final class AppState {
     /// DEBUG diagnostics. It never changes the selected household itself.
     func inspectLegacyHouseholds(context: ModelContext) async {
         guard let household = currentHousehold else { return }
+
+        // A participant's active household lives in the shared database and is
+        // not part of this Apple Account's private owned-zone inventory. Never
+        // offer to replace a joined household with an unrelated old private zone.
+        if let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier),
+           !locator.isOwner {
+            legacyHouseholdRecovery = .noAction
+            return
+        }
+
         do {
             let owned = try await HouseholdCloudBootstrapService.ownedHouseholdInventory()
             let plan = LegacyHouseholdRecoveryPlan.make(
@@ -289,6 +299,11 @@ final class AppState {
         cloudBootstrapState = .connecting
         defer { finishCloudDownload() }
         guard let local = currentHousehold else { return }
+        if let locator = HouseholdShareLocator.decode(local.cloudKitShareIdentifier),
+           !locator.isOwner {
+            legacyHouseholdRecovery = .noAction
+            return
+        }
         let owned = try await HouseholdCloudBootstrapService.ownedHouseholdInventory()
         let plan = LegacyHouseholdRecoveryPlan.make(local: .init(household: local), owned: owned)
         guard case .reviewRequired(let canonicalID, _) = plan,
