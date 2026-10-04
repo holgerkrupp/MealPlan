@@ -601,6 +601,7 @@ struct RecipeSchemaParser: RecipeImporter {
 
     static func instructions(_ any: Any?) -> String? {
         var steps: [String] = []
+        var containsSections = false
 
         func collect(_ value: Any?, section: String? = nil) {
             switch value {
@@ -616,6 +617,7 @@ struct RecipeSchemaParser: RecipeImporter {
                     let title = string(d["name"] ?? d["headline"])
                         .map { $0.strippingHTML.trimmedCollapsed }
                         .flatMap { isPlaceholderPayload($0) ? nil : $0 }
+                    containsSections = containsSections || title != nil || section != nil
                     collect(d["itemListElement"] ?? d["steps"], section: title ?? section)
                 } else if d["itemListElement"] != nil || d["steps"] != nil {
                     collect(d["itemListElement"] ?? d["steps"], section: section)
@@ -628,7 +630,11 @@ struct RecipeSchemaParser: RecipeImporter {
         }
 
         collect(any)
-        return steps.isEmpty ? nil : steps.enumerated()
+        guard !steps.isEmpty else { return nil }
+        if steps.count == 1 || containsSections {
+            return steps.joined(separator: "\n\n")
+        }
+        return steps.enumerated()
             .map { "\($0.offset + 1). \($0.element)" }
             .joined(separator: "\n\n")
     }

@@ -106,13 +106,18 @@ enum GermanUnitParser {
 
         // 9. If we only have a container count ("1 Dose"), try the hint for a
         //    concrete weight/volume.
+        var usedHintAsQuantity = false
         if let hint, quantity == nil || quantity?.dimension == .count {
             let parsedHint = parse(hint)
             if let hq = parsedHint.quantity, hq.dimension != .count {
                 quantity = hq
                 displayUnit = parsedHint.displayUnit
                 approximate = approximate || parsedHint.isApproximate
+                usedHintAsQuantity = true
             }
+        }
+        if let hint, !usedHintAsQuantity {
+            note = append(note, hint)
         }
 
         return ParsedIngredient(

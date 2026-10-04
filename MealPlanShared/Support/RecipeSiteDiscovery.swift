@@ -139,13 +139,15 @@ enum RecipeSiteDiscoveryService {
 
         let feedURLs = RecipeFeedDiscovery.feedURLs(inHTML: html, baseURL: url)
         let canonical = canonicalURL(in: html, baseURL: url) ?? url
-        let title = pageTitle(in: html) ?? canonical.host() ?? String(localized: "Recipe site")
         let itemList = containsItemList(in: html)
         let recipeLinks = recipeLinkCount(in: html, baseURL: url)
-        let hasRecipe = RecipeSchemaParser.jsonLDBlocks(in: html).contains { block in
+        let jsonLDBlocks = RecipeSchemaParser.jsonLDBlocks(in: html)
+        let hasRecipe = jsonLDBlocks.contains { block in
             guard let data = block.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) else { return false }
             return !RecipeSchemaParser.recipeDicts(in: object).isEmpty
         }
+        let recipeTitle = hasRecipe ? RecipeSchemaParser().parseJSONLD(html: html, sourceURL: url)?.name : nil
+        let title = pageTitle(in: html) ?? recipeTitle ?? canonical.host() ?? String(localized: "Recipe site")
         let looksLikeIndex = itemList || recipeLinks >= 2 || isCollectionPath(url.path)
 
         if !feedURLs.isEmpty || looksLikeIndex {
@@ -256,7 +258,11 @@ enum RecipeSiteDiscoveryService {
 
     private static func isCollectionPath(_ path: String) -> Bool {
         let path = path.lowercased()
-        return path.isEmpty || path == "/" || ["/rezepte", "/recipes", "/category", "/categories", "/blog", "/suche", "/search"].contains(where: { path == $0 || path.hasPrefix($0 + "/") && !$0.contains("rezepte") })
+        if path.isEmpty || path == "/" || path == "/rezepte" || path == "/recipes" {
+            return true
+        }
+        return ["/category", "/categories", "/blog", "/suche", "/search"]
+            .contains { path == $0 || path.hasPrefix($0 + "/") }
     }
 
     private static func isRecipePath(_ path: String) -> Bool {

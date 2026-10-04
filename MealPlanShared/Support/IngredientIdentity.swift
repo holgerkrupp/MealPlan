@@ -169,15 +169,16 @@ enum IngredientMergeService {
 
         let requestedName = canonicalName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !requestedName.isEmpty, Ingredient.normalize(requestedName) != canonical.normalizedName {
+            let previousName = canonical.name
+            canonical.name = requestedName
+            canonical.normalizedName = Ingredient.normalize(requestedName)
             IngredientIdentity.addAlias(
-                named: canonical.name,
+                named: previousName,
                 to: canonical,
                 source: .userConfirmed,
                 confidence: 1,
                 context: context
             )
-            canonical.name = requestedName
-            canonical.normalizedName = Ingredient.normalize(requestedName)
             canonical.modifiedAt = .now
         }
 

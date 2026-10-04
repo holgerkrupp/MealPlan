@@ -142,10 +142,14 @@ enum IngredientCleanupService {
     }
 
     private static func canonicalAndDuplicate(_ lhs: Ingredient, _ rhs: Ingredient) -> (Ingredient, Ingredient) {
+        // Keep the established catalogue row as canonical. A misspelled row
+        // is often the one with usage because it came from an import, so
+        // preferring relationship count would discard the older row's name
+        // and curated metadata precisely when cleanup is meant to preserve it.
+        if lhs.modifiedAt != rhs.modifiedAt { return lhs.modifiedAt < rhs.modifiedAt ? (lhs, rhs) : (rhs, lhs) }
         let lhsUsage = (lhs.dishIngredients ?? []).count + (lhs.shoppingItems ?? []).count
         let rhsUsage = (rhs.dishIngredients ?? []).count + (rhs.shoppingItems ?? []).count
         if lhsUsage != rhsUsage { return lhsUsage > rhsUsage ? (lhs, rhs) : (rhs, lhs) }
-        if lhs.modifiedAt != rhs.modifiedAt { return lhs.modifiedAt < rhs.modifiedAt ? (lhs, rhs) : (rhs, lhs) }
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             ? (lhs, rhs) : (rhs, lhs)
     }

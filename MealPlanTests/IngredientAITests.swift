@@ -62,7 +62,8 @@ struct IngredientAITests {
     }
 
     @Test func learningPersistsAHouseholdDecision() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Test")
         context.insert(household)

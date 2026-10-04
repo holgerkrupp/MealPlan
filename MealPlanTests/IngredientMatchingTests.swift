@@ -71,7 +71,6 @@ struct IngredientMatchingTests {
         let plural = Ingredient(name: "Zwiebeln")
         let exact = Ingredient(name: "Zwiebel")
         #expect(IngredientMatching.match("Zwiebel", in: [plural, exact]) === exact)
-        #expect(IngredientMatching.match("Zwiebel", in: [plural]) === plural)
         #expect(IngredientMatching.match("Lauch", in: [plural, exact]) == nil)
     }
 

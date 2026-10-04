@@ -23,7 +23,8 @@ struct IngredientIdentityTests {
     }
 
     @Test func manualChoiceCanRejectAnUncertainCandidate() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt")
@@ -50,7 +51,8 @@ struct IngredientIdentityTests {
     }
 
     @Test func importedSpellingStaysFaithfulUntilConfirmedAndThenLearns() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt")
@@ -87,7 +89,8 @@ struct IngredientIdentityTests {
     }
 
     @Test func mergeRepointsRelationshipsAndKeepsCanonicalMetadata() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt", category: .dairy)
@@ -133,7 +136,8 @@ struct IngredientIdentityTests {
     /// by an unrelated recipe.
     @Test func PaprikaImportNeverMutatesSharedIngredientMetadata() throws {
         IngredientIntegrityDiagnostics.resetForTesting()
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let paprika = Ingredient(name: "Paprika", category: .produce)
@@ -173,7 +177,8 @@ struct IngredientIdentityTests {
     }
 
     @Test func structuredImportInitializesOnlyItsNewIngredient() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         context.insert(household)
@@ -193,7 +198,8 @@ struct IngredientIdentityTests {
     }
 
     @Test func mergeHistoryCanRestoreTheDuplicateAndRelationships() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt")

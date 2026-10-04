@@ -192,6 +192,16 @@ struct HouseholdSafetyBackup: Identifiable {
     var id: URL { url }
 }
 
+/// The app-owned state needed while replacing the local household store.
+/// Keeping this boundary in shared code lets extensions compile the recovery
+/// models without depending on the main app's concrete `AppState` type.
+@MainActor
+protocol HouseholdRecoveryAppState: AnyObject {
+    var currentHousehold: Household? { get }
+
+    func bootstrap(context: ModelContext, planningThrough latestPlanningDate: Date?)
+}
+
 /// Coordinates the only local replacement used by household recovery. Remote
 /// data is always downloaded into a staging store before the current device is
 /// touched; the original portable backup is retained and automatically put
@@ -200,7 +210,7 @@ struct HouseholdSafetyBackup: Identifiable {
 enum HouseholdRecoveryService {
     static func restore(
         _ candidate: HouseholdRecoveryCandidate,
-        appState: AppState,
+        appState: any HouseholdRecoveryAppState,
         context: ModelContext,
         progress: @escaping @MainActor (HouseholdCloudDownloadProgress) -> Void = { _ in }
     ) async throws -> HouseholdRecoveryResult {
@@ -220,7 +230,7 @@ enum HouseholdRecoveryService {
             restored.cloudKitShareIdentifier = try HouseholdShareLocator.encode(candidate.locator)
             try context.save()
             try validate(restored, matching: candidate, context: context)
-            appState.bootstrap(context: context)
+            appState.bootstrap(context: context, planningThrough: nil)
 
             let didRestartSync = await restartSync(for: restored, context: context)
             HouseholdSyncDiagnostics.record(event: "householdRecoveryRestored", locator: candidate.locator)
@@ -240,10 +250,10 @@ enum HouseholdRecoveryService {
                 if let original = try context.fetch(FetchDescriptor<Household>()).first {
                     original.cloudKitShareIdentifier = originalLocator
                     try context.save()
-                    appState.bootstrap(context: context)
+                    appState.bootstrap(context: context, planningThrough: nil)
                     _ = await restartSync(for: original, context: context)
                 } else {
-                    appState.bootstrap(context: context)
+                    appState.bootstrap(context: context, planningThrough: nil)
                 }
             } catch let rollbackError {
                 // The safety backup is already on disk, even if a damaged
@@ -259,7 +269,7 @@ enum HouseholdRecoveryService {
     /// CKShare stay untouched for 30 days. Participants cannot call this path.
     static func moveToRecentlyDeleted(
         household: Household,
-        appState: AppState,
+        appState: any HouseholdRecoveryAppState,
         context: ModelContext
     ) async throws -> HouseholdRecoveryResult {
         let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
@@ -279,7 +289,7 @@ enum HouseholdRecoveryService {
         await HouseholdRecordSyncService.shared.stop()
         do {
             try MealPlanBackupRestore.replaceEverything(with: emptyBackup(), context: context)
-            appState.bootstrap(context: context)
+            appState.bootstrap(context: context, planningThrough: nil)
             guard let fresh = appState.currentHousehold else { throw HouseholdRecoveryError.validationFailed }
             let didRestartSync = await restartSync(for: fresh, context: context)
             HouseholdSyncDiagnostics.record(event: "householdMovedToRecentlyDeleted", locator: locator)
@@ -292,7 +302,7 @@ enum HouseholdRecoveryService {
                 if let original = try context.fetch(FetchDescriptor<Household>()).first {
                     original.cloudKitShareIdentifier = household.cloudKitShareIdentifier
                     try context.save()
-                    appState.bootstrap(context: context)
+                    appState.bootstrap(context: context, planningThrough: nil)
                     _ = await restartSync(for: original, context: context)
                 }
             } catch let rollbackError {
@@ -380,7 +390,7 @@ enum HouseholdRecoveryService {
     /// not contact iCloud and carries the local zone locator back with it.
     static func restoreSafetyBackup(
         _ checkpoint: HouseholdSafetyBackup,
-        appState: AppState,
+        appState: any HouseholdRecoveryAppState,
         context: ModelContext
     ) async throws -> HouseholdRecoveryResult {
         let currentBackup = try MealPlanBackup.make(from: context)
@@ -396,7 +406,7 @@ enum HouseholdRecoveryService {
             restored.cloudKitShareIdentifier = checkpoint.shareIdentifier
             try context.save()
             try validate(restored, matching: checkpoint.backup, context: context)
-            appState.bootstrap(context: context)
+            appState.bootstrap(context: context, planningThrough: nil)
             let didRestartSync = await restartSync(for: restored, context: context)
             SharedStore.reloadWidgets()
             return .init(safetyBackupURL: safetyBackupURL, restoredHouseholdID: restored.uuid, didRestartSync: didRestartSync)
@@ -407,7 +417,7 @@ enum HouseholdRecoveryService {
                 if let original = try context.fetch(FetchDescriptor<Household>()).first {
                     original.cloudKitShareIdentifier = currentLocator
                     try context.save()
-                    appState.bootstrap(context: context)
+                    appState.bootstrap(context: context, planningThrough: nil)
                     _ = await restartSync(for: original, context: context)
                 }
             } catch let rollbackError {

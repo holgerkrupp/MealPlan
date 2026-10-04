@@ -104,8 +104,15 @@ enum SharedStore {
     @MainActor
     static func make(cloudKit: Bool, inMemory: Bool = false) -> ModelContainer {
         let c = container(cloudKit: cloudKit, inMemory: inMemory)
-        c.mainContext.undoManager = UndoManager()
-        c.mainContext.undoManager?.levelsOfUndo = 20
+        // An in-memory container is used for transient import staging,
+        // previews, and tests. Core Data can tear down its sole connection
+        // while an undo snapshot still requests permanent IDs, producing
+        // "No eligible connection available". Transient stores do not need
+        // UI undo history; the durable app store still does.
+        if !inMemory {
+            c.mainContext.undoManager = UndoManager()
+            c.mainContext.undoManager?.levelsOfUndo = 20
+        }
         return c
     }
 

@@ -6,7 +6,8 @@ import Testing
 @MainActor
 struct IngredientCleanupTests {
     @Test func findsExistingDuplicateWithEvidenceAndRecipeExamples() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt", category: .dairy)
@@ -37,7 +38,8 @@ struct IngredientCleanupTests {
     }
 
     @Test func keepSeparatePersistsAndRemovesPairFromReview() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt")
@@ -59,7 +61,8 @@ struct IngredientCleanupTests {
     }
 
     @Test func mergeCanRenameCanonicalAndKeepsRelationshipsUndoable() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let canonical = Ingredient(name: "Joghurt")
