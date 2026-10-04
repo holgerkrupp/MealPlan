@@ -9,7 +9,11 @@ import AppKit
 
 @main
 struct MealPlanApp: App {
-    let container = SharedStore.make(cloudKit: true)
+    private static var isRunningTests: Bool {
+        ProcessInfo.processInfo.environment["XCTestConfigurationFilePath"] != nil
+    }
+
+    let container: ModelContainer
     @State private var appState = AppState()
     @State private var purchaseManager = PurchaseManager.shared
     /// Calendar integration. Creating it touches no calendar data and never
@@ -32,6 +36,14 @@ struct MealPlanApp: App {
     #endif
 
     init() {
+        // Unit tests run inside the app process. Opening the production store
+        // and starting its sync services there races the transient SwiftData
+        // containers owned by persistence tests, and Core Data can terminate
+        // those tests with "No eligible connection available".
+        container = SharedStore.make(
+            cloudKit: !Self.isRunningTests,
+            inMemory: Self.isRunningTests
+        )
         // Before the first view asks a tip whether it may show.
         MealPlanTips.configure()
     }
@@ -50,6 +62,7 @@ struct MealPlanApp: App {
                     .environment(publishedCalendarSettings)
                     .environment(\.calendarEventWriter, calendarEventWriter)
                     .task {
+                        guard !Self.isRunningTests else { return }
                         // Open the on-device store synchronously. This creates
                         // a usable first-run household too, rather than
                         // leaving a new install on a cloud-loading screen.
@@ -83,6 +96,7 @@ struct MealPlanApp: App {
                         #endif
                     }
                     .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+                        guard !Self.isRunningTests else { return }
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         PublishedCalendarService.scheduleRefreshIfNeeded(
                             household: appState.currentHousehold,
@@ -93,7 +107,7 @@ struct MealPlanApp: App {
                     }
                     .onChange(of: scenePhase) { _, phase in
                         // Calendar access can be revoked while the app is away.
-                        guard phase == .active else { return }
+                        guard phase == .active, !Self.isRunningTests else { return }
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         Task {
                             await calendarStore.applicationBecameActive()

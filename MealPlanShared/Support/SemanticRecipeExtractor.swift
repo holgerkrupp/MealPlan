@@ -95,7 +95,13 @@ struct SemanticRecipeExtractor {
         // decorative heading, or no heading at all. Treat those containers as
         // candidate regions, still subject to the same noise and line scoring.
         if ingredients.isEmpty {
-            for (order, node) in nodes.enumerated() where !node.isExcludedRegion && node.semanticName.contains("ingredient") {
+            let marked = nodes.enumerated().filter { _, node in
+                !node.isExcludedRegion && node.semanticName.contains("ingredient")
+            }
+            let regions = marked.filter { _, node in
+                node.hasDescendant(named: "li") || node.hasDescendant(named: "tr") || node.hasDescendant(named: "p")
+            }
+            for (order, node) in regions.isEmpty ? marked : regions {
                 let lines = ingredientLines(in: [node])
                 if !lines.isEmpty {
                     ingredients.append(SectionCandidate(heading: node, kind: .ingredients, lines: lines, score: sectionScore(heading: node, lines: lines, kind: .ingredients), order: order))
@@ -103,7 +109,13 @@ struct SemanticRecipeExtractor {
             }
         }
         if instructions.isEmpty {
-            for (order, node) in nodes.enumerated() where !node.isExcludedRegion && (node.semanticName.contains("instruction") || node.semanticName.contains("direction") || node.semanticName.contains("method") || node.semanticName.contains("step")) {
+            let marked = nodes.enumerated().filter { _, node in
+                !node.isExcludedRegion && (node.semanticName.contains("instruction") || node.semanticName.contains("direction") || node.semanticName.contains("method") || node.semanticName.contains("step"))
+            }
+            let regions = marked.filter { _, node in
+                node.hasDescendant(named: "li") || node.hasDescendant(named: "ol") || node.hasDescendant(named: "p")
+            }
+            for (order, node) in regions.isEmpty ? marked : regions {
                 let lines = instructionLines(in: [node])
                 if !lines.isEmpty {
                     instructions.append(SectionCandidate(heading: node, kind: .instructions, lines: lines, score: sectionScore(heading: node, lines: lines, kind: .instructions), order: order))
@@ -242,6 +254,7 @@ struct SemanticRecipeExtractor {
     private static func ingredientLine(_ raw: String) -> String? {
         let line = cleanPayload(raw, removeListMarker: true)
         guard !line.isEmpty, line.count <= 180, !isNoise(line) else { return nil }
+        guard !isHeadingPayload(line) else { return nil }
         let lower = line.lowercased()
         let hasQuantity = line.range(of: #"(?:\b\d+(?:[.,]\d+)?|[¼½¾⅓⅔⅛⅜⅝⅞])"#, options: .regularExpression) != nil
         let hasUnit = ingredientUnits.contains { lower.range(of: #"\b"# + NSRegularExpression.escapedPattern(for: $0) + #"\b"#, options: .regularExpression) != nil }
@@ -286,7 +299,7 @@ struct SemanticRecipeExtractor {
     }
 
     private static func cleanPayload(_ raw: String, removeListMarker: Bool) -> String {
-        var result = normalized(raw)
+        var result = collapsed(raw)
         if removeListMarker {
             result = result.replacingOccurrences(of: #"^\s*(?:[-•*]|\d+[.)])\s*"#, with: "", options: .regularExpression)
         }
@@ -314,6 +327,10 @@ struct SemanticRecipeExtractor {
     }
 
     private static func normalized(_ value: String) -> String {
+        collapsed(value).lowercased()
+    }
+
+    private static func collapsed(_ value: String) -> String {
         value
             .replacingOccurrences(of: "\u{00a0}", with: " ")
             .trimmingCharacters(in: .whitespacesAndNewlines)
@@ -321,7 +338,6 @@ struct SemanticRecipeExtractor {
             .filter { !$0.isEmpty }
             .joined(separator: " ")
             .trimmingCharacters(in: CharacterSet(charactersIn: ":："))
-            .lowercased()
     }
 
     private static func recipeName(in document: HTMLDocument, sourceURL: URL?) -> String? {
@@ -336,7 +352,7 @@ struct SemanticRecipeExtractor {
 
     private static func descendantNodes(in nodes: [HTMLNode], named name: String) -> [HTMLNode] {
         nodes.flatMap { node in
-            node.allDescendants.filter { $0.name == name }
+            (node.name == name ? [node] : []) + node.allDescendants.filter { $0.name == name }
         }
     }
 

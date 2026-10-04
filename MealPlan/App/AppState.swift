@@ -28,7 +28,7 @@ enum CloudBootstrapState: Equatable {
 /// filters.
 @Observable
 @MainActor
-final class AppState {
+final class AppState: HouseholdRecoveryAppState {
     let cookingSession = CookingSessionStore.shared
     /// Durable projection of the current share participant. This replaces the
     /// old transient guest flag; it is restored before any network refresh.

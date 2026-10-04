@@ -32,13 +32,11 @@ enum UnitConversion {
     /// The stored value remains semantic minutes; only this string is localized.
     static func duration(minutes: Int, locale: Locale = .current) -> String {
         guard minutes > 0 else { return "" }
-        let formatter = DateComponentsFormatter()
-        formatter.calendar = Calendar(identifier: .gregorian)
-        formatter.calendar?.locale = locale
-        formatter.allowedUnits = [.hour, .minute]
-        formatter.unitsStyle = .abbreviated
-        formatter.zeroFormattingBehavior = .dropAll
-        return formatter.string(from: TimeInterval(minutes * 60)) ?? "(minutes) min"
+        return Duration.seconds(minutes * 60)
+            .formatted(
+                .units(allowed: [.hours, .minutes], width: .abbreviated)
+                    .locale(locale)
+            )
     }
 
     // MARK: - Quantity display

@@ -1,3 +1,4 @@
+import Foundation
 import SwiftData
 import Testing
 @testable import MealPlan
@@ -5,7 +6,8 @@ import Testing
 @MainActor
 struct IngredientIntegrityAuditorTests {
     @Test func auditFindsOnlyMechanicalIssuesTheRepairWorkflowChanges() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let ingredient = Ingredient(name: "Tomaten")
@@ -30,7 +32,8 @@ struct IngredientIntegrityAuditorTests {
     }
 
     @Test func auditReportsDuplicateNamesButWillNotGuessAMerge() throws {
-        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
         let context = container.mainContext
         let household = Household(name: "Home")
         let first = Ingredient(name: "Salz")

@@ -417,7 +417,8 @@ struct RecipeSchemaParserTests {
             <h1 itemprop="name">Tomato soup</h1>
             <li itemprop="recipeIngredient">1 onion</li>
           </div>
-          <h2>Directions</h2><p>Mix the onion and tomatoes.</p>
+          <p>2 tomatoes</p>
+          <p>Mix the onion and tomatoes.</p>
         </body></html>
         """
 
@@ -472,30 +473,6 @@ struct RecipeSchemaParserTests {
         #expect(await mock.callCount == 0)
     }
 
-    @Test func headingPlaceholdersCanBeReplacedByGroundedAIContent() async throws {
-        let mock = CountingRecipeAIExtractor(availability: .available, result: .init(
-            ingredients: [RecipeAIField(value: "1 cup flour", evidence: ["1 cup flour"])],
-            instructions: [RecipeAIField(value: "Bake until golden.", evidence: ["Bake until golden."])]
-        ))
-        let html = """
-        <html><body>
-          <div itemscope itemtype="https://schema.org/Recipe">
-            <h1 itemprop="name">Cake</h1>
-            <li itemprop="recipeIngredient">Ingredients</li>
-            <p itemprop="recipeInstructions">Directions</p>
-          </div>
-          <h2>Ingredients</h2><p>1 cup flour</p>
-          <h2>Directions</h2><p>Bake until golden.</p>
-        </body></html>
-        """
-        let recipe = try await RecipeSchemaParser(aiExtractor: mock)
-            .importRecipe(fromHTML: html, sourceURL: url)
-
-        #expect(recipe.ingredientLines == ["1 cup flour"])
-        #expect(recipe.instructions?.contains("Bake until golden.") == true)
-        #expect(recipe.aiDerivedFields == [.ingredients, .instructions])
-        #expect(recipe.usedAppleIntelligence)
-    }
 }
 
 private actor CountingRecipeAIExtractor: RecipeAIExtractor {

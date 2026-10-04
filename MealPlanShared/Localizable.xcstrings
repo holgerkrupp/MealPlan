@@ -5164,6 +5164,9 @@
         }
       }
     },
+    "Available for permanent deletion after %@." : {
+
+    },
     "Average per day" : {
 
     },
@@ -7363,6 +7366,9 @@
     "Check ingredient data" : {
 
     },
+    "Check that you are signed in to iCloud, then refresh." : {
+
+    },
     "Check the split is right, then save. The dish opens for editing and is marked to review." : {
       "localizations" : {
         "da" : {
@@ -7408,6 +7414,16 @@
     },
     "Checked off" : {
 
+    },
+    "Checking %lld of %lld records" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Checking %1$lld of %2$lld records"
+          }
+        }
+      }
     },
     "Checking the page is still online…" : {
 
@@ -7512,6 +7528,9 @@
           }
         }
       }
+    },
+    "Choose an exact iCloud household to restore on this device, safely reset this device, or recover an owner household moved to Recently Deleted." : {
+
     },
     "Choose any you already cook. They are ordinary dishes, so you can edit or delete them anytime." : {
       "localizations" : {
@@ -7732,6 +7751,9 @@
       }
     },
     "Choose the catalogue name" : {
+
+    },
+    "Choose the exact iCloud household to restore. MealPlan never guesses between old, shared, or similarly named households here." : {
 
     },
     "Choose the icon MealPlan uses on your Home Screen and in search." : {
@@ -8611,6 +8633,9 @@
       }
     },
     "Connected. Adding you to the household…" : {
+
+    },
+    "Connecting to iCloud" : {
 
     },
     "Connecting to your household…" : {
@@ -9498,6 +9523,9 @@
     "Couldn’t check whether the page is still online." : {
 
     },
+    "Couldn’t complete recovery" : {
+
+    },
     "Couldn’t export recipe" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10196,10 +10224,16 @@
     "Create a New Invitation?" : {
 
     },
+    "Create a portable MealPlan backup yourself before a recovery, or keep one somewhere outside this device. Recovery also creates its own local safety checkpoint automatically." : {
+
+    },
     "Create Meal Routine" : {
 
     },
     "Create New Invitation" : {
+
+    },
+    "Created %@" : {
 
     },
     "Created %@ routine for %@." : {
@@ -11244,6 +11278,12 @@
         }
       }
     },
+    "Diagnostics" : {
+
+    },
+    "Diagnostics contain identifiers, database scope, zone and share references only—never recipe, ingredient, address, or member-name content." : {
+
+    },
     "Didn’t like it" : {
       "localizations" : {
         "da" : {
@@ -11830,6 +11870,9 @@
 
     },
     "Downloaded (count) items." : {
+
+    },
+    "Downloaded %lld records" : {
 
     },
     "Downloading from iCloud…" : {
@@ -13943,6 +13986,9 @@
           }
         }
       }
+    },
+    "Export Backup" : {
+
     },
     "Export recipe" : {
       "extractionState" : "stale",
@@ -16538,6 +16584,9 @@
           }
         }
       }
+    },
+    "Household Recovery" : {
+
     },
     "Household standard" : {
       "localizations" : {
@@ -19232,6 +19281,9 @@
         }
       }
     },
+    "Local Safety Backups" : {
+
+    },
     "Looking for calendars…" : {
       "localizations" : {
         "da" : {
@@ -19277,6 +19329,12 @@
           }
         }
       }
+    },
+    "Looking for household" : {
+
+    },
+    "Looking for iCloud households…" : {
+
     },
     "Looking for the owner’s device…" : {
 
@@ -20776,6 +20834,12 @@
     "Move a Meal to Another Day" : {
 
     },
+    "Move Current Household to Recently Deleted" : {
+
+    },
+    "Move this household to Recently Deleted?" : {
+
+    },
     "Move to another day or meal…" : {
       "localizations" : {
         "da" : {
@@ -20821,6 +20885,9 @@
           }
         }
       }
+    },
+    "Move to Recently Deleted" : {
+
     },
     "Moves recipe and shopping list relationships to the canonical ingredient" : {
 
@@ -22423,6 +22490,9 @@
           }
         }
       }
+    },
+    "No recoverable iCloud households" : {
+
     },
     "No regular meals yet." : {
       "localizations" : {
@@ -25392,6 +25462,9 @@
         }
       }
     },
+    "Owner controls" : {
+
+    },
     "P %@ · C %@ · F %@" : {
       "localizations" : {
         "en" : {
@@ -26149,6 +26222,12 @@
     "Period" : {
 
     },
+    "Permanently Delete" : {
+
+    },
+    "Permanently delete this household?" : {
+
+    },
     "Person" : {
       "localizations" : {
         "da" : {
@@ -26710,6 +26789,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Plano"
+          }
+        }
+      }
+    },
+    "Plan %@–%@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Plan %1$@–%2$@"
           }
         }
       }
@@ -28245,6 +28334,12 @@
         }
       }
     },
+    "Private" : {
+
+    },
+    "Private zones and already accepted shared zones are listed separately when they are distinct. The selected zone, UUID, and share are re-adopted exactly as shown." : {
+
+    },
     "Production" : {
       "localizations" : {
         "da" : {
@@ -28788,6 +28883,9 @@
           }
         }
       }
+    },
+    "Recently Deleted" : {
+
     },
     "recipe" : {
       "localizations" : {
@@ -29581,7 +29679,16 @@
     "Records whether an ingredient is available, low, or out." : {
 
     },
+    "Recovery" : {
+
+    },
+    "Recovery Diagnostics" : {
+
+    },
     "Red cabbage" : {
+
+    },
+    "Refresh iCloud Households" : {
 
     },
     "Refresh recipe" : {
@@ -30595,6 +30702,9 @@
     "Reset" : {
 
     },
+    "Reset & Restore" : {
+
+    },
     "Reset all package sizes" : {
 
     },
@@ -30847,6 +30957,15 @@
         }
       }
     },
+    "Restore Household from iCloud" : {
+
+    },
+    "Restore on This Device" : {
+
+    },
+    "Restore one exact household already in iCloud, safely reset only this device, or recover an accidentally deleted owner household. Recovery creates a timestamped safety backup before changing this device." : {
+
+    },
     "Restore Purchases" : {
       "localizations" : {
         "da" : {
@@ -30886,6 +31005,15 @@
           }
         }
       }
+    },
+    "Restore Safety Backup" : {
+
+    },
+    "Restore this household on this device?" : {
+
+    },
+    "Restore this local safety backup?" : {
+
     },
     "Restored %lld dishes and %lld planned meals." : {
       "localizations" : {
@@ -30932,6 +31060,9 @@
           }
         }
       }
+    },
+    "Restoring downloads and checks the selected household before this device changes. A timestamped MealPlan backup is retained locally first; your iCloud household is not deleted or overwritten." : {
+
     },
     "Restoring…" : {
       "localizations" : {
@@ -33763,6 +33894,9 @@
         }
       }
     },
+    "Shared" : {
+
+    },
     "Sharing unavailable" : {
       "localizations" : {
         "da" : {
@@ -36383,6 +36517,32 @@
     "Tap images to select several. Nutrition figures are estimates per person and all statistics are calculated on this device." : {
 
     },
+    "Target: %@, %lld dishes, %lld planned meals. Only the data on this device will be replaced. MealPlan downloads and validates that exact iCloud zone first, writes a timestamped safety backup, then restarts sync only after a successful replacement. Your iCloud household is not deleted." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Target: %1$@, %2$lld dishes, %3$lld planned meals. Only the data on this device will be replaced. MealPlan downloads and validates that exact iCloud zone first, writes a timestamped safety backup, then restarts sync only after a successful replacement. Your iCloud household is not deleted."
+          }
+        }
+      }
+    },
+    "Target: %@, written %@. Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this ordinary MealPlan backup and its original local iCloud locator." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Target: %1$@, written %2$@. Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this ordinary MealPlan backup and its original local iCloud locator."
+          }
+        }
+      }
+    },
+    "Target: %@. MealPlan first saves a timestamped local backup and records the exact iCloud zone in your private recovery index. This device will start with a new empty household. The original household, its UUID, and its iCloud share stay recoverable for 30 days." : {
+
+    },
+    "Target: %@. This is irreversible: the original iCloud household zone and its recovery entry will be permanently deleted. Shared participants will lose access. This action is available only after the 30-day recovery period." : {
+
+    },
     "Template" : {
 
     },
@@ -37450,6 +37610,9 @@
         }
       }
     },
+    "These checkpoints use the ordinary MealPlan backup format and keep the matching local iCloud locator in a private sidecar. They remain available if an interrupted restore needs recovery while iCloud is offline." : {
+
+    },
     "These choices stay on this device and are never shared with your family or iCloud. MealPlan only reads your calendars — it never adds, changes or deletes events." : {
       "localizations" : {
         "da" : {
@@ -37495,6 +37658,9 @@
           }
         }
       }
+    },
+    "These owner households still live in their original iCloud zones for 30 days. Restoring preserves their record UUIDs and, where iCloud still permits it, their share participants." : {
+
     },
     "These values are estimates" : {
       "localizations" : {
@@ -37620,6 +37786,9 @@
       }
     },
     "This calendar year" : {
+
+    },
+    "This device" : {
 
     },
     "This device already has its own “%@” household with %lld dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way." : {
@@ -38080,6 +38249,9 @@
           }
         }
       }
+    },
+    "This only resets this device after iCloud has recorded a recovery entry. The original zone and its shared household stay intact for 30 days. Participants leaving a shared household can never delete the owner’s data." : {
+
     },
     "This page does not look like a recipe or recipe site." : {
 
@@ -39974,7 +40146,6 @@
 
     },
     "Updated %@" : {
-      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {

@@ -29,12 +29,18 @@ actor RecipeFeedImageResolver {
 
     typealias Loader = @Sendable (URL) async -> ArticleImageLookup
 
+    private struct InFlightLookup {
+        let id: UUID
+        let task: Task<ArticleImageLookup, Never>
+        var waiters: Set<UUID>
+    }
+
     private let concurrencyLimit: Int
     private let loader: Loader
     private var running = 0
     private var waiting: [UUID: CheckedContinuation<Bool, Never>] = [:]
     private var cached: [URL: ArticleImageLookup] = [:]
-    private var inFlight: [URL: Task<ArticleImageLookup, Never>] = [:]
+    private var inFlight: [URL: InFlightLookup] = [:]
 
     init(concurrencyLimit: Int = 3, loader: Loader? = nil) {
         self.concurrencyLimit = max(1, concurrencyLimit)
@@ -51,25 +57,40 @@ actor RecipeFeedImageResolver {
 
     func lookUpImage(forArticleAt url: URL) async -> ArticleImageLookup {
         if let cachedResult = cached[url] { return cachedResult }
-        if let existing = inFlight[url] {
-            let result = await existing.value
-            return Task.isCancelled ? .unreachable : result
+        let waiterID = UUID()
+        let lookupID: UUID
+        let task: Task<ArticleImageLookup, Never>
+
+        if var existing = inFlight[url] {
+            existing.waiters.insert(waiterID)
+            inFlight[url] = existing
+            lookupID = existing.id
+            task = existing.task
+        } else {
+            lookupID = UUID()
+            task = Task { [loader] in
+                guard await self.acquireSlot() else { return ArticleImageLookup.unreachable }
+                defer { Task { self.releaseSlot() } }
+                guard !Task.isCancelled else { return .unreachable }
+                let state = RecipePerformanceSignposts.signposter.beginInterval("article image lookup")
+                let result = await loader(url)
+                RecipePerformanceSignposts.signposter.endInterval("article image lookup", state)
+                return result
+            }
+            inFlight[url] = InFlightLookup(id: lookupID, task: task, waiters: [waiterID])
         }
 
-        let task = Task { [loader] in
-            guard await self.acquireSlot() else { return ArticleImageLookup.unreachable }
-            defer { Task { await self.releaseSlot() } }
-            guard !Task.isCancelled else { return .unreachable }
-            let state = RecipePerformanceSignposts.signposter.beginInterval("article image lookup")
-            let result = await loader(url)
-            RecipePerformanceSignposts.signposter.endInterval("article image lookup", state)
-            return result
+        let result = await withTaskCancellationHandler {
+            await task.value
+        } onCancel: {
+            Task { await self.cancelLookup(for: url, lookupID: lookupID, waiterID: waiterID) }
         }
-        inFlight[url] = task
-        let result = await task.value
-        inFlight[url] = nil
-        if result != .unreachable { cached[url] = result }
-        return Task.isCancelled ? .unreachable : result
+        if Task.isCancelled {
+            cancelLookup(for: url, lookupID: lookupID, waiterID: waiterID)
+            return .unreachable
+        }
+        finishLookup(for: url, lookupID: lookupID, waiterID: waiterID, result: result)
+        return result
     }
 
     /// The best picture a recipe page advertises. A `schema.org` recipe's own
@@ -123,5 +144,32 @@ actor RecipeFeedImageResolver {
 
     private func cancelWaiter(_ id: UUID) {
         waiting.removeValue(forKey: id)?.resume(returning: false)
+    }
+
+    private func cancelLookup(for url: URL, lookupID: UUID, waiterID: UUID) {
+        guard var lookup = inFlight[url], lookup.id == lookupID,
+              lookup.waiters.remove(waiterID) != nil else { return }
+        if lookup.waiters.isEmpty {
+            inFlight[url] = nil
+            lookup.task.cancel()
+        } else {
+            inFlight[url] = lookup
+        }
+    }
+
+    private func finishLookup(
+        for url: URL,
+        lookupID: UUID,
+        waiterID: UUID,
+        result: ArticleImageLookup
+    ) {
+        guard var lookup = inFlight[url], lookup.id == lookupID,
+              lookup.waiters.remove(waiterID) != nil else { return }
+        if lookup.waiters.isEmpty {
+            inFlight[url] = nil
+            if result != .unreachable { cached[url] = result }
+        } else {
+            inFlight[url] = lookup
+        }
     }
 }
