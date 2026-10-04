@@ -280,6 +280,20 @@ enum HouseholdRecordCodec {
     static let assetKey = "asset"
     static let schemaVersion = 1
 
+    /// The minimum record required before a legacy zone can be shared. Unlike
+    /// `records(for:context:)`, this does not walk every relationship or hash
+    /// every image, so invitation preparation never waits for a full custom
+    /// synchronization pass.
+    static func rootRecord(for household: Household, zoneID: CKRecordZone.ID) throws -> CKRecord {
+        let snapshot = LocalHouseholdRecord(
+            identity: .init(type: .household, uuid: household.uuid),
+            householdID: household.uuid,
+            modifiedAt: household.modifiedAt,
+            payloadData: try encode(householdPayload(for: household))
+        )
+        return try makeRecord(from: snapshot, zoneID: zoneID)
+    }
+
     static func records(for household: Household, context: ModelContext) throws -> [LocalHouseholdRecord] {
         var result: [LocalHouseholdRecord] = []
         func append(_ identity: HouseholdRecordIdentity, _ modifiedAt: Date, _ payload: HouseholdRecordPayload, asset: Data? = nil, groups: [String: String] = [:]) throws {
@@ -293,28 +307,7 @@ enum HouseholdRecordCodec {
             ))
         }
 
-        try append(.init(type: .household, uuid: household.uuid), household.modifiedAt, .household(HouseholdPayload(
-            name: household.name,
-            unitSystemRaw: household.unitSystemRaw,
-            roundsDisplayedAmounts: household.roundsDisplayedAmounts,
-            standardServings: household.standardServings,
-            showsNutritionEstimates: household.showsNutritionEstimates,
-            leftoverSuggestionsEnabled: household.leftoverSuggestionsEnabled,
-            unitPresentationOverrideRaw: household.unitPresentationOverrideRaw,
-            inventoryEnabled: household.inventoryEnabled,
-            packageSizeCountryCode: household.packageSizeCountryCode,
-            energyUnitRaw: household.energyUnitRaw,
-            localeIdentifier: household.localeIdentifier,
-            dateCreated: household.dateCreated,
-            didSeedPantryStaples: household.didSeedPantryStaples,
-            ingredientMergeAuditData: household.ingredientMergeAuditData,
-            unlockedByPurchase: household.unlockedByPurchase,
-            bringListUuid: household.bringListUuid,
-            bringListName: household.bringListName,
-            bringShadowKeys: household.bringShadowKeys,
-            bringAutoSync: household.bringAutoSync,
-            bringLastSyncedAt: household.bringLastSyncedAt
-        )))
+        try append(.init(type: .household, uuid: household.uuid), household.modifiedAt, householdPayload(for: household))
 
         for member in household.members ?? [] {
             try append(.init(type: .member, uuid: member.uuid), member.modifiedAt, .member(MemberPayload(
@@ -467,6 +460,31 @@ enum HouseholdRecordCodec {
             )))
         }
         return result
+    }
+
+    private static func householdPayload(for household: Household) -> HouseholdRecordPayload {
+        .household(HouseholdPayload(
+            name: household.name,
+            unitSystemRaw: household.unitSystemRaw,
+            roundsDisplayedAmounts: household.roundsDisplayedAmounts,
+            standardServings: household.standardServings,
+            showsNutritionEstimates: household.showsNutritionEstimates,
+            leftoverSuggestionsEnabled: household.leftoverSuggestionsEnabled,
+            unitPresentationOverrideRaw: household.unitPresentationOverrideRaw,
+            inventoryEnabled: household.inventoryEnabled,
+            packageSizeCountryCode: household.packageSizeCountryCode,
+            energyUnitRaw: household.energyUnitRaw,
+            localeIdentifier: household.localeIdentifier,
+            dateCreated: household.dateCreated,
+            didSeedPantryStaples: household.didSeedPantryStaples,
+            ingredientMergeAuditData: household.ingredientMergeAuditData,
+            unlockedByPurchase: household.unlockedByPurchase,
+            bringListUuid: household.bringListUuid,
+            bringListName: household.bringListName,
+            bringShadowKeys: household.bringShadowKeys,
+            bringAutoSync: household.bringAutoSync,
+            bringLastSyncedAt: household.bringLastSyncedAt
+        ))
     }
 
     static func makeRecord(from snapshot: LocalHouseholdRecord, zoneID: CKRecordZone.ID, systemRecord: CKRecord? = nil) throws -> CKRecord {

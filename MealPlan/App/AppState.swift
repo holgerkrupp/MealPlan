@@ -68,6 +68,10 @@ final class AppState {
     /// Set once the lookup has actually found a household and is fetching it,
     /// so the first-run tour knows it is worth waiting for.
     private(set) var isDownloadingCloudHousehold = false
+    /// A populated local household disagrees with another owned legacy zone.
+    /// The migration window must preserve both graphs until recovery is chosen;
+    /// this state is intentionally diagnostic/review-only.
+    private(set) var legacyHouseholdRecovery: LegacyHouseholdRecoveryPlan = .noAction
 
     struct NearbyJoinRequest: Identifiable, Equatable {
         let id = UUID()
@@ -222,6 +226,11 @@ final class AppState {
 
         bootstrap(context: context, planningThrough: latestPlanningDate)
 
+        // Always inventory old owned zones, even once this device has content.
+        // The previous empty-placeholder guard is what allowed two populated
+        // same-account installations to silently remain split.
+        await inspectLegacyHouseholds(context: context)
+
         guard shouldDiscover, let placeholder = currentHousehold else {
             isLookingForCloudHousehold = false
             return
@@ -244,6 +253,98 @@ final class AppState {
             }
         } catch {
             // Deliberately silent; see above.
+        }
+    }
+
+    /// Re-runs the non-destructive legacy-zone inventory used by launch and by
+    /// DEBUG diagnostics. It never changes the selected household itself.
+    func inspectLegacyHouseholds(context: ModelContext) async {
+        guard let household = currentHousehold else { return }
+
+        // A participant's active household lives in the shared database and is
+        // not part of this Apple Account's private owned-zone inventory. Never
+        // offer to replace a joined household with an unrelated old private zone.
+        if let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier),
+           !locator.isOwner {
+            legacyHouseholdRecovery = .noAction
+            return
+        }
+
+        do {
+            let owned = try await HouseholdCloudBootstrapService.ownedHouseholdInventory()
+            let plan = LegacyHouseholdRecoveryPlan.make(
+                local: .init(household: household),
+                owned: owned
+            )
+            legacyHouseholdRecovery = plan
+            LegacyHouseholdDiagnostics.record(
+                event: plan == .noAction ? "ownedZonesInventoried" : "ownedZoneRecoveryRequired",
+                activeHouseholdID: household.uuid,
+                owned: owned
+            )
+        } catch {
+            LegacyHouseholdDiagnostics.record(
+                event: "ownedZoneInventoryFailed",
+                activeHouseholdID: household.uuid,
+                error: error
+            )
+        }
+    }
+
+    /// Copies unmatched data from competing same-account legacy zones only
+    /// after the settings UI has obtained the person's confirmation. The
+    /// original CloudKit zones are retained; this is a reversible handoff,
+    /// not a destructive automatic reconciliation.
+    func reconcileLegacyHouseholds(context: ModelContext) async throws {
+        cloudBootstrapState = .connecting
+        defer { finishCloudDownload() }
+        guard let local = currentHousehold else { return }
+        if let locator = HouseholdShareLocator.decode(local.cloudKitShareIdentifier),
+           !locator.isOwner {
+            legacyHouseholdRecovery = .noAction
+            return
+        }
+        let owned = try await HouseholdCloudBootstrapService.ownedHouseholdInventory()
+        let plan = LegacyHouseholdRecoveryPlan.make(local: .init(household: local), owned: owned)
+        guard case .reviewRequired(let canonicalID, _) = plan,
+              let canonical = owned.first(where: { $0.householdID == canonicalID })
+        else {
+            legacyHouseholdRecovery = plan
+            return
+        }
+
+        do {
+            let recovered = try await HouseholdCloudBootstrapService.reconcileOwnedHouseholds(
+                canonical: canonical,
+                owned: owned,
+                preserving: local,
+                context: context,
+                progress: updateCloudProgress
+            )
+            currentHousehold = recovered
+            collaboration.restore(for: recovered)
+            legacyHouseholdRecovery = .noAction
+            LegacyHouseholdDiagnostics.record(
+                event: "ownedZonesReconciled",
+                activeHouseholdID: recovered.uuid,
+                owned: owned
+            )
+        } catch {
+            // `restoreOwnedHousehold` saves the canonical graph before it
+            // starts copying unmatched competitor records. If a later local
+            // save fails, point the UI at that saved graph rather than a
+            // deleted pre-recovery object.
+            if let recovered = (try? context.fetch(FetchDescriptor<Household>()))?.first(where: { $0.uuid == canonical.householdID }) {
+                currentHousehold = recovered
+                collaboration.restore(for: recovered)
+            }
+            LegacyHouseholdDiagnostics.record(
+                event: "ownedZoneReconciliationFailed",
+                activeHouseholdID: local.uuid,
+                owned: owned,
+                error: error
+            )
+            throw error
         }
     }
 
