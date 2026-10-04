@@ -35,6 +35,7 @@ extension RecipeBookmark: LegacyMigrationModel {}
 /// CloudKit transport, and prevents an accidental semantic rematch of recipes
 /// or ingredients during the copy.
 enum ManagedHouseholdMigrationValue: Equatable, Sendable {
+    case null
     case string(String)
     case bool(Bool)
     case integer(Int64)
@@ -43,8 +44,9 @@ enum ManagedHouseholdMigrationValue: Equatable, Sendable {
     case uuid(UUID)
     case data(Data)
 
-    var objectValue: Any {
+    var objectValue: Any? {
         switch self {
+        case .null: nil
         case .string(let value): value
         case .bool(let value): value
         case .integer(let value): value
@@ -57,6 +59,7 @@ enum ManagedHouseholdMigrationValue: Equatable, Sendable {
 
     func matches(_ value: Any?) -> Bool {
         switch self {
+        case .null: return value == nil || value is NSNull
         case .string(let expected): return value as? String == expected
         case .bool(let expected): return (value as? NSNumber)?.boolValue == expected
         case .integer(let expected): return (value as? NSNumber)?.int64Value == expected
@@ -83,10 +86,22 @@ struct ManagedHouseholdMigrationRecord: Equatable, Sendable {
 }
 
 struct ManagedHouseholdMigrationInventory: Equatable, Sendable {
-    let identifiersByEntity: [ManagedHouseholdEntity: Set<UUID>]
+    /// Exact source identities, preserving multiplicity. A duplicate UUID is
+    /// invalid source data and must never be collapsed by a Set during migration.
+    let identifiersByEntity: [ManagedHouseholdEntity: [UUID]]
 
+    /// Persist both totals and every UUID occurrence in the existing checkpoint
+    /// dictionary. This makes a delete+insert with the same entity count detectable
+    /// on resume without changing the on-disk state schema.
     var counts: [String: Int] {
-        Dictionary(uniqueKeysWithValues: identifiersByEntity.map { ($0.key.rawValue, $0.value.count) })
+        var result: [String: Int] = [:]
+        for (entity, identifiers) in identifiersByEntity {
+            result["entity:\(entity.rawValue):count"] = identifiers.count
+            for (uuid, occurrences) in Dictionary(grouping: identifiers, by: { $0 }) {
+                result["entity:\(entity.rawValue):uuid:\(uuid.uuidString)"] = occurrences.count
+            }
+        }
+        return result
     }
 }
 
@@ -180,6 +195,7 @@ enum ManagedHouseholdMigrationError: LocalizedError, Equatable {
     case unsupportedStateVersion(Int)
     case previousFailure(String?)
     case inventoryChanged(expected: [String: Int], actual: [String: Int])
+    case duplicateSourceObject(ManagedHouseholdEntity, UUID)
     case duplicateTargetObject(ManagedHouseholdEntity, UUID)
     case missingRelationshipTarget(ManagedHouseholdEntity, UUID, String, UUID)
     case verificationFailed(String)
@@ -189,6 +205,7 @@ enum ManagedHouseholdMigrationError: LocalizedError, Equatable {
         case .unsupportedStateVersion(let version): "A newer managed-household migration format (\(version)) is present."
         case .previousFailure(let code): "The managed-household migration previously failed\(code.map { ": \($0)" } ?? ".")."
         case .inventoryChanged: "The legacy household inventory changed while it was being copied."
+        case .duplicateSourceObject(let entity, let uuid): "The legacy store contains duplicate \(entity.rawValue) records for \(uuid)."
         case .duplicateTargetObject(let entity, let uuid): "The destination contains duplicate \(entity.rawValue) records for \(uuid)."
         case .missingRelationshipTarget(let entity, let uuid, let relationship, let target): "\(entity.rawValue) \(uuid) refers to missing \(relationship) target \(target)."
         case .verificationFailed(let detail): "Managed-household migration verification failed: \(detail)"
@@ -246,7 +263,11 @@ final class ManagedHouseholdMigration {
 
             for entity in ManagedHouseholdEntity.allCases {
                 let records = try source.records(for: entity).sorted { $0.uuid.uuidString < $1.uuid.uuidString }
-                guard Set(records.map(\.uuid)) == inventory.identifiersByEntity[entity, default: []] else {
+                let identifiers = records.map(\.uuid)
+                if let duplicate = Dictionary(grouping: identifiers, by: { $0 }).first(where: { $0.value.count > 1 })?.key {
+                    throw ManagedHouseholdMigrationError.duplicateSourceObject(entity, duplicate)
+                }
+                guard identifiers == inventory.identifiersByEntity[entity, default: []].sorted(by: { $0.uuidString < $1.uuidString }) else {
                     throw ManagedHouseholdMigrationError.verificationFailed("source inventory differs for \(entity.rawValue)")
                 }
                 let checkpoint = state.entityCheckpoints[entity.rawValue]
@@ -333,8 +354,19 @@ final class ManagedHouseholdMigration {
         let context = destination.container.viewContext
         for entity in ManagedHouseholdEntity.allCases {
             let records = try source.records(for: entity)
-            guard Set(records.map(\.uuid)) == inventory.identifiersByEntity[entity, default: []] else {
+            let sourceIDs = records.map(\.uuid).sorted(by: { $0.uuidString < $1.uuidString })
+            let expectedIDs = inventory.identifiersByEntity[entity, default: []].sorted(by: { $0.uuidString < $1.uuidString })
+            guard sourceIDs == expectedIDs else {
                 throw ManagedHouseholdMigrationError.verificationFailed("source inventory changed for \(entity.rawValue)")
+            }
+            if let duplicate = Dictionary(grouping: sourceIDs, by: { $0 }).first(where: { $0.value.count > 1 })?.key {
+                throw ManagedHouseholdMigrationError.duplicateSourceObject(entity, duplicate)
+            }
+            let targetIDs = try allObjects(entity, context: context)
+                .compactMap { $0.value(forKey: "uuid") as? UUID }
+                .sorted(by: { $0.uuidString < $1.uuidString })
+            guard targetIDs == expectedIDs else {
+                throw ManagedHouseholdMigrationError.verificationFailed("destination inventory differs for \(entity.rawValue)")
             }
             for record in records {
                 guard let object = try targetObject(entity: entity, uuid: record.uuid, scope: record.scope, context: context) else {
@@ -480,9 +512,9 @@ final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSou
     }
 
     func inventory() throws -> ManagedHouseholdMigrationInventory {
-        var identifiers: [ManagedHouseholdEntity: Set<UUID>] = [:]
+        var identifiers: [ManagedHouseholdEntity: [UUID]] = [:]
         for entity in ManagedHouseholdEntity.allCases {
-            identifiers[entity] = Set(try records(for: entity).map(\.uuid))
+            identifiers[entity] = try records(for: entity).map(\.uuid).sorted(by: { $0.uuidString < $1.uuidString })
         }
         return .init(identifiersByEntity: identifiers)
     }
@@ -675,9 +707,27 @@ final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSou
             guard let name = values[offset] as? String else {
                 preconditionFailure("Migration attribute names must be strings.")
             }
-            if let value = values[offset + 1] as? ManagedHouseholdMigrationValue {
+            let raw = values[offset + 1]
+            if let value = raw as? ManagedHouseholdMigrationValue {
                 result[name] = value
+                continue
             }
+
+            // Optional.none arrives boxed as Any. Preserve it explicitly so an
+            // interrupted migration can clear stale destination values and verify
+            // nil just as strictly as non-nil attributes.
+            let mirror = Mirror(reflecting: raw)
+            if mirror.displayStyle == .optional {
+                guard let child = mirror.children.first else {
+                    result[name] = .null
+                    continue
+                }
+                if let value = child.value as? ManagedHouseholdMigrationValue {
+                    result[name] = value
+                    continue
+                }
+            }
+            preconditionFailure("Migration attribute values must be migration values or nil optionals.")
         }
         return result
     }
