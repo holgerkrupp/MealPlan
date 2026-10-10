@@ -24,6 +24,7 @@ struct RecipeDiscoveryView: View {
     /// nil means built-in and subscribed sources together.
     @State private var sourceFilter: String?
     @State private var snapshot = RecipeDiscoverySnapshot.empty
+    @State private var imageMetadataRevision = 0
 
     private var feeds: [RecipeFeed] {
         allFeeds.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
@@ -399,16 +400,15 @@ struct RecipeDiscoveryView: View {
     }
 
     private var snapshotTaskID: String {
-        let feedRevision = feeds.map { feed in
-            let itemRevision = (feed.items ?? []).map { item in
-                "\(item.stableID):\(item.fetchedAt.timeIntervalSinceReferenceDate):\(item.archivedAt?.timeIntervalSinceReferenceDate ?? 0)"
-            }.joined(separator: ",")
-            return "\(feed.uuid.uuidString):\(itemRevision)"
+        // Feed refreshes update lastFetchedAt. That gives discovery a compact
+        // revision without walking every cached article on each body update.
+        let feedRevision = feeds.map {
+            "\($0.uuid.uuidString):\($0.lastFetchedAt?.timeIntervalSinceReferenceDate ?? 0)"
         }.joined(separator: "|")
         let publicRevision = discoveredSources.map { result in
             "\(result.source.id):\(result.articles.map { $0.id }.joined(separator: ","))"
         }.joined(separator: "|")
-        return "\(search)|\(scope.rawValue)|\(sort.rawValue)|\(sourceFilter ?? "*")|\(selectedCategory?.rawValue ?? "*")|\(feedRevision)|\(publicRevision)"
+        return "\(search)|\(scope.rawValue)|\(sort.rawValue)|\(sourceFilter ?? "*")|\(selectedCategory?.rawValue ?? "*")|\(feedRevision)|\(publicRevision)|\(imageMetadataRevision)"
     }
 
     private var discoveryQuery: RecipeDiscoveryQuery {
@@ -520,6 +520,7 @@ struct RecipeDiscoveryView: View {
         guard let item = feed.items?.first(where: { $0.stableID == article.readStateID }) else { return }
         if let imageURL { item.imageURLString = imageURL.absoluteString }
         item.imageLookupAt = .now
+        imageMetadataRevision &+= 1
         try? context.save()
     }
 

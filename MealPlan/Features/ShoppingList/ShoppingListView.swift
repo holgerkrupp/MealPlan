@@ -72,16 +72,6 @@ struct ShoppingListView: View {
             .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
     }
 
-    /// An empty KptnCook ingredient list is intentional when the site did
-    /// not provide reliable rows. Surface that omission above the generated
-    /// groceries rather than silently making an incomplete shopping trip.
-    private var missingIngredientDishes: [String] {
-        let planned = (appState.currentHousehold?.entries ?? []).filter {
-            $0.date >= range.start && $0.date < range.end
-        }
-        return ShoppingListBuilder.missingIngredientDishNames(planned)
-    }
-
     var body: some View {
         @Bindable var appState = appState
 
@@ -107,21 +97,7 @@ struct ShoppingListView: View {
                 }
             }
 
-            if !missingIngredientDishes.isEmpty {
-                Section {
-                    Label(
-                        String(localized: "Some planned recipes are missing ingredients"),
-                        systemImage: "exclamationmark.triangle"
-                    )
-                    .foregroundStyle(.orange)
-                    Text(
-                        String(
-                            localized: "Ingredients could not be imported for \(missingIngredientDishes.joined(separator: ", ")). Add them to the recipe before shopping."
-                        )
-                    )
-                    .font(.footnote)
-                }
-            }
+            MissingIngredientWarningView(householdID: appState.currentHousehold?.uuid, range: range)
 
             if items.isEmpty {
                 ContentUnavailableView(
@@ -562,6 +538,40 @@ struct ShoppingListView: View {
         }
     }
     #endif
+}
+
+/// Owns a date- and household-scoped query so calculating the warning never
+/// faults the household's complete entries relationship.
+@MainActor
+private struct MissingIngredientWarningView: View {
+    @Query private var entries: [MealPlanEntry]
+
+    init(householdID: UUID?, range: DayRange) {
+        let start = range.start
+        let end = range.end
+        if let householdID {
+            let predicate = #Predicate<MealPlanEntry> {
+                $0.date >= start && $0.date < end && $0.household?.uuid == householdID
+            }
+            _entries = Query(FetchDescriptor(predicate: predicate))
+        } else {
+            _entries = Query(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { _ in false }))
+        }
+    }
+
+    var body: some View {
+        let names = ShoppingListBuilder.missingIngredientDishNames(entries)
+        if names.isEmpty {
+            EmptyView()
+        } else {
+            Section {
+                Label(String(localized: "Some planned recipes are missing ingredients"), systemImage: "exclamationmark.triangle")
+                    .foregroundStyle(.orange)
+                Text(String(localized: "Ingredients could not be imported for \(names.joined(separator: ", ")). Add them to the recipe before shopping."))
+                    .font(.footnote)
+            }
+        }
+    }
 }
 
 #Preview {

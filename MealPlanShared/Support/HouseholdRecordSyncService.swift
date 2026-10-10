@@ -122,6 +122,7 @@ final class HouseholdRecordSyncService {
     private var household: Household?
     private var context: ModelContext?
     private var modelContainer: ModelContainer?
+    private var snapshotActor: HouseholdSnapshotActor?
     private var locator: HouseholdShareLocator?
     private var metadata = HouseholdSyncMetadata()
     private var saveObserver: NSObjectProtocol?
@@ -191,6 +192,7 @@ final class HouseholdRecordSyncService {
         household = nil
         context = nil
         modelContainer = nil
+        snapshotActor = nil
         locator = nil
         pendingSnapshots.removeAll(keepingCapacity: false)
         needsLocalScan = true
@@ -269,7 +271,10 @@ final class HouseholdRecordSyncService {
         scheduledScan?.cancel()
         self.household = household
         self.context = context
-        modelContainer = context.container
+        if modelContainer !== context.container {
+            snapshotActor = nil
+            modelContainer = context.container
+        }
         locator = nextLocator
         metadata = loadMetadata(for: nextLocator)
         pendingSnapshots.removeAll(keepingCapacity: false)
@@ -721,7 +726,10 @@ final class HouseholdRecordSyncService {
 
     private func snapshotRecords(for householdID: UUID) async throws -> [LocalHouseholdRecord] {
         guard let modelContainer else { return [] }
-        let snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        if snapshotActor == nil {
+            snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        }
+        guard let snapshotActor else { return [] }
         return try await snapshotActor.records(for: householdID)
     }
 
@@ -730,7 +738,10 @@ final class HouseholdRecordSyncService {
         householdID: UUID
     ) async throws {
         guard let modelContainer else { return }
-        let snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        if snapshotActor == nil {
+            snapshotActor = HouseholdSnapshotActor(modelContainer: modelContainer)
+        }
+        guard let snapshotActor else { return }
         try await snapshotActor.touch(changes, at: .now, householdID: householdID)
     }
 

@@ -202,9 +202,16 @@ final class AppState: HouseholdRecoveryAppState {
             // This is lossless, backed up first, and guarded per household.
             try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
-        DishGlyphMaintenance.run(context: context)
-        BlankDishMaintenance.run(context: context)
         cloudBootstrapState = .ready
+        // Let the first screen render before scanning dishes for derived glyphs
+        // or abandoned drafts. The sweep remains idempotent and the blank-draft
+        // grace period protects content that is still arriving from sync.
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard self != nil else { return }
+            DishGlyphMaintenance.run(context: context)
+            BlankDishMaintenance.run(context: context)
+        }
     }
 
     /// Local first, iCloud behind it. The device's own household is set up

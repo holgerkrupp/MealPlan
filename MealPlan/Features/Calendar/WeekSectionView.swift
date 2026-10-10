@@ -214,6 +214,7 @@ struct WeekSectionView: View {
                 mealKey: MealType.extraKey,
                 mealTitle: MealType.extraName,
                 mealSymbol: MealType.extraSymbolName,
+                householdID: appState.currentHousehold?.uuid,
                 onEditNewDish: { newDishToEdit = $0 }
             )
             .dismissesOnOutsideClick()

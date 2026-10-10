@@ -14,6 +14,7 @@ struct DishPickerView: View {
     let mealKey: String
     let mealTitle: String
     var mealSymbol: String = "fork.knife"
+    let householdID: UUID?
     /// Called after a bare new dish is planned and the cook wants to fill in
     /// the recipe. The editor belongs to whoever presented this view: on macOS
     /// this is a popover, and a sheet raised from one dies with it.
@@ -49,7 +50,7 @@ struct DishPickerView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query(sort: \Dish.name) private var allDishes: [Dish]
-    @Query(sort: \MealPlanEntry.date) private var plannedEntries: [MealPlanEntry]
+    @Query private var plannedEntries: [MealPlanEntry]
 
     @State private var tab: Tab = .cook
     @State private var text = ""
@@ -59,6 +60,32 @@ struct DishPickerView: View {
     @FocusState private var isSearchFocused: Bool
 
     private let importer: RecipeImporter = RecipeSchemaParser()
+
+    init(
+        date: Date,
+        mealKey: String,
+        mealTitle: String,
+        mealSymbol: String = "fork.knife",
+        householdID: UUID? = nil,
+        onEditNewDish: @escaping (Dish) -> Void = { _ in }
+    ) {
+        self.date = date
+        self.mealKey = mealKey
+        self.mealTitle = mealTitle
+        self.mealSymbol = mealSymbol
+        self.householdID = householdID
+        self.onEditNewDish = onEditNewDish
+        let start = date.startOfDay
+        let end = start.adding(weeks: MealRoutineScheduler.horizonWeeks + 1)
+        if let householdID {
+            let predicate = #Predicate<MealPlanEntry> {
+                $0.date >= start && $0.date < end && $0.household?.uuid == householdID
+            }
+            _plannedEntries = Query(FetchDescriptor(predicate: predicate, sortBy: [SortDescriptor(\.date)]))
+        } else {
+            _plannedEntries = Query(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { _ in false }))
+        }
+    }
 
     private var query: String { text.trimmingCharacters(in: .whitespacesAndNewlines) }
 

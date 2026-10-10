@@ -415,6 +415,7 @@ struct MealCard: View {
             mealKey: mealKey,
             mealTitle: title,
             mealSymbol: symbolName,
+            householdID: appState.currentHousehold?.uuid,
             onEditNewDish: { newDishToEdit = $0 }
         )
     }
