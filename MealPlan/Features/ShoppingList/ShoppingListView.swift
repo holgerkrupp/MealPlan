@@ -289,7 +289,7 @@ struct ShoppingListView: View {
         .macWindowMargins()
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
-        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(managedMode)-\(range.start.timeIntervalSinceReferenceDate)-\(range.end.timeIntervalSinceReferenceDate)") {
+        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(managedMode)-\(appState.managedCollaboration != nil)-\(range.start.timeIntervalSinceReferenceDate)-\(range.end.timeIntervalSinceReferenceDate)") {
             reloadManagedShoppingList()
         }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanManagedStoreDidChange)) { _ in

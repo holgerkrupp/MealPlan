@@ -109,7 +109,7 @@ struct PantryStaplesView: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
-        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(managedMode)") {
+        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(managedMode)-\(appState.managedCollaboration != nil)") {
             reloadManagedPantry()
         }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanManagedStoreDidChange)) { _ in

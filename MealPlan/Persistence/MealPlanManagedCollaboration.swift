@@ -94,6 +94,62 @@ struct ManagedShoppingListSnapshot: Equatable, Sendable {
     let missingIngredientDishNames: [String]
 }
 
+struct ManagedDishChoice: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let name: String
+}
+
+struct ManagedMealTypeChoice: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let key: String
+    let name: String
+    let symbolName: String
+    let sortOrder: Int
+}
+
+struct ManagedMealRoutineSummary: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let dishID: UUID?
+    let dishName: String?
+    let mealKey: String
+    let weekday: Int
+    let intervalWeeks: Int
+    let startDate: Date
+    let isActive: Bool
+    let plannedThrough: Date?
+    let dateCreated: Date
+
+    var scheduleDescription: String {
+        let symbols = Calendar.current.standaloneWeekdaySymbols
+        let index = min(max(weekday - 1, 0), symbols.count - 1)
+        let dayName = symbols[index]
+        return switch max(1, intervalWeeks) {
+        case 1: String(localized: "Every \(dayName)")
+        case 2: String(localized: "Every second \(dayName)")
+        case 3: String(localized: "Every third \(dayName)")
+        case 4: String(localized: "Every fourth \(dayName)")
+        default: String(localized: "Every \(intervalWeeks) weeks on \(dayName)")
+        }
+    }
+}
+
+struct ManagedMealRoutineDraft: Identifiable, Equatable, Sendable {
+    let id: UUID
+    var dishID: UUID?
+    var mealKey: String
+    var weekday: Int
+    var intervalWeeks: Int
+    var startDate: Date
+    var isActive: Bool
+}
+
+struct ManagedMealRoutineSnapshot: Equatable, Sendable {
+    let householdID: UUID
+    let routines: [ManagedMealRoutineSummary]
+    let dishes: [ManagedDishChoice]
+    let mealTypes: [ManagedMealTypeChoice]
+}
+
 /// MealPlan's host adapter for the reusable collaboration package. Construction
 /// is deliberately explicit: callers must load a CloudKit-enabled managed
 /// persistence instance first, and share creation remains an explicit user action.
@@ -289,6 +345,156 @@ final class MealPlanManagedCollaboration {
             pantryStaples: staples,
             missingIngredientDishNames: missingNames
         )
+    }
+
+    func mealRoutineSnapshot(for householdID: UUID) throws -> ManagedMealRoutineSnapshot {
+        let objectID = try managedHouseholdObjectID(for: householdID)
+        let root = try container.viewContext.existingObject(with: objectID)
+        let dishes = ((root.value(forKey: "dishes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .compactMap { object -> ManagedDishChoice? in
+                guard let id = object.value(forKey: "uuid") as? UUID,
+                      let name = object.value(forKey: "name") as? String else { return nil }
+                return ManagedDishChoice(id: id, name: name)
+            }
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        let mealTypes = ((root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .compactMap { object -> ManagedMealTypeChoice? in
+                guard let id = object.value(forKey: "uuid") as? UUID,
+                      let key = object.value(forKey: "key") as? String,
+                      let name = object.value(forKey: "name") as? String else { return nil }
+                return ManagedMealTypeChoice(
+                    id: id,
+                    key: key,
+                    name: name,
+                    symbolName: object.value(forKey: "symbolName") as? String ?? "fork.knife",
+                    sortOrder: (object.value(forKey: "sortOrder") as? NSNumber)?.intValue ?? 0
+                )
+            }
+            .sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) }
+        let routines = ((root.value(forKey: "mealRoutines") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .compactMap { object -> ManagedMealRoutineSummary? in
+                guard let id = object.value(forKey: "uuid") as? UUID,
+                      let startDate = object.value(forKey: "startDate") as? Date else { return nil }
+                let dish = object.value(forKey: "dish") as? NSManagedObject
+                return ManagedMealRoutineSummary(
+                    id: id,
+                    dishID: dish?.value(forKey: "uuid") as? UUID,
+                    dishName: dish?.value(forKey: "name") as? String,
+                    mealKey: object.value(forKey: "mealKey") as? String ?? MealSlot.dinner.rawValue,
+                    weekday: (object.value(forKey: "weekday") as? NSNumber)?.intValue ?? 3,
+                    intervalWeeks: (object.value(forKey: "intervalWeeks") as? NSNumber)?.intValue ?? 1,
+                    startDate: startDate,
+                    isActive: (object.value(forKey: "isActive") as? NSNumber)?.boolValue ?? true,
+                    plannedThrough: object.value(forKey: "plannedThrough") as? Date,
+                    dateCreated: object.value(forKey: "dateCreated") as? Date ?? .distantPast
+                )
+            }
+            .sorted { ($0.dateCreated, $0.id.uuidString) < ($1.dateCreated, $1.id.uuidString) }
+        return ManagedMealRoutineSnapshot(householdID: householdID, routines: routines, dishes: dishes, mealTypes: mealTypes)
+    }
+
+    func addManagedMealRoutine(in householdID: UUID) throws -> ManagedMealRoutineDraft {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let dishes = (root.value(forKey: "dishes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let mealTypes = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        guard let dish = dishes.sorted(by: { ($0.value(forKey: "name") as? String ?? "") < ($1.value(forKey: "name") as? String ?? "") }).first else {
+            throw MealPlanManagedCollaborationError.householdNotFound
+        }
+        let mealKeys = mealTypes.compactMap { $0.value(forKey: "key") as? String }
+        let mealKey = mealKeys.contains(MealSlot.dinner.rawValue) ? MealSlot.dinner.rawValue : (mealKeys.first ?? MealSlot.dinner.rawValue)
+        let routine = try insert(.mealRoutine, into: store(for: rootID), context: context)
+        let today = Date.now.startOfDay
+        routine.setValue(mealKey, forKey: "mealKey")
+        routine.setValue(Calendar.current.component(.weekday, from: today), forKey: "weekday")
+        routine.setValue(1, forKey: "intervalWeeks")
+        routine.setValue(today, forKey: "startDate")
+        routine.setValue(true, forKey: "isActive")
+        routine.setValue(Date.now, forKey: "dateCreated")
+        routine.setValue(dish, forKey: "dish")
+        routine.setValue(root, forKey: "household")
+        root.mutableSetValue(forKey: "mealRoutines").add(routine)
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        return ManagedMealRoutineDraft(
+            id: routine.value(forKey: "uuid") as? UUID ?? UUID(),
+            dishID: dish.value(forKey: "uuid") as? UUID,
+            mealKey: mealKey,
+            weekday: Calendar.current.component(.weekday, from: today),
+            intervalWeeks: 1,
+            startDate: today,
+            isActive: true
+        )
+    }
+
+    func saveManagedMealRoutine(
+        _ draft: ManagedMealRoutineDraft,
+        in householdID: UUID,
+        through latestPlanningDate: Date? = nil,
+        memberName: String = ""
+    ) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let routine = ((root.value(forKey: "mealRoutines") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .first(where: { $0.value(forKey: "uuid") as? UUID == draft.id }),
+              canUpdate(routine.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let dishes = (root.value(forKey: "dishes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let dish = draft.dishID.flatMap { id in dishes.first { $0.value(forKey: "uuid") as? UUID == id } }
+        routine.setValue(dish, forKey: "dish")
+        routine.setValue(draft.mealKey, forKey: "mealKey")
+        routine.setValue(min(7, max(1, draft.weekday)), forKey: "weekday")
+        routine.setValue(min(4, max(1, draft.intervalWeeks)), forKey: "intervalWeeks")
+        routine.setValue(draft.startDate.startOfDay, forKey: "startDate")
+        routine.setValue(draft.isActive, forKey: "isActive")
+        routine.setValue(nil, forKey: "plannedThrough")
+        routine.setValue(Date.now, forKey: "modifiedAt")
+        if draft.isActive, dish != nil {
+            try planManagedRoutines(
+                [routine], root: root, rootID: rootID, context: context,
+                through: latestPlanningDate, memberName: memberName
+            )
+        }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func deleteManagedMealRoutine(_ routineID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let routine = ((root.value(forKey: "mealRoutines") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .first(where: { $0.value(forKey: "uuid") as? UUID == routineID }),
+              canUpdate(routine.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let today = Date.now.startOfDay
+        let entryRequest = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.mealPlanEntry.rawValue)
+        entryRequest.predicate = NSPredicate(format: "household == %@ AND routineUUID == %@ AND date >= %@", root, routineID as NSUUID, today as NSDate)
+        entryRequest.affectedStores = [try store(for: rootID)]
+        for entry in try context.fetch(entryRequest) { context.delete(entry) }
+        context.delete(routine)
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func applyManagedMealRoutines(
+        for householdID: UUID,
+        through latestPlanningDate: Date? = nil,
+        memberName: String = ""
+    ) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let routines = ((root.value(forKey: "mealRoutines") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? [])
+            .filter { ($0.value(forKey: "isActive") as? NSNumber)?.boolValue ?? false }
+        guard !routines.isEmpty else { return }
+        try planManagedRoutines(
+            routines, root: root, rootID: rootID, context: context,
+            through: latestPlanningDate, memberName: memberName
+        )
+        if context.hasChanges {
+            try context.save()
+            try finishManagedWrite(householdID: householdID, rootID: rootID)
+            SharedStore.reloadWidgets()
+        }
     }
 
     func setPantryStaple(_ isStaple: Bool, ingredientID: UUID, in householdID: UUID) throws {
@@ -929,6 +1135,88 @@ final class MealPlanManagedCollaboration {
                   let kindRaw = rule.value(forKey: "kindRaw") as? String,
                   let kind = IngredientMatchRuleKind(rawValue: kindRaw) else { return nil }
             return IngredientMatchRuleValue(leftKey: leftKey, rightKey: rightKey, kind: kind)
+        }
+    }
+
+    private func planManagedRoutines(
+        _ routines: [NSManagedObject],
+        root: NSManagedObject,
+        rootID: NSManagedObjectID,
+        context: NSManagedObjectContext,
+        through latestPlanningDate: Date?,
+        memberName: String
+    ) throws {
+        let today = Date.now.startOfDay
+        let defaultHorizon = today.adding(weeks: MealRoutineScheduler.horizonWeeks)
+        let horizon = latestPlanningDate.map { min(defaultHorizon, $0.startOfDay) } ?? defaultHorizon
+        guard horizon >= today else { return }
+
+        let request = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.mealPlanEntry.rawValue)
+        request.predicate = NSPredicate(format: "household == %@ AND date >= %@ AND date < %@", root, today as NSDate, horizon.adding(days: 1) as NSDate)
+        request.affectedStores = [try store(for: rootID)]
+        let existingEntries = try context.fetch(request)
+        func slotKey(_ date: Date, _ mealKey: String) -> String {
+            "\(date.startOfDay.timeIntervalSinceReferenceDate)|\(mealKey)"
+        }
+        var occupied = Set<String>()
+        var nextSortIndex: [String: Int] = [:]
+        for entry in existingEntries {
+            guard let date = entry.value(forKey: "date") as? Date,
+                  let mealKey = entry.value(forKey: "mealSlotRaw") as? String else { continue }
+            let key = slotKey(date, mealKey)
+            occupied.insert(key)
+            nextSortIndex[key] = max(
+                nextSortIndex[key] ?? 0,
+                ((entry.value(forKey: "sortIndex") as? NSNumber)?.intValue ?? -1) + 1
+            )
+        }
+
+        let orderedRoutines = routines.sorted {
+            let lhsDate = $0.value(forKey: "dateCreated") as? Date ?? .distantPast
+            let rhsDate = $1.value(forKey: "dateCreated") as? Date ?? .distantPast
+            if lhsDate != rhsDate { return lhsDate < rhsDate }
+            return (($0.value(forKey: "uuid") as? UUID)?.uuidString ?? "") < (($1.value(forKey: "uuid") as? UUID)?.uuidString ?? "")
+        }
+        let managedDishes = (root.value(forKey: "dishes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let store = try store(for: rootID)
+
+        for routine in orderedRoutines where (routine.value(forKey: "isActive") as? NSNumber)?.boolValue ?? false {
+            guard let dishID = (routine.value(forKey: "dish") as? NSManagedObject)?.value(forKey: "uuid") as? UUID,
+                  let dish = managedDishes.first(where: { $0.value(forKey: "uuid") as? UUID == dishID }),
+                  let routineID = routine.value(forKey: "uuid") as? UUID else { continue }
+            let mealKey = routine.value(forKey: "mealKey") as? String ?? MealSlot.dinner.rawValue
+            let weekday = (routine.value(forKey: "weekday") as? NSNumber)?.intValue ?? 3
+            let interval = (routine.value(forKey: "intervalWeeks") as? NSNumber)?.intValue ?? 1
+            let startDate = routine.value(forKey: "startDate") as? Date ?? today
+            let plannedThrough = routine.value(forKey: "plannedThrough") as? Date
+            let from = max(today, plannedThrough?.adding(days: 1).startOfDay ?? today)
+            guard from <= horizon else { continue }
+
+            let projection = MealRoutine(dish: nil, mealKey: mealKey, weekday: weekday, intervalWeeks: interval, startDate: startDate)
+            let days = projection.occurrences(from: from, through: horizon)
+            for day in days {
+                let key = slotKey(day, mealKey)
+                guard occupied.insert(key).inserted else { continue }
+                let entry = try insert(.mealPlanEntry, into: store, context: context)
+                let now = Date.now
+                entry.setValue(now, forKey: "placementModifiedAt")
+                entry.setValue(now, forKey: "contentModifiedAt")
+                entry.setValue(day.startOfDay, forKey: "date")
+                entry.setValue(mealKey, forKey: "mealSlotRaw")
+                entry.setValue(nextSortIndex[key] ?? 0, forKey: "sortIndex")
+                entry.setValue(false, forKey: "skipped")
+                entry.setValue(false, forKey: "prepReminder")
+                entry.setValue(memberName, forKey: "plannedByName")
+                entry.setValue(try JSONEncoder().encode([String]()), forKey: "participatingMemberUUIDs")
+                entry.setValue(false, forKey: "isEatingOut")
+                entry.setValue(routineID, forKey: "routineUUID")
+                entry.setValue(dish, forKey: "dish")
+                entry.setValue(root, forKey: "household")
+                root.mutableSetValue(forKey: "entries").add(entry)
+                nextSortIndex[key, default: 0] += 1
+            }
+            routine.setValue(horizon, forKey: "plannedThrough")
+            routine.setValue(Date.now, forKey: "modifiedAt")
         }
     }
 

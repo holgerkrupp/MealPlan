@@ -21,6 +21,7 @@ enum MealRoutineScheduler {
         through latestPlanningDate: Date? = nil,
         memberName: String = ""
     ) {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return }
         let routines = (household.mealRoutines ?? []).filter(\.isActive)
         guard !routines.isEmpty else { return }
         let today = now.startOfDay
@@ -70,6 +71,7 @@ enum MealRoutineScheduler {
         through latestPlanningDate: Date? = nil,
         memberName: String = ""
     ) {
+        guard HouseholdMutationAuthorization.canMutate(household: household ?? routine.household) else { return }
         guard routine.isActive else { return }
         // Route a single routine through the same batched scheduler. Temporarily
         // scoped to its own occurrence list by the scheduler's active-routine
@@ -113,6 +115,7 @@ enum MealRoutineScheduler {
     /// (and anything the family has already edited into place) alone.
     @MainActor
     static func removeFutureEntries(of routine: MealRoutine, context: ModelContext, now: Date = .now) {
+        guard HouseholdMutationAuthorization.canMutate(household: routine.household) else { return }
         let today = now.startOfDay
         let id = routine.uuid
         let predicate = #Predicate<MealPlanEntry> { $0.routineUUID == id && $0.date >= today }

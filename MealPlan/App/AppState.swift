@@ -240,6 +240,11 @@ final class AppState: HouseholdRecoveryAppState {
             managedHouseholdPersistence = persistence
             managedCollaboration = adapter
             managedCollaborationError = nil
+            try? adapter.applyManagedMealRoutines(
+                for: household.uuid,
+                through: PurchaseManager.shared.latestPlanningDate(),
+                memberName: currentMemberName
+            )
         } catch {
             // Keep the old store and share data intact. A later foreground
             // activation can retry a temporary account or CloudKit failure.
@@ -338,32 +343,38 @@ final class AppState: HouseholdRecoveryAppState {
             isNewHousehold = true
         }
         if let household = currentHousehold {
+            let managedWriterIsActive = ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid)
             let migrationSucceeded = HouseholdCollaborationMigration.migrateIfNeeded()
             collaboration.restore(for: household)
             if !migrationSucceeded { collaboration.failClosedForUnknownMigrationFormat() }
             // Only a household this device just created: a family that has been
             // planning for a while must not have ingredients disappear off its
             // shopping list because of an update.
-            if isNewHousehold {
+            if isNewHousehold && !managedWriterIsActive {
                 PantryStaples.seedDefaults(for: household, context: context)
             }
-            MealType.ensure(for: household, context: context)
-            CookedLogMaintenance.run(for: household, context: context)
-            MealRoutineScheduler.apply(
-                for: household,
-                context: context,
-                through: latestPlanningDate,
-                memberName: currentMemberName
-            )
+            if !managedWriterIsActive {
+                MealType.ensure(for: household, context: context)
+                CookedLogMaintenance.run(for: household, context: context)
+                MealRoutineScheduler.apply(
+                    for: household,
+                    context: context,
+                    through: latestPlanningDate,
+                    memberName: currentMemberName
+                )
+            }
             // Collections and dietary flags used to duplicate the tag system.
             // This is lossless, backed up first, and guarded per household.
-            try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
+            if !managedWriterIsActive {
+                try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
+            }
         }
         cloudBootstrapState = .ready
         // Let the first screen render before scanning dishes for derived glyphs
         // or abandoned drafts. Cloud bootstrap can call this method twice for
         // the same household; only schedule one sweep for that model graph.
         if let household = currentHousehold,
+           !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid),
            maintenanceHouseholdIDs.insert(household.uuid).inserted {
             Task { @MainActor in
                 await Task.yield()

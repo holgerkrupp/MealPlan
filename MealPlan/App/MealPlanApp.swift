@@ -137,6 +137,13 @@ struct MealPlanApp: App {
                     }
                     .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
                         guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
+                        if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
+                            try? appState.managedCollaboration?.applyManagedMealRoutines(
+                                for: household.uuid,
+                                memberName: appState.currentMemberName
+                            )
+                            return
+                        }
                         MealRoutineScheduler.apply(
                             for: household,
                             context: container.mainContext,
