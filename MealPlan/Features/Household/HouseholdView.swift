@@ -7,40 +7,27 @@ struct HouseholdSettingsView: View {
     @Environment(\.modelContext) private var context
 
     @State private var showingShareSheet = false
-    @State private var showingMemberReinviteSheet = false
+    #if os(iOS)
+    @State private var showingJoinNearby = false
+    #endif
+    @State private var memberPendingRemoval: HouseholdMember?
+    @State private var removingMemberID: UUID?
+    @State private var removalErrorMessage: String?
     @State private var isConfirmingLegacyRecovery = false
     @State private var isReconcilingLegacyHouseholds = false
     @State private var legacyRecoveryErrorMessage: String?
-    @State private var householdHelpMessage: String?
-    @State private var managedHousehold: ManagedHouseholdSummary?
 
-    /// Local household profiles are kept for dietary preferences and plan
-    /// attribution. CloudKitCollaborationKit and Apple's sharing controls are
-    /// authoritative for invitation and access management.
+    /// People who currently have access. Someone removed from the share keeps
+    /// an inactive row (see `HouseholdCloudSharingService.refreshMembers`) so
+    /// plan attribution still has a name, but no longer counts as planning.
     private var members: [HouseholdMember] {
         (appState.currentHousehold?.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
     }
 
-    private var displayedMembers: [ManagedHouseholdMemberSummary] {
-        if let managedHousehold { return managedHousehold.members.filter(\.isActive) }
-        if usesManagedStore(for: appState.currentHousehold?.uuid) { return [] }
-        return members.map { member in
-            ManagedHouseholdMemberSummary(
-                id: member.uuid,
-                name: member.name,
-                isActive: member.isActive,
-                isCurrentUser: member.isCurrentUser,
-                roleRaw: member.roleRaw,
-                dateAdded: member.dateAdded,
-                allergies: member.allergies,
-                mustAvoidIngredients: member.mustAvoidIngredients,
-                dietaryPatterns: member.dietaryPatterns,
-                dislikes: member.dislikes,
-                favorites: member.favorites,
-                preferredCuisines: member.preferredCuisines,
-                spiceTolerance: member.spiceTolerance
-            )
-        }
+    /// Removing people is the owner's call, the same as inviting them — and
+    /// unlike inviting, it needs a share to remove them from.
+    private func canRemoveMembers(from household: Household) -> Bool {
+        !appState.isGuest && HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) == true
     }
 
     /// How many things the family counts as always in stock, for the row that
@@ -50,30 +37,19 @@ struct HouseholdSettingsView: View {
         return count == 0 ? String(localized: "None") : "\(count)"
     }
 
+    /// Only the owner can invite further participants: a household that's
+    /// already shared and whose share this device didn't create is one this
+    /// device joined as an editor, not the owner.
+    private func canInvite(_ household: Household) -> Bool {
+        HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) ?? true
+    }
+
     /// Writes straight through to the household so the new standard reaches
     /// the rest of the family with the next iCloud sync.
     private func standardServings(_ household: Household) -> Binding<Int> {
         Binding(
-            get: {
-                if usesManagedStore(for: household.uuid) { return managedHousehold?.standardServings ?? 2 }
-                return household.scalingServings
-            },
-            set: { value in
-                if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
-                    do {
-                        guard let collaboration = appState.managedCollaboration else {
-                            throw MealPlanManagedCollaborationError.managedStoresUnavailable
-                        }
-                        try collaboration.updateStandardServings(value, for: household.uuid)
-                        refreshManagedHousehold()
-                    } catch {
-                        householdHelpMessage = error.localizedDescription
-                    }
-                } else {
-                    household.standardServings = max(1, value)
-                    try? context.save()
-                }
-            }
+            get: { household.scalingServings },
+            set: { household.standardServings = max(1, $0); try? context.save() }
         )
     }
 
@@ -84,15 +60,12 @@ struct HouseholdSettingsView: View {
                     TextField(
                         String(localized: "Family name"),
                         text: Binding(
-                            get: {
-                                if usesManagedStore(for: household.uuid) { return managedHousehold?.name ?? "" }
-                                return household.name
-                            },
-                            set: { setHouseholdName($0, household: household) }
+                            get: { household.name },
+                            set: { household.name = $0; try? context.save() }
                         )
                     )
                     .font(.headline)
-                    .disabled(appState.isGuest || (usesManagedStore(for: household.uuid) && managedHousehold == nil))
+                    .disabled(appState.isGuest)
                 } header: {
                     Text("This family")
                 } footer: {
@@ -105,17 +78,17 @@ struct HouseholdSettingsView: View {
                     Stepper(value: standardServings(household), in: 1...50) {
                         LabeledContent(
                             String(localized: "Standard portions"),
-                            value: String(localized: "\(standardServings(household).wrappedValue) servings")
+                            value: String(localized: "\(household.scalingServings) servings")
                         )
                     }
-                    .disabled(appState.isGuest || (usesManagedStore(for: household.uuid) && managedHousehold == nil))
+                    .disabled(appState.isGuest)
                 } header: {
                     Text("How much you cook")
                 } footer: {
                     Text("Recipes are scaled to this many portions automatically, whatever yield they were written for. You can still change the portions of a single meal when you plan it. This is shared with everyone in the family.")
                 }
 
-                if appState.collaboration.isOwner {
+                if !appState.isGuest, canInvite(household) {
                     Section {
                         Button {
                             showingShareSheet = true
@@ -123,19 +96,7 @@ struct HouseholdSettingsView: View {
                             Label("Share with family", systemImage: "person.crop.circle.badge.plus")
                         }
                     } footer: {
-                        Text("Apple manages invitations and access. Invite household members again after the household is ready for the updated sharing system.")
-                    }
-                }
-
-                if isWaitingForManagedReinvite(household) {
-                    Section {
-                        Button {
-                            showingMemberReinviteSheet = true
-                        } label: {
-                            Label("Your household needs a new invitation", systemImage: "envelope.badge")
-                        }
-                    } footer: {
-                        Text("Ask the person who manages your household to invite you again. Your saved information remains here while you reconnect.")
+                        Text("Everyone you invite sees the same plan and dishes. You can invite people as editors or view-only guests.")
                     }
                 }
 
@@ -170,6 +131,18 @@ struct HouseholdSettingsView: View {
                 } footer: {
                     Text("Choose an exact iCloud household to restore on this device, safely reset this device, or recover an owner household moved to Recently Deleted.")
                 }
+
+                #if os(iOS)
+                Section {
+                    Button {
+                        showingJoinNearby = true
+                    } label: {
+                        Label("Join a Household Nearby", systemImage: "dot.radiowaves.left.and.right")
+                    }
+                } footer: {
+                    Text("Someone who already plans with MealPlan can add you from their device while you’re together, no email address needed.")
+                }
+                #endif
 
                 Section {
                     NavigationLink {
@@ -207,22 +180,7 @@ struct HouseholdSettingsView: View {
 
                 Section {
                     NavigationLink {
-                        if let managedHousehold,
-                           let collaboration = appState.managedCollaboration {
-                            ManagedFoodProfilesView(
-                                members: managedHousehold.members,
-                                householdID: managedHousehold.id,
-                                collaboration: collaboration
-                            )
-                        } else if usesManagedStore(for: household.uuid) {
-                            ManagedHouseholdSharingUnavailableView(
-                                title: String(localized: "Household is preparing"),
-                                description: String(localized: "Your saved household data is safe. Check again once the updated household is ready."),
-                                retry: refreshManagedHousehold
-                            )
-                        } else {
-                            FoodProfilesView(members: members)
-                        }
+                        FoodProfilesView(members: members)
                     } label: {
                         Label("Food profiles", systemImage: "fork.knife.circle")
                     }
@@ -232,13 +190,19 @@ struct HouseholdSettingsView: View {
 
                 Section {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
-                    ForEach(displayedMembers) { member in
-                        memberRow(member)
+                    ForEach(members) { member in
+                        memberRow(member, removable: canRemoveMembers(from: household) && HouseholdCloudSharingService.canRemove(member))
                     }
                 } header: {
                     Text("Who’s planning")
                 } footer: {
-                    Text("These profiles hold household food preferences. Invitation access is managed separately in Apple’s sharing controls.")
+                    if canRemoveMembers(from: household), members.contains(where: HouseholdCloudSharingService.canRemove) {
+                        #if os(macOS)
+                        Text("Control-click someone to remove them from the household.")
+                        #else
+                        Text("Swipe someone’s name to remove them from the household.")
+                        #endif
+                    }
                 }
 
                 #if DEBUG
@@ -262,54 +226,38 @@ struct HouseholdSettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(String(localized: "Household"))
-        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.managedCollaboration != nil)") {
-            refreshManagedHousehold()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .mealPlanManagedStoreDidChange)) { _ in
-            refreshManagedHousehold()
-        }
         .sheet(isPresented: $showingShareSheet) {
             if let household = appState.currentHousehold {
-                if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
-                    if let collaboration = appState.managedCollaboration,
-                       let managedHousehold = try? collaboration.householdSummary(for: household.uuid) {
-                        ManagedHouseholdSharingView(household: managedHousehold, collaboration: collaboration)
-                            .dismissesOnOutsideClick()
-                    } else {
-                        ManagedHouseholdSharingUnavailableView(
-                            title: String(localized: "Apple sharing is preparing"),
-                            description: appState.managedCollaborationError ?? String(localized: "Your household is ready for the updated sharing system. MealPlan is reconnecting its managed store. Your saved household data is safe."),
-                            retry: { Task { await appState.restoreManagedCollaborationIfActive() } }
-                        )
-                        .dismissesOnOutsideClick()
-                    }
-                } else {
-                    ManagedHouseholdSharingUnavailableView(
-                        title: String(localized: "Household migration is still preparing"),
-                        description: sharingPreparationDescription(for: household),
-                        retry: {
-                            Task {
-                                await appState.stageManagedHouseholdIfNeeded(context: context)
-                                await appState.restoreManagedCollaborationIfActive()
-                            }
-                        }
-                    )
-                        .dismissesOnOutsideClick()
-                }
+                HouseholdSharingView(household: household)
+                    .dismissesOnOutsideClick()
             }
         }
-        .sheet(isPresented: $showingMemberReinviteSheet) {
-            if let household = appState.currentHousehold {
-                HouseholdReinviteWaitingView(
-                    canOpenInvitations: appState.managedCollaboration != nil,
-                    openInvitations: { Task { await retryManagedInvitations() } },
-                    getHelp: {
-                        householdHelpMessage = String(localized: "Ask the person who manages your household to send you a new invitation. Your existing information is safe while you reconnect.")
-                    },
-                    onDismiss: { HouseholdReinviteNoticeStore.markDismissed(for: household.uuid) }
-                )
-                .dismissesOnOutsideClick()
+        #if os(iOS)
+        .sheet(isPresented: $showingJoinNearby) {
+            JoinNearbyHouseholdView(code: nil)
+        }
+        #endif
+        .confirmationDialog(
+            String(localized: "Remove \(memberPendingRemoval?.name ?? "")?"),
+            isPresented: Binding(get: { memberPendingRemoval != nil }, set: { if !$0 { memberPendingRemoval = nil } }),
+            titleVisibility: .visible,
+            presenting: memberPendingRemoval
+        ) { member in
+            Button(String(localized: "Remove from Household"), role: .destructive) {
+                Task { await remove(member) }
             }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { member in
+            Text("\(member.name) will lose access to the shared plan and shopping list right away. They keep a copy of the household’s recipes.")
+        }
+        .alert(
+            String(localized: "Couldn’t Remove"),
+            isPresented: Binding(get: { removalErrorMessage != nil }, set: { if !$0 { removalErrorMessage = nil } }),
+            presenting: removalErrorMessage
+        ) { _ in
+            Button(String(localized: "OK")) {}
+        } message: { message in
+            Text(message)
         }
         .confirmationDialog(
             String(localized: "Copy household data into the canonical household?"),
@@ -332,14 +280,6 @@ struct HouseholdSettingsView: View {
         } message: { message in
             Text(message)
         }
-        .alert(
-            String(localized: "Household Help"),
-            isPresented: Binding(get: { householdHelpMessage != nil }, set: { if !$0 { householdHelpMessage = nil } })
-        ) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: {
-            Text(householdHelpMessage ?? "")
-        }
     }
 
     private func reconcileLegacyHouseholds() async {
@@ -352,180 +292,48 @@ struct HouseholdSettingsView: View {
         }
     }
 
-    private func refreshManagedHousehold() {
-        guard let householdID = appState.currentHousehold?.uuid,
-              ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID),
-              let collaboration = appState.managedCollaboration else {
-            managedHousehold = nil
-            return
-        }
-        managedHousehold = try? collaboration.householdSummary(for: householdID)
-    }
-
-    private func usesManagedStore(for householdID: UUID?) -> Bool {
-        guard let householdID else { return false }
-        return ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID)
-    }
-
-    private func usesManagedStore(for householdID: UUID) -> Bool {
-        ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID)
-    }
-
-    private func setHouseholdName(_ name: String, household: Household) {
-        if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
-            do {
-                guard let collaboration = appState.managedCollaboration else {
-                    throw MealPlanManagedCollaborationError.managedStoresUnavailable
-                }
-                try collaboration.updateHouseholdName(name, for: household.uuid)
-                refreshManagedHousehold()
-            } catch {
-                householdHelpMessage = error.localizedDescription
-            }
-        } else {
-            household.name = name
-            try? context.save()
-        }
-    }
-
     private func ingredientCleanupSummary(_ household: Household) -> String {
         let count = IngredientCleanupService.suggestions(in: household).count
         return count == 0 ? String(localized: "All clear") : String(localized: "(count) to review")
     }
 
-    private func memberRow(_ member: ManagedHouseholdMemberSummary) -> some View {
+    private func memberRow(_ member: HouseholdMember, removable: Bool) -> some View {
         LabeledContent(member.name) {
-            Text(MemberRole(rawValue: member.roleRaw)?.localizedName ?? MemberRole.editor.localizedName)
+            if removingMemberID == member.uuid {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Text(member.role.localizedName)
+            }
         }
-    }
-
-    private func sharingPreparationDescription(for household: Household) -> String {
-        switch ManagedHouseholdRolloutAuthority.shared.phase(for: household.uuid) {
-        case .verified, .readyForCutover:
-            String(localized: "Your household copy is verified. MealPlan is finishing the checks needed before Apple’s invitation controls can be enabled. Your existing household remains available and unchanged.")
-        case .managedActive, .membersReinvited:
-            appState.managedCollaborationError ?? String(localized: "MealPlan is reconnecting the managed household store. Your saved household data is safe.")
-        case .legacyRecoveryOnly:
-            String(localized: "MealPlan needs to finish household recovery before invitations can resume. Your saved household data has not been changed.")
-        case .legacyActive, .inventory, .stagedCopy:
-            String(localized: "MealPlan is preparing a safe household copy before invitations can resume. You can keep using your household while this runs.")
-        }
-    }
-
-    private func isWaitingForManagedReinvite(_ household: Household) -> Bool {
-        guard !appState.collaboration.isOwner,
-              !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid),
-              let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) else { return false }
-        return locator.shareRecordName != nil && !locator.isOwner
-    }
-
-    private func retryManagedInvitations() async {
-        guard let collaboration = appState.managedCollaboration else { return }
-        _ = await collaboration.retryPendingInvitations()
-    }
-}
-
-@MainActor
-private struct ManagedFoodProfilesView: View {
-    let members: [ManagedHouseholdMemberSummary]
-    let householdID: UUID
-    let collaboration: MealPlanManagedCollaboration
-
-    var body: some View {
-        List(members.filter(\.isActive)) { member in
-            NavigationLink {
-                ManagedFoodProfileEditor(
-                    member: member,
-                    householdID: householdID,
-                    collaboration: collaboration
-                )
-            } label: {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(member.name)
-                    let count = member.allergies.count + member.mustAvoidIngredients.count + member.dislikes.count + member.favorites.count
-                    Text(count == 0 ? String(localized: "No preferences") : String(localized: "\(count) preferences"))
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+        .swipeActions {
+            if removable {
+                Button(role: .destructive) {
+                    memberPendingRemoval = member
+                } label: {
+                    Label(String(localized: "Remove"), systemImage: "person.fill.xmark")
                 }
             }
         }
-        .navigationTitle("Food profiles")
-    }
-}
-
-@MainActor
-private struct ManagedFoodProfileEditor: View {
-    @Environment(\.dismiss) private var dismiss
-    @State private var member: ManagedHouseholdMemberSummary
-    let householdID: UUID
-    let collaboration: MealPlanManagedCollaboration
-
-    @State private var errorMessage: String?
-
-    init(
-        member: ManagedHouseholdMemberSummary,
-        householdID: UUID,
-        collaboration: MealPlanManagedCollaboration
-    ) {
-        _member = State(initialValue: member)
-        self.householdID = householdID
-        self.collaboration = collaboration
-    }
-
-    var body: some View {
-        Form {
-            Section {
-                TextField("Allergies (comma separated)", text: arrayBinding(\.allergies))
-                TextField("Must avoid (comma separated)", text: arrayBinding(\.mustAvoidIngredients))
-            } header: {
-                Text("Hard exclusions")
-            } footer: {
-                Text("Recipes containing these terms are filtered out for this person.")
-            }
-
-            Section {
-                TextField("Dislikes (comma separated)", text: arrayBinding(\.dislikes))
-                TextField("Favorites (comma separated)", text: arrayBinding(\.favorites))
-                TextField("Preferred cuisines (comma separated)", text: arrayBinding(\.preferredCuisines))
-                TextField("Dietary patterns (comma separated)", text: arrayBinding(\.dietaryPatterns))
-            } header: {
-                Text("Preferences")
+        .contextMenu {
+            if removable {
+                Button(role: .destructive) {
+                    memberPendingRemoval = member
+                } label: {
+                    Label(String(localized: "Remove from Household"), systemImage: "person.fill.xmark")
+                }
             }
         }
-        .formStyle(.grouped)
-        .navigationTitle(member.name)
-        .toolbar {
-            ToolbarItem(placement: .confirmationAction) {
-                Button(String(localized: "Save"), action: save)
-            }
-        }
-        .alert(
-            String(localized: "Couldn’t Save Food Profile"),
-            isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }),
-            presenting: errorMessage
-        ) { _ in
-            Button(String(localized: "OK")) {}
-        } message: { Text($0) }
     }
 
-    private func arrayBinding(_ keyPath: WritableKeyPath<ManagedHouseholdMemberSummary, [String]>) -> Binding<String> {
-        Binding(
-            get: { member[keyPath: keyPath].joined(separator: ", ") },
-            set: { value in
-                member[keyPath: keyPath] = value
-                    .split(separator: ",")
-                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-                    .filter { !$0.isEmpty }
-            }
-        )
-    }
-
-    private func save() {
+    private func remove(_ member: HouseholdMember) async {
+        guard let household = appState.currentHousehold else { return }
+        removingMemberID = member.uuid
+        defer { removingMemberID = nil }
         do {
-            try collaboration.updateFoodProfile(member, in: householdID)
-            dismiss()
+            try await HouseholdCloudSharingService.removeMember(member, from: household, context: context)
         } catch {
-            errorMessage = error.localizedDescription
+            removalErrorMessage = error.localizedDescription
         }
     }
 }

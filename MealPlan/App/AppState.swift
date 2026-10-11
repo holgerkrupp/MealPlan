@@ -6,9 +6,9 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Progress of looking up or importing the household from the legacy store.
-/// The new managed invitation path is coordinated by CloudKitCollaborationKit
-/// and does not replace the on-screen household while its stores load.
+/// Progress of deliberately joining a household — accepting an invitation.
+/// The launch-time iCloud lookup never reports here: it runs silently behind
+/// the device's own data (see `AppState.bootstrapFromCloud`).
 enum CloudBootstrapState: Equatable {
     case connecting
     case downloading(Int)
@@ -54,7 +54,11 @@ final class AppState: HouseholdRecoveryAppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
-    /// Covers the app while the existing legacy store is being reconciled.
+    /// Set when the owner's single-use "add someone nearby" QR code opened
+    /// the app; `RootView` presents `JoinNearbyHouseholdView` for it.
+    var pendingNearbyJoin: NearbyJoinRequest?
+    /// Covers the app while an accepted invitation downloads the household
+    /// the person asked to join.
     var cloudBootstrapState: CloudBootstrapState = .ready
     /// True from launch until it is settled whether this device's household
     /// comes from iCloud. Nothing is shown for it — the device's own data is
@@ -68,20 +72,11 @@ final class AppState: HouseholdRecoveryAppState {
     /// The migration window must preserve both graphs until recovery is chosen;
     /// this state is intentionally diagnostic/review-only.
     private(set) var legacyHouseholdRecovery: LegacyHouseholdRecoveryPlan = .noAction
-    /// Loaded only after the durable rollout authority has crossed its guarded
-    /// managed-writer boundary. Until then the existing local household stays
-    /// the sole live UI source and the staged Core Data copy stays offline.
-    private(set) var managedCollaboration: MealPlanManagedCollaboration?
-    private(set) var managedCollaborationError: String?
-    @ObservationIgnored private var managedHouseholdPersistence: ManagedHouseholdPersistence?
-    @ObservationIgnored private var isLoadingManagedCollaboration = false
-    @ObservationIgnored private var isStagingManagedHousehold = false
-    @ObservationIgnored private var managedMigrationSaveObserver: NSObjectProtocol?
-    @ObservationIgnored private var managedMigrationObservedContextID: ObjectIdentifier?
-    /// Bootstrap can run once for the local store and again after CloudKit
-    /// discovery. Maintenance belongs to the household graph, so coalesce the
-    /// deferred sweep for each household instead of launching it twice.
-    @ObservationIgnored private var maintenanceHouseholdIDs: Set<UUID> = []
+
+    struct NearbyJoinRequest: Identifiable, Equatable {
+        let id = UUID()
+        var code: String?
+    }
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -94,163 +89,6 @@ final class AppState: HouseholdRecoveryAppState {
     private(set) var collapsedDays: Set<String> = AppState.loadCollapsedDays()
 
     private static let collapsedDaysKey = "collapsedDayIDs"
-
-    /// Builds and verifies the new Core Data graph while the existing
-    /// SwiftData household remains the only live writer. This is deliberately
-    /// a staging operation: CloudKit mirroring, share creation, and authority
-    /// cutover each remain behind their own readiness checks.
-    func stageManagedHouseholdIfNeeded(context: ModelContext) async {
-        guard !isStagingManagedHousehold else { return }
-        isStagingManagedHousehold = true
-        defer { isStagingManagedHousehold = false }
-        guard let household = currentHousehold else { return }
-        let authority = ManagedHouseholdRolloutAuthority.shared
-        var phase = authority.phase(for: household.uuid)
-        guard !phase.usesManagedWriter, phase != .legacyRecoveryOnly else { return }
-
-        // A competing populated legacy zone requires the existing recovery
-        // flow first. Guests keep their local graph until they accept a new
-        // managed invitation into the shared store.
-        let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
-        guard legacyHouseholdRecovery == .noAction,
-              collaboration.isOwner,
-              locator?.isOwner != false else { return }
-
-        let source = SwiftDataLegacyHouseholdMigrationSource(context: context)
-        installManagedMigrationSaveObserver(for: context)
-
-        do {
-            try source.refreshSnapshot()
-            let inventory = try source.inventory()
-            let householdIDs = inventory.identifiersByEntity[.household, default: []]
-            guard householdIDs.count == 1, householdIDs.first == household.uuid else {
-                // Multiple or mismatched private roots are retained for the
-                // explicit same-account recovery flow; do not pick one here.
-                return
-            }
-
-            let stateStore = try FileManagedHouseholdMigrationStateStore(
-                url: Self.managedMigrationStateURL(for: household.uuid)
-            )
-            let sourceFingerprint = try ManagedHouseholdMigration.sourceSnapshotFingerprint(source: source)
-
-            if phase == .verified || phase == .readyForCutover {
-                let rollout = try authority.record(for: household.uuid)
-                let stagedState = try stateStore.load()
-                if rollout.sourceSnapshotFingerprint == sourceFingerprint,
-                   stagedState?.sourceSnapshotFingerprint == sourceFingerprint {
-                    return
-                }
-                try authority.noteLegacyMutation(for: household.uuid)
-                phase = authority.phase(for: household.uuid)
-            }
-
-            guard phase == .legacyActive || phase == .inventory || phase == .stagedCopy else { return }
-            try authority.beginStaging(for: household.uuid)
-            let diagnosticLocator = locator ?? .solo(householdID: household.uuid)
-            HouseholdSyncDiagnostics.record(event: "managedMigrationStarted", locator: diagnosticLocator)
-
-            let persistence = try ManagedHouseholdPersistence(
-                cloudKitEnabled: false,
-                environment: BuildEnvironment.cloudKit
-            )
-            let migration = ManagedHouseholdMigration(
-                source: source,
-                destination: persistence,
-                stateStore: stateStore
-            )
-            try await migration.run()
-
-            // Recheck the root set after the potentially long copy. A second
-            // root or any source change during staging leaves the app in
-            // legacy mode; the next automatic pass can safely resume it.
-            try source.refreshSnapshot()
-            let completedFingerprint = try ManagedHouseholdMigration.sourceSnapshotFingerprint(source: source)
-            let completedInventory = try source.inventory()
-            let completedHouseholds = completedInventory.identifiersByEntity[.household, default: []]
-            guard completedHouseholds.count == 1, completedHouseholds.first == household.uuid,
-                  let completedState = try stateStore.load(),
-                  completedState.phase == .legacyRetainedForRollback,
-                  completedState.sourceSnapshotFingerprint == completedFingerprint else { return }
-
-            try authority.markStagedCopy(for: household.uuid)
-            try authority.markVerified(for: household.uuid, sourceFingerprint: completedFingerprint)
-            HouseholdSyncDiagnostics.record(
-                event: "managedMigrationVerified",
-                locator: diagnosticLocator,
-                pendingCount: completedInventory.identifiersByEntity.values.reduce(0) { $0 + $1.count }
-            )
-        } catch {
-            managedCollaborationError = error.localizedDescription
-            let diagnosticLocator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
-                ?? .solo(householdID: household.uuid)
-            HouseholdSyncDiagnostics.record(event: "managedMigrationFailed", locator: diagnosticLocator)
-        }
-    }
-
-    private func installManagedMigrationSaveObserver(for context: ModelContext) {
-        let contextID = ObjectIdentifier(context)
-        guard managedMigrationObservedContextID != contextID else { return }
-        if let managedMigrationSaveObserver {
-            NotificationCenter.default.removeObserver(managedMigrationSaveObserver)
-        }
-        managedMigrationObservedContextID = contextID
-        managedMigrationSaveObserver = NotificationCenter.default.addObserver(
-            forName: ModelContext.didSave,
-            object: context,
-            queue: .main
-        ) { [weak self] _ in
-            Task { @MainActor [weak self] in
-                guard let self, let householdID = self.currentHousehold?.uuid else { return }
-                let authority = ManagedHouseholdRolloutAuthority.shared
-                let phase = authority.phase(for: householdID)
-                if phase == .verified || phase == .readyForCutover {
-                    try? authority.noteLegacyMutation(for: householdID)
-                }
-            }
-        }
-    }
-
-    private static func managedMigrationStateURL(for householdID: UUID) -> URL {
-        let root = FileManager.default.containerURL(
-            forSecurityApplicationGroupIdentifier: SharedStore.appGroupID
-        ) ?? URL.applicationSupportDirectory
-        return root
-            .appending(path: "ManagedHouseholdMigration", directoryHint: .isDirectory)
-            .appending(path: BuildEnvironment.cloudKit.rawValue.lowercased(), directoryHint: .isDirectory)
-            .appending(path: householdID.uuidString, directoryHint: .isDirectory)
-            .appending(path: "state-v\(ManagedHouseholdMigrationState.currentVersion).json")
-    }
-
-    func restoreManagedCollaborationIfActive() async {
-        guard let household = currentHousehold,
-              ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid),
-              managedCollaboration == nil,
-              !isLoadingManagedCollaboration else { return }
-        isLoadingManagedCollaboration = true
-        defer { isLoadingManagedCollaboration = false }
-        do {
-            let persistence = try ManagedHouseholdPersistence(
-                cloudKitEnabled: true,
-                environment: BuildEnvironment.cloudKit
-            )
-            try await persistence.load()
-            let adapter = try MealPlanManagedCollaboration(persistence: persistence)
-            _ = await adapter.storesDidLoad()
-            managedHouseholdPersistence = persistence
-            managedCollaboration = adapter
-            managedCollaborationError = nil
-            try? adapter.applyManagedMealRoutines(
-                for: household.uuid,
-                through: PurchaseManager.shared.latestPlanningDate(),
-                memberName: currentMemberName
-            )
-        } catch {
-            // Keep the old store and share data intact. A later foreground
-            // activation can retry a temporary account or CloudKit failure.
-            managedCollaborationError = error.localizedDescription
-        }
-    }
 
     func isDayCollapsed(_ day: Date) -> Bool {
         collapsedDays.contains(day.dayID)
@@ -343,44 +181,36 @@ final class AppState: HouseholdRecoveryAppState {
             isNewHousehold = true
         }
         if let household = currentHousehold {
-            let managedWriterIsActive = ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid)
             let migrationSucceeded = HouseholdCollaborationMigration.migrateIfNeeded()
             collaboration.restore(for: household)
             if !migrationSucceeded { collaboration.failClosedForUnknownMigrationFormat() }
             // Only a household this device just created: a family that has been
             // planning for a while must not have ingredients disappear off its
             // shopping list because of an update.
-            if isNewHousehold && !managedWriterIsActive {
+            if isNewHousehold {
                 PantryStaples.seedDefaults(for: household, context: context)
             }
-            if !managedWriterIsActive {
-                MealType.ensure(for: household, context: context)
-                CookedLogMaintenance.run(for: household, context: context)
-                MealRoutineScheduler.apply(
-                    for: household,
-                    context: context,
-                    through: latestPlanningDate,
-                    memberName: currentMemberName
-                )
-            }
+            MealType.ensure(for: household, context: context)
+            CookedLogMaintenance.run(for: household, context: context)
+            MealRoutineScheduler.apply(
+                for: household,
+                context: context,
+                through: latestPlanningDate,
+                memberName: currentMemberName
+            )
             // Collections and dietary flags used to duplicate the tag system.
             // This is lossless, backed up first, and guarded per household.
-            if !managedWriterIsActive {
-                try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
-            }
+            try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
         cloudBootstrapState = .ready
         // Let the first screen render before scanning dishes for derived glyphs
-        // or abandoned drafts. Cloud bootstrap can call this method twice for
-        // the same household; only schedule one sweep for that model graph.
-        if let household = currentHousehold,
-           !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid),
-           maintenanceHouseholdIDs.insert(household.uuid).inserted {
-            Task { @MainActor in
-                await Task.yield()
-                DishGlyphMaintenance.run(context: context)
-                BlankDishMaintenance.run(context: context)
-            }
+        // or abandoned drafts. The sweep remains idempotent and the blank-draft
+        // grace period protects content that is still arriving from sync.
+        Task { @MainActor [weak self] in
+            await Task.yield()
+            guard self != nil else { return }
+            DishGlyphMaintenance.run(context: context)
+            BlankDishMaintenance.run(context: context)
         }
     }
 
@@ -570,6 +400,14 @@ final class AppState: HouseholdRecoveryAppState {
         case .dish(let id):
             requestedDishID = id
             requestedSection = .dishes
+        case .joinNearby(let code):
+            // Adding someone nearby is iPhone and iPad only: the Mac app
+            // ships without the local-network entitlement it would need.
+            #if os(iOS)
+            pendingNearbyJoin = NearbyJoinRequest(code: code)
+            #else
+            _ = code
+            #endif
         }
     }
 
@@ -593,7 +431,7 @@ final class AppState: HouseholdRecoveryAppState {
             Task {
                 do {
                     let metadata = try await HouseholdCloudSharingService.fetchMetadata(for: url)
-                    CloudShareMetadataInbox.shared.enqueue(metadata)
+                    HouseholdShareInvitationInbox.shared.enqueue(metadata)
                 } catch {
                     importNotice = String(localized: "Couldn’t open that invitation: \(error.localizedDescription)")
                 }

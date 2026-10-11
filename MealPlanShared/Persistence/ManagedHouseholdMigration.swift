@@ -1,5 +1,4 @@
 import CoreData
-import CryptoKit
 import Foundation
 import SwiftData
 
@@ -35,7 +34,7 @@ extension RecipeBookmark: LegacyMigrationModel {}
 /// type explicit makes the migration testable without launching SwiftUI or a
 /// CloudKit transport, and prevents an accidental semantic rematch of recipes
 /// or ingredients during the copy.
-enum ManagedHouseholdMigrationValue: Codable, Equatable, Sendable {
+enum ManagedHouseholdMigrationValue: Equatable, Sendable {
     case null
     case string(String)
     case bool(Bool)
@@ -77,7 +76,7 @@ enum ManagedHouseholdMigrationValue: Codable, Equatable, Sendable {
 /// One legacy row and its to-one relationship endpoints. To-many relationships
 /// are reconstructed from these endpoints, preserving the original graph
 /// rather than assuming that names, recipes, or ingredients are equivalent.
-struct ManagedHouseholdMigrationRecord: Codable, Equatable, Sendable {
+struct ManagedHouseholdMigrationRecord: Equatable, Sendable {
     let entity: ManagedHouseholdEntity
     let uuid: UUID
     let modifiedAt: Date
@@ -110,7 +109,6 @@ struct ManagedHouseholdMigrationInventory: Equatable, Sendable {
 protocol LegacyHouseholdMigrationSource {
     func inventory() throws -> ManagedHouseholdMigrationInventory
     func records(for entity: ManagedHouseholdEntity) throws -> [ManagedHouseholdMigrationRecord]
-    func refreshSnapshot() throws
     /// Identifiers produced by the existing SwiftData ingredient auditor.
     /// They let the importer reject any new mechanical integrity finding
     /// without attempting to repair, normalize, or reinterpret user data.
@@ -119,7 +117,6 @@ protocol LegacyHouseholdMigrationSource {
 
 extension LegacyHouseholdMigrationSource {
     func integrityIssueIDs() throws -> Set<String> { [] }
-    func refreshSnapshot() throws {}
 }
 
 enum ManagedHouseholdMigrationPhase: String, Codable, Sendable {
@@ -135,7 +132,7 @@ enum ManagedHouseholdMigrationPhase: String, Codable, Sendable {
 /// Stored outside both persistent object graphs. An interruption can therefore
 /// be resumed without treating either database as proof that a copy completed.
 struct ManagedHouseholdMigrationState: Codable, Equatable, Sendable {
-    static let currentVersion = 2
+    static let currentVersion = 1
 
     var version: Int
     var phase: ManagedHouseholdMigrationPhase
@@ -143,25 +140,6 @@ struct ManagedHouseholdMigrationState: Codable, Equatable, Sendable {
     var entityCheckpoints: [String: String]
     var updatedAt: Date
     var failureCode: String?
-    var sourceSnapshotFingerprint: String? = nil
-
-    init(
-        version: Int,
-        phase: ManagedHouseholdMigrationPhase,
-        sourceCounts: [String: Int],
-        entityCheckpoints: [String: String],
-        updatedAt: Date,
-        failureCode: String?,
-        sourceSnapshotFingerprint: String? = nil
-    ) {
-        self.version = version
-        self.phase = phase
-        self.sourceCounts = sourceCounts
-        self.entityCheckpoints = entityCheckpoints
-        self.updatedAt = updatedAt
-        self.failureCode = failureCode
-        self.sourceSnapshotFingerprint = sourceSnapshotFingerprint
-    }
 
     static func new() -> Self {
         .init(
@@ -170,35 +148,8 @@ struct ManagedHouseholdMigrationState: Codable, Equatable, Sendable {
             sourceCounts: [:],
             entityCheckpoints: [:],
             updatedAt: .now,
-            failureCode: nil,
-            sourceSnapshotFingerprint: nil
+            failureCode: nil
         )
-    }
-
-    private enum CodingKeys: String, CodingKey {
-        case version, phase, sourceCounts, entityCheckpoints, updatedAt, failureCode, sourceSnapshotFingerprint
-    }
-
-    init(from decoder: Decoder) throws {
-        let values = try decoder.container(keyedBy: CodingKeys.self)
-        version = try values.decode(Int.self, forKey: .version)
-        phase = try values.decode(ManagedHouseholdMigrationPhase.self, forKey: .phase)
-        sourceCounts = try values.decode([String: Int].self, forKey: .sourceCounts)
-        entityCheckpoints = try values.decode([String: String].self, forKey: .entityCheckpoints)
-        updatedAt = try values.decode(Date.self, forKey: .updatedAt)
-        failureCode = try values.decodeIfPresent(String.self, forKey: .failureCode)
-        sourceSnapshotFingerprint = try values.decodeIfPresent(String.self, forKey: .sourceSnapshotFingerprint)
-    }
-
-    func encode(to encoder: Encoder) throws {
-        var values = encoder.container(keyedBy: CodingKeys.self)
-        try values.encode(version, forKey: .version)
-        try values.encode(phase, forKey: .phase)
-        try values.encode(sourceCounts, forKey: .sourceCounts)
-        try values.encode(entityCheckpoints, forKey: .entityCheckpoints)
-        try values.encode(updatedAt, forKey: .updatedAt)
-        try values.encodeIfPresent(failureCode, forKey: .failureCode)
-        try values.encodeIfPresent(sourceSnapshotFingerprint, forKey: .sourceSnapshotFingerprint)
     }
 }
 
@@ -230,16 +181,8 @@ final class FileManagedHouseholdMigrationStateStore: ManagedHouseholdMigrationSt
     }
 
     func load() throws -> ManagedHouseholdMigrationState? {
-        if FileManager.default.fileExists(atPath: url.path) {
-            return try JSONDecoder().decode(ManagedHouseholdMigrationState.self, from: Data(contentsOf: url))
-        }
-        // Read the previous marker format when upgrading an installation that
-        // already began staging. The next successful save writes the current
-        // versioned path without removing the older recovery marker.
-        let previousURL = url.deletingLastPathComponent()
-            .appending(path: "state-v\(ManagedHouseholdMigrationState.currentVersion - 1).json")
-        guard FileManager.default.fileExists(atPath: previousURL.path) else { return nil }
-        return try JSONDecoder().decode(ManagedHouseholdMigrationState.self, from: Data(contentsOf: previousURL))
+        guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+        return try JSONDecoder().decode(ManagedHouseholdMigrationState.self, from: Data(contentsOf: url))
     }
 
     func save(_ state: ManagedHouseholdMigrationState) throws {
@@ -251,7 +194,6 @@ final class FileManagedHouseholdMigrationStateStore: ManagedHouseholdMigrationSt
 enum ManagedHouseholdMigrationError: LocalizedError, Equatable {
     case unsupportedStateVersion(Int)
     case previousFailure(String?)
-    case cloudMirroringEnabledDuringStaging
     case inventoryChanged(expected: [String: Int], actual: [String: Int])
     case duplicateSourceObject(ManagedHouseholdEntity, UUID)
     case duplicateTargetObject(ManagedHouseholdEntity, UUID)
@@ -262,7 +204,6 @@ enum ManagedHouseholdMigrationError: LocalizedError, Equatable {
         switch self {
         case .unsupportedStateVersion(let version): "A newer managed-household migration format (\(version)) is present."
         case .previousFailure(let code): "The managed-household migration previously failed\(code.map { ": \($0)" } ?? ".")."
-        case .cloudMirroringEnabledDuringStaging: "Managed CloudKit mirroring must remain off until the staged household graph has been verified."
         case .inventoryChanged: "The legacy household inventory changed while it was being copied."
         case .duplicateSourceObject(let entity, let uuid): "The legacy store contains duplicate \(entity.rawValue) records for \(uuid)."
         case .duplicateTargetObject(let entity, let uuid): "The destination contains duplicate \(entity.rawValue) records for \(uuid)."
@@ -296,52 +237,15 @@ final class ManagedHouseholdMigration {
     }
 
     func run() async throws {
-        guard !destination.cloudKitEnabled else {
-            throw ManagedHouseholdMigrationError.cloudMirroringEnabledDuringStaging
-        }
         var state = try stateStore.load() ?? .new()
         guard state.version <= ManagedHouseholdMigrationState.currentVersion else {
             throw ManagedHouseholdMigrationError.unsupportedStateVersion(state.version)
         }
+        if state.phase == .legacyRetainedForRollback { return }
+        if state.phase == .failed { throw ManagedHouseholdMigrationError.previousFailure(state.failureCode) }
+
         do {
-            try source.refreshSnapshot()
-            if state.version < ManagedHouseholdMigrationState.currentVersion {
-                state.version = ManagedHouseholdMigrationState.currentVersion
-                state.sourceSnapshotFingerprint = nil
-                try stateStore.save(state)
-            }
             let inventory = try source.inventory()
-
-            // A completed offline stage is rechecked on launch. If the live
-            // legacy graph changed after verification, reuse the retained
-            // destination as a staging copy and reconcile it from a fresh
-            // source snapshot. It is never opened with CloudKit enabled here.
-            if state.phase == .legacyRetainedForRollback {
-                let fingerprint = try Self.sourceSnapshotFingerprint(source: source)
-                if state.sourceCounts == inventory.counts,
-                   state.sourceSnapshotFingerprint == fingerprint {
-                    return
-                }
-                state = .new()
-                try stateStore.save(state)
-            }
-
-            if state.phase == .failed {
-                if !state.sourceCounts.isEmpty, state.sourceCounts != inventory.counts {
-                    // The legacy store is still authoritative before cutover.
-                    // A changed inventory becomes the new staging baseline;
-                    // the earlier store remains intact as recovery input.
-                    state = .new()
-                    try stateStore.save(state)
-                } else {
-                    // Copy operations are idempotent by stable UUID. A failed
-                    // entity can therefore resume from its last durable batch.
-                    state.phase = state.entityCheckpoints.isEmpty ? .inventoryCreated : .copying
-                    state.failureCode = nil
-                    try stateStore.save(state)
-                }
-            }
-
             let existingIntegrityIssues = try source.integrityIssueIDs()
             if state.sourceCounts.isEmpty {
                 state.sourceCounts = inventory.counts
@@ -353,7 +257,6 @@ final class ManagedHouseholdMigration {
             }
 
             try await destination.load()
-            try reconcileStagedRows(with: inventory)
             state.phase = .copying
             state.updatedAt = .now
             try stateStore.save(state)
@@ -378,9 +281,7 @@ final class ManagedHouseholdMigration {
                         state.updatedAt = .now
                         try stateStore.save(state)
                     }
-                    await Task.yield()
                 }
-                await Task.yield()
             }
 
             try linkRelationships()
@@ -388,10 +289,6 @@ final class ManagedHouseholdMigration {
             state.updatedAt = .now
             try stateStore.save(state)
 
-            // The original snapshot is staged offline. Read a fresh source
-            // snapshot before comparing it so saves made during the copy
-            // invalidate readiness instead of being silently skipped.
-            try source.refreshSnapshot()
             try verify(inventory: inventory)
             let introducedIssues = try destinationIntegrityIssueIDs().subtracting(existingIntegrityIssues)
             guard introducedIssues.isEmpty else {
@@ -399,9 +296,6 @@ final class ManagedHouseholdMigration {
                     "migration introduced ingredient integrity findings: \(introducedIssues.sorted().joined(separator: ","))"
                 )
             }
-            let fingerprint = try Self.sourceSnapshotFingerprint(source: source)
-            try markVerifiedHouseholdRoots()
-            state.sourceSnapshotFingerprint = fingerprint
             state.phase = .verified
             state.updatedAt = .now
             try stateStore.save(state)
@@ -414,57 +308,11 @@ final class ManagedHouseholdMigration {
             try stateStore.save(state)
         } catch {
             state.phase = .failed
-            state.failureCode = Self.safeFailureCode(for: error)
+            state.failureCode = String(describing: error)
             state.updatedAt = .now
             try stateStore.save(state)
             throw error
         }
-    }
-
-    static func sourceSnapshotFingerprint(source: any LegacyHouseholdMigrationSource) throws -> String {
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.sortedKeys]
-        var hasher = SHA256()
-        for entity in ManagedHouseholdEntity.allCases {
-            let ordered = try source.records(for: entity).sorted { $0.uuid.uuidString < $1.uuid.uuidString }
-            for record in ordered {
-                hasher.update(data: Data(try encoder.encode(record)))
-            }
-        }
-        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
-    private static func safeFailureCode(for error: Error) -> String {
-        guard let migrationError = error as? ManagedHouseholdMigrationError else { return "unexpected" }
-        return switch migrationError {
-        case .unsupportedStateVersion: "unsupported-state-version"
-        case .previousFailure: "previous-failure"
-        case .cloudMirroringEnabledDuringStaging: "cloud-mirroring-enabled"
-        case .inventoryChanged: "inventory-changed"
-        case .duplicateSourceObject: "duplicate-source-object"
-        case .duplicateTargetObject: "duplicate-target-object"
-        case .missingRelationshipTarget: "missing-relationship-target"
-        case .verificationFailed: "verification-failed"
-        }
-    }
-
-    /// The Core Data directory is a disposable, offline staging copy until
-    /// the one-way writer boundary. Remove rows no longer present in SwiftData
-    /// only from the private staging store; the shared store and source remain
-    /// untouched.
-    private func reconcileStagedRows(with inventory: ManagedHouseholdMigrationInventory) throws {
-        let context = destination.container.viewContext
-        for entity in ManagedHouseholdEntity.allCases {
-            let expected = Set(inventory.identifiersByEntity[entity, default: []])
-            for object in try allObjects(entity, context: context)
-            where destination.storeScope(for: object) == .private {
-                guard let uuid = object.value(forKey: "uuid") as? UUID else {
-                    throw ManagedHouseholdMigrationError.verificationFailed("a staged row has no stable identity")
-                }
-                if !expected.contains(uuid) { context.delete(object) }
-            }
-        }
-        if context.hasChanges { try context.save() }
     }
 
     private func copy(_ records: [ManagedHouseholdMigrationRecord]) throws {
@@ -539,29 +387,6 @@ final class ManagedHouseholdMigration {
                 }
             }
         }
-    }
-
-    /// Writes a small provenance marker only after every row, relationship,
-    /// asset and integrity check has passed. It is copied into the future
-    /// managed CloudKit graph and gives share preparation a durable proof that
-    /// this root came from a completed local staging pass.
-    private func markVerifiedHouseholdRoots() throws {
-        let context = destination.container.viewContext
-        let objects = try ManagedHouseholdEntity.allCases.flatMap { try allObjects($0, context: context) }
-        var counts: [UUID: Int] = [:]
-        for object in objects {
-            guard let householdID = householdID(of: object) else { continue }
-            counts[householdID, default: 0] += 1
-        }
-        for household in try allObjects(.household, context: context) {
-            guard let householdID = household.value(forKey: "uuid") as? UUID,
-                  let objectCount = counts[householdID], objectCount > 0 else {
-                throw ManagedHouseholdMigrationError.verificationFailed("a household root has no verified graph")
-            }
-            household.setValue("verified", forKey: "managedMigrationPhaseRaw")
-            household.setValue(Int64(objectCount), forKey: "managedGraphObjectCount")
-        }
-        if context.hasChanges { try context.save() }
     }
 
     private func targetObject(
@@ -660,14 +485,9 @@ final class ManagedHouseholdMigration {
         if let household = object.value(forKey: "household") as? NSManagedObject {
             return household.value(forKey: "uuid") as? UUID
         }
-        for relationshipName in ["dish", "ingredient", "template", "feed", "entry"] {
-            guard let related = object.value(forKey: relationshipName) as? NSManagedObject else { continue }
-            if related.entity.name == ManagedHouseholdEntity.household.rawValue {
-                return related.value(forKey: "uuid") as? UUID
-            }
-            if let household = related.value(forKey: "household") as? NSManagedObject {
-                return household.value(forKey: "uuid") as? UUID
-            }
+        if let dish = object.value(forKey: "dish") as? NSManagedObject,
+           let household = dish.value(forKey: "household") as? NSManagedObject {
+            return household.value(forKey: "uuid") as? UUID
         }
         return nil
     }
@@ -686,14 +506,9 @@ private extension Array {
 @MainActor
 final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSource {
     private let context: ModelContext
-    private var recordCache: [ManagedHouseholdEntity: [ManagedHouseholdMigrationRecord]]?
 
     init(context: ModelContext) {
         self.context = context
-    }
-
-    func refreshSnapshot() throws {
-        recordCache = nil
     }
 
     func inventory() throws -> ManagedHouseholdMigrationInventory {
@@ -711,21 +526,6 @@ final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSou
     }
 
     func records(for entity: ManagedHouseholdEntity) throws -> [ManagedHouseholdMigrationRecord] {
-        if recordCache == nil {
-            var snapshot: [ManagedHouseholdEntity: [ManagedHouseholdMigrationRecord]] = [:]
-            for candidate in ManagedHouseholdEntity.allCases {
-                // Legacy guest households remain solely in the preserved
-                // SwiftData/shared-zone recovery path. The owner migration
-                // stages only private records; invited members later receive
-                // the new graph through NSPersistentCloudKitContainer.
-                snapshot[candidate] = try buildRecords(for: candidate).filter { $0.scope == .private }
-            }
-            recordCache = snapshot
-        }
-        return recordCache?[entity] ?? []
-    }
-
-    private func buildRecords(for entity: ManagedHouseholdEntity) throws -> [ManagedHouseholdMigrationRecord] {
         switch entity {
         case .household:
             return try context.fetch(FetchDescriptor<Household>()).map { household in

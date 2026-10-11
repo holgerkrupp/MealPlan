@@ -1,13 +1,11 @@
 import SwiftUI
 import SwiftData
-import OSLog
 
 /// Horizontal strip of dishes that fit the current season — either tagged
 /// with the season or containing a seasonal ingredient.
 @MainActor
 struct SeasonalSuggestionsStrip: View {
     @Environment(AppState.self) private var appState
-    @Environment(\.modelContext) private var context
     let dishes: [Dish]
 
     @State private var planning: Dish?
@@ -80,49 +78,24 @@ struct SeasonalSuggestionsStrip: View {
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
 
-        let dishIDs = dishes.map(\.uuid)
-        let selectedIDs = await SeasonalSuggestionActor(
-            modelContainer: context.container
-        ).suggestionIDs(for: dishIDs, season: season)
-        guard !Task.isCancelled else { return }
-        let dishesByID = Dictionary(dishes.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
-        suggestions = selectedIDs.compactMap { dishesByID[$0] }
-    }
-}
-
-/// Reads ingredient relationships on a private SwiftData executor. The strip
-/// stays value-driven on the main actor while its secondary suggestions are
-/// derived, so an idle or scrolling library never faults recipe ingredients
-/// from the UI executor.
-@ModelActor
-private actor SeasonalSuggestionActor {
-    func suggestionIDs(for requestedIDs: [UUID], season: Season) async -> [UUID] {
-        let signposter = DishLibraryPerformanceSignposts.signposter
-        let interval = signposter.beginInterval("Seasonal suggestion scan", id: signposter.makeSignpostID())
-        defer { signposter.endInterval("Seasonal suggestion scan", interval) }
-        guard !Task.isCancelled, !requestedIDs.isEmpty else { return [] }
-        let ids = Set(requestedIDs)
-        let dishes = (try? modelContext.fetch(FetchDescriptor<Dish>(
-            predicate: #Predicate { ids.contains($0.uuid) }
-        ))) ?? []
-        guard !Task.isCancelled else { return [] }
-
+        let currentSeason = season
         var selected = dishes
-            .filter { $0.season == season }
+            .filter { $0.season == currentSeason }
             .sorted(by: suggestionOrder)
         if selected.count >= 10 {
-            return Array(selected.prefix(10).map(\.uuid))
+            suggestions = Array(selected.prefix(10))
+            return
         }
 
         let candidates = dishes
-            .filter { $0.season != season }
+            .filter { $0.season != currentSeason }
             .sorted(by: suggestionOrder)
             .prefix(120)
 
         for (offset, dish) in candidates.enumerated() {
             if dish.sortedIngredients.contains(where: { line in
                 guard let name = line.ingredient?.name else { return false }
-                return SeasonalProduce.seasons(forIngredientNamed: name).contains(season)
+                return SeasonalProduce.seasons(forIngredientNamed: name).contains(currentSeason)
             }) {
                 selected.append(dish)
                 if selected.count == 10 { break }
@@ -130,11 +103,11 @@ private actor SeasonalSuggestionActor {
 
             if offset.isMultiple(of: 8) {
                 await Task.yield()
-                guard !Task.isCancelled else { return [] }
+                guard !Task.isCancelled else { return }
             }
         }
 
-        return Array(selected.sorted(by: suggestionOrder).prefix(10).map(\.uuid))
+        suggestions = Array(selected.sorted(by: suggestionOrder).prefix(10))
     }
 
     private func suggestionOrder(_ lhs: Dish, _ rhs: Dish) -> Bool {

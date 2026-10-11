@@ -125,34 +125,10 @@ enum HouseholdCollaborationStore {
     static func canMutate(_ household: Household?) -> Bool {
         guard HouseholdCollaborationMigration.supportsCurrentOrOlderFormat() else { return false }
         guard let household else { return true }
-        guard !ManagedHouseholdRolloutAuthority.usesManagedWriterInSharedContainer(for: household.uuid) else {
-            return false
-        }
         let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         if locator.shareRecordName == nil { return true }
         if locator.isReadOnly { return false }
         return load(for: household.uuid)?.role.canEdit ?? true
-    }
-}
-
-/// Device-local acknowledgement for the existing-member re-invite sheet.
-/// Household profile and invitation identities remain separate; only the
-/// dismissed state is shared with extension processes through the App Group.
-enum HouseholdReinviteNoticeStore {
-    private static var defaults: UserDefaults {
-        UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
-    }
-
-    private static func key(for householdID: UUID) -> String {
-        "HouseholdReinviteNotice.dismissed.\(householdID.uuidString)"
-    }
-
-    static func wasDismissed(for householdID: UUID) -> Bool {
-        defaults.bool(forKey: key(for: householdID))
-    }
-
-    static func markDismissed(for householdID: UUID) {
-        defaults.set(true, forKey: key(for: householdID))
     }
 }
 

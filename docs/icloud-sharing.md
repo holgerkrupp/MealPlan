@@ -12,40 +12,10 @@ and are very different underneath:
   records through CloudKit's *shared* database, at the permission the owner
   granted.
 
-Both scopes use the legacy transport described below while MealPlan transitions
-to managed sharing. This document describes the current code;
-[`sharing-architecture.md`](sharing-architecture.md) records the design
-decisions that led there.
-
-## Managed collaboration transition
-
-MealPlan is adopting the sibling `CloudKitCollaborationKit` package for new
-managed sharing. The released SwiftData/`CKSyncEngine` path remains the active
-writer while each owner household is copied and verified into an offline Core
-Data staging store. A missing or invalid rollout marker always leaves the old
-household intact and keeps the managed stores out of CloudKit.
-
-The migration runs only for a single, confirmed owner root. Participant
-households and accounts with competing populated legacy zones stay on their
-existing recovery path. The staged copy retains the original UUIDs, scalar
-values, image bytes, and relationships; a content digest and per-entity
-identity inventory are checked before the root is marked verified. A later
-legacy edit invalidates that verification. Neither staging nor verification
-creates a share or uploads the staged records.
-
-Managed CloudKit mirroring starts only after the durable per-household
-readiness gate is complete. The activation path drains the legacy sync engine
-and rechecks the gate before changing writer authority. Share preparation also
-checks the entire private-store graph and the verified object count. Existing
-legacy invitations continue to use the existing acceptance path until the
-managed household path is ready; managed owner re-invitation and member
-reconnection copy is behind that same gate.
-
-The main app screens, widgets, and Share Extension still use SwiftData. Their
-cutover is a required readiness item, so the app does not enable the managed
-writer or show the new sharing flow yet. This staged state is intentional:
-users retain their current workflow while the new store is prepared, and no
-household is left with two canonical CloudKit writers.
+Both run on the same transport, the same record format, and the same conflict
+rules. Only the database scope and a few permission checks differ. This
+document describes what the code does; [`sharing-architecture.md`](sharing-architecture.md)
+records the design decisions that led there.
 
 ## The pieces
 
@@ -59,10 +29,6 @@ household is left with two canonical CloudKit writers.
 | `MealPlanShared/Support/HouseholdCloudBootstrapService.swift` | Finds and downloads a household this Apple Account already owns. |
 | `MealPlanShared/Support/HouseholdCloudSharingService.swift` | Creates, replaces, and accepts invitations; keeps the member roster. |
 | `MealPlanShared/Support/HouseholdCollaborationSession.swift` | Persists the last known access projection, migration marker, and App Group write generation. |
-| `MealPlanShared/Persistence/ManagedHouseholdMigration.swift` | Copies the legacy graph into an offline Core Data staging store and verifies identities, values, assets, relationships, and integrity. |
-| `MealPlanShared/Persistence/ManagedHouseholdRolloutAuthority.swift` | Stores per-household migration phases and the one-way writer readiness gate in the App Group. |
-| `MealPlan/Persistence/MealPlanManagedCollaboration.swift` | Maps MealPlan roots to exact private/shared stores and supplies graph preflight to `CloudKitCollaborationKit`. |
-| `MealPlan/Features/Household/ManagedHouseholdSharingView.swift` | New native share and re-invitation experience, shown only after managed-writer activation. |
 | `MealPlan/Features/Household/CloudSharingView.swift` | The invitation sheet: access, add someone nearby, invite by Apple Account, the people on the share, link, re-issue. |
 | `MealPlan/Features/Household/NearbyInvite.swift` | The in-person hand-off over MultipeerConnectivity, iOS only: single-use code, owner (`NearbyInviteHost`) and invitee (`NearbyInviteGuest`) sides. The code and message helpers stay cross-platform so the tests cover them. |
 | `MealPlan/Features/Household/JoinNearbyHouseholdView.swift` | The invitee's "Join a Household Nearby" screen (iOS only). |

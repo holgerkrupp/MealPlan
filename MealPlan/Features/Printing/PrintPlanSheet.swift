@@ -16,9 +16,6 @@ struct PrintPlanSheet: View {
     /// What to print when the sheet opens, overriding what was printed last
     /// time. Set by the Shopping screen, whose Print… means the list.
     var initialContent: PrintContent?
-    /// A managed household's list is supplied as values because it does not
-    /// live in the legacy SwiftData container.
-    var managedShoppingItems: [ManagedShoppingListItemSummary]? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
@@ -173,7 +170,6 @@ struct PrintPlanSheet: View {
                     Text(content.localizedName).tag(content)
                 }
             }
-            .disabled(managedShoppingItems != nil)
         } footer: {
             if settings.content.includesShoppingList {
                 Text(String(
@@ -272,31 +268,6 @@ struct PrintPlanSheet: View {
     // MARK: - Actions
 
     private func rebuild() {
-        if let managedShoppingItems {
-            let items = managedShoppingItems.map { value -> ShoppingListItem in
-                let item = ShoppingListItem(name: value.name, category: value.category)
-                item.uuid = value.id
-                item.displayText = value.displayText
-                item.isChecked = value.isChecked
-                item.isManual = value.isManual
-                item.customAisleName = value.customAisleName
-                item.sortIndex = value.sortIndex
-                item.rangeStart = value.rangeStart
-                item.rangeEnd = value.rangeEnd
-                return item
-            }
-            document = MealPlanPrintBuilder.document(
-                range: range,
-                settings: settings,
-                householdName: appState.currentHousehold?.name ?? "MealPlan",
-                energyUnit: appState.energyUnit,
-                showsNutritionEstimates: appState.showsNutritionEstimates,
-                mealTypes: [],
-                entries: [],
-                shoppingItems: items
-            )
-            return
-        }
         document = MealPlanPrintBuilder.document(
             range: range,
             settings: settings,

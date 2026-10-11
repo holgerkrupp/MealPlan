@@ -80,8 +80,6 @@ struct MealPlanApp: App {
                                 context: container.mainContext,
                                 planningThrough: purchaseManager.latestPlanningDate()
                             )
-                            await appState.stageManagedHouseholdIfNeeded(context: container.mainContext)
-                            await appState.restoreManagedCollaborationIfActive()
                         }
 
                         await purchaseManager.prepareForLaunch()
@@ -137,13 +135,6 @@ struct MealPlanApp: App {
                     }
                     .onChange(of: purchaseManager.isUnlocked) { wasUnlocked, isUnlocked in
                         guard isUnlocked, !wasUnlocked, let household = appState.currentHousehold else { return }
-                        if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
-                            try? appState.managedCollaboration?.applyManagedMealRoutines(
-                                for: household.uuid,
-                                memberName: appState.currentMemberName
-                            )
-                            return
-                        }
                         MealRoutineScheduler.apply(
                             for: household,
                             context: container.mainContext,
@@ -288,8 +279,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 /// UIKit uses two different paths: an already-connected window receives
 /// `windowScene(_:userDidAcceptCloudKitShareWith:)`, while an invitation that
 /// launches the app arrives in the new scene's connection options. Funnel
-/// both through the in-memory inbox so the host can forward them to
-/// CloudKitCollaborationKit after its managed stores are ready.
+/// both through the in-memory inbox so `RootView` can accept them once its
+/// SwiftData context is ready.
 final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(
         _ scene: UIScene,
@@ -297,7 +288,7 @@ final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
         options connectionOptions: UIScene.ConnectionOptions
     ) {
         if let metadata = connectionOptions.cloudKitShareMetadata {
-            CloudShareMetadataInbox.shared.enqueue(metadata)
+            HouseholdShareInvitationInbox.shared.enqueue(metadata)
         }
     }
 
@@ -305,7 +296,7 @@ final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
         _ windowScene: UIWindowScene,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        CloudShareMetadataInbox.shared.enqueue(cloudKitShareMetadata)
+        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 }
 #elseif os(macOS)
@@ -316,7 +307,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
-        CloudShareMetadataInbox.shared.enqueue(cloudKitShareMetadata)
+        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
     }
 
 

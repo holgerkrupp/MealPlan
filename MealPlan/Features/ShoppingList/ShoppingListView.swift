@@ -1,6 +1,5 @@
 import SwiftUI
 import SwiftData
-import CollaborationCore
 
 @MainActor
 struct ShoppingListView: View {
@@ -22,8 +21,6 @@ struct ShoppingListView: View {
     @State private var showingPrint = false
     @State private var customAisleItemID: UUID?
     @State private var customAisleName = ""
-    @State private var managedShoppingList: ManagedShoppingListSnapshot?
-    @State private var managedError: String?
     @AppStorage("shoppingList.hideCheckedItems") private var hideCheckedItems = false
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
     /// the add field.
@@ -40,43 +37,12 @@ struct ShoppingListView: View {
         hideCheckedItems ? items.filter { !$0.isChecked } : items
     }
 
-    private var managedMode: Bool {
-        guard let householdID = appState.currentHousehold?.uuid else { return false }
-        return ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID)
-    }
-
-    private var visibleRowSnapshots: [ShoppingListRowSnapshot] {
-        if managedMode {
-            let values = managedShoppingList?.items ?? []
-            return values.filter { !hideCheckedItems || !$0.isChecked }.map(ShoppingListRowSnapshot.init)
-        }
-        return visibleItems.map(ShoppingListRowSnapshot.init)
-    }
-
-    private var rowSnapshots: [ShoppingListRowSnapshot] {
-        if managedMode { return (managedShoppingList?.items ?? []).map(ShoppingListRowSnapshot.init) }
-        return items.map(ShoppingListRowSnapshot.init)
-    }
-
-    private var hasShoppingItems: Bool { managedMode ? !(managedShoppingList?.items.isEmpty ?? true) : !items.isEmpty }
-    private var hasVisibleShoppingItems: Bool { !visibleRowSnapshots.isEmpty }
-    private var hasCheckedShoppingItems: Bool { rowSnapshots.contains(where: \.isChecked) }
-
-    private var managedCanEdit: Bool {
-        guard managedMode, let householdID = appState.currentHousehold?.uuid,
-              let collaboration = appState.managedCollaboration else { return false }
-        let access = collaboration.effectiveAccess(for: householdID)
-        return access == .owner || access == .editor
-    }
-
-    private var canEditList: Bool { managedMode ? managedCanEdit : !appState.isGuest }
-
     private var bringService: BringSyncService { .shared }
 
     /// Whether this family has a Bring! list to send to at all. The account
     /// itself is per device, so both have to be there.
     private var isConnectedToBring: Bool {
-        !managedMode && appState.currentHousehold?.isConnectedToBring == true && bringService.hasAccount
+        appState.currentHousehold?.isConnectedToBring == true && bringService.hasAccount
     }
 
     /// The household's pantry staples that aren't on the list already. These
@@ -89,18 +55,11 @@ struct ShoppingListView: View {
         }
     }
 
-    private var managedStapleSuggestions: [ManagedPantryIngredientSummary] {
-        let onList = Set((managedShoppingList?.items ?? []).map { IngredientMatching.key(for: $0.name) })
-        return (managedShoppingList?.pantryStaples ?? []).filter {
-            !onList.contains(IngredientMatching.key(for: $0.name))
-        }
-    }
-
     /// Convert the live query into value snapshots before building rows. A
     /// rebuild may delete a model while SwiftUI still has an old row in its
     /// render tree; rows must never read that invalidated model again.
     private var groupedSnapshots: [ShoppingListRowGroup] {
-        let snapshots = visibleRowSnapshots
+        let snapshots = visibleItems.map { ShoppingListRowSnapshot($0) }
         return Dictionary(grouping: snapshots, by: \.aisleName)
             .map { name, values in
                 ShoppingListRowGroup(
@@ -136,29 +95,17 @@ struct ShoppingListView: View {
                 } label: {
                     Label(String(localized: "Rebuild from plan"), systemImage: "arrow.triangle.2.circlepath")
                 }
-                .disabled(!canEditList)
             }
 
-            if managedMode {
-                if let names = managedShoppingList?.missingIngredientDishNames, !names.isEmpty {
-                    missingIngredientWarning(names)
-                }
-            } else {
-                MissingIngredientWarningView(householdID: appState.currentHousehold?.uuid, range: range)
-            }
+            MissingIngredientWarningView(householdID: appState.currentHousehold?.uuid, range: range)
 
-            if managedError != nil && managedShoppingList == nil {
-                managedUnavailableMessage
-            } else if managedMode && managedShoppingList == nil {
-                ProgressView(String(localized: "Loading shopping list"))
-                    .frame(maxWidth: .infinity, minHeight: 80)
-            } else if !hasShoppingItems {
+            if items.isEmpty {
                 ContentUnavailableView(
                     String(localized: "Nothing to buy yet"),
                     systemImage: "cart",
                     description: Text("Plan some meals, then rebuild the list — or add items yourself below.")
                 )
-            } else if !hasVisibleShoppingItems {
+            } else if visibleItems.isEmpty {
                 ContentUnavailableView(
                     String(localized: "All items are checked"),
                     systemImage: "checkmark.circle",
@@ -167,7 +114,19 @@ struct ShoppingListView: View {
             }
 
             ForEach(groupedSnapshots) { group in
-                rowGroup(group)
+                Section(group.name) {
+                    ForEach(group.items) { item in
+                        ShoppingListRow(
+                            snapshot: item,
+                            onToggle: { toggle(item.id) },
+                            onCategoryChange: { changeCategory(item.id, to: $0) },
+                            onCustomAisle: { beginCustomAisle(for: item.id) },
+                            onSetStaple: { setStaple(item.id, $0) },
+                            onMarkOwned: { markOwned(item.id) }
+                        )
+                    }
+                    .onDelete { offsets in delete(offsets, in: group.items) }
+                }
             }
 
             Section {
@@ -178,15 +137,7 @@ struct ShoppingListView: View {
                     Button(String(localized: "Add"), action: addManualItem)
                         .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
-                if managedMode, !managedStapleSuggestions.isEmpty {
-                    Menu {
-                        ForEach(managedStapleSuggestions) { ingredient in
-                            Button(ingredient.name) { addManagedStaple(ingredient) }
-                        }
-                    } label: {
-                        Label(String(localized: "Add a staple"), systemImage: "shippingbox")
-                    }
-                } else if !managedMode, !stapleSuggestions.isEmpty {
+                if !stapleSuggestions.isEmpty {
                     Menu {
                         ForEach(stapleSuggestions) { ingredient in
                             Button(ingredient.name) { addStaple(ingredient) }
@@ -198,7 +149,6 @@ struct ShoppingListView: View {
             } footer: {
                 Text("Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt.")
             }
-            .disabled(!canEditList)
         }
         .navigationTitle(AppSection.shopping.title)
         .toolbar {
@@ -206,7 +156,7 @@ struct ShoppingListView: View {
                 ShareLink(item: shareText) {
                     Label(String(localized: "Share"), systemImage: "square.and.arrow.up")
                 }
-                .disabled(!hasShoppingItems)
+                .disabled(items.isEmpty)
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
@@ -220,14 +170,14 @@ struct ShoppingListView: View {
                     } label: {
                         Label(String(localized: "Print list…"), systemImage: "printer")
                     }
-                    .disabled(!hasShoppingItems)
+                    .disabled(items.isEmpty)
                     #if os(iOS)
                     Button {
                         Task { await exportToReminders() }
                     } label: {
                         Label(String(localized: "Add to Reminders"), systemImage: "list.bullet")
                     }
-                    .disabled(isExporting || !hasShoppingItems)
+                    .disabled(isExporting || items.isEmpty)
                     #endif
                     Toggle(isOn: $hideCheckedItems) {
                         Label(String(localized: "Hide checked items"), systemImage: "eye.slash")
@@ -238,11 +188,11 @@ struct ShoppingListView: View {
                     Button(String(localized: "Clear ticked items"), role: .destructive) {
                         clearChecked()
                     }
-                    .disabled(!canEditList || !hasCheckedShoppingItems)
+                    .disabled(!items.contains(where: \.isChecked))
                     Button(String(localized: "Clear the whole list"), role: .destructive) {
                         confirmingClearAll = true
                     }
-                    .disabled(!canEditList || !hasShoppingItems)
+                    .disabled(items.isEmpty)
 
                     Divider()
 
@@ -252,7 +202,7 @@ struct ShoppingListView: View {
                         } label: {
                             Label(String(localized: "Send to Bring!"), systemImage: "arrow.up.doc")
                         }
-                        .disabled(!hasShoppingItems || bringService.isSyncing)
+                        .disabled(items.isEmpty || bringService.isSyncing)
                         Button {
                             Task { await syncWithBring() }
                         } label: {
@@ -260,17 +210,15 @@ struct ShoppingListView: View {
                         }
                         .disabled(bringService.isSyncing)
                     }
-                    if !managedMode {
-                        Button {
-                            showingBringSetup = true
-                        } label: {
-                            Label(
-                                isConnectedToBring
-                                    ? String(localized: "Bring! settings…")
-                                    : String(localized: "Connect to Bring!…"),
-                                systemImage: "cart.badge.plus"
-                            )
-                        }
+                    Button {
+                        showingBringSetup = true
+                    } label: {
+                        Label(
+                            isConnectedToBring
+                                ? String(localized: "Bring! settings…")
+                                : String(localized: "Connect to Bring!…"),
+                            systemImage: "cart.badge.plus"
+                        )
                     }
                 } label: {
                     Label(String(localized: "More"), systemImage: "ellipsis")
@@ -289,12 +237,6 @@ struct ShoppingListView: View {
         .macWindowMargins()
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
         .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
-        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(managedMode)-\(appState.managedCollaboration != nil)-\(range.start.timeIntervalSinceReferenceDate)-\(range.end.timeIntervalSinceReferenceDate)") {
-            reloadManagedShoppingList()
-        }
-        .onReceive(NotificationCenter.default.publisher(for: .mealPlanManagedStoreDidChange)) { _ in
-            reloadManagedShoppingList()
-        }
         .detailPresentation(isPresented: $showingBringSetup, route: .bringSettings) {
             NavigationStack {
                 BringSettingsView()
@@ -306,11 +248,7 @@ struct ShoppingListView: View {
             }
         }
         .detailPresentation(isPresented: $showingPrint, route: .printShoppingList) {
-            PrintPlanSheet(
-                referenceWeek: .now,
-                initialContent: .shoppingList,
-                managedShoppingItems: managedMode ? (managedShoppingList?.items ?? []) : nil
-            )
+            PrintPlanSheet(referenceWeek: .now, initialContent: .shoppingList)
                 .dismissesOnOutsideClick()
         }
         .detailPresentation(isPresented: $showingPantryStaples, route: .pantryStaples) {
@@ -342,15 +280,7 @@ struct ShoppingListView: View {
         ) {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
-            bringAlertMessage
-        }
-        .alert(
-            String(localized: "Shopping list update failed"),
-            isPresented: Binding(get: { managedError != nil }, set: { if !$0 { managedError = nil } })
-        ) {
-            Button(String(localized: "OK"), role: .cancel) { managedError = nil }
-        } message: {
-            Text(managedError ?? String(localized: "Please try again."))
+            Text(bringMessage ?? "")
         }
         .alert(
             String(localized: "Reminders"),
@@ -383,18 +313,18 @@ struct ShoppingListView: View {
             addItem: { addItemFocused = true },
             setRange: { appState.shoppingRange = $0 }
         )
-        if hasShoppingItems {
+        if !items.isEmpty {
             commands.printList = { showingPrint = true }
         }
         #if os(iOS)
-        if !isExporting, hasShoppingItems {
+        if !isExporting, !items.isEmpty {
             commands.addToReminders = { Task { await exportToReminders() } }
         }
         #endif
-        if hasCheckedShoppingItems {
+        if items.contains(where: \.isChecked) {
             commands.clearTicked = { clearChecked() }
         }
-        if hasShoppingItems {
+        if !items.isEmpty {
             commands.clearAll = { confirmingClearAll = true }
         }
         if isConnectedToBring, !bringService.isSyncing {
@@ -422,36 +352,9 @@ struct ShoppingListView: View {
         return lines.joined(separator: "\n")
     }
 
-    private var bringAlertMessage: Text { Text(verbatim: bringMessage ?? "") }
-
-    private var managedUnavailableMessage: some View {
-        VStack(spacing: 8) {
-            ContentUnavailableView(
-                String(localized: "Shopping list unavailable"),
-                systemImage: "externaldrive.badge.exclamationmark",
-                description: Text(managedError ?? String(localized: "Please try again."))
-            )
-            Button(String(localized: "Try again")) { reloadManagedShoppingList() }
-        }
-    }
-
     // MARK: - Actions
 
     private func regenerate() {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.regenerateShoppingList(
-                    for: householdID,
-                    range: range,
-                    system: appState.unitSystem,
-                    roundsAmounts: appState.roundsDisplayedAmounts
-                )
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let household = appState.currentHousehold else { return }
         ShoppingListBuilder.regenerate(
             range: range,
@@ -463,68 +366,11 @@ struct ShoppingListView: View {
         Task { await autoSyncWithBring() }
     }
 
-    private func reloadManagedShoppingList() {
-        guard managedMode else {
-            managedShoppingList = nil
-            managedError = nil
-            return
-        }
-        guard let householdID = appState.currentHousehold?.uuid,
-              let collaboration = appState.managedCollaboration else {
-            managedShoppingList = nil
-            return
-        }
-        do {
-            managedShoppingList = try collaboration.shoppingListSnapshot(for: householdID, range: range)
-            managedError = nil
-        } catch {
-            managedShoppingList = nil
-            managedError = error.localizedDescription
-        }
-    }
-
-    private func rowGroup(_ group: ShoppingListRowGroup) -> some View {
-        Section(group.name) {
-            ForEach(group.items) { item in
-                ShoppingListRow(
-                    snapshot: item,
-                    isEditable: canEditList,
-                    onToggle: { toggle(item.id) },
-                    onCategoryChange: { changeCategory(item.id, to: $0) },
-                    onCustomAisle: { beginCustomAisle(for: item.id) },
-                    onSetStaple: { setStaple(item.id, $0) },
-                    onMarkOwned: { markOwned(item.id) }
-                )
-            }
-            .onDelete(perform: canEditList ? { offsets in delete(offsets, in: group.items) } : nil)
-        }
-    }
-
-    @ViewBuilder
-    private func missingIngredientWarning(_ names: [String]) -> some View {
-        Section {
-            Label(String(localized: "Some planned recipes are missing ingredients"), systemImage: "exclamationmark.triangle")
-                .foregroundStyle(.orange)
-            Text(String(localized: "Ingredients could not be imported for \(names.joined(separator: ", ")). Add them to the recipe before shopping."))
-                .font(.footnote)
-        }
-    }
-
     private func currentItem(_ id: UUID) -> ShoppingListItem? {
         items.first { $0.uuid == id }
     }
 
     private func toggle(_ id: UUID) {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration,
-                  let item = managedShoppingList?.items.first(where: { $0.id == id }) else { return }
-            do {
-                try collaboration.setShoppingItemChecked(!item.isChecked, itemID: id, in: householdID)
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let item = currentItem(id) else { return }
         withAnimation {
             ShoppingListMutationService.setChecked(item, checked: !item.isChecked, context: context)
@@ -532,19 +378,6 @@ struct ShoppingListView: View {
     }
 
     private func markOwned(_ id: UUID) {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.markShoppingItemOwned(
-                    id, in: householdID, range: range,
-                    system: appState.unitSystem,
-                    roundsAmounts: appState.roundsDisplayedAmounts
-                )
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let item = currentItem(id) else { return }
         guard let household = appState.currentHousehold else { return }
         let ingredient = item.ingredient ?? {
@@ -563,21 +396,6 @@ struct ShoppingListView: View {
     }
 
     private func addManualItem() {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.addManagedShoppingItem(
-                    named: newItemName,
-                    householdID: householdID,
-                    system: appState.unitSystem,
-                    roundsAmounts: appState.roundsDisplayedAmounts
-                )
-                newItemName = ""
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let household = appState.currentHousehold else { return }
         ShoppingListBuilder.addManualItem(
             named: newItemName,
@@ -595,42 +413,14 @@ struct ShoppingListView: View {
         ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
     }
 
-    private func addManagedStaple(_ ingredient: ManagedPantryIngredientSummary) {
-        guard let householdID = appState.currentHousehold?.uuid,
-              let collaboration = appState.managedCollaboration else { return }
-        do {
-            try collaboration.addPantryStapleToShoppingList(ingredientID: ingredient.id, in: householdID)
-            reloadManagedShoppingList()
-        } catch { managedError = error.localizedDescription }
-    }
-
     private func delete(_ offsets: IndexSet, in list: [ShoppingListRowSnapshot]) {
         let ids = offsets.compactMap { list.indices.contains($0) ? list[$0].id : nil }
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid else { return }
-            do {
-                try appState.managedCollaboration?.deleteShoppingItems(ids, in: householdID)
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         withoutUndoRegistration(in: context) {
             ShoppingListMutationService.delete(ids: ids, context: context)
         }
     }
 
     private func clearChecked() {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid else { return }
-            do {
-                try appState.managedCollaboration?.deleteShoppingItems(
-                    (managedShoppingList?.items ?? []).filter(\.isChecked).map(\.id),
-                    in: householdID
-                )
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         withoutUndoRegistration(in: context) {
             ShoppingListMutationService.clearCompleted(from: items, context: context)
         }
@@ -641,17 +431,6 @@ struct ShoppingListView: View {
     /// Generated lines come back with the next rebuild; manual ones don't, so
     /// this asks first.
     private func clearAll() {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid else { return }
-            do {
-                try appState.managedCollaboration?.deleteShoppingItems(
-                    (managedShoppingList?.items ?? []).map(\.id),
-                    in: householdID
-                )
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         let ids = items.map(\.uuid)
         withoutUndoRegistration(in: context) {
             ShoppingListMutationService.delete(ids: ids, context: context)
@@ -685,21 +464,11 @@ struct ShoppingListView: View {
     /// Says nothing either way — a Bring! that can't be reached is not a
     /// reason to interrupt someone reading their shopping list.
     private func autoSyncWithBring() async {
-        guard !managedMode else { return }
         guard let household = appState.currentHousehold else { return }
         await bringService.syncQuietly(household: household, context: context)
     }
 
     private func changeCategory(_ id: UUID, to category: IngredientCategory) {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.changeShoppingItemCategory(category, itemID: id, in: householdID)
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let item = currentItem(id) else { return }
         item.category = category
         item.customAisleName = nil
@@ -710,29 +479,12 @@ struct ShoppingListView: View {
     }
 
     private func beginCustomAisle(for id: UUID) {
-        if managedMode {
-            guard let item = managedShoppingList?.items.first(where: { $0.id == id }) else { return }
-            customAisleName = item.customAisleName ?? ""
-            customAisleItemID = id
-            return
-        }
         guard let item = currentItem(id) else { return }
         customAisleName = item.customAisleName ?? ""
         customAisleItemID = id
     }
 
     private func saveCustomAisle() {
-        if managedMode {
-            guard let id = customAisleItemID,
-                  let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.setShoppingItemAisle(customAisleName, itemID: id, in: householdID)
-                customAisleItemID = nil
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let id = customAisleItemID, let item = currentItem(id) else { return }
         let trimmed = customAisleName.trimmingCharacters(in: .whitespacesAndNewlines)
         item.customAisleName = trimmed.isEmpty ? nil : trimmed
@@ -742,17 +494,6 @@ struct ShoppingListView: View {
     }
 
     private func clearCustomAisle() {
-        if managedMode {
-            guard let id = customAisleItemID,
-                  let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.setShoppingItemAisle(nil, itemID: id, in: householdID)
-                customAisleItemID = nil
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let id = customAisleItemID, let item = currentItem(id) else { return }
         item.customAisleName = nil
         item.ingredient?.customAisleName = nil
@@ -765,15 +506,6 @@ struct ShoppingListView: View {
     /// the point of a staple is that it isn't bought week by week — while a
     /// line the family added by hand stays, because they asked for it.
     private func setStaple(_ id: UUID, _ isStaple: Bool) {
-        if managedMode {
-            guard let householdID = appState.currentHousehold?.uuid,
-                  let collaboration = appState.managedCollaboration else { return }
-            do {
-                try collaboration.setShoppingItemStaple(isStaple, itemID: id, in: householdID)
-                reloadManagedShoppingList()
-            } catch { managedError = error.localizedDescription }
-            return
-        }
         guard let item = currentItem(id) else { return }
         guard let household = appState.currentHousehold else { return }
         withoutUndoRegistration(in: context) {
@@ -799,19 +531,7 @@ struct ShoppingListView: View {
         isExporting = true
         defer { isExporting = false }
         do {
-            let exportItems: [ShoppingListItem]
-            if managedMode {
-                exportItems = (managedShoppingList?.items ?? []).map { summary in
-                    let item = ShoppingListItem(name: summary.name, category: summary.category, isManual: summary.isManual)
-                    item.uuid = summary.id
-                    item.displayText = summary.displayText
-                    item.isChecked = summary.isChecked
-                    return item
-                }
-            } else {
-                exportItems = items
-            }
-            let count = try await RemindersExporter.export(exportItems)
+            let count = try await RemindersExporter.export(items)
             exportMessage = String(localized: "Added \(count) items to your “MealPlan” list in Reminders.")
         } catch {
             exportMessage = error.localizedDescription

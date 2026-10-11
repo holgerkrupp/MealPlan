@@ -52,32 +52,6 @@ struct IngredientMatchResult {
     var isAmbiguous: Bool { reasons.contains(.candidateCollision) }
 }
 
-/// Core Data friendly matching inputs used by screens that consume the
-/// managed household store. These contain no persistent model objects.
-struct IngredientMatchAliasValue: Equatable, Sendable {
-    let name: String
-    let normalizedName: String
-    let sourceRaw: String
-}
-
-struct IngredientMatchCandidateValue: Equatable, Sendable {
-    let id: UUID
-    let name: String
-    let normalizedName: String
-    let aliases: [IngredientMatchAliasValue]
-    let rejectedMatchKeys: [String]
-}
-
-struct IngredientMatchRuleValue: Equatable, Sendable {
-    let leftKey: String
-    let rightKey: String
-    let kind: IngredientMatchRuleKind
-
-    func applies(to firstKey: String, and secondKey: String) -> Bool {
-        [firstKey, secondKey].sorted() == [leftKey, rightKey]
-    }
-}
-
 /// An indexed ingredient catalogue. Build it once for a bulk import or list
 /// rebuild so each lookup only examines keys whose lengths could match.
 struct IngredientMatcher {
@@ -399,45 +373,6 @@ enum IngredientMatching {
             $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: candidate.name))
         }) else { return nil }
         return candidate
-    }
-
-    /// SwiftData-free equivalent of the safe compatibility lookup for a
-    /// managed-store snapshot. It only returns exact canonical names,
-    /// confirmed aliases, or a unique explicit household alias rule.
-    static func matchID(
-        _ name: String,
-        in candidates: [IngredientMatchCandidateValue],
-        rules: [IngredientMatchRuleValue] = []
-    ) -> UUID? {
-        let normalized = Ingredient.normalize(name)
-        guard !normalized.isEmpty else { return nil }
-        let wanted = key(for: name)
-
-        let explicit = candidates.filter { candidate in
-            !rejects(name, for: candidate)
-                && rules.contains { $0.kind == .alias && $0.applies(to: wanted, and: key(for: candidate.name)) }
-                && !rules.contains { $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: candidate.name)) }
-        }
-        if explicit.count == 1 { return explicit[0].id }
-        if explicit.count > 1 { return nil }
-
-        let exact = candidates.filter { candidate in
-            guard !rejects(name, for: candidate) else { return false }
-            if candidate.normalizedName == normalized { return true }
-            let matchingAliases = candidate.aliases.filter { $0.normalizedName == normalized }
-            return !matchingAliases.isEmpty && matchingAliases.allSatisfy { $0.sourceRaw == IngredientAliasSource.userConfirmed.rawValue }
-        }
-        guard exact.count == 1, let candidate = exact.first else { return nil }
-        guard !rules.contains(where: {
-            $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: candidate.name))
-        }) else { return nil }
-        return candidate.id
-    }
-
-    private static func rejects(_ name: String, for candidate: IngredientMatchCandidateValue) -> Bool {
-        let normalized = Ingredient.normalize(name)
-        return candidate.rejectedMatchKeys.contains(normalized)
-            || candidate.rejectedMatchKeys.contains(key(for: name))
     }
 
     /// Explain every candidate decision without coupling matching to SwiftUI
