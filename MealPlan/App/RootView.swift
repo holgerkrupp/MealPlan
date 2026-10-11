@@ -112,8 +112,9 @@ struct RootView: View {
         .sheet(isPresented: $isShowingManagedReinviteNotice) {
             if let household = appState.currentHousehold,
                appState.collaboration.isOwner,
-               let collaboration = appState.managedCollaboration {
-                ManagedHouseholdSharingView(household: household, collaboration: collaboration)
+               let collaboration = appState.managedCollaboration,
+               let managedHousehold = try? collaboration.householdSummary(for: household.uuid) {
+                ManagedHouseholdSharingView(household: managedHousehold, collaboration: collaboration)
                     .dismissesOnOutsideClick()
             } else if let household = appState.currentHousehold {
                 HouseholdReinviteWaitingView(
@@ -266,8 +267,9 @@ struct RootView: View {
         guard let household = appState.currentHousehold else { return }
         if appState.collaboration.isOwner {
             guard let collaboration = appState.managedCollaboration,
-                  collaboration.isVerifiedManagedHousehold(household.uuid),
-                  (household.members ?? []).contains(where: { $0.isActive && !$0.isCurrentUser }),
+                  let managedHousehold = try? collaboration.householdSummary(for: household.uuid),
+                  collaboration.isVerifiedManagedHousehold(managedHousehold.id),
+                  managedHousehold.members.contains(where: { $0.isActive && !$0.isCurrentUser }),
                   !collaboration.reinviteNoticeWasDismissed(for: household.uuid) else { return }
             isShowingManagedReinviteNotice = true
             return

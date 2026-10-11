@@ -12,12 +12,35 @@ struct HouseholdSettingsView: View {
     @State private var isReconcilingLegacyHouseholds = false
     @State private var legacyRecoveryErrorMessage: String?
     @State private var householdHelpMessage: String?
+    @State private var managedHousehold: ManagedHouseholdSummary?
 
     /// Local household profiles are kept for dietary preferences and plan
     /// attribution. CloudKitCollaborationKit and Apple's sharing controls are
     /// authoritative for invitation and access management.
     private var members: [HouseholdMember] {
         (appState.currentHousehold?.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
+    }
+
+    private var displayedMembers: [ManagedHouseholdMemberSummary] {
+        if let managedHousehold { return managedHousehold.members.filter(\.isActive) }
+        if usesManagedStore(for: appState.currentHousehold?.uuid) { return [] }
+        return members.map { member in
+            ManagedHouseholdMemberSummary(
+                id: member.uuid,
+                name: member.name,
+                isActive: member.isActive,
+                isCurrentUser: member.isCurrentUser,
+                roleRaw: member.roleRaw,
+                dateAdded: member.dateAdded,
+                allergies: member.allergies,
+                mustAvoidIngredients: member.mustAvoidIngredients,
+                dietaryPatterns: member.dietaryPatterns,
+                dislikes: member.dislikes,
+                favorites: member.favorites,
+                preferredCuisines: member.preferredCuisines,
+                spiceTolerance: member.spiceTolerance
+            )
+        }
     }
 
     /// How many things the family counts as always in stock, for the row that
@@ -31,8 +54,26 @@ struct HouseholdSettingsView: View {
     /// the rest of the family with the next iCloud sync.
     private func standardServings(_ household: Household) -> Binding<Int> {
         Binding(
-            get: { household.scalingServings },
-            set: { household.standardServings = max(1, $0); try? context.save() }
+            get: {
+                if usesManagedStore(for: household.uuid) { return managedHousehold?.standardServings ?? 2 }
+                return household.scalingServings
+            },
+            set: { value in
+                if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
+                    do {
+                        guard let collaboration = appState.managedCollaboration else {
+                            throw MealPlanManagedCollaborationError.managedStoresUnavailable
+                        }
+                        try collaboration.updateStandardServings(value, for: household.uuid)
+                        refreshManagedHousehold()
+                    } catch {
+                        householdHelpMessage = error.localizedDescription
+                    }
+                } else {
+                    household.standardServings = max(1, value)
+                    try? context.save()
+                }
+            }
         )
     }
 
@@ -43,12 +84,15 @@ struct HouseholdSettingsView: View {
                     TextField(
                         String(localized: "Family name"),
                         text: Binding(
-                            get: { household.name },
-                            set: { household.name = $0; try? context.save() }
+                            get: {
+                                if usesManagedStore(for: household.uuid) { return managedHousehold?.name ?? "" }
+                                return household.name
+                            },
+                            set: { setHouseholdName($0, household: household) }
                         )
                     )
                     .font(.headline)
-                    .disabled(appState.isGuest)
+                    .disabled(appState.isGuest || (usesManagedStore(for: household.uuid) && managedHousehold == nil))
                 } header: {
                     Text("This family")
                 } footer: {
@@ -61,10 +105,10 @@ struct HouseholdSettingsView: View {
                     Stepper(value: standardServings(household), in: 1...50) {
                         LabeledContent(
                             String(localized: "Standard portions"),
-                            value: String(localized: "\(household.scalingServings) servings")
+                            value: String(localized: "\(standardServings(household).wrappedValue) servings")
                         )
                     }
-                    .disabled(appState.isGuest)
+                    .disabled(appState.isGuest || (usesManagedStore(for: household.uuid) && managedHousehold == nil))
                 } header: {
                     Text("How much you cook")
                 } footer: {
@@ -163,7 +207,22 @@ struct HouseholdSettingsView: View {
 
                 Section {
                     NavigationLink {
-                        FoodProfilesView(members: members)
+                        if let managedHousehold,
+                           let collaboration = appState.managedCollaboration {
+                            ManagedFoodProfilesView(
+                                members: managedHousehold.members,
+                                householdID: managedHousehold.id,
+                                collaboration: collaboration
+                            )
+                        } else if usesManagedStore(for: household.uuid) {
+                            ManagedHouseholdSharingUnavailableView(
+                                title: String(localized: "Household is preparing"),
+                                description: String(localized: "Your saved household data is safe. Check again once the updated household is ready."),
+                                retry: refreshManagedHousehold
+                            )
+                        } else {
+                            FoodProfilesView(members: members)
+                        }
                     } label: {
                         Label("Food profiles", systemImage: "fork.knife.circle")
                     }
@@ -173,7 +232,7 @@ struct HouseholdSettingsView: View {
 
                 Section {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
-                    ForEach(members) { member in
+                    ForEach(displayedMembers) { member in
                         memberRow(member)
                     }
                 } header: {
@@ -203,11 +262,18 @@ struct HouseholdSettingsView: View {
         }
         .formStyle(.grouped)
         .navigationTitle(String(localized: "Household"))
+        .task(id: "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.managedCollaboration != nil)") {
+            refreshManagedHousehold()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanManagedStoreDidChange)) { _ in
+            refreshManagedHousehold()
+        }
         .sheet(isPresented: $showingShareSheet) {
             if let household = appState.currentHousehold {
                 if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
-                    if let collaboration = appState.managedCollaboration {
-                        ManagedHouseholdSharingView(household: household, collaboration: collaboration)
+                    if let collaboration = appState.managedCollaboration,
+                       let managedHousehold = try? collaboration.householdSummary(for: household.uuid) {
+                        ManagedHouseholdSharingView(household: managedHousehold, collaboration: collaboration)
                             .dismissesOnOutsideClick()
                     } else {
                         ManagedHouseholdSharingUnavailableView(
@@ -286,14 +352,50 @@ struct HouseholdSettingsView: View {
         }
     }
 
+    private func refreshManagedHousehold() {
+        guard let householdID = appState.currentHousehold?.uuid,
+              ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID),
+              let collaboration = appState.managedCollaboration else {
+            managedHousehold = nil
+            return
+        }
+        managedHousehold = try? collaboration.householdSummary(for: householdID)
+    }
+
+    private func usesManagedStore(for householdID: UUID?) -> Bool {
+        guard let householdID else { return false }
+        return ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID)
+    }
+
+    private func usesManagedStore(for householdID: UUID) -> Bool {
+        ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: householdID)
+    }
+
+    private func setHouseholdName(_ name: String, household: Household) {
+        if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
+            do {
+                guard let collaboration = appState.managedCollaboration else {
+                    throw MealPlanManagedCollaborationError.managedStoresUnavailable
+                }
+                try collaboration.updateHouseholdName(name, for: household.uuid)
+                refreshManagedHousehold()
+            } catch {
+                householdHelpMessage = error.localizedDescription
+            }
+        } else {
+            household.name = name
+            try? context.save()
+        }
+    }
+
     private func ingredientCleanupSummary(_ household: Household) -> String {
         let count = IngredientCleanupService.suggestions(in: household).count
         return count == 0 ? String(localized: "All clear") : String(localized: "(count) to review")
     }
 
-    private func memberRow(_ member: HouseholdMember) -> some View {
+    private func memberRow(_ member: ManagedHouseholdMemberSummary) -> some View {
         LabeledContent(member.name) {
-            Text(member.role.localizedName)
+            Text(MemberRole(rawValue: member.roleRaw)?.localizedName ?? MemberRole.editor.localizedName)
         }
     }
 
@@ -320,6 +422,111 @@ struct HouseholdSettingsView: View {
     private func retryManagedInvitations() async {
         guard let collaboration = appState.managedCollaboration else { return }
         _ = await collaboration.retryPendingInvitations()
+    }
+}
+
+@MainActor
+private struct ManagedFoodProfilesView: View {
+    let members: [ManagedHouseholdMemberSummary]
+    let householdID: UUID
+    let collaboration: MealPlanManagedCollaboration
+
+    var body: some View {
+        List(members.filter(\.isActive)) { member in
+            NavigationLink {
+                ManagedFoodProfileEditor(
+                    member: member,
+                    householdID: householdID,
+                    collaboration: collaboration
+                )
+            } label: {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(member.name)
+                    let count = member.allergies.count + member.mustAvoidIngredients.count + member.dislikes.count + member.favorites.count
+                    Text(count == 0 ? String(localized: "No preferences") : String(localized: "\(count) preferences"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+        .navigationTitle("Food profiles")
+    }
+}
+
+@MainActor
+private struct ManagedFoodProfileEditor: View {
+    @Environment(\.dismiss) private var dismiss
+    @State private var member: ManagedHouseholdMemberSummary
+    let householdID: UUID
+    let collaboration: MealPlanManagedCollaboration
+
+    @State private var errorMessage: String?
+
+    init(
+        member: ManagedHouseholdMemberSummary,
+        householdID: UUID,
+        collaboration: MealPlanManagedCollaboration
+    ) {
+        _member = State(initialValue: member)
+        self.householdID = householdID
+        self.collaboration = collaboration
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                TextField("Allergies (comma separated)", text: arrayBinding(\.allergies))
+                TextField("Must avoid (comma separated)", text: arrayBinding(\.mustAvoidIngredients))
+            } header: {
+                Text("Hard exclusions")
+            } footer: {
+                Text("Recipes containing these terms are filtered out for this person.")
+            }
+
+            Section {
+                TextField("Dislikes (comma separated)", text: arrayBinding(\.dislikes))
+                TextField("Favorites (comma separated)", text: arrayBinding(\.favorites))
+                TextField("Preferred cuisines (comma separated)", text: arrayBinding(\.preferredCuisines))
+                TextField("Dietary patterns (comma separated)", text: arrayBinding(\.dietaryPatterns))
+            } header: {
+                Text("Preferences")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(member.name)
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(String(localized: "Save"), action: save)
+            }
+        }
+        .alert(
+            String(localized: "Couldn’t Save Food Profile"),
+            isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } }),
+            presenting: errorMessage
+        ) { _ in
+            Button(String(localized: "OK")) {}
+        } message: { Text($0) }
+    }
+
+    private func arrayBinding(_ keyPath: WritableKeyPath<ManagedHouseholdMemberSummary, [String]>) -> Binding<String> {
+        Binding(
+            get: { member[keyPath: keyPath].joined(separator: ", ") },
+            set: { value in
+                member[keyPath: keyPath] = value
+                    .split(separator: ",")
+                    .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                    .filter { !$0.isEmpty }
+            }
+        )
+    }
+
+    private func save() {
+        do {
+            try collaboration.updateFoodProfile(member, in: householdID)
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }
 

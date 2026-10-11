@@ -9,7 +9,7 @@ import AppKit
 @MainActor
 struct ManagedHouseholdSharingView: View {
     @Environment(\.dismiss) private var dismiss
-    let household: Household
+    let household: ManagedHouseholdSummary
     let collaboration: MealPlanManagedCollaboration
 
     @State private var session: ManagedCollaborationSession?
@@ -24,9 +24,9 @@ struct ManagedHouseholdSharingView: View {
     #endif
 
     private var isOwner: Bool { collaboration.effectiveAccess(for: household) == .owner }
-    private var wasNoticeDismissed: Bool { collaboration.reinviteNoticeWasDismissed(for: household.uuid) }
-    private var previousMembers: [HouseholdMember] {
-        (household.members ?? []).filter { !$0.isCurrentUser && $0.isActive }
+    private var wasNoticeDismissed: Bool { collaboration.reinviteNoticeWasDismissed(for: household.id) }
+    private var previousMembers: [ManagedHouseholdMemberSummary] {
+        household.members.filter { !$0.isCurrentUser && $0.isActive }
     }
 
     var body: some View {
@@ -212,8 +212,9 @@ struct ManagedHouseholdSharingView: View {
     }
 
     private func refresh() async {
-        isVerified = collaboration.isVerifiedManagedHousehold(household.uuid)
+        isVerified = collaboration.isVerifiedManagedHousehold(household.id)
         guard isVerified else { return }
+        guard isOwner else { return }
         do {
             if session == nil { session = try collaboration.makeVerifiedSession(for: household) }
             try session?.refresh()
@@ -238,7 +239,7 @@ struct ManagedHouseholdSharingView: View {
     }
 
     private func dismissNotice() {
-        do { try collaboration.dismissReinviteNotice(for: household.uuid) }
+        do { try collaboration.dismissReinviteNotice(for: household.id) }
         catch { errorMessage = error.localizedDescription }
     }
 

@@ -6,6 +6,33 @@ import CollaborationDiagnostics
 import CollaborationUI
 import Foundation
 
+/// Immutable household information needed by the sharing screens. Keeping
+/// this projection separate from the legacy SwiftData model lets the native
+/// sharing UI read its title and reinvitation checklist from the store it
+/// actually shares.
+struct ManagedHouseholdMemberSummary: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let name: String
+    let isActive: Bool
+    let isCurrentUser: Bool
+    let roleRaw: String
+    let dateAdded: Date
+    var allergies: [String]
+    var mustAvoidIngredients: [String]
+    var dietaryPatterns: [String]
+    var dislikes: [String]
+    var favorites: [String]
+    var preferredCuisines: [String]
+    var spiceTolerance: Int?
+}
+
+struct ManagedHouseholdSummary: Equatable, Sendable {
+    let id: UUID
+    let name: String
+    let standardServings: Int
+    let members: [ManagedHouseholdMemberSummary]
+}
+
 /// MealPlan's host adapter for the reusable collaboration package. Construction
 /// is deliberately explicit: callers must load a CloudKit-enabled managed
 /// persistence instance first, and share creation remains an explicit user action.
@@ -63,23 +90,63 @@ final class MealPlanManagedCollaboration {
         }
     }
 
-    func makeSession(for household: Household) -> ManagedCollaborationSession {
+    func householdSummary(for householdID: UUID) throws -> ManagedHouseholdSummary {
+        let objectID = try managedHouseholdObjectID(for: householdID)
+        let root = try container.viewContext.existingObject(with: objectID)
+        guard root.value(forKey: "managedMigrationPhaseRaw") as? String == "verified",
+              let name = root.value(forKey: "name") as? String else {
+            throw MealPlanManagedCollaborationError.householdNotFound
+        }
+        let standardServings = max(1, (root.value(forKey: "standardServings") as? NSNumber)?.intValue ?? 2)
+
+        let records = (root.value(forKey: "members") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let members = records.compactMap { member -> ManagedHouseholdMemberSummary? in
+            guard let id = member.value(forKey: "uuid") as? UUID,
+                  let name = member.value(forKey: "name") as? String else { return nil }
+            return ManagedHouseholdMemberSummary(
+                id: id,
+                name: name,
+                isActive: (member.value(forKey: "isActive") as? NSNumber)?.boolValue ?? false,
+                isCurrentUser: (member.value(forKey: "isCurrentUser") as? NSNumber)?.boolValue ?? false,
+                roleRaw: member.value(forKey: "roleRaw") as? String ?? MemberRole.editor.rawValue,
+                dateAdded: member.value(forKey: "dateAdded") as? Date ?? .distantPast,
+                allergies: Self.stringArray(member.value(forKey: "allergies")),
+                mustAvoidIngredients: Self.stringArray(member.value(forKey: "mustAvoidIngredients")),
+                dietaryPatterns: Self.stringArray(member.value(forKey: "dietaryPatterns")),
+                dislikes: Self.stringArray(member.value(forKey: "dislikes")),
+                favorites: Self.stringArray(member.value(forKey: "favorites")),
+                preferredCuisines: Self.stringArray(member.value(forKey: "preferredCuisines")),
+                spiceTolerance: (member.value(forKey: "spiceTolerance") as? NSNumber)?.intValue
+            )
+        }
+        .sorted {
+            $0.dateAdded == $1.dateAdded ? $0.id.uuidString < $1.id.uuidString : $0.dateAdded < $1.dateAdded
+        }
+        return ManagedHouseholdSummary(
+            id: householdID,
+            name: name,
+            standardServings: standardServings,
+            members: members
+        )
+    }
+
+    func makeSession(for household: ManagedHouseholdSummary) -> ManagedCollaborationSession {
         ManagedCollaborationSession(
-            rootID: household.uuid.uuidString,
+            rootID: household.id.uuidString,
             title: household.name,
             service: sharing
         )
     }
 
-    func makeVerifiedSession(for household: Household) throws -> ManagedCollaborationSession {
-        guard isVerifiedManagedHousehold(household.uuid) else {
+    func makeVerifiedSession(for household: ManagedHouseholdSummary) throws -> ManagedCollaborationSession {
+        guard isVerifiedManagedHousehold(household.id) else {
             throw MealPlanManagedCollaborationError.householdNotFound
         }
         return makeSession(for: household)
     }
 
     func isVerifiedManagedHousehold(_ householdID: UUID) -> Bool {
-        guard let objectID = try? sharing.resolveRootObjectID(householdID.uuidString),
+        guard let objectID = try? managedHouseholdObjectID(for: householdID),
               let root = try? container.viewContext.existingObject(with: objectID),
               root.value(forKey: "managedMigrationPhaseRaw") as? String == "verified",
               let count = root.value(forKey: "managedGraphObjectCount") as? NSNumber,
@@ -92,7 +159,7 @@ final class MealPlanManagedCollaboration {
     }
 
     func reinviteNoticeWasDismissed(for householdID: UUID) -> Bool {
-        guard let objectID = try? sharing.resolveRootObjectID(householdID.uuidString),
+        guard let objectID = try? managedHouseholdObjectID(for: householdID),
               let root = try? container.viewContext.existingObject(with: objectID) else { return false }
         return root.value(forKey: "reinviteNoticeDismissedAt") as? Date != nil
     }
@@ -106,6 +173,74 @@ final class MealPlanManagedCollaboration {
         try ManagedHouseholdRolloutAuthority.shared.markReinviteNoticeDismissed(for: householdID)
     }
 
+    func updateHouseholdName(_ name: String, for householdID: UUID) throws {
+        try updateHousehold(for: householdID) { root in
+            root.setValue(name, forKey: "name")
+        }
+    }
+
+    func updateStandardServings(_ servings: Int, for householdID: UUID) throws {
+        try updateHousehold(for: householdID) { root in
+            root.setValue(max(1, servings), forKey: "standardServings")
+        }
+    }
+
+    func updateFoodProfile(_ member: ManagedHouseholdMemberSummary, in householdID: UUID) throws {
+        let rootID = try managedHouseholdObjectID(for: householdID)
+        let access = sharing.effectiveAccess(for: rootID).level
+        guard access == .owner || access == .editor,
+              container.canUpdateRecord(forManagedObjectWith: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let context = container.viewContext
+        let root = try context.existingObject(with: rootID)
+        let records = (root.value(forKey: "members") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        guard let object = records.first(where: { $0.value(forKey: "uuid") as? UUID == member.id }),
+              container.canUpdateRecord(forManagedObjectWith: object.objectID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        object.setValue(try JSONEncoder().encode(member.allergies), forKey: "allergies")
+        object.setValue(try JSONEncoder().encode(member.mustAvoidIngredients), forKey: "mustAvoidIngredients")
+        object.setValue(try JSONEncoder().encode(member.dietaryPatterns), forKey: "dietaryPatterns")
+        object.setValue(try JSONEncoder().encode(member.dislikes), forKey: "dislikes")
+        object.setValue(try JSONEncoder().encode(member.favorites), forKey: "favorites")
+        object.setValue(try JSONEncoder().encode(member.preferredCuisines), forKey: "preferredCuisines")
+        object.setValue(member.spiceTolerance.map { NSNumber(value: $0) }, forKey: "spiceTolerance")
+        object.setValue(Date.now, forKey: "profileModifiedAt")
+        object.setValue(Date.now, forKey: "modifiedAt")
+        try context.save()
+        if rootID.persistentStore === privateStore {
+            try ManagedHouseholdRolloutAuthority.shared.recordManagedWrite(for: householdID)
+        }
+        NotificationCenter.default.post(name: .mealPlanManagedStoreDidChange, object: nil)
+    }
+
+    private func updateHousehold(
+        for householdID: UUID,
+        mutate: (NSManagedObject) -> Void
+    ) throws {
+        let objectID = try managedHouseholdObjectID(for: householdID)
+        let access = sharing.effectiveAccess(for: objectID).level
+        guard access == .owner || access == .editor,
+              container.canUpdateRecord(forManagedObjectWith: objectID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let context = container.viewContext
+        let root = try context.existingObject(with: objectID)
+        mutate(root)
+        root.setValue(Date.now, forKey: "modifiedAt")
+        try context.save()
+        if objectID.persistentStore === privateStore {
+            try ManagedHouseholdRolloutAuthority.shared.recordManagedWrite(for: householdID)
+        }
+        NotificationCenter.default.post(name: .mealPlanManagedStoreDidChange, object: nil)
+    }
+
+    private static func stringArray(_ value: Any?) -> [String] {
+        guard let data = value as? Data else { return [] }
+        return (try? JSONDecoder().decode([String].self, from: data)) ?? []
+    }
+
     func prepareVerifiedShare(rootID: String) async throws -> CKShare {
         guard let householdID = UUID(uuidString: rootID), isVerifiedManagedHousehold(householdID) else {
             throw MealPlanManagedCollaborationError.householdNotFound
@@ -113,15 +248,31 @@ final class MealPlanManagedCollaboration {
         return try await sharing.prepareShare(rootID: rootID)
     }
 
-    func existingShare(for household: Household) throws -> CKShare? {
-        try sharing.existingShare(for: sharing.resolveRootObjectID(household.uuid.uuidString))
+    func existingShare(for household: ManagedHouseholdSummary) throws -> CKShare? {
+        try sharing.existingShare(for: sharing.resolveRootObjectID(household.id.uuidString))
     }
 
-    func effectiveAccess(for household: Household) -> AccessLevel {
-        guard let objectID = try? sharing.resolveRootObjectID(household.uuid.uuidString) else {
+    func effectiveAccess(for household: ManagedHouseholdSummary) -> AccessLevel {
+        guard let objectID = try? managedHouseholdObjectID(for: household.id) else {
             return .unavailable
         }
         return sharing.effectiveAccess(for: objectID).level
+    }
+
+    private func managedHouseholdObjectID(for householdID: UUID) throws -> NSManagedObjectID {
+        let context = container.viewContext
+        for store in [privateStore, sharedStore] {
+            let request = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.household.rawValue)
+            request.predicate = NSPredicate(format: "uuid == %@", householdID as NSUUID)
+            request.fetchLimit = 2
+            request.affectedStores = [store]
+            let matches = try context.fetch(request)
+            guard matches.count <= 1 else {
+                throw MealPlanManagedCollaborationError.duplicateStableIdentity
+            }
+            if let match = matches.first { return match.objectID }
+        }
+        throw MealPlanManagedCollaborationError.householdNotFound
     }
 
     func receive(_ metadata: CKShare.Metadata) async throws -> InvitationDeliveryDisposition {
@@ -333,6 +484,7 @@ enum MealPlanManagedCollaborationError: LocalizedError {
     case duplicateStableIdentity
     case crossHouseholdRelationship
     case incompleteHouseholdGraph
+    case editingNotAllowed
 
     var errorDescription: String? {
         switch self {
@@ -346,6 +498,7 @@ enum MealPlanManagedCollaborationError: LocalizedError {
         case .duplicateStableIdentity: "The household graph contains duplicate record identities."
         case .crossHouseholdRelationship: "The household graph contains a link to another household."
         case .incompleteHouseholdGraph: "The household graph has an incomplete relationship."
+        case .editingNotAllowed: "You do not have permission to change this household."
         }
     }
 }
