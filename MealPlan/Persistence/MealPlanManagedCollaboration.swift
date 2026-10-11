@@ -66,6 +66,34 @@ struct ManagedPantrySnapshot: Equatable, Sendable {
     let matchRules: [IngredientMatchRuleValue]
 }
 
+struct ManagedShoppingListItemSummary: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let name: String
+    let displayText: String?
+    let sourceDishNames: [String]
+    let isChecked: Bool
+    let isManual: Bool
+    let isStaple: Bool
+    let categoryRaw: String
+    let customAisleName: String?
+    let sortIndex: Int
+    let rangeStart: Date?
+    let rangeEnd: Date?
+
+    var category: IngredientCategory { IngredientCategory(rawValue: categoryRaw) ?? .other }
+    var aisleName: String {
+        let custom = customAisleName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return custom.isEmpty ? category.localizedName : custom
+    }
+}
+
+struct ManagedShoppingListSnapshot: Equatable, Sendable {
+    let householdID: UUID
+    let items: [ManagedShoppingListItemSummary]
+    let pantryStaples: [ManagedPantryIngredientSummary]
+    let missingIngredientDishNames: [String]
+}
+
 /// MealPlan's host adapter for the reusable collaboration package. Construction
 /// is deliberately explicit: callers must load a CloudKit-enabled managed
 /// persistence instance first, and share creation remains an explicit user action.
@@ -211,6 +239,58 @@ final class MealPlanManagedCollaboration {
         )
     }
 
+    func shoppingListSnapshot(for householdID: UUID, range: DayRange) throws -> ManagedShoppingListSnapshot {
+        let objectID = try managedHouseholdObjectID(for: householdID)
+        let root = try container.viewContext.existingObject(with: objectID)
+        let ingredientObjects = (root.value(forKey: "ingredients") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let ingredients = ingredientObjects.compactMap(managedPantryIngredientSummary)
+        let ingredientsByID = Dictionary(uniqueKeysWithValues: ingredients.map { ($0.id, $0) })
+        let shoppingObjects = (root.value(forKey: "shoppingItems") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let items = shoppingObjects.compactMap { item -> ManagedShoppingListItemSummary? in
+            guard let id = item.value(forKey: "uuid") as? UUID,
+                  let name = item.value(forKey: "name") as? String else { return nil }
+            let linkedIngredientID = (item.value(forKey: "ingredient") as? NSManagedObject)?.value(forKey: "uuid") as? UUID
+            return ManagedShoppingListItemSummary(
+                id: id,
+                name: name,
+                displayText: item.value(forKey: "displayText") as? String,
+                sourceDishNames: Self.stringArray(item.value(forKey: "sourceDishNames")),
+                isChecked: (item.value(forKey: "isChecked") as? NSNumber)?.boolValue ?? false,
+                isManual: (item.value(forKey: "isManual") as? NSNumber)?.boolValue ?? false,
+                isStaple: linkedIngredientID.flatMap { ingredientsByID[$0]?.isPantryStaple } ?? false,
+                categoryRaw: item.value(forKey: "categoryRaw") as? String ?? IngredientCategory.other.rawValue,
+                customAisleName: item.value(forKey: "customAisleName") as? String,
+                sortIndex: (item.value(forKey: "sortIndex") as? NSNumber)?.intValue ?? 0,
+                rangeStart: item.value(forKey: "rangeStart") as? Date,
+                rangeEnd: item.value(forKey: "rangeEnd") as? Date
+            )
+        }
+        .sorted { ($0.sortIndex, $0.id.uuidString) < ($1.sortIndex, $1.id.uuidString) }
+        let staples = ingredients.filter(\.isPantryStaple)
+            .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+
+        let entries = try managedEntries(in: root, rootID: objectID, range: range)
+        var missingNames: [String] = []
+        var seenNames: Set<String> = []
+        for entry in entries {
+            guard let date = entry.value(forKey: "date") as? Date,
+                  range.contains(date),
+                  !((entry.value(forKey: "skipped") as? NSNumber)?.boolValue ?? false),
+                  let dish = entry.value(forKey: "dish") as? NSManagedObject,
+                  dish.value(forKey: "importedSourceApp") as? String == "KptnCook",
+                  ((dish.value(forKey: "ingredients") as? NSSet)?.count ?? 0) == 0,
+                  let name = dish.value(forKey: "name") as? String,
+                  seenNames.insert(name).inserted else { continue }
+            missingNames.append(name)
+        }
+        return ManagedShoppingListSnapshot(
+            householdID: householdID,
+            items: items,
+            pantryStaples: staples,
+            missingIngredientDishNames: missingNames
+        )
+    }
+
     func setPantryStaple(_ isStaple: Bool, ingredientID: UUID, in householdID: UUID) throws {
         let (rootID, root, context) = try editableHousehold(householdID)
         let ingredientObjects = (root.value(forKey: "ingredients") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
@@ -285,6 +365,335 @@ final class MealPlanManagedCollaboration {
         root.mutableSetValue(forKey: "shoppingItems").add(item)
         try context.save()
         try finishManagedWrite(householdID: householdID, rootID: rootID)
+    }
+
+    func setShoppingItemChecked(_ checked: Bool, itemID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let item = shoppingItems(in: root).first(where: { $0.value(forKey: "uuid") as? UUID == itemID }),
+              canUpdate(item.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        guard (item.value(forKey: "isChecked") as? NSNumber)?.boolValue != checked else { return }
+        let now = Date.now
+        item.setValue(checked, forKey: "isChecked")
+        item.setValue(now, forKey: "checkStateModifiedAt")
+        item.setValue(now, forKey: "modifiedAt")
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func deleteShoppingItems(_ itemIDs: some Sequence<UUID>, in householdID: UUID) throws {
+        let ids = Set(itemIDs)
+        guard !ids.isEmpty else { return }
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let matches = shoppingItems(in: root).filter { item in
+            guard let id = item.value(forKey: "uuid") as? UUID else { return false }
+            return ids.contains(id) && canUpdate(item.objectID, in: rootID)
+        }
+        guard !matches.isEmpty else { return }
+        for item in matches { context.delete(item) }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func addManagedShoppingItem(
+        named text: String,
+        householdID: UUID,
+        system: UnitSystem,
+        roundsAmounts: Bool = true
+    ) throws {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let parsed = GermanUnitParser.parse(trimmed)
+        let name = parsed.name.isEmpty ? trimmed : parsed.name
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let snapshot = try pantrySnapshot(for: householdID)
+        let ingredientID = IngredientMatching.matchID(
+            name,
+            in: snapshot.ingredients.map(\.matchValue),
+            rules: snapshot.matchRules
+        )
+        let ingredient = ingredientID.flatMap { id in
+            managedIngredients(in: root).first { $0.value(forKey: "uuid") as? UUID == id }
+        }
+        let categoryRaw = ingredient?.value(forKey: "categoryRaw") as? String ?? IngredientCategory.other.rawValue
+        let category = IngredientCategory(rawValue: categoryRaw) ?? .other
+        let item = try insert(.shoppingListItem, into: store(for: rootID), context: context)
+        let now = Date.now
+        item.setValue(now, forKey: "contentModifiedAt")
+        item.setValue(now, forKey: "checkStateModifiedAt")
+        item.setValue(name, forKey: "name")
+        item.setValue(Ingredient.normalize(name), forKey: "normalizedName")
+        item.setValue(category.rawValue, forKey: "categoryRaw")
+        item.setValue(ingredient?.value(forKey: "customAisleName"), forKey: "customAisleName")
+        item.setValue(try JSONEncoder().encode([String]()), forKey: "additionalAmountsRaw")
+        item.setValue(0, forKey: "unmeasuredCount")
+        item.setValue(false, forKey: "isChecked")
+        item.setValue(true, forKey: "isManual")
+        item.setValue(parsed.isApproximate, forKey: "isApproximate")
+        item.setValue(category.sortOrder * 1_000 + 999, forKey: "sortIndex")
+        item.setValue(try JSONEncoder().encode([String]()), forKey: "sourceDishNames")
+        item.setValue(now, forKey: "dateCreated")
+        item.setValue(ingredient, forKey: "ingredient")
+        item.setValue(root, forKey: "household")
+        if let quantity = parsed.quantity {
+            let line = AggregatedLine(
+                name: name,
+                normalizedName: Ingredient.normalize(name),
+                category: category,
+                quantity: quantity,
+                displayUnit: parsed.displayUnit,
+                isApproximate: parsed.isApproximate
+            )
+            item.setValue(quantity.value, forKey: "canonicalValue")
+            item.setValue(quantity.dimension.rawValue, forKey: "canonicalDimensionRaw")
+            item.setValue(parsed.displayUnit, forKey: "displayUnit")
+            item.setValue(ShoppingListBuilder.displayText(for: line, system: system, roundsAmounts: roundsAmounts), forKey: "displayText")
+        }
+        root.mutableSetValue(forKey: "shoppingItems").add(item)
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func changeShoppingItemCategory(_ category: IngredientCategory, itemID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let item = shoppingItems(in: root).first(where: { $0.value(forKey: "uuid") as? UUID == itemID }),
+              canUpdate(item.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        item.setValue(category.rawValue, forKey: "categoryRaw")
+        let current = (item.value(forKey: "sortIndex") as? NSNumber)?.intValue ?? 0
+        item.setValue(category.sortOrder * 1_000 + current % 1_000, forKey: "sortIndex")
+        item.setValue(Date.now, forKey: "contentModifiedAt")
+        item.setValue(Date.now, forKey: "modifiedAt")
+        if let ingredient = item.value(forKey: "ingredient") as? NSManagedObject {
+            ingredient.setValue(category.rawValue, forKey: "categoryRaw")
+            ingredient.setValue(Date.now, forKey: "modifiedAt")
+        }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+    }
+
+    func setShoppingItemAisle(_ aisle: String?, itemID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let item = shoppingItems(in: root).first(where: { $0.value(forKey: "uuid") as? UUID == itemID }),
+              canUpdate(item.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let trimmed = aisle?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let value: String? = trimmed.isEmpty ? nil : trimmed
+        item.setValue(value, forKey: "customAisleName")
+        item.setValue(Date.now, forKey: "contentModifiedAt")
+        item.setValue(Date.now, forKey: "modifiedAt")
+        if let ingredient = item.value(forKey: "ingredient") as? NSManagedObject {
+            ingredient.setValue(value, forKey: "customAisleName")
+            ingredient.setValue(Date.now, forKey: "modifiedAt")
+        }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+    }
+
+    func setShoppingItemStaple(_ isStaple: Bool, itemID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let item = shoppingItems(in: root).first(where: { $0.value(forKey: "uuid") as? UUID == itemID }),
+              canUpdate(item.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        var ingredient = item.value(forKey: "ingredient") as? NSManagedObject
+        if ingredient == nil, isStaple {
+            let itemName = item.value(forKey: "name") as? String ?? ""
+            let snapshot = try pantrySnapshot(for: householdID)
+            let matchedID = IngredientMatching.matchID(itemName, in: snapshot.ingredients.map(\.matchValue), rules: snapshot.matchRules)
+            ingredient = matchedID.flatMap { id in managedIngredients(in: root).first { $0.value(forKey: "uuid") as? UUID == id } }
+            if ingredient == nil {
+                let created = try insert(.ingredient, into: store(for: rootID), context: context)
+                created.setValue(itemName, forKey: "name")
+                created.setValue(Ingredient.normalize(itemName), forKey: "normalizedName")
+                created.setValue(item.value(forKey: "categoryRaw") as? String ?? IngredientCategory.other.rawValue, forKey: "categoryRaw")
+                created.setValue(InventoryMode.none.rawValue, forKey: "inventoryModeRaw")
+                created.setValue(try JSONEncoder().encode([String]()), forKey: "rejectedMatchKeys")
+                created.setValue(root, forKey: "household")
+                root.mutableSetValue(forKey: "ingredients").add(created)
+                ingredient = created
+            }
+            item.setValue(ingredient, forKey: "ingredient")
+        }
+        ingredient?.setValue(isStaple, forKey: "isPantryStaple")
+        ingredient?.setValue(Date.now, forKey: "modifiedAt")
+        if isStaple, !((item.value(forKey: "isManual") as? NSNumber)?.boolValue ?? false) {
+            context.delete(item)
+        }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func markShoppingItemOwned(_ itemID: UUID, in householdID: UUID, range: DayRange, system: UnitSystem, roundsAmounts: Bool = true) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        guard let item = shoppingItems(in: root).first(where: { $0.value(forKey: "uuid") as? UUID == itemID }),
+              canUpdate(item.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        var ingredient = item.value(forKey: "ingredient") as? NSManagedObject
+        if ingredient == nil {
+            let itemName = item.value(forKey: "name") as? String ?? ""
+            let snapshot = try pantrySnapshot(for: householdID)
+            let matchedID = IngredientMatching.matchID(itemName, in: snapshot.ingredients.map(\.matchValue), rules: snapshot.matchRules)
+            ingredient = matchedID.flatMap { id in managedIngredients(in: root).first { $0.value(forKey: "uuid") as? UUID == id } }
+            if ingredient == nil {
+                let created = try insert(.ingredient, into: store(for: rootID), context: context)
+                created.setValue(itemName, forKey: "name")
+                created.setValue(Ingredient.normalize(itemName), forKey: "normalizedName")
+                created.setValue(item.value(forKey: "categoryRaw") as? String ?? IngredientCategory.other.rawValue, forKey: "categoryRaw")
+                created.setValue(InventoryMode.none.rawValue, forKey: "inventoryModeRaw")
+                created.setValue(try JSONEncoder().encode([String]()), forKey: "rejectedMatchKeys")
+                created.setValue(root, forKey: "household")
+                root.mutableSetValue(forKey: "ingredients").add(created)
+                ingredient = created
+            }
+            item.setValue(ingredient, forKey: "ingredient")
+        }
+        root.setValue(true, forKey: "inventoryEnabled")
+        let now = Date.now
+        ingredient?.setValue(InventoryMode.have.rawValue, forKey: "inventoryModeRaw")
+        ingredient?.setValue(item.value(forKey: "canonicalValue"), forKey: "inventoryCanonicalValue")
+        ingredient?.setValue(item.value(forKey: "canonicalDimensionRaw"), forKey: "inventoryDimensionRaw")
+        ingredient?.setValue(now, forKey: "inventoryUpdatedAt")
+        ingredient?.setValue(now, forKey: "modifiedAt")
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        try regenerateShoppingList(for: householdID, range: range, system: system, roundsAmounts: roundsAmounts)
+    }
+
+    func regenerateShoppingList(for householdID: UUID, range: DayRange, system: UnitSystem, roundsAmounts: Bool = true) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let managedIngredients = managedIngredients(in: root)
+        let domainIngredients = managedIngredients.compactMap(managedIngredientModel)
+        let domainByID = Dictionary(uniqueKeysWithValues: domainIngredients.map { ($0.uuid, $0) })
+        let ruleValues = managedMatchRules(in: root)
+        let domainRules = ruleValues.map { value -> IngredientMatchRule in
+            let rule = IngredientMatchRule()
+            rule.leftKey = value.leftKey
+            rule.rightKey = value.rightKey
+            rule.kindRaw = value.kind.rawValue
+            return rule
+        }
+        let staples = Set(domainIngredients.filter(\.isPantryStaple).map { IngredientMatching.key(for: $0.name) })
+        let sourceEntries = try managedEntries(in: root, rootID: rootID, range: range)
+        let standardServings = max(1, (root.value(forKey: "standardServings") as? NSNumber)?.intValue ?? Household.defaultStandardServings)
+        let entries = sourceEntries.compactMap { managedEntry -> MealPlanEntry? in
+            guard let date = managedEntry.value(forKey: "date") as? Date,
+                  let managedDish = managedEntry.value(forKey: "dish") as? NSManagedObject,
+                  let dishName = managedDish.value(forKey: "name") as? String else { return nil }
+            let dish = Dish(name: dishName)
+            dish.servings = max(1, (managedDish.value(forKey: "servings") as? NSNumber)?.intValue ?? 2)
+            dish.importedSourceApp = managedDish.value(forKey: "importedSourceApp") as? String
+            let managedDishIngredients = (managedDish.value(forKey: "ingredients") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+            dish.ingredients = managedDishIngredients.compactMap { managedLine -> DishIngredient? in
+                let line = DishIngredient(
+                    canonicalValue: (managedLine.value(forKey: "canonicalValue") as? NSNumber)?.doubleValue,
+                    dimension: (managedLine.value(forKey: "canonicalDimensionRaw") as? String).flatMap(QuantityDimension.init(rawValue:)),
+                    displayUnit: managedLine.value(forKey: "displayUnit") as? String,
+                    isApproximate: (managedLine.value(forKey: "isApproximate") as? NSNumber)?.boolValue ?? false,
+                    note: managedLine.value(forKey: "note") as? String,
+                    rawText: managedLine.value(forKey: "rawText") as? String,
+                    sortIndex: (managedLine.value(forKey: "sortIndex") as? NSNumber)?.intValue ?? 0
+                )
+                if let ingredientObject = managedLine.value(forKey: "ingredient") as? NSManagedObject,
+                   let ingredientID = ingredientObject.value(forKey: "uuid") as? UUID,
+                   let ingredient = domainByID[ingredientID] {
+                    line.ingredient = ingredient
+                }
+                line.dish = dish
+                return line
+            }
+            let entry = MealPlanEntry(date: date, mealKey: managedEntry.value(forKey: "mealSlotRaw") as? String ?? MealSlot.dinner.rawValue, dish: dish)
+            entry.skipped = false
+            entry.servingsOverride = max(1, (managedEntry.value(forKey: "servingsOverride") as? NSNumber)?.intValue ?? standardServings)
+            entry.dish = dish
+            return entry
+        }
+        let aggregated = ShoppingListBuilder.aggregate(entries, stapleKeys: staples, matchRules: domainRules)
+            .compactMap { line -> AggregatedLine? in
+                guard (root.value(forKey: "inventoryEnabled") as? NSNumber)?.boolValue == true,
+                      let ingredient = IngredientMatching.match(line.name, in: domainIngredients, rules: domainRules) else { return line }
+                return ShoppingListBuilder.subtractingInventory(line, ingredient: ingredient)
+            }
+
+        var oldByKey = Dictionary(grouping: shoppingItems(in: root).filter { !(( $0.value(forKey: "isManual") as? NSNumber)?.boolValue ?? false) }) {
+            IngredientMatching.key(for: $0.value(forKey: "name") as? String ?? "")
+        }.mapValues { $0.sorted {
+            (($0.value(forKey: "uuid") as? UUID)?.uuidString ?? "") < (($1.value(forKey: "uuid") as? UUID)?.uuidString ?? "")
+        } }
+        let ruleCandidates = managedIngredients.compactMap { object -> IngredientMatchCandidateValue? in
+            guard let summary = managedPantryIngredientSummary(object) else { return nil }
+            return summary.matchValue
+        }
+        for (index, line) in aggregated.enumerated() {
+            let key = IngredientMatching.key(for: line.name)
+            let item: NSManagedObject
+            let isNew: Bool
+            if var bucket = oldByKey[key], let reused = bucket.first {
+                item = reused
+                isNew = false
+                bucket.removeFirst()
+                oldByKey[key] = bucket
+            } else {
+                item = try insert(.shoppingListItem, into: store(for: rootID), context: context)
+                isNew = true
+                item.setValue(false, forKey: "isManual")
+                item.setValue(false, forKey: "isChecked")
+                item.setValue(Date.now, forKey: "checkStateModifiedAt")
+                item.setValue(try JSONEncoder().encode([String]()), forKey: "additionalAmountsRaw")
+                item.setValue(try JSONEncoder().encode([String]()), forKey: "sourceDishNames")
+                item.setValue(0, forKey: "unmeasuredCount")
+                item.setValue(false, forKey: "isApproximate")
+                item.setValue(Date.now, forKey: "dateCreated")
+                item.setValue(root, forKey: "household")
+                root.mutableSetValue(forKey: "shoppingItems").add(item)
+            }
+            let now = Date.now
+            var changed = isNew
+            func assign(_ value: Any?, forKey key: String) {
+                if !Self.managedValuesEqual(item.value(forKey: key), value) {
+                    item.setValue(value, forKey: key)
+                    changed = true
+                }
+            }
+            assign(line.name, forKey: "name")
+            assign(line.normalizedName, forKey: "normalizedName")
+            assign(line.category.rawValue, forKey: "categoryRaw")
+            assign(line.customAisleName, forKey: "customAisleName")
+            assign(line.quantity?.value, forKey: "canonicalValue")
+            assign(line.quantity?.dimension.rawValue, forKey: "canonicalDimensionRaw")
+            assign(try JSONEncoder().encode(line.additionalQuantities.map(\.encoded)), forKey: "additionalAmountsRaw")
+            assign(line.unmeasuredCount, forKey: "unmeasuredCount")
+            assign(line.displayUnit, forKey: "displayUnit")
+            assign(line.isApproximate, forKey: "isApproximate")
+            assign(ShoppingListBuilder.displayText(for: line, system: system, roundsAmounts: roundsAmounts), forKey: "displayText")
+            assign(try JSONEncoder().encode(line.sourceDishNames), forKey: "sourceDishNames")
+            assign(range.start, forKey: "rangeStart")
+            assign(range.end, forKey: "rangeEnd")
+            assign(line.category.sortOrder * 1_000 + index, forKey: "sortIndex")
+            let linkedID = IngredientMatching.matchID(line.name, in: ruleCandidates, rules: ruleValues)
+            let linkedIngredient = linkedID.flatMap { id in managedIngredients.first { $0.value(forKey: "uuid") as? UUID == id } }
+            let currentLinkedID = (item.value(forKey: "ingredient") as? NSManagedObject)?.value(forKey: "uuid") as? UUID
+            if currentLinkedID != linkedID {
+                item.setValue(linkedIngredient, forKey: "ingredient")
+                changed = true
+            }
+            if changed {
+                item.setValue(now, forKey: "contentModifiedAt")
+                item.setValue(now, forKey: "modifiedAt")
+            }
+        }
+        for stale in oldByKey.values.flatMap({ $0 }) { context.delete(stale) }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
     }
 
     func makeSession(for household: ManagedHouseholdSummary) -> ManagedCollaborationSession {
@@ -398,6 +807,13 @@ final class MealPlanManagedCollaboration {
         return (try? JSONDecoder().decode([String].self, from: data)) ?? []
     }
 
+    private static func managedValuesEqual(_ lhs: Any?, _ rhs: Any?) -> Bool {
+        guard let lhs, let rhs else { return lhs == nil && rhs == nil }
+        if let lhs = lhs as? NSNumber, let rhs = rhs as? NSNumber { return lhs == rhs }
+        if let lhs = lhs as? NSObject { return lhs.isEqual(rhs) }
+        return false
+    }
+
     func prepareVerifiedShare(rootID: String) async throws -> CKShare {
         guard let householdID = UUID(uuidString: rootID), isVerifiedManagedHousehold(householdID) else {
             throw MealPlanManagedCollaborationError.householdNotFound
@@ -454,6 +870,92 @@ final class MealPlanManagedCollaboration {
             throw MealPlanManagedCollaborationError.invalidRootStore
         }
         return store
+    }
+
+    private func managedIngredients(in root: NSManagedObject) -> [NSManagedObject] {
+        (root.value(forKey: "ingredients") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+    }
+
+    private func shoppingItems(in root: NSManagedObject) -> [NSManagedObject] {
+        (root.value(forKey: "shoppingItems") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+    }
+
+    private func managedEntries(in root: NSManagedObject, rootID: NSManagedObjectID, range: DayRange) throws -> [NSManagedObject] {
+        let request = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.mealPlanEntry.rawValue)
+        request.predicate = NSPredicate(
+            format: "household == %@ AND date >= %@ AND date < %@ AND skipped == NO",
+            root,
+            range.start as NSDate,
+            range.end as NSDate
+        )
+        request.sortDescriptors = [
+            NSSortDescriptor(key: "date", ascending: true),
+            NSSortDescriptor(key: "sortIndex", ascending: true),
+        ]
+        request.affectedStores = [try store(for: rootID)]
+        return try container.viewContext.fetch(request)
+    }
+
+    private func managedPantryIngredientSummary(_ ingredient: NSManagedObject) -> ManagedPantryIngredientSummary? {
+        guard let id = ingredient.value(forKey: "uuid") as? UUID,
+              let name = ingredient.value(forKey: "name") as? String else { return nil }
+        let aliasObjects = (ingredient.value(forKey: "aliases") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let aliases = aliasObjects.compactMap { alias -> IngredientMatchAliasValue? in
+            guard let aliasName = alias.value(forKey: "name") as? String,
+                  let normalizedName = alias.value(forKey: "normalizedName") as? String else { return nil }
+            return IngredientMatchAliasValue(
+                name: aliasName,
+                normalizedName: normalizedName,
+                sourceRaw: alias.value(forKey: "sourceRaw") as? String ?? IngredientAliasSource.automatic.rawValue
+            )
+        }
+        return ManagedPantryIngredientSummary(
+            id: id,
+            name: name,
+            normalizedName: ingredient.value(forKey: "normalizedName") as? String ?? Ingredient.normalize(name),
+            categoryRaw: ingredient.value(forKey: "categoryRaw") as? String ?? IngredientCategory.other.rawValue,
+            customAisleName: ingredient.value(forKey: "customAisleName") as? String,
+            isPantryStaple: (ingredient.value(forKey: "isPantryStaple") as? NSNumber)?.boolValue ?? false,
+            aliases: aliases,
+            rejectedMatchKeys: Self.stringArray(ingredient.value(forKey: "rejectedMatchKeys"))
+        )
+    }
+
+    private func managedMatchRules(in root: NSManagedObject) -> [IngredientMatchRuleValue] {
+        let rules = (root.value(forKey: "matchRules") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        return rules.compactMap { rule in
+            guard let leftKey = rule.value(forKey: "leftKey") as? String,
+                  let rightKey = rule.value(forKey: "rightKey") as? String,
+                  let kindRaw = rule.value(forKey: "kindRaw") as? String,
+                  let kind = IngredientMatchRuleKind(rawValue: kindRaw) else { return nil }
+            return IngredientMatchRuleValue(leftKey: leftKey, rightKey: rightKey, kind: kind)
+        }
+    }
+
+    private func managedIngredientModel(_ object: NSManagedObject) -> Ingredient? {
+        guard let id = object.value(forKey: "uuid") as? UUID,
+              let name = object.value(forKey: "name") as? String else { return nil }
+        let category = IngredientCategory(rawValue: object.value(forKey: "categoryRaw") as? String ?? "") ?? .other
+        let ingredient = Ingredient(name: name, category: category)
+        ingredient.uuid = id
+        ingredient.normalizedName = object.value(forKey: "normalizedName") as? String ?? Ingredient.normalize(name)
+        ingredient.customAisleName = object.value(forKey: "customAisleName") as? String
+        ingredient.isPantryStaple = (object.value(forKey: "isPantryStaple") as? NSNumber)?.boolValue ?? false
+        ingredient.inventoryModeRaw = object.value(forKey: "inventoryModeRaw") as? String ?? InventoryMode.none.rawValue
+        ingredient.inventoryCanonicalValue = (object.value(forKey: "inventoryCanonicalValue") as? NSNumber)?.doubleValue
+        ingredient.inventoryDimensionRaw = object.value(forKey: "inventoryDimensionRaw") as? String
+        ingredient.rejectedMatchKeys = Self.stringArray(object.value(forKey: "rejectedMatchKeys"))
+        let aliasObjects = (object.value(forKey: "aliases") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        ingredient.aliases = aliasObjects.compactMap { object in
+            guard let name = object.value(forKey: "name") as? String else { return nil }
+            let source = IngredientAliasSource(rawValue: object.value(forKey: "sourceRaw") as? String ?? "") ?? .automatic
+            let alias = IngredientAlias(name: name, source: source, confidence: (object.value(forKey: "confidence") as? NSNumber)?.doubleValue)
+            alias.uuid = object.value(forKey: "uuid") as? UUID ?? alias.uuid
+            alias.normalizedName = object.value(forKey: "normalizedName") as? String ?? Ingredient.normalize(name)
+            alias.ingredient = ingredient
+            return alias
+        }
+        return ingredient
     }
 
     private func insert(

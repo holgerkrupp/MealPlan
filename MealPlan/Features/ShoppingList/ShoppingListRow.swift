@@ -26,6 +26,19 @@ struct ShoppingListRowSnapshot: Identifiable, Equatable {
         aisleName = item.aisleName
         sortIndex = item.sortIndex
     }
+
+    init(_ item: ManagedShoppingListItemSummary) {
+        id = item.id
+        name = item.name
+        displayText = item.displayText
+        sourceDishNames = item.sourceDishNames
+        isChecked = item.isChecked
+        isManual = item.isManual
+        isStaple = item.isStaple
+        category = item.category
+        aisleName = item.aisleName
+        sortIndex = item.sortIndex
+    }
 }
 
 struct ShoppingListRowGroup: Identifiable {
@@ -39,6 +52,7 @@ struct ShoppingListRowGroup: Identifiable {
 @MainActor
 struct ShoppingListRow: View {
     let snapshot: ShoppingListRowSnapshot
+    var isEditable = true
     var onToggle: () -> Void
     var onCategoryChange: (IngredientCategory) -> Void
     var onCustomAisle: () -> Void
@@ -78,6 +92,7 @@ struct ShoppingListRow: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .disabled(!isEditable)
             .accessibilityElement(children: .ignore)
             .accessibilityLabel(accessibilityLabel)
             .accessibilityValue(snapshot.isChecked
@@ -97,43 +112,45 @@ struct ShoppingListRow: View {
                     .foregroundStyle(.tertiary)
                     .accessibilityLabel(String(localized: "Added by hand"))
             }
-            Menu {
-                Picker(String(localized: "Aisle"), selection: Binding(
-                    get: { snapshot.category }, set: { onCategoryChange($0) }
-                )) {
-                    ForEach(IngredientCategory.allCases) { category in
-                        Label(category.localizedName, systemImage: category.symbolName).tag(category)
+            if isEditable {
+                Menu {
+                    Picker(String(localized: "Aisle"), selection: Binding(
+                        get: { snapshot.category }, set: { onCategoryChange($0) }
+                    )) {
+                        ForEach(IngredientCategory.allCases) { category in
+                            Label(category.localizedName, systemImage: category.symbolName).tag(category)
+                        }
                     }
-                }
-                Button(action: onCustomAisle) {
-                    Label(String(localized: "Custom aisle…"), systemImage: "text.badge.plus")
-                }
-                Divider()
-                Button(action: onMarkOwned) {
-                    Label(String(localized: "Already have this"), systemImage: "checkmark.seal")
-                }
-                if isStaple {
-                    Button {
-                        onSetStaple(false)
-                    } label: {
-                        Label(String(localized: "Not a staple"), systemImage: "minus.circle")
+                    Button(action: onCustomAisle) {
+                        Label(String(localized: "Custom aisle…"), systemImage: "text.badge.plus")
                     }
-                } else {
-                    Button {
-                        onSetStaple(true)
-                    } label: {
-                        Label(String(localized: "Usually have this"), systemImage: "shippingbox")
+                    Divider()
+                    Button(action: onMarkOwned) {
+                        Label(String(localized: "Already have this"), systemImage: "checkmark.seal")
                     }
+                    if isStaple {
+                        Button {
+                            onSetStaple(false)
+                        } label: {
+                            Label(String(localized: "Not a staple"), systemImage: "minus.circle")
+                        }
+                    } else {
+                        Button {
+                            onSetStaple(true)
+                        } label: {
+                            Label(String(localized: "Usually have this"), systemImage: "shippingbox")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "ellipsis.circle")
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
-            } label: {
-                Image(systemName: "ellipsis.circle")
-                    .foregroundStyle(.secondary)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
+                .buttonStyle(.plain)
+                .help(String(localized: "Change the aisle, or mark as a pantry staple"))
+                .accessibilityLabel(String(localized: "Options for \(snapshot.name)"))
             }
-            .buttonStyle(.plain)
-            .help(String(localized: "Change the aisle, or mark as a pantry staple"))
-            .accessibilityLabel(String(localized: "Options for \(snapshot.name)"))
         }
     }
 
