@@ -4679,6 +4679,9 @@
     "An estimate, not a nutrition label." : {
 
     },
+    "Another household needs review" : {
+
+    },
     "Answers what is planned for a day, date range, or meal." : {
       "localizations" : {
         "da" : {
@@ -9428,6 +9431,9 @@
     "Copied" : {
 
     },
+    "Copy and Switch Household" : {
+
+    },
     "Copy from last week" : {
       "localizations" : {
         "da" : {
@@ -9467,6 +9473,9 @@
           }
         }
       }
+    },
+    "Copy household data into the canonical household?" : {
+
     },
     "Copy Invitation Link" : {
       "localizations" : {
@@ -9509,6 +9518,9 @@
       }
     },
     "Copy text" : {
+
+    },
+    "Copying household data…" : {
 
     },
     "Could not save recipe" : {
@@ -9822,6 +9834,9 @@
         }
       }
     },
+    "Couldn’t move meal" : {
+
+    },
     "Couldn’t open that invitation: %@" : {
 
     },
@@ -9993,6 +10008,9 @@
           }
         }
       }
+    },
+    "Couldn’t Reconcile Households" : {
+
     },
     "Couldn’t refresh recipe" : {
 
@@ -16984,6 +17002,9 @@
     "iCloud is preparing the shared meal plan." : {
 
     },
+    "iCloud is taking too long to prepare this invitation. Check your connection and try again." : {
+
+    },
     "iCloud sharing is unavailable on this device." : {
       "localizations" : {
         "da" : {
@@ -20071,6 +20092,9 @@
     "MealPlan found a public recipe feed or discovery page. It will keep the source and show future recipes in Discover." : {
 
     },
+    "MealPlan found more than one populated household for this Apple Account. Copying moves this device to the active shared household and retains every original iCloud zone as a backup." : {
+
+    },
     "MealPlan Fridge" : {
 
     },
@@ -20395,6 +20419,9 @@
           }
         }
       }
+    },
+    "MealPlan will use the already shared household when one exists, then copy recipes, plans, shopping items and other unmatched data from the other household zones. It will not delete any CloudKit zone. If two records have the same identity, this device’s version is kept so you can review it later." : {
+
     },
     "MealPlan's value" : {
       "localizations" : {
@@ -31202,6 +31229,9 @@
     "Resumed %@ routine." : {
 
     },
+    "Retry" : {
+
+    },
     "Reverse last ingredient merge" : {
 
     },
@@ -31244,6 +31274,9 @@
           }
         }
       }
+    },
+    "Review and Copy Household Data" : {
+
     },
     "Review ingredient" : {
 
@@ -42772,6 +42805,9 @@
           }
         }
       }
+    },
+    "Your change wasn’t saved. Please try again." : {
+
     },
     "Your dishes" : {
       "localizations" : {

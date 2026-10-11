@@ -11,25 +11,25 @@ import SwiftData
 struct DishSidebarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    #if os(macOS)
-    #endif
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @State private var planningDish: Dish?
     @State private var detailDish: Dish?
     /// Lets ⌘F from the menu bar land in the sidebar's own search field.
     @FocusState private var searchFocused: Bool
+    @State private var availableTags: [String] = []
+    @State private var popularTags: [String] = []
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var filteredDishes: [Dish] {
         appState.planDishFilter.apply(to: allDishes, sourceIsAlphabeticallySorted: true)
-    }
-
-    private var tags: [String] {
-        DishTag.vocabulary(from: allDishes)
-    }
-
-    private var popularTags: [String] {
-        DishTag.mostUsed(from: allDishes)
     }
 
     var body: some View {
@@ -52,6 +52,11 @@ struct DishSidebarView: View {
             }
         }
         .background(.background.secondary)
+        .task(id: libraryRevision) {
+            let usage = DishTag.usage(fromTagLists: allDishes.map(\.tagNames))
+            availableTags = DishTag.sorted(usage.map(\.tag))
+            popularTags = Array(usage.prefix(12).map(\.tag))
+        }
         // The sidebar is the dish list while you're on the plan, so it takes
         // over the library's menu items — filtering its own `planDishFilter`,
         // and offering neither import nor export, which belong to the Dishes
@@ -105,7 +110,7 @@ struct DishSidebarView: View {
                 Spacer(minLength: 0)
                 DishFilterMenu(
                     filter: filter,
-                    availableTags: tags
+                    availableTags: availableTags
                 )
                     .labelStyle(.iconOnly)
                     .menuIndicator(.hidden)
@@ -117,6 +122,15 @@ struct DishSidebarView: View {
             TagFilterStrip(filter: filter, tags: popularTags, horizontalPadding: 0)
         }
         .padding(10)
+    }
+
+    private var libraryRevision: SidebarLibraryRevision {
+        SidebarLibraryRevision(count: allDishes.count, latestModification: allDishes.lazy.map(\.modifiedAt).max())
+    }
+
+    private struct SidebarLibraryRevision: Equatable {
+        var count: Int
+        var latestModification: Date?
     }
 
     private func searchField(text: Binding<String>) -> some View {
@@ -293,7 +307,7 @@ struct DishSidebarView: View {
 }
 
 #Preview {
-    DishSidebarView()
+    DishSidebarView(householdID: AppState.preview.currentHousehold?.uuid)
         .frame(width: 300, height: 600)
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)

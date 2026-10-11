@@ -8,6 +8,7 @@ import SwiftData
 /// between them is draggable and the width is remembered.
 @MainActor
 struct PlanView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.horizontalSizeClass) private var sizeClass
 
     @AppStorage("plan.showsDishSidebar") private var showsSidebar = true
@@ -31,7 +32,7 @@ struct PlanView: View {
 
                 if fits && showsSidebar {
                     resizeHandle(currentWidth: width, availableWidth: geometry.size.width)
-                    DishSidebarView()
+                    DishSidebarView(householdID: appState.currentHousehold?.uuid)
                         .frame(width: width)
                         .transition(.move(edge: .trailing))
                 }

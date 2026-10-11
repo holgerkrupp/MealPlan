@@ -5,24 +5,23 @@ import UniformTypeIdentifiers
 @MainActor
 struct DishLibraryView: View {
     @Environment(AppState.self) private var appState
-    @State private var fetchLimit = Self.pageSize
+    @State private var pageCount = 1
 
-    private static let pageSize = 120
-
-    private var needsEntireLibrary: Bool {
-        let filter = appState.dishFilter
-        return filter.sort != .alphabetical
-            || filter.isActive
-            || !filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
+    fileprivate static let pageSize = 120
 
     var body: some View {
         DishLibraryContent(
-            fetchLimit: needsEntireLibrary ? nil : fetchLimit,
-            loadMore: { fetchLimit += Self.pageSize }
+            householdID: appState.currentHousehold?.uuid,
+            sort: appState.dishFilter.sort,
+            pageCount: pageCount,
+            loadMore: { pageIndex in
+                guard pageIndex == pageCount - 1 else { return }
+                pageCount += 1
+            }
         )
+        .id("\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.dishFilter.sort.rawValue)")
         .onChange(of: appState.dishFilter) {
-            fetchLimit = Self.pageSize
+            pageCount = 1
         }
     }
 }
@@ -33,8 +32,12 @@ private struct DishLibraryContent: View {
     @Environment(\.modelContext) private var context
     @Query private var allDishes: [Dish]
 
-    private let fetchLimit: Int?
-    private let loadMore: @MainActor () -> Void
+    private let householdID: UUID?
+    private let sort: DishFilter.Sort
+    private let pageCount: Int
+    private let loadMore: @MainActor (Int) -> Void
+    @State private var hasAnyFilteredResults = false
+    @State private var hasMorePages = true
 
     /// The freshly created dish whose editor is open. Setting it is what
     /// opens the editor — in a window where the platform has them, else a sheet.
@@ -50,16 +53,29 @@ private struct DishLibraryContent: View {
     @State private var isSearchPresented = false
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
+    @State private var debouncedSearchText = ""
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
-    init(fetchLimit: Int?, loadMore: @escaping @MainActor () -> Void) {
-        var descriptor = FetchDescriptor<Dish>(sortBy: [SortDescriptor(\Dish.name)])
-        if let fetchLimit {
-            descriptor.fetchLimit = fetchLimit
-        }
+    init(
+        householdID: UUID?,
+        sort: DishFilter.Sort,
+        pageCount: Int,
+        loadMore: @escaping @MainActor (Int) -> Void
+    ) {
+        self.householdID = householdID
+        self.sort = sort
+        // A normal library view must never fall back to observing every
+        // household's recipes. With no active household, this sentinel can
+        // match no real dish.
+        let scopedHouseholdID = householdID ?? UUID()
+        var descriptor = FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: DishLibrarySort.descriptors(for: sort)
+        )
+        descriptor.fetchLimit = DishLibraryView.pageSize
         _allDishes = Query(descriptor)
-        self.fetchLimit = fetchLimit
+        self.pageCount = pageCount
         self.loadMore = loadMore
     }
 
@@ -73,6 +89,12 @@ private struct DishLibraryContent: View {
             count: allDishes.count,
             latestModification: allDishes.lazy.map(\.modifiedAt).max()
         )
+    }
+
+    private var visibleFilter: DishFilter {
+        var filter = appState.dishFilter
+        filter.searchText = debouncedSearchText
+        return filter
     }
 
     /// What the grid actually draws. A variant group collapses into one cell
@@ -117,73 +139,87 @@ private struct DishLibraryContent: View {
 
     var body: some View {
         @Bindable var appState = appState
-        let filteredDishes = appState.dishFilter.apply(
+        let filteredDishes = visibleFilter.apply(
             to: allDishes,
             sourceIsAlphabeticallySorted: true
         )
         let items = libraryItems(from: filteredDishes)
-        let canLoadMore = fetchLimit.map { allDishes.count >= $0 } ?? false
+        let canLoadMore = householdID != nil && allDishes.count == DishLibraryView.pageSize
 
         ScrollView {
-            #if os(iOS)
-            FullPageScreenshotBridge()
-                .frame(width: 0, height: 0)
-                .accessibilityHidden(true)
-            #endif
+            LazyVStack(alignment: .leading, spacing: 0) {
+                #if os(iOS)
+                FullPageScreenshotBridge()
+                    .frame(width: 0, height: 0)
+                    .accessibilityHidden(true)
+                #endif
 
-            TagFilterStrip(
-                filter: $appState.dishFilter,
-                tags: popularTags,
-                horizontalPadding: MacLayout.gutter
-            )
-            .padding(.top, 8)
+                TagFilterStrip(
+                    filter: $appState.dishFilter,
+                    tags: popularTags,
+                    horizontalPadding: MacLayout.gutter
+                )
+                .padding(.top, 8)
 
-            SeasonalSuggestionsStrip(dishes: allDishes)
+                SeasonalSuggestionsStrip(dishes: allDishes)
 
-            if filteredDishes.isEmpty {
-                emptyState
-                    .frame(maxWidth: .infinity, minHeight: 320)
-            } else {
                 if !appState.isGuest {
                     InlineTip(
                         tip: DishVariantsTip(),
                         padding: EdgeInsets(top: 8, leading: MacLayout.gutter, bottom: 0, trailing: MacLayout.gutter)
                     )
                 }
-                LazyVGrid(columns: columns, spacing: 16) {
-                    ForEach(items) { item in
-                        switch item {
-                        case .dish(let dish):
-                            DishLibraryCell(
-                                dish: dish,
-                                acceptsDrops: !appState.isGuest,
-                                library: allDishes
-                            )
-                        case .group(let ref, let lead, let count):
-                            DishLibraryCell(
-                                dish: lead,
-                                group: ref,
-                                variantCount: count,
-                                acceptsDrops: !appState.isGuest,
-                                library: allDishes
-                            )
-                        }
-                    }
 
-                    if canLoadMore {
-                        ProgressView()
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .onAppear {
-                                loadMore()
-                            }
-                    }
+                if !filteredDishes.isEmpty {
+                    grid(items, acceptsDrops: !appState.isGuest)
                 }
-                .padding(MacLayout.gutter)
+
+                if canLoadMore && pageCount == 1 {
+                    pageProgress { loadMore(0) }
+                }
+
+                ForEach(1..<pageCount, id: \.self) { pageIndex in
+                    DishLibraryResultPage(
+                        householdID: householdID,
+                        pageIndex: pageIndex,
+                        filter: visibleFilter,
+                        isLastPage: pageIndex == pageCount - 1,
+                        acceptsDrops: !appState.isGuest,
+                        hasAnyFilteredResults: $hasAnyFilteredResults,
+                        hasMorePages: $hasMorePages,
+                        loadMore: loadMore
+                    )
+                }
+
+                if filteredDishes.isEmpty && !hasAnyFilteredResults && !hasMorePages {
+                    emptyState
+                        .frame(maxWidth: .infinity, minHeight: 320)
+                }
             }
+        }
+        .onAppear { updatePageState(filteredDishes: filteredDishes) }
+        .onChange(of: allDishes.count) { updatePageState(filteredDishes: filteredDishes) }
+        .onChange(of: appState.dishFilter) {
+            hasAnyFilteredResults = false
+            hasMorePages = allDishes.count == DishLibraryView.pageSize
+            updatePageState(filteredDishes: filteredDishes)
         }
         .task(id: allDishes.count) {
             MealPlanTips.updateLibrary(allDishes)
+        }
+        .task(id: appState.dishFilter.searchText) {
+            let requestedText = appState.dishFilter.searchText
+            try? await Task.sleep(for: .milliseconds(200))
+            guard !Task.isCancelled else { return }
+            debouncedSearchText = requestedText
+        }
+        .onChange(of: debouncedSearchText) {
+            hasAnyFilteredResults = false
+            hasMorePages = householdID != nil && allDishes.count == DishLibraryView.pageSize
+            updatePageState(filteredDishes: visibleFilter.apply(
+                to: allDishes,
+                sourceIsAlphabeticallySorted: true
+            ))
         }
         .task(id: libraryRevision) {
             await refreshTags()
@@ -284,7 +320,10 @@ private struct DishLibraryContent: View {
         .task(id: appState.requestedDishID) {
             guard let id = appState.requestedDishID else { return }
             appState.requestedDishID = nil
-            requestedDish = allDishes.first { $0.uuid == id }
+            guard let householdID else { return }
+            requestedDish = try? context.fetch(FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.uuid == id && $0.household?.uuid == householdID }
+            )).first
         }
     }
 
@@ -297,10 +336,44 @@ private struct DishLibraryContent: View {
         guard !Task.isCancelled else { return }
         let metadata = await DishLibraryMetadataActor(
             modelContainer: context.container
-        ).tagMetadata()
+        ).tagMetadata(householdID: householdID)
         guard !Task.isCancelled else { return }
         availableTags = metadata.available
         popularTags = metadata.popular
+    }
+
+    private func updatePageState(filteredDishes: [Dish]) {
+        hasMorePages = householdID != nil && allDishes.count == DishLibraryView.pageSize
+        if !filteredDishes.isEmpty { hasAnyFilteredResults = true }
+    }
+
+    private func grid(_ items: [LibraryItem], acceptsDrops: Bool) -> some View {
+        LazyVGrid(columns: columns, spacing: 16) {
+            ForEach(items) { item in
+                switch item {
+                case .dish(let dish):
+                    DishLibraryCell(dish: dish, acceptsDrops: acceptsDrops, householdID: householdID)
+                        .equatable()
+                case .group(let ref, let lead, let count):
+                    DishLibraryCell(
+                        dish: lead,
+                        group: ref,
+                        variantCount: count,
+                        acceptsDrops: acceptsDrops,
+                        householdID: householdID
+                    )
+                    .equatable()
+                }
+            }
+        }
+        .padding(MacLayout.gutter)
+    }
+
+    private func pageProgress(action: @escaping () -> Void) -> some View {
+        ProgressView()
+            .frame(maxWidth: .infinity)
+            .padding()
+            .onAppear(perform: action)
     }
 
     private func handleAddRequest(_ request: AppState.PendingAddDish) async {
@@ -388,9 +461,11 @@ private struct DishLibraryContent: View {
             // The normal library query is deliberately paged. Export is an
             // explicit whole-library operation, so fetch everything only when
             // the cook actually requests it.
-            let dishes = try context.fetch(
-                FetchDescriptor<Dish>(sortBy: [SortDescriptor(\Dish.name)])
-            )
+            guard let householdID else { return }
+            let dishes = try context.fetch(FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == householdID },
+                sortBy: [SortDescriptor(\Dish.name)]
+            ))
             exportedArchive = ExportedRecipeArchive(
                 url: try MealPlanRecipeArchive.temporaryFile(for: dishes)
             )
@@ -416,11 +491,160 @@ private struct DishLibraryTagMetadata: Sendable {
     static let empty = DishLibraryTagMetadata(available: [], popular: [])
 }
 
+/// Each scrolling window owns a fixed-size query. Reaching its footer mounts
+/// the next window, so loading page 20 does not keep 2,400 SwiftData models in
+/// the library view's active query or rerun filtering over all earlier pages.
+@MainActor
+private struct DishLibraryResultPage: View {
+    @Query private var dishes: [Dish]
+
+    private let householdID: UUID?
+    private let pageIndex: Int
+    private let filter: DishFilter
+    private let isLastPage: Bool
+    private let acceptsDrops: Bool
+    @Binding private var hasAnyFilteredResults: Bool
+    @Binding private var hasMorePages: Bool
+    private let loadMore: @MainActor (Int) -> Void
+    private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
+
+    private enum Item: Identifiable {
+        case dish(Dish)
+        case group(DishVariantGroupRef, lead: Dish, count: Int)
+
+        var id: String {
+            switch self {
+            case .dish(let dish): "dish-\(dish.uuid)"
+            case .group(let group, _, _): "group-\(group.id)"
+            }
+        }
+    }
+
+    init(
+        householdID: UUID?,
+        pageIndex: Int,
+        filter: DishFilter,
+        isLastPage: Bool,
+        acceptsDrops: Bool,
+        hasAnyFilteredResults: Binding<Bool>,
+        hasMorePages: Binding<Bool>,
+        loadMore: @escaping @MainActor (Int) -> Void
+    ) {
+        self.householdID = householdID
+        self.pageIndex = pageIndex
+        self.filter = filter
+        self.isLastPage = isLastPage
+        self.acceptsDrops = acceptsDrops
+        self._hasAnyFilteredResults = hasAnyFilteredResults
+        self._hasMorePages = hasMorePages
+        self.loadMore = loadMore
+
+        let scopedHouseholdID = householdID ?? UUID()
+        var descriptor = FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: DishLibrarySort.descriptors(for: filter.sort)
+        )
+        descriptor.fetchLimit = DishLibraryView.pageSize
+        descriptor.fetchOffset = pageIndex * DishLibraryView.pageSize
+        _dishes = Query(descriptor)
+    }
+
+    var body: some View {
+        let filtered = filter.apply(
+            to: dishes,
+            now: .now,
+            sourceIsAlphabeticallySorted: filter.sort == .alphabetical
+        )
+        let items = libraryItems(from: filtered)
+
+        Group {
+            if !items.isEmpty {
+                LazyVGrid(columns: columns, spacing: 16) {
+                    ForEach(items) { item in
+                        switch item {
+                        case .dish(let dish):
+                            DishLibraryCell(
+                                dish: dish,
+                                acceptsDrops: acceptsDrops,
+                                householdID: householdID
+                            )
+                            .equatable()
+                        case .group(let ref, let lead, let count):
+                            DishLibraryCell(
+                                dish: lead,
+                                group: ref,
+                                variantCount: count,
+                                acceptsDrops: acceptsDrops,
+                                householdID: householdID
+                            )
+                            .equatable()
+                        }
+                    }
+                }
+                .padding(MacLayout.gutter)
+            }
+
+            if isLastPage && dishes.count == DishLibraryView.pageSize {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .onAppear { loadMore(pageIndex) }
+            }
+        }
+        .onAppear { updateState(filtered: filtered) }
+        .onChange(of: dishes.count) { updateState(filtered: filtered) }
+    }
+
+    private func updateState(filtered: [Dish]) {
+        if isLastPage {
+            hasMorePages = householdID != nil && dishes.count == DishLibraryView.pageSize
+        }
+        if !filtered.isEmpty { hasAnyFilteredResults = true }
+    }
+
+    private func libraryItems(from filtered: [Dish]) -> [Item] {
+        let groups = DishVariants.groups(in: filtered)
+        var seenGroups: Set<UUID> = []
+        var items: [Item] = []
+        for dish in filtered {
+            guard let groupID = dish.variantGroupID, let members = groups[groupID] else {
+                items.append(.dish(dish))
+                continue
+            }
+            guard seenGroups.insert(groupID).inserted else { continue }
+            items.append(.group(
+                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
+                lead: members[0],
+                count: members.count
+            ))
+        }
+        return items
+    }
+
+}
+
+private enum DishLibrarySort {
+    static func descriptors(for sort: DishFilter.Sort) -> [SortDescriptor<Dish>] {
+        switch sort {
+        case .alphabetical, .neverCooked:
+            [SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
+        case .recentlyAdded:
+            [SortDescriptor(\Dish.dateCreated, order: .reverse), SortDescriptor(\Dish.uuid)]
+        case .mostCooked:
+            [SortDescriptor(\Dish.usageCount, order: .reverse), SortDescriptor(\Dish.uuid)]
+        case .leastRecentlyCooked:
+            [SortDescriptor(\Dish.lastUsedDate), SortDescriptor(\Dish.uuid)]
+        }
+    }
+}
+
 @ModelActor
 private actor DishLibraryMetadataActor {
-    func tagMetadata() -> DishLibraryTagMetadata {
-        guard !Task.isCancelled,
-              let dishes = try? modelContext.fetch(FetchDescriptor<Dish>())
+    func tagMetadata(householdID: UUID?) -> DishLibraryTagMetadata {
+        guard !Task.isCancelled, let householdID,
+              let dishes = try? modelContext.fetch(FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == householdID }
+              ))
         else { return .empty }
 
         let usage = DishTag.usage(fromTagLists: dishes.map(\.tagNames))

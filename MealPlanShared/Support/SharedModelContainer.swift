@@ -118,11 +118,29 @@ enum SharedStore {
 
     /// Ask the system to refresh all widget timelines. No-op where WidgetKit
     /// isn't available (macOS build without the widget target loaded, etc.).
+    /// The timeline reload and synchronous notification observers are deferred
+    /// and coalesced so a committed edit does not hold up its interaction.
     static func reloadWidgets() {
-        #if canImport(WidgetKit)
-        WidgetCenter.shared.reloadAllTimelines()
-        #endif
-        NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
+        Task { @MainActor in
+            await WidgetRefreshScheduler.schedule()
+        }
+    }
+}
+
+@MainActor
+private enum WidgetRefreshScheduler {
+    private static var scheduledTask: Task<Void, Never>?
+
+    static func schedule() async {
+        guard scheduledTask == nil else { return }
+        scheduledTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(150))
+            #if canImport(WidgetKit)
+            WidgetCenter.shared.reloadAllTimelines()
+            #endif
+            NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
+            scheduledTask = nil
+        }
     }
 }
 

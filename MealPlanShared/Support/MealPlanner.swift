@@ -93,15 +93,34 @@ enum MealPlanner {
     }
 
     @MainActor
-    static func move(_ entry: MealPlanEntry, to date: Date, mealKey: String, memberName: String, context: ModelContext) {
-        guard HouseholdMutationAuthorization.canMutate(household: entry.household) else { return }
-        entry.date = date.startOfDay
+    @discardableResult
+    static func move(_ entry: MealPlanEntry, to date: Date, mealKey: String, memberName: String, context: ModelContext) -> Bool {
+        guard HouseholdMutationAuthorization.canMutate(household: entry.household) else { return false }
+        let destination = date.startOfDay
+        guard entry.date != destination || entry.mealKey != mealKey else { return true }
+
+        let previousDate = entry.date
+        let previousMealKey = entry.mealKey
+        let previousSortIndex = entry.sortIndex
+        let previousEditor = entry.lastEditedByName
+        let previousEditDate = entry.lastEditedDate
+        entry.date = destination
         entry.mealKey = mealKey
-        entry.sortIndex = nextSortIndex(for: date, mealKey: mealKey, context: context)
+        entry.sortIndex = nextSortIndex(for: destination, mealKey: mealKey, household: entry.household, context: context)
         entry.lastEditedByName = memberName
         entry.lastEditedDate = .now
-        try? context.save()
+        do {
+            try context.save()
+        } catch {
+            entry.date = previousDate
+            entry.mealKey = previousMealKey
+            entry.sortIndex = previousSortIndex
+            entry.lastEditedByName = previousEditor
+            entry.lastEditedDate = previousEditDate
+            return false
+        }
         SharedStore.reloadWidgets()
+        return true
     }
 
     @MainActor
@@ -160,11 +179,23 @@ enum MealPlanner {
 
     @MainActor
     static func nextSortIndex(for date: Date, mealKey: String, context: ModelContext) -> Int {
+        nextSortIndex(for: date, mealKey: mealKey, household: nil, context: context)
+    }
+
+    @MainActor
+    static func nextSortIndex(for date: Date, mealKey: String, household: Household?, context: ModelContext) -> Int {
         let day = date.startOfDay
-        let existing = (try? context.fetch(FetchDescriptor<MealPlanEntry>(
-            predicate: #Predicate { $0.date == day && $0.mealSlotRaw == mealKey }
-        ))) ?? []
-        return (existing.map(\.sortIndex).max() ?? -1) + 1
+        let householdID = household?.uuid
+        var descriptor = FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { entry in
+                entry.date == day
+                    && entry.mealSlotRaw == mealKey
+                    && entry.household?.uuid == householdID
+            },
+            sortBy: [SortDescriptor(\MealPlanEntry.sortIndex, order: .reverse), SortDescriptor(\MealPlanEntry.uuid)]
+        )
+        descriptor.fetchLimit = 1
+        return ((try? context.fetch(descriptor))?.first?.sortIndex ?? -1) + 1
     }
 
     @MainActor
@@ -246,8 +277,7 @@ extension MealPlanner {
         switch dropPlan(from: origin, onto: date, mealKey: mealKey, defaultMealKey: fallback) {
         case .move(let day, let key):
             guard let entry else { return false }
-            move(entry, to: day, mealKey: key, memberName: memberName, context: context)
-            return true
+            return move(entry, to: day, mealKey: key, memberName: memberName, context: context)
         case .add(let day, let key):
             guard let dish else { return false }
             plan(dish: dish, on: day, mealKey: key,

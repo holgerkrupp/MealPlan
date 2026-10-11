@@ -1,5 +1,6 @@
 import SwiftUI
 import SwiftData
+import Observation
 
 struct ExportedPDF: Identifiable { let id = UUID(); let url: URL }
 
@@ -34,7 +35,7 @@ struct CalendarHomeView: View {
     /// store-wide entry query defeats lazy scrolling even when the stack only
     /// builds a handful of weeks.
     @State private var paginator = CalendarPaginator()
-    @State private var loadedEntries: [MealPlanEntrySnapshot] = []
+    @State private var entrySnapshots = CalendarEntrySnapshotStore()
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,8 +68,9 @@ struct CalendarHomeView: View {
 
             LoadedMealPlanEntriesView(
                 range: paginator.queryRange,
-                onUpdate: { loadedEntries = $0 }
+                snapshotStore: entrySnapshots
             )
+            .equatable()
             .id(paginator.queryWindowID)
             .frame(width: 0, height: 0)
 
@@ -76,7 +78,7 @@ struct CalendarHomeView: View {
                 weekStart: $stripWeekStart,
                 selectedDate: appState.selectedDate,
                 visibilityTracker: visibilityTracker,
-                entries: loadedEntries,
+                entries: entrySnapshots.entries,
                 mealTypes: mealTypes,
                 onDropDish: { references, day in drop(references, on: day) },
                 isPickingDate: $showingDatePicker,
@@ -90,7 +92,7 @@ struct CalendarHomeView: View {
             .background(.bar)
 
             Divider()
-            plan(entries: loadedEntries)
+            plan(entries: entrySnapshots.entries)
         }
         // The Plan menu only works while the calendar is on screen; switching
         // to another section drops this value and greys the menu out.
@@ -255,14 +257,14 @@ struct CalendarHomeView: View {
 /// sections. Rebuilding this view when the paginator grows changes the query
 /// predicate, so SwiftData never observes the entire meal-plan history.
 @MainActor
-private struct LoadedMealPlanEntriesView: View {
+private struct LoadedMealPlanEntriesView: View, Equatable {
     let range: DateInterval
+    let snapshotStore: CalendarEntrySnapshotStore
     @Query private var models: [MealPlanEntry]
-    let onUpdate: ([MealPlanEntrySnapshot]) -> Void
 
-    init(range: DateInterval, onUpdate: @escaping ([MealPlanEntrySnapshot]) -> Void) {
+    init(range: DateInterval, snapshotStore: CalendarEntrySnapshotStore) {
         self.range = range
-        self.onUpdate = onUpdate
+        self.snapshotStore = snapshotStore
         let start = range.start
         let end = range.end
         _models = Query(
@@ -279,21 +281,63 @@ private struct LoadedMealPlanEntriesView: View {
                 // The live models stop here. Everything below this boundary
                 // renders immutable values and cannot fault a relationship
                 // while a lazy card is being constructed.
-                onUpdate(models.map(MealPlanEntrySnapshot.init))
+                snapshotStore.entries = models.map(MealPlanEntrySnapshot.init)
                 MealPlanTips.updatePlannedMealCount(models.count)
             }
     }
 
-    private var revision: Int {
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.range.start == rhs.range.start
+            && lhs.range.end == rhs.range.end
+            && lhs.snapshotStore === rhs.snapshotStore
+    }
+
+    private var revision: PlanEntryRenderRevision {
+        PlanEntryRenderRevision(entries: models)
+    }
+}
+
+@Observable
+@MainActor
+private final class CalendarEntrySnapshotStore {
+    var entries: [MealPlanEntrySnapshot] = []
+}
+
+/// Compact invalidation digest for the bounded query. Keeping a single integer
+/// as the task ID avoids allocating and comparing one revision value per meal
+/// whenever SwiftUI reevaluates this view during calendar scrolling.
+struct PlanEntryRenderRevision: Hashable, Sendable {
+    let digest: Int
+
+    @MainActor
+    init(entries: [MealPlanEntry]) {
         var hasher = Hasher()
-        hasher.combine(models.count)
-        for model in models {
-            hasher.combine(model.uuid)
-            hasher.combine(model.modifiedAt)
-            hasher.combine(model.dish?.uuid)
-            hasher.combine(model.dish?.modifiedAt)
+        hasher.combine(entries.count)
+        for entry in entries {
+            hasher.combine(entry.uuid)
+            hasher.combine(entry.modifiedAt)
+            hasher.combine(entry.date)
+            hasher.combine(entry.mealKey)
+            hasher.combine(entry.sortIndex)
+            hasher.combine(entry.servingsOverride)
+            hasher.combine(entry.skipped)
+            hasher.combine(entry.prepReminder)
+            hasher.combine(entry.plannedByName)
+            hasher.combine(entry.reactionRaw)
+            hasher.combine(entry.routineUUID)
+            hasher.combine(entry.isEatingOut)
+            hasher.combine(entry.placeName)
+            if let dish = entry.dish {
+                hasher.combine(dish.uuid)
+                hasher.combine(dish.modifiedAt)
+                hasher.combine(dish.name)
+                hasher.combine(dish.glyph)
+                hasher.combine(dish.needsReview)
+            } else {
+                hasher.combine(Optional<UUID>.none)
+            }
         }
-        return hasher.finalize()
+        digest = hasher.finalize()
     }
 }
 

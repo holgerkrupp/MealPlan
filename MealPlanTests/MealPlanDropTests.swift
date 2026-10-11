@@ -72,6 +72,22 @@ struct MealPlanDropTests {
         #expect(plan == .unchanged)
     }
 
+    @Test func renderRevisionTracksPlacementEvenWhenIdentityAndModifiedAtDoNotChange() {
+        let entry = MealPlanEntry(date: monday, mealKey: "lunch")
+        let originalUUID = entry.uuid
+        let originalModifiedAt = entry.modifiedAt
+        let before = PlanEntryRenderRevision(entries: [entry])
+
+        entry.date = friday
+        entry.mealKey = "dinner"
+        entry.sortIndex = 3
+
+        let after = PlanEntryRenderRevision(entries: [entry])
+        #expect(entry.uuid == originalUUID)
+        #expect(entry.modifiedAt == originalModifiedAt)
+        #expect(before != after)
+    }
+
     // MARK: - Dropping a dish from the library
 
     @Test func aDishDroppedOnAMealIsPlannedThere() {

@@ -20,6 +20,7 @@ struct EntryQuickActionsSheet: View {
     @State private var showCookPhoto = false
     @State private var photoItem: PhotosPickerItem?
     @State private var useAsDishImage = true
+    @State private var moveSaveFailed = false
 
     var body: some View {
         NavigationStack {
@@ -122,8 +123,15 @@ struct EntryQuickActionsSheet: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done")) { applyReschedule(); close() }
+                    Button(String(localized: "Done")) {
+                        if applyReschedule() { close() }
+                    }
                 }
+            }
+            .alert(String(localized: "Couldn’t move meal"), isPresented: $moveSaveFailed) {
+                Button(String(localized: "OK"), role: .cancel) { }
+            } message: {
+                Text(String(localized: "Your change wasn’t saved. Please try again."))
             }
             .onAppear {
                 date = entry.date
@@ -222,9 +230,11 @@ struct EntryQuickActionsSheet: View {
 
     // MARK: - Actions
 
-    private func applyReschedule() {
-        guard !date.isSameDay(as: entry.date) || mealKey != entry.mealKey else { return }
-        MealPlanner.move(entry, to: date, mealKey: mealKey, memberName: appState.currentMemberName, context: context)
+    private func applyReschedule() -> Bool {
+        guard !date.isSameDay(as: entry.date) || mealKey != entry.mealKey else { return true }
+        let saved = MealPlanner.move(entry, to: date, mealKey: mealKey, memberName: appState.currentMemberName, context: context)
+        moveSaveFailed = !saved
+        return saved
     }
 
     private func markCooked() {

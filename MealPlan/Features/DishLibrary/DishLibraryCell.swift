@@ -9,7 +9,7 @@ import SwiftData
 /// `isTargeted` flag, which is why this is a view of its own rather than a
 /// branch inside the grid's `ForEach`.
 @MainActor
-struct DishLibraryCell: View {
+struct DishLibraryCell: View, Equatable {
     /// The dish this cell shows, and — for a group — the one standing in for
     /// its members.
     let dish: Dish
@@ -18,9 +18,10 @@ struct DishLibraryCell: View {
     var variantCount: Int = 0
     /// Guests can rearrange nothing, so they get no drop target.
     var acceptsDrops: Bool = true
-    /// The library, passed down rather than re-queried: a `@Query` here would
-    /// run once per cell in the grid.
-    let library: [Dish]
+    /// Used only if a recipe is dropped on this cell. Keeping the complete
+    /// library out of every cell avoids invalidating every visible cell when
+    /// another page is loaded.
+    let householdID: UUID?
 
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -29,6 +30,18 @@ struct DishLibraryCell: View {
     #endif
 
     @State private var isTargeted = false
+
+    static func == (lhs: DishLibraryCell, rhs: DishLibraryCell) -> Bool {
+        lhs.dish.persistentModelID == rhs.dish.persistentModelID
+            && lhs.dish.modifiedAt == rhs.dish.modifiedAt
+            && lhs.dish.name == rhs.dish.name
+            && lhs.dish.isFavorite == rhs.dish.isFavorite
+            && lhs.dish.needsReview == rhs.dish.needsReview
+            && lhs.group == rhs.group
+            && lhs.variantCount == rhs.variantCount
+            && lhs.acceptsDrops == rhs.acceptsDrops
+            && lhs.householdID == rhs.householdID
+    }
 
     var body: some View {
         content
@@ -90,6 +103,10 @@ struct DishLibraryCell: View {
     /// Adds every dropped recipe to this cell's group, creating the group from
     /// this cell's own dish when there isn't one yet.
     private func joinVariants(_ references: [DishReference]) -> Bool {
+        guard let householdID else { return false }
+        let library = (try? context.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))) ?? []
         let dropped = references.compactMap { reference in
             library.first { $0.uuid == reference.dishUUID }
         }
