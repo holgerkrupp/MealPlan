@@ -5,7 +5,7 @@ import Foundation
 /// Entity names in the managed Core Data model introduced for the CloudKit
 /// collaboration migration. The model is intentionally separate from the
 /// existing SwiftData schema until the one-way migration is ready.
-enum ManagedHouseholdEntity: String, CaseIterable, Sendable {
+enum ManagedHouseholdEntity: String, CaseIterable, Codable, Sendable {
     case household = "Household"
     case householdMember = "HouseholdMember"
     case mealType = "MealType"
@@ -55,7 +55,7 @@ enum ManagedHouseholdPersistenceClassification {
     ]
 }
 
-enum ManagedHouseholdStoreScope: String, CaseIterable, Sendable {
+enum ManagedHouseholdStoreScope: String, CaseIterable, Codable, Sendable {
     case `private`
     case shared
 
@@ -120,11 +120,11 @@ final class ManagedHouseholdPersistence {
 
     init(
         storeDirectory: URL? = nil,
-        cloudKitEnabled: Bool = true,
+        cloudKitEnabled: Bool = false,
         inMemory: Bool = false,
         environment: CloudKitEnvironment = BuildEnvironment.cloudKit
     ) throws {
-        let resolvedStoreDirectory = try storeDirectory ?? Self.defaultStoreDirectory()
+        let resolvedStoreDirectory = try storeDirectory ?? Self.defaultStoreDirectory(environment: environment)
         let shouldEnableCloudKit = cloudKitEnabled && !inMemory
         self.storeDirectory = resolvedStoreDirectory
         self.cloudKitEnabled = shouldEnableCloudKit
@@ -204,6 +204,15 @@ final class ManagedHouseholdPersistence {
         return stores.first { $0.value === store }?.key
     }
 
+    /// Returns the exact loaded store object for a configured scope. Collaboration
+    /// adapters must use this mapping instead of assuming CloudKit store order.
+    func persistentStore(for scope: ManagedHouseholdStoreScope) throws -> NSPersistentStore {
+        guard isLoaded, let store = stores[scope] else {
+            throw ManagedHouseholdPersistenceError.notLoaded
+        }
+        return store
+    }
+
     /// Shared household permission comes from accepted-share metadata, not
     /// from heuristics about data residing in a shared store. #85 connects the
     /// system share's participant permission to this explicit value.
@@ -280,9 +289,10 @@ final class ManagedHouseholdPersistence {
         }
     }
 
-    private static func defaultStoreDirectory() throws -> URL {
+    private static func defaultStoreDirectory(environment: CloudKitEnvironment) throws -> URL {
         let directory = URL.applicationSupportDirectory
             .appending(path: "MealPlan", directoryHint: .isDirectory)
+            .appending(path: environment.rawValue.lowercased(), directoryHint: .isDirectory)
             .appending(path: "ManagedHouseholdStores", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory
@@ -361,7 +371,7 @@ private enum ManagedHouseholdModel {
     private static func attributes(for entity: ManagedHouseholdEntity) -> [ManagedHouseholdAttribute] {
         switch entity {
         case .household:
-            attributes(.uuid, .modifiedAt, .string("name"), .string("unitSystemRaw"), .string("unitPresentationOverrideRaw", optional: true), .bool("roundsDisplayedAmounts"), .string("calendarStyleRaw"), .integer("standardServings"), .bool("showsNutritionEstimates"), .bool("leftoverSuggestionsEnabled"), .bool("inventoryEnabled"), .string("packageSizeCountryCode"), .string("energyUnitRaw"), .string("localeIdentifier"), .date("dateCreated"), .bool("didSeedPantryStaples"), .binary("ingredientMergeAuditData", external: true), .bool("unlockedByPurchase"), .string("bringListUuid", optional: true), .string("bringListName", optional: true), .binary("bringShadowKeys"), .bool("bringAutoSync"), .date("bringLastSyncedAt", optional: true))
+            attributes(.uuid, .modifiedAt, .string("name"), .string("unitSystemRaw"), .string("unitPresentationOverrideRaw", optional: true), .bool("roundsDisplayedAmounts"), .string("calendarStyleRaw"), .integer("standardServings"), .bool("showsNutritionEstimates"), .bool("leftoverSuggestionsEnabled"), .bool("inventoryEnabled"), .string("packageSizeCountryCode"), .string("energyUnitRaw"), .string("localeIdentifier"), .date("dateCreated"), .bool("didSeedPantryStaples"), .binary("ingredientMergeAuditData", external: true), .bool("unlockedByPurchase"), .string("bringListUuid", optional: true), .string("bringListName", optional: true), .binary("bringShadowKeys"), .bool("bringAutoSync"), .date("bringLastSyncedAt", optional: true), .string("managedMigrationPhaseRaw", optional: true), .integer("managedGraphObjectCount", optional: true), .date("reinviteNoticeDismissedAt", optional: true))
         case .householdMember:
             attributes(.uuid, .modifiedAt, .string("cloudKitParticipantID", optional: true), .bool("isActive"), .string("name"), .string("roleRaw"), .bool("isCurrentUser"), .date("dateAdded"), .date("shareMetadataModifiedAt"), .date("profileModifiedAt"), .binary("allergies"), .binary("mustAvoidIngredients"), .binary("dietaryPatterns"), .binary("dislikes"), .binary("favorites"), .binary("preferredCuisines"), .integer("spiceTolerance", optional: true))
         case .mealType:

@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import CloudKit
+import CollaborationUI
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case plan, dishes, shopping, fridge, settings
@@ -263,6 +264,29 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(150))
         }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
+            // The shipped transport creates zone-wide shares, whose metadata
+            // has no hierarchical root. Core Data managed shares do have one.
+            // Keep those invitations out of the legacy SwiftData applier.
+            if metadata.hierarchicalRootRecordID != nil {
+                guard let managedCollaboration = appState.managedCollaboration else {
+                    HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+                    sharingErrorMessage = String(localized: "This invitation uses the updated household system. Your saved household is safe, and this invitation will be available after its new store is ready.")
+                    continue
+                }
+                do {
+                    let disposition = try await managedCollaboration.receive(metadata)
+                    if disposition == .queuedUntilStoresLoad {
+                        sharingErrorMessage = String(localized: "Your invitation is saved and will be opened when the household store is ready.")
+                    } else if disposition == .accepted {
+                        sharingErrorMessage = String(localized: "The invitation was accepted. Your existing household data remains saved while the shared household finishes preparing.")
+                    }
+                } catch {
+                    HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+                    sharingErrorMessage = String(localized: "The invitation could not be opened right now. Your saved household is unchanged. Check your connection and try again.")
+                }
+                continue
+            }
+
             if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
                 pendingHouseholdJoin = PendingHouseholdJoin(
                     metadata: metadata,

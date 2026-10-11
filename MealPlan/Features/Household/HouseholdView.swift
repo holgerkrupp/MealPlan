@@ -228,8 +228,21 @@ struct HouseholdSettingsView: View {
         .navigationTitle(String(localized: "Household"))
         .sheet(isPresented: $showingShareSheet) {
             if let household = appState.currentHousehold {
-                HouseholdSharingView(household: household)
-                    .dismissesOnOutsideClick()
+                if ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid) {
+                    if let collaboration = appState.managedCollaboration {
+                        ManagedHouseholdSharingView(household: household, collaboration: collaboration)
+                            .dismissesOnOutsideClick()
+                    } else {
+                        ManagedHouseholdSharingUnavailableView(
+                            error: appState.managedCollaborationError,
+                            retry: { Task { await appState.restoreManagedCollaborationIfActive() } }
+                        )
+                        .dismissesOnOutsideClick()
+                    }
+                } else {
+                    HouseholdSharingView(household: household)
+                        .dismissesOnOutsideClick()
+                }
             }
         }
         #if os(iOS)

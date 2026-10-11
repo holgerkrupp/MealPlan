@@ -125,6 +125,9 @@ enum HouseholdCollaborationStore {
     static func canMutate(_ household: Household?) -> Bool {
         guard HouseholdCollaborationMigration.supportsCurrentOrOlderFormat() else { return false }
         guard let household else { return true }
+        guard !ManagedHouseholdRolloutAuthority.usesManagedWriterInSharedContainer(for: household.uuid) else {
+            return false
+        }
         let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         if locator.shareRecordName == nil { return true }
         if locator.isReadOnly { return false }

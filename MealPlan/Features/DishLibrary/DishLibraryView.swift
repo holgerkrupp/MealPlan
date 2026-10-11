@@ -1,6 +1,18 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import OSLog
+
+enum DishLibraryPerformanceSignposts {
+    static let signposter = OSSignposter(
+        subsystem: "de.holgerkrupp.mealplan",
+        category: "DishLibrary"
+    )
+
+    static func recordPageRequest() {
+        signposter.emitEvent("Dish page requested", id: signposter.makeSignpostID())
+    }
+}
 
 @MainActor
 struct DishLibraryView: View {
@@ -175,7 +187,7 @@ private struct DishLibraryContent: View {
                 }
 
                 if canLoadMore && pageCount == 1 {
-                    pageProgress { loadMore(0) }
+                    loadMoreButton { loadMore(0) }
                 }
 
                 ForEach(1..<pageCount, id: \.self) { pageIndex in
@@ -369,11 +381,18 @@ private struct DishLibraryContent: View {
         .padding(MacLayout.gutter)
     }
 
-    private func pageProgress(action: @escaping () -> Void) -> some View {
-        ProgressView()
-            .frame(maxWidth: .infinity)
-            .padding()
-            .onAppear(perform: action)
+    private func loadMoreButton(action: @escaping () -> Void) -> some View {
+        Button {
+            DishLibraryPerformanceSignposts.recordPageRequest()
+            action()
+        } label: {
+            Label(String(localized: "Load more dishes"), systemImage: "arrow.down.circle")
+                .frame(maxWidth: .infinity)
+                .padding()
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.tint)
+        .accessibilityHint(String(localized: "Loads the next group of dishes."))
     }
 
     private func handleAddRequest(_ request: AppState.PendingAddDish) async {
@@ -585,10 +604,17 @@ private struct DishLibraryResultPage: View {
             }
 
             if isLastPage && dishes.count == DishLibraryView.pageSize {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .onAppear { loadMore(pageIndex) }
+                Button {
+                    DishLibraryPerformanceSignposts.recordPageRequest()
+                    loadMore(pageIndex)
+                } label: {
+                    Label(String(localized: "Load more dishes"), systemImage: "arrow.down.circle")
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.tint)
+                .accessibilityHint(String(localized: "Loads the next group of dishes."))
             }
         }
         .onAppear { updateState(filtered: filtered) }
@@ -641,6 +667,9 @@ private enum DishLibrarySort {
 @ModelActor
 private actor DishLibraryMetadataActor {
     func tagMetadata(householdID: UUID?) -> DishLibraryTagMetadata {
+        let signposter = DishLibraryPerformanceSignposts.signposter
+        let interval = signposter.beginInterval("Tag metadata scan", id: signposter.makeSignpostID())
+        defer { signposter.endInterval("Tag metadata scan", interval) }
         guard !Task.isCancelled, let householdID,
               let dishes = try? modelContext.fetch(FetchDescriptor<Dish>(
                 predicate: #Predicate { $0.household?.uuid == householdID }

@@ -161,19 +161,28 @@ final class HouseholdRecordSyncService {
     func synchronize(household: Household, context: ModelContext) async throws {
         try activateIfNeeded(household: household, context: context)
         guard let locator else { return }
+        let managedWriterIsActive = ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid)
         observeExternalStoreGeneration()
-        if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
-        await performCloudOperation(fetch: true, send: !locator.isReadOnly)
+        if !managedWriterIsActive, !locator.isReadOnly, needsLocalScan {
+            try await scanLocalChanges()
+        }
+        // Keep the old zone available as a read-only recovery source after
+        // cutover. It may reveal late writes from older app versions, but the
+        // legacy engine can never publish a second canonical stream.
+        await performCloudOperation(fetch: true, send: !managedWriterIsActive && !locator.isReadOnly)
         if let lastError { throw lastError }
     }
 
     func fetchChanges() async {
         guard locator != nil else { return }
+        let managedWriterIsActive = household.map {
+            ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: $0.uuid)
+        } ?? false
         observeExternalStoreGeneration()
         // A fetch can arrive through launch/bootstrap without the explicit
         // synchronize() path. Capture local edits first so that this fetch
         // cannot make them look acknowledged.
-        if locator?.isReadOnly != true, needsLocalScan {
+        if !managedWriterIsActive, locator?.isReadOnly != true, needsLocalScan {
             do { try await scanLocalChanges() }
             catch { lastError = error; return }
         }
@@ -198,6 +207,34 @@ final class HouseholdRecordSyncService {
         needsLocalScan = true
         didRestoreTombstoneOperations = false
         lastObservedStoreGeneration = nil
+    }
+
+    /// Flushes and stops the old CKSyncEngine at the one-way authority
+    /// boundary. It is not called during staging; activation requires a
+    /// successful final fetch/send, and a legacy change during that sync
+    /// invalidates the rollout record before it can be switched.
+    func prepareForManagedCutover(householdID: UUID) async throws {
+        guard let household, household.uuid == householdID,
+              let context, locator?.isOwner != false else {
+            throw ManagedHouseholdRolloutError.legacySyncUnavailable
+        }
+
+        let pendingScan = scheduledScan
+        scheduledScan?.cancel()
+        scheduledScan = nil
+        await pendingScan?.value
+        if let cloudOperationTask { await cloudOperationTask.value }
+
+        try await synchronize(household: household, context: context)
+
+        let trailingScan = scheduledScan
+        trailingScan?.cancel()
+        scheduledScan = nil
+        await trailingScan?.value
+        if let cloudOperationTask { await cloudOperationTask.value }
+        await engine?.cancelOperations()
+        engine = nil
+        pendingSnapshots.removeAll(keepingCapacity: false)
     }
 
     /// Forgets everything stored for syncing `locator`'s zone. Used once this
@@ -300,6 +337,17 @@ final class HouseholdRecordSyncService {
         saveObserver = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: context, queue: .main) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
+                if let householdID = self.household?.uuid {
+                    let rollout = ManagedHouseholdRolloutAuthority.shared
+                    let phase = rollout.phase(for: householdID)
+                    if phase == .verified || phase == .readyForCutover || rollout.usesManagedWriter(for: householdID) {
+                        try? rollout.noteLegacyMutation(for: householdID)
+                    }
+                    if rollout.usesManagedWriter(for: householdID) {
+                        self.needsLocalScan = false
+                        return
+                    }
+                }
                 if !self.isApplyingRemoteChanges { HouseholdStoreGeneration.markDirty() }
                 self.needsLocalScan = true
                 self.scheduleScan()
@@ -319,12 +367,27 @@ final class HouseholdRecordSyncService {
         }
         guard current != lastObservedStoreGeneration else { return }
         self.lastObservedStoreGeneration = current
+        if let household {
+            let authority = ManagedHouseholdRolloutAuthority.shared
+            if authority.usesManagedWriter(for: household.uuid) {
+                try? authority.noteLegacyMutation(for: household.uuid)
+                needsLocalScan = false
+                return
+            }
+            let phase = authority.phase(for: household.uuid)
+            if phase == .verified || phase == .readyForCutover {
+                try? authority.noteLegacyMutation(for: household.uuid)
+            }
+        }
         needsLocalScan = true
         scheduleScan()
     }
 
     private func scheduleScan() {
-        guard !isApplyingRemoteChanges, locator?.isReadOnly != true else { return }
+        guard !isApplyingRemoteChanges,
+              locator?.isReadOnly != true,
+              household.map({ !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: $0.uuid) }) == true
+        else { return }
         scheduledScan?.cancel()
         scheduledScan = Task { @MainActor [weak self] in
             // Keep database serialization and photo hashing out of the burst
@@ -341,7 +404,9 @@ final class HouseholdRecordSyncService {
     }
 
     private func scanLocalChanges() async throws {
-        guard let household, let engine, let locator, !locator.isReadOnly else { return }
+        guard let household, let engine, let locator, !locator.isReadOnly,
+              !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid)
+        else { return }
         var snapshots = try await snapshotRecords(for: household.uuid)
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
@@ -483,16 +548,28 @@ final class HouseholdRecordSyncService {
 
     private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) async throws {
         guard let household, let context, let locator else { return }
-        isApplyingRemoteChanges = true
-        defer { isApplyingRemoteChanges = false }
-
-        var local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
         let modifications = changes.modifications
             .filter { $0.record.recordID.zoneID == locator.zoneID }
             .sorted { priority($0.record) < priority($1.record) }
         let deletions = changes.deletions
             .filter { $0.recordID.zoneID == locator.zoneID }
             .sorted { deletionPriority(recordType: $0.recordType) < deletionPriority(recordType: $1.recordType) }
+        let rollout = ManagedHouseholdRolloutAuthority.shared
+        let managedWriterIsActive = rollout.usesManagedWriter(for: household.uuid)
+        if (!modifications.isEmpty || !deletions.isEmpty),
+           (managedWriterIsActive || rollout.phase(for: household.uuid) == .verified
+                || rollout.phase(for: household.uuid) == .readyForCutover) {
+            try? rollout.noteLegacyMutation(for: household.uuid)
+        }
+        // After cutover this zone is a recovery signal only. Applying its rows
+        // into the retired SwiftData graph would create a second local view of
+        // the household, and it must never feed a canonical managed write.
+        if managedWriterIsActive { return }
+
+        isApplyingRemoteChanges = true
+        defer { isApplyingRemoteChanges = false }
+
+        var local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
         let counts = Dictionary(grouping: modifications) { $0.record.recordType }
             .mapValues(\.count)
             .map { "\($0.key)=\($0.value)" }

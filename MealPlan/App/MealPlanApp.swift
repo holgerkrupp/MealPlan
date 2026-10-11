@@ -80,6 +80,8 @@ struct MealPlanApp: App {
                                 context: container.mainContext,
                                 planningThrough: purchaseManager.latestPlanningDate()
                             )
+                            await appState.stageManagedHouseholdIfNeeded(context: container.mainContext)
+                            await appState.restoreManagedCollaborationIfActive()
                         }
 
                         await purchaseManager.prepareForLaunch()

@@ -1,18 +1,26 @@
 # Per-record household sharing architecture
 
-Status: **approved for a pre-release clean cutover**
+Status: **managed-sharing migration is staged behind a per-household cutover gate**
 
 For how the shipped implementation works — both across one account's
 devices and between different people — see
 [`icloud-sharing.md`](icloud-sharing.md).
 
-MealPlan uses one CloudKit record per SwiftData entity, driven by
-`CKSyncEngine`. The old whole-household `MealPlanBackup` sharing asset and
-SwiftData CloudKit mirror are removed. There is intentionally no data or blob
-migration: the app has no customers yet, and its developer installations may
-be reset or restored with the existing manual backup tools if needed.
+The shipped MealPlan store is SwiftData with one CloudKit record per entity,
+driven by `CKSyncEngine`. That path remains the only active writer until an
+owner's existing household has been staged and all dependent clients are ready
+to move together. The sibling `CloudKitCollaborationKit` package supplies the
+new Core Data sharing and invitation foundation. The app copies the existing
+graph offline, keeps the SwiftData store intact, and does not enable CloudKit
+mirroring or create a share during staging.
 
-## One CloudKit owner
+This is a preservation migration. Stable UUIDs, image bytes, relationships,
+member metadata, and records from every supported SwiftData entity are copied
+without semantic rematching. The new writer boundary is one way: once managed
+writes are accepted, the app must never silently switch back to writable
+SwiftData/`CKSyncEngine` state.
+
+## Legacy writer retained during staging
 
 The App Group SwiftData store is opened with `cloudKitDatabase: .none`.
 `CKSyncEngine` is the only CloudKit writer, so there is one change stream and
@@ -101,3 +109,41 @@ and serialized state survive relaunch, and networking or quota failures remain
 pending for the next foreground/save retry. Server conflicts are merged against
 the returned system record and resubmitted with its change tag. Manual JSON
 backup/restore remains available as the recovery path during development.
+
+## Managed collaboration transition
+
+The app links the `CollaborationCore`, `CollaborationCoreData`,
+`CollaborationUI`, and `CollaborationDiagnostics` products from the sibling
+`CloudKitCollaborationKit` package. The app adapter supplies its CloudKit
+container, exact loaded private/shared store objects, a stable household root
+resolver, and a background closed-graph preflight. The package stays generic;
+MealPlan owns model mapping, schema markers, and migration decisions.
+
+At launch, an owner with one unambiguous private SwiftData household stages a
+copy into environment-scoped Core Data stores with CloudKit mirroring disabled.
+The state marker is scoped by environment and household UUID. It records the
+phase, per-entity identity inventory, batch checkpoints, and content digest.
+The importer reuses stable UUIDs, copies image data, links relationships after
+row creation, detects edits while copying, reconciles the offline destination,
+and checks the copied attributes and ingredient-integrity findings. A failed
+batch can resume; a changed authoritative source becomes a fresh stage. The
+SwiftData store is never deleted or rewritten by this migration.
+
+The durable rollout phases are `legacyActive`, `inventory`, `stagedCopy`,
+`verified`, `readyForCutover`, `managedActive`, and `membersReinvited`, plus a
+fail-closed recovery state. Verification alone cannot enable mirroring. The
+readiness record requires a confirmed canonical owner, same-account
+convergence, a stable legacy snapshot, resolved legacy writers, a migrated app
+mutation path, migrated extensions/widgets, and owner confirmation. Activation
+then performs a final serialized legacy sync and rechecks the durable record
+before changing authority. After activation, the old sync engine never scans
+or sends and extension/widget writes to the retired legacy path are rejected.
+
+The migration and package adapter are staged for rollout; the SwiftData UI,
+widgets, and Share Extension have not yet moved to managed Core Data. Therefore
+the readiness gate remains closed in this version, and the new native sharing
+and one-time re-invitation experience is not shown. Existing owner data and
+legacy invitations continue to use the current path until those clients can
+switch together. A production rollout still needs physical-device validation
+with two Apple Accounts, offline/old-version devices, and CloudKit Development
+and Production environments before the gate is enabled.

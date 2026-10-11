@@ -9,6 +9,10 @@
 /* Begin PBXBuildFile section */
 		483FD9E0304AECEB000857EF /* SFSymbolSelector in Frameworks */ = {isa = PBXBuildFile; productRef = 483FD9DF304AECEB000857EF /* SFSymbolSelector */; };
 		489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */ = {isa = PBXBuildFile; productRef = 489FB59E3044985000B8D666 /* ESADesignKit */; };
+		A11400000000000000000001 /* CollaborationCore in Frameworks */ = {isa = PBXBuildFile; productRef = A11400000000000000000011 /* CollaborationCore */; };
+		A11400000000000000000002 /* CollaborationCoreData in Frameworks */ = {isa = PBXBuildFile; productRef = A11400000000000000000012 /* CollaborationCoreData */; };
+		A11400000000000000000003 /* CollaborationUI in Frameworks */ = {isa = PBXBuildFile; productRef = A11400000000000000000013 /* CollaborationUI */; };
+		A11400000000000000000004 /* CollaborationDiagnostics in Frameworks */ = {isa = PBXBuildFile; productRef = A11400000000000000000014 /* CollaborationDiagnostics */; };
 		AB000000000000000000000D /* MealPlan/AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000000E /* MealPlan/AppIcon.icon */; };
 		BB000000000000000000000C /* MealPlanWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* MealPlanWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		DD000000000000000000000C /* MealPlanWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MealPlanWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -168,6 +172,10 @@
 		000000000000000130000000 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				A11400000000000000000001 /* CollaborationCore in Frameworks */,
+				A11400000000000000000002 /* CollaborationCoreData in Frameworks */,
+				A11400000000000000000003 /* CollaborationUI in Frameworks */,
+				A11400000000000000000004 /* CollaborationDiagnostics in Frameworks */,
 				483FD9E0304AECEB000857EF /* SFSymbolSelector in Frameworks */,
 				489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */,
 			);
@@ -259,6 +267,10 @@
 			packageProductDependencies = (
 				489FB59E3044985000B8D666 /* ESADesignKit */,
 				483FD9DF304AECEB000857EF /* SFSymbolSelector */,
+				A11400000000000000000011 /* CollaborationCore */,
+				A11400000000000000000012 /* CollaborationCoreData */,
+				A11400000000000000000013 /* CollaborationUI */,
+				A11400000000000000000014 /* CollaborationDiagnostics */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* MealPlan.app */;
@@ -389,6 +401,7 @@
 			packageReferences = (
 				489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */,
 				483FD9DE304AECEB000857EF /* XCRemoteSwiftPackageReference "SFSymbolSelector" */,
+				A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -1027,6 +1040,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../CloudKitCollaborationKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		483FD9DE304AECEB000857EF /* XCRemoteSwiftPackageReference "SFSymbolSelector" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1056,6 +1076,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */;
 			productName = ESADesignKit;
+		};
+		A11400000000000000000011 /* CollaborationCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationCore;
+		};
+		A11400000000000000000012 /* CollaborationCoreData */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationCoreData;
+		};
+		A11400000000000000000013 /* CollaborationUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationUI;
+		};
+		A11400000000000000000014 /* CollaborationDiagnostics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A11400000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationDiagnostics;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
