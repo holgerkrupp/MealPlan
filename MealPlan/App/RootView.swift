@@ -53,21 +53,10 @@ struct RootView: View {
     @State private var didEvaluateOnboarding = false
     @State private var rootSheet: RootSheet?
     @State private var sharingErrorMessage: String?
+    @State private var isShowingManagedReinviteNotice = false
     /// The shared household this device just lost access to, for the one
     /// alert that explains why the plan changed underneath the person.
     @State private var lostHouseholdName: String?
-    /// Set instead of joining immediately when accepting `metadata` would
-    /// replace a household this device already has something in. Presented
-    /// by the `confirmationDialog` below; see
-    /// `HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting:context:)`.
-    @State private var pendingHouseholdJoin: PendingHouseholdJoin?
-
-    private struct PendingHouseholdJoin {
-        let metadata: CKShare.Metadata
-        let existingHouseholdName: String
-        let dishCount: Int
-    }
-
     var body: some View {
         Group {
             if sizeClass == .compact {
@@ -120,13 +109,31 @@ struct RootView: View {
             }
             .dismissesOnOutsideClick()
         }
-        #if os(iOS)
-        .sheet(item: Binding(get: { appState.pendingNearbyJoin }, set: { appState.pendingNearbyJoin = $0 })) { request in
-            JoinNearbyHouseholdView(code: request.code)
+        .sheet(isPresented: $isShowingManagedReinviteNotice) {
+            if let household = appState.currentHousehold,
+               appState.collaboration.isOwner,
+               let collaboration = appState.managedCollaboration {
+                ManagedHouseholdSharingView(household: household, collaboration: collaboration)
+                    .dismissesOnOutsideClick()
+            } else if let household = appState.currentHousehold {
+                HouseholdReinviteWaitingView(
+                    canOpenInvitations: appState.managedCollaboration != nil,
+                    openInvitations: { Task { await retryManagedInvitations() } },
+                    getHelp: {
+                        sharingErrorMessage = String(localized: "Ask the person who manages your household to send you a new invitation. Your existing information is safe while you reconnect.")
+                    },
+                    onDismiss: { HouseholdReinviteNoticeStore.markDismissed(for: household.uuid) }
+                )
+                .dismissesOnOutsideClick()
+            }
         }
-        #endif
         .task { await evaluateOnboarding() }
         .task { await acceptPendingCloudShares() }
+        .task(id: appState.managedCollaboration != nil) {
+            guard appState.managedCollaboration != nil else { return }
+            await acceptPendingCloudShares()
+        }
+        .task(id: reinviteNoticeEvaluationKey) { maybeShowManagedReinviteNotice() }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
             Task { await acceptPendingCloudShares() }
         }
@@ -160,41 +167,6 @@ struct RootView: View {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text("The owner removed you or stopped sharing the household. Your recipes are still here, in a new household of your own; the shared plan and shopping list are gone from this device.")
-        }
-        .confirmationDialog(
-            String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
-            isPresented: Binding(
-                get: { pendingHouseholdJoin != nil },
-                set: { isPresented in
-                    if !isPresented {
-                        if let metadata = pendingHouseholdJoin?.metadata {
-                            HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-                        }
-                        pendingHouseholdJoin = nil
-                    }
-                }
-            ),
-            titleVisibility: .visible,
-            presenting: pendingHouseholdJoin
-        ) { pending in
-            Button(String(localized: "Merge Recipes"), role: .none) {
-                pendingHouseholdJoin = nil
-                Task { await acceptHouseholdJoin(pending.metadata, mergeRecipes: true) }
-            }
-            Button(String(localized: "Replace Everything"), role: .destructive) {
-                pendingHouseholdJoin = nil
-                Task { await acceptHouseholdJoin(pending.metadata, mergeRecipes: false) }
-            }
-            Button(String(localized: "Cancel"), role: .cancel) {
-                HouseholdShareInvitationInbox.shared.allowRedelivery(of: pending.metadata)
-                pendingHouseholdJoin = nil
-            }
-        } message: { pending in
-            Text(pending.dishCount == 0
-                ? "This device already has its own “\(pending.existingHouseholdName)” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device."
-                : pending.dishCount == 1
-                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way."
-                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way.")
         }
         // Everything the menu bar can reach from any section. Published here
         // rather than read from `AppState` directly so the menu items update —
@@ -251,87 +223,74 @@ struct RootView: View {
         showOnboarding = true
     }
 
-    /// Accepts any CloudKit share invitations that arrived while the app had
-    /// no `ModelContext` to accept them into yet (see `AppDelegate`), merging
-    /// each into the store and switching to it. A device that already has a
-    /// household with something in it is asked first, since joining replaces
-    /// it — see `pendingHouseholdJoin`.
+    /// Routes invitations only through CloudKitCollaborationKit. Legacy zone
+    /// invitations cannot be imported into the managed model, so they receive
+    /// the plain-language re-invite guidance and never replace local data.
     private func acceptPendingCloudShares() async {
-        // The app-level CloudKit discovery and a share acceptance both replace
-        // the active household. Serialize them so a launch-time invitation
-        // cannot import the same private zone while discovery is still doing so.
         while appState.isLookingForCloudHousehold || appState.cloudBootstrapState.isWorking, !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(150))
         }
-        for metadata in HouseholdShareInvitationInbox.shared.drain() {
-            // The shipped transport creates zone-wide shares, whose metadata
-            // has no hierarchical root. Core Data managed shares do have one.
-            // Keep those invitations out of the legacy SwiftData applier.
-            if metadata.hierarchicalRootRecordID != nil {
-                guard let managedCollaboration = appState.managedCollaboration else {
-                    HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-                    sharingErrorMessage = String(localized: "This invitation uses the updated household system. Your saved household is safe, and this invitation will be available after its new store is ready.")
-                    continue
-                }
-                do {
-                    let disposition = try await managedCollaboration.receive(metadata)
-                    if disposition == .queuedUntilStoresLoad {
-                        sharingErrorMessage = String(localized: "Your invitation is saved and will be opened when the household store is ready.")
-                    } else if disposition == .accepted {
-                        sharingErrorMessage = String(localized: "The invitation was accepted. Your existing household data remains saved while the shared household finishes preparing.")
-                    }
-                } catch {
-                    HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-                    sharingErrorMessage = String(localized: "The invitation could not be opened right now. Your saved household is unchanged. Check your connection and try again.")
-                }
+        for metadata in CloudShareMetadataInbox.shared.drain() {
+            guard metadata.hierarchicalRootRecordID != nil else {
+                CloudShareMetadataInbox.shared.allowRedelivery(of: metadata)
+                sharingErrorMessage = String(localized: "This invitation was made with an older version of MealPlan. Please ask the household organizer to send you a new one.")
                 continue
             }
-
-            if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
-                pendingHouseholdJoin = PendingHouseholdJoin(
-                    metadata: metadata,
-                    existingHouseholdName: atRisk.name,
-                    dishCount: (atRisk.dishes ?? []).count
-                )
-            } else {
-                await acceptHouseholdJoin(metadata, mergeRecipes: false)
+            guard let managedCollaboration = appState.managedCollaboration else {
+                CloudShareMetadataInbox.shared.parkUntilManagedStoreLoads(metadata)
+                sharingErrorMessage = String(localized: "Your household needs a new invitation. Your existing information is safe while MealPlan prepares the updated household.")
+                continue
+            }
+            do {
+                let disposition = try await managedCollaboration.receive(metadata)
+                switch disposition {
+                case .queuedUntilStoresLoad:
+                    sharingErrorMessage = String(localized: "Your invitation is saved and will open when the household is ready.")
+                case .accepted:
+                    sharingErrorMessage = String(localized: "Your invitation was accepted. Your existing information remains saved while the household finishes loading.")
+                case .duplicate:
+                    break
+                }
+            } catch {
+                CloudShareMetadataInbox.shared.allowRedelivery(of: metadata)
+                sharingErrorMessage = String(localized: "The invitation could not be opened right now. Your saved household is unchanged. Check your connection and try again.")
             }
         }
     }
 
-    /// Finishes joining a household after `acceptPendingCloudShares` either
-    /// found nothing at risk or the person chose how to handle what was.
-    private func acceptHouseholdJoin(_ metadata: CKShare.Metadata, mergeRecipes: Bool) async {
-        appState.updateCloudProgress(.connecting)
-        do {
-            let (household, isGuest) = try await HouseholdCloudSharingService.accept(
-                metadata,
-                mergeRecipes: mergeRecipes,
-                context: context,
-                progress: appState.updateCloudProgress
-            )
-            appState.currentHousehold = household
-            appState.collaboration.reconcile(
-                household: household,
-                role: isGuest ? .viewOnly : .editor
-            )
-            // Mirrors the household-specific half of `AppState.bootstrap`
-            // rather than calling it outright: bootstrap re-fetches
-            // "the first household", which could pick a different local
-            // one if this device had already seeded its own.
-            MealType.ensure(for: household, context: context)
-            CookedLogMaintenance.run(for: household, context: context)
-            MealRoutineScheduler.apply(
-                for: household,
-                context: context,
-                through: purchaseManager.latestPlanningDate(),
-                memberName: appState.currentMemberName
-            )
-            appState.finishCloudDownload()
-        } catch {
-            HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-            appState.finishCloudDownload()
-            sharingErrorMessage = error.localizedDescription
+    private var reinviteNoticeEvaluationKey: String {
+        "\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.managedCollaboration != nil)-\(appState.collaboration.isOwner)"
+    }
+
+    private func maybeShowManagedReinviteNotice() {
+        guard let household = appState.currentHousehold else { return }
+        if appState.collaboration.isOwner {
+            guard let collaboration = appState.managedCollaboration,
+                  collaboration.isVerifiedManagedHousehold(household.uuid),
+                  (household.members ?? []).contains(where: { $0.isActive && !$0.isCurrentUser }),
+                  !collaboration.reinviteNoticeWasDismissed(for: household.uuid) else { return }
+            isShowingManagedReinviteNotice = true
+            return
+        }
+
+        let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
+        guard locator?.shareRecordName != nil,
+              locator?.isOwner == false,
+              !ManagedHouseholdRolloutAuthority.shared.usesManagedWriter(for: household.uuid),
+              !HouseholdReinviteNoticeStore.wasDismissed(for: household.uuid) else { return }
+        isShowingManagedReinviteNotice = true
+    }
+
+    private func retryManagedInvitations() async {
+        guard let managedCollaboration = appState.managedCollaboration else { return }
+        let results = await managedCollaboration.retryPendingInvitations()
+        if results.contains(where: { $0.outcome == .accepted }) {
+            sharingErrorMessage = String(localized: "Your invitation was accepted. Your existing information remains saved while the household finishes loading.")
+        } else if results.contains(where: {
+            if case .failed = $0.outcome { return true }
+            return false
+        }) {
+            sharingErrorMessage = String(localized: "The invitation could not be opened right now. Your saved household is unchanged. Check your connection and try again.")
         }
     }
 

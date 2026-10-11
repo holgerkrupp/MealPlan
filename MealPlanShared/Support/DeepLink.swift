@@ -9,9 +9,6 @@ enum DeepLink: Equatable, Sendable {
     case plan(dishName: String?, dishUUID: UUID?, date: Date?, slot: MealSlot?)
     case dish(UUID)
     case shoppingList
-    /// "Join a Household Nearby", optionally with the single-use code from
-    /// the owner's QR code (see `NearbyInvite`).
-    case joinNearby(code: String?)
 
     static let scheme = "mealplan"
 
@@ -47,8 +44,6 @@ enum DeepLink: Equatable, Sendable {
                 ?? url.pathComponents.dropFirst().first.flatMap(UUID.init(uuidString:))
             else { return nil }
             self = .dish(id)
-        case "join-nearby", "join":
-            self = .joinNearby(code: q("code").flatMap { $0.isEmpty ? nil : $0 })
         default:
             return nil
         }
@@ -86,12 +81,6 @@ extension DeepLink {
             return URL(string: "\(DeepLink.scheme)://date/\(date.dayID)") ?? DeepLink.today.url
         case .shoppingList:
             return URL(string: "\(DeepLink.scheme)://shopping") ?? DeepLink.today.url
-        case .joinNearby(let code):
-            var components = URLComponents()
-            components.scheme = DeepLink.scheme
-            components.host = "join-nearby"
-            if let code { components.queryItems = [URLQueryItem(name: "code", value: code)] }
-            return components.url ?? DeepLink.today.url
         case .addDish, .plan:
             // Both carry free-form text that would need escaping, and nothing
             // links *into* them from outside yet.

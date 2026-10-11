@@ -6,9 +6,9 @@ import SwiftUI
 import UIKit
 #endif
 
-/// Progress of deliberately joining a household — accepting an invitation.
-/// The launch-time iCloud lookup never reports here: it runs silently behind
-/// the device's own data (see `AppState.bootstrapFromCloud`).
+/// Progress of looking up or importing the household from the legacy store.
+/// The new managed invitation path is coordinated by CloudKitCollaborationKit
+/// and does not replace the on-screen household while its stores load.
 enum CloudBootstrapState: Equatable {
     case connecting
     case downloading(Int)
@@ -54,11 +54,7 @@ final class AppState: HouseholdRecoveryAppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
-    /// Set when the owner's single-use "add someone nearby" QR code opened
-    /// the app; `RootView` presents `JoinNearbyHouseholdView` for it.
-    var pendingNearbyJoin: NearbyJoinRequest?
-    /// Covers the app while an accepted invitation downloads the household
-    /// the person asked to join.
+    /// Covers the app while the existing legacy store is being reconciled.
     var cloudBootstrapState: CloudBootstrapState = .ready
     /// True from launch until it is settled whether this device's household
     /// comes from iCloud. Nothing is shown for it — the device's own data is
@@ -79,17 +75,13 @@ final class AppState: HouseholdRecoveryAppState {
     private(set) var managedCollaborationError: String?
     @ObservationIgnored private var managedHouseholdPersistence: ManagedHouseholdPersistence?
     @ObservationIgnored private var isLoadingManagedCollaboration = false
+    @ObservationIgnored private var isStagingManagedHousehold = false
     @ObservationIgnored private var managedMigrationSaveObserver: NSObjectProtocol?
     @ObservationIgnored private var managedMigrationObservedContextID: ObjectIdentifier?
     /// Bootstrap can run once for the local store and again after CloudKit
     /// discovery. Maintenance belongs to the household graph, so coalesce the
     /// deferred sweep for each household instead of launching it twice.
     @ObservationIgnored private var maintenanceHouseholdIDs: Set<UUID> = []
-
-    struct NearbyJoinRequest: Identifiable, Equatable {
-        let id = UUID()
-        var code: String?
-    }
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -108,6 +100,9 @@ final class AppState: HouseholdRecoveryAppState {
     /// a staging operation: CloudKit mirroring, share creation, and authority
     /// cutover each remain behind their own readiness checks.
     func stageManagedHouseholdIfNeeded(context: ModelContext) async {
+        guard !isStagingManagedHousehold else { return }
+        isStagingManagedHousehold = true
+        defer { isStagingManagedHousehold = false }
         guard let household = currentHousehold else { return }
         let authority = ManagedHouseholdRolloutAuthority.shared
         var phase = authority.phase(for: household.uuid)
@@ -167,14 +162,16 @@ final class AppState: HouseholdRecoveryAppState {
             try await migration.run()
 
             // Recheck the root set after the potentially long copy. A second
-            // root appearing during staging leaves the app in legacy mode.
+            // root or any source change during staging leaves the app in
+            // legacy mode; the next automatic pass can safely resume it.
             try source.refreshSnapshot()
+            let completedFingerprint = try ManagedHouseholdMigration.sourceSnapshotFingerprint(source: source)
             let completedInventory = try source.inventory()
             let completedHouseholds = completedInventory.identifiersByEntity[.household, default: []]
             guard completedHouseholds.count == 1, completedHouseholds.first == household.uuid,
                   let completedState = try stateStore.load(),
                   completedState.phase == .legacyRetainedForRollback,
-                  let completedFingerprint = completedState.sourceSnapshotFingerprint else { return }
+                  completedState.sourceSnapshotFingerprint == completedFingerprint else { return }
 
             try authority.markStagedCopy(for: household.uuid)
             try authority.markVerified(for: household.uuid, sourceFingerprint: completedFingerprint)
@@ -562,14 +559,6 @@ final class AppState: HouseholdRecoveryAppState {
         case .dish(let id):
             requestedDishID = id
             requestedSection = .dishes
-        case .joinNearby(let code):
-            // Adding someone nearby is iPhone and iPad only: the Mac app
-            // ships without the local-network entitlement it would need.
-            #if os(iOS)
-            pendingNearbyJoin = NearbyJoinRequest(code: code)
-            #else
-            _ = code
-            #endif
         }
     }
 
@@ -593,7 +582,7 @@ final class AppState: HouseholdRecoveryAppState {
             Task {
                 do {
                     let metadata = try await HouseholdCloudSharingService.fetchMetadata(for: url)
-                    HouseholdShareInvitationInbox.shared.enqueue(metadata)
+                    CloudShareMetadataInbox.shared.enqueue(metadata)
                 } catch {
                     importNotice = String(localized: "Couldn’t open that invitation: \(error.localizedDescription)")
                 }

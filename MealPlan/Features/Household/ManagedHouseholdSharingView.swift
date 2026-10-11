@@ -50,7 +50,10 @@ struct ManagedHouseholdSharingView: View {
             #endif
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Done")) { dismiss() }
+                    Button(String(localized: "Done")) {
+                        if isOwner && isVerified && !wasNoticeDismissed { dismissNotice() }
+                        dismiss()
+                    }
                 }
             }
         }
@@ -109,12 +112,12 @@ struct ManagedHouseholdSharingView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         Label(String(localized: "Sharing has been updated"), systemImage: "person.2.badge.plus")
                             .font(.title2.bold())
-                        Text("Your recipes, meal plans and shopping lists are still here. To keep planning together, please invite your household members again. You only need to do this once for each person.")
+                        Text("Your recipes, meal plans and shopping lists are still here. Please invite each household member again. The new way is more reliable, faster and smoother to use. You only need to do this once for each person.")
                             .foregroundStyle(.secondary)
                         inviteAction
                         Button(String(localized: "Later")) {
-                            do { try collaboration.dismissReinviteNotice(for: household.uuid) }
-                            catch { errorMessage = error.localizedDescription }
+                            dismissNotice()
+                            dismiss()
                         }
                         .buttonStyle(.bordered)
                     }
@@ -234,6 +237,11 @@ struct ManagedHouseholdSharingView: View {
         }
     }
 
+    private func dismissNotice() {
+        do { try collaboration.dismissReinviteNotice(for: household.uuid) }
+        catch { errorMessage = error.localizedDescription }
+    }
+
     private func showShareManagement() {
         guard let share else { return }
         #if os(iOS)
@@ -258,19 +266,71 @@ struct ManagedHouseholdSharingView: View {
 @MainActor
 struct ManagedHouseholdSharingUnavailableView: View {
     @Environment(\.dismiss) private var dismiss
-    let error: String?
+    let title: String
+    let description: String
     let retry: () -> Void
 
     var body: some View {
         ContentUnavailableView {
-            Label(String(localized: "Sharing is still preparing"), systemImage: "icloud.and.arrow.down")
+            Label(title, systemImage: "clock.arrow.circlepath")
         } description: {
-            Text(error ?? String(localized: "Your existing household is safe. MealPlan will retry when iCloud is available."))
+            Text(description)
         } actions: {
-            Button(String(localized: "Retry"), action: retry)
+            Button(String(localized: "Check again"), action: retry)
                 .buttonStyle(.borderedProminent)
             Button(String(localized: "Done")) { dismiss() }
                 .buttonStyle(.bordered)
         }
+    }
+}
+
+@MainActor
+struct HouseholdReinviteWaitingView: View {
+    @Environment(\.dismiss) private var dismiss
+    let canOpenInvitations: Bool
+    let openInvitations: () -> Void
+    let getHelp: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(spacing: 18) {
+                Image(systemName: "envelope.badge")
+                    .font(.system(size: 42))
+                    .foregroundStyle(.tint)
+                Text(String(localized: "Your household needs a new invitation"))
+                    .font(.title2.bold())
+                    .multilineTextAlignment(.center)
+                Text("The way households are shared has changed. Ask the person who manages your household to send you a new invitation. Your existing information will be kept safe while you reconnect.")
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+
+                if canOpenInvitations {
+                    Button(String(localized: "Open Invitations"), action: openInvitations)
+                        .buttonStyle(.borderedProminent)
+                }
+                Button(String(localized: "Not Now")) {
+                    onDismiss()
+                    dismiss()
+                }
+                .buttonStyle(.bordered)
+                Button(String(localized: "Get Help"), action: getHelp)
+                    .buttonStyle(.plain)
+            }
+            .padding(28)
+            .frame(maxWidth: 520)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) {
+                        onDismiss()
+                        dismiss()
+                    }
+                }
+            }
+        }
+        #if os(macOS)
+        .frame(minWidth: 460, minHeight: 420)
+        #endif
     }
 }

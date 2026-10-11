@@ -135,6 +135,27 @@ enum HouseholdCollaborationStore {
     }
 }
 
+/// Device-local acknowledgement for the existing-member re-invite sheet.
+/// Household profile and invitation identities remain separate; only the
+/// dismissed state is shared with extension processes through the App Group.
+enum HouseholdReinviteNoticeStore {
+    private static var defaults: UserDefaults {
+        UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
+    }
+
+    private static func key(for householdID: UUID) -> String {
+        "HouseholdReinviteNotice.dismissed.\(householdID.uuidString)"
+    }
+
+    static func wasDismissed(for householdID: UUID) -> Bool {
+        defaults.bool(forKey: key(for: householdID))
+    }
+
+    static func markDismissed(for householdID: UUID) {
+        defaults.set(true, forKey: key(for: householdID))
+    }
+}
+
 /// Bumps an App Group generation after a process commits local household data.
 /// Only the main app observes the value and drives CKSyncEngine; extensions
 /// only write this tiny sidecar value.

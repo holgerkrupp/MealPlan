@@ -84,7 +84,11 @@ final class MealPlanManagedCollaboration {
               root.value(forKey: "managedMigrationPhaseRaw") as? String == "verified",
               let count = root.value(forKey: "managedGraphObjectCount") as? NSNumber,
               count.intValue > 0 else { return false }
-        return (try? graphPreflight.validateOnCurrentContext(rootID: householdID.uuidString)) == count.intValue
+        // The durable marker is written only after migration validates every
+        // object and relationship. Full share-boundary validation runs on a
+        // background context when the person explicitly starts an invitation.
+        // Do not rescan the complete graph on the main actor during view refresh.
+        return true
     }
 
     func reinviteNoticeWasDismissed(for householdID: UUID) -> Bool {
@@ -204,10 +208,6 @@ private final class MealPlanShareGraphPreflight: ManagedSharePreflighting, @unch
             try Self.validate(rootID: rootID, context: context, privateStoreURL: privateStoreURL)
         }
         return ShareGraphPreflightResult(validatedObjectCount: count)
-    }
-
-    func validateOnCurrentContext(rootID: String) throws -> Int {
-        try Self.validate(rootID: rootID, context: container.viewContext, privateStoreURL: privateStoreURL)
     }
 
     private static func validate(

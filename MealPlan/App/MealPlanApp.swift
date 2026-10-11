@@ -281,8 +281,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 /// UIKit uses two different paths: an already-connected window receives
 /// `windowScene(_:userDidAcceptCloudKitShareWith:)`, while an invitation that
 /// launches the app arrives in the new scene's connection options. Funnel
-/// both through the in-memory inbox so `RootView` can accept them once its
-/// SwiftData context is ready.
+/// both through the in-memory inbox so the host can forward them to
+/// CloudKitCollaborationKit after its managed stores are ready.
 final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
     func scene(
         _ scene: UIScene,
@@ -290,7 +290,7 @@ final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
         options connectionOptions: UIScene.ConnectionOptions
     ) {
         if let metadata = connectionOptions.cloudKitShareMetadata {
-            HouseholdShareInvitationInbox.shared.enqueue(metadata)
+            CloudShareMetadataInbox.shared.enqueue(metadata)
         }
     }
 
@@ -298,7 +298,7 @@ final class MealPlanSceneDelegate: UIResponder, UIWindowSceneDelegate {
         _ windowScene: UIWindowScene,
         userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata
     ) {
-        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
+        CloudShareMetadataInbox.shared.enqueue(cloudKitShareMetadata)
     }
 }
 #elseif os(macOS)
@@ -309,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func application(_ application: NSApplication, userDidAcceptCloudKitShareWith cloudKitShareMetadata: CKShare.Metadata) {
-        HouseholdShareInvitationInbox.shared.enqueue(cloudKitShareMetadata)
+        CloudShareMetadataInbox.shared.enqueue(cloudKitShareMetadata)
     }
 
 

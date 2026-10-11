@@ -7431,6 +7431,9 @@
     "Checking the page is still online…" : {
 
     },
+    "Checking your household…" : {
+
+    },
     "Checks existing recipe and shopping-list links plus catalogue search keys. Automatic repair is limited to rebuilding stale search keys." : {
 
     },
@@ -15741,6 +15744,9 @@
     "Get Expiring Ingredients" : {
 
     },
+    "Get Help" : {
+
+    },
     "Get Ingredient Inventory" : {
 
     },
@@ -16657,6 +16663,9 @@
           }
         }
       }
+    },
+    "Household still preparing" : {
+
     },
     "Households in file" : {
 
@@ -18094,6 +18103,9 @@
     "Inventory state" : {
 
     },
+    "Invitation accepted" : {
+
+    },
     "Invitation Copied" : {
       "localizations" : {
         "da" : {
@@ -18138,6 +18150,12 @@
 
     },
     "Invite by Apple Account" : {
+
+    },
+    "Invite Members" : {
+
+    },
+    "Invite one person for each household member. Choose whether they can edit or only view in Apple’s sharing controls." : {
 
     },
     "Invite people as editors, or as view-only guests who can look but not change." : {
@@ -19023,6 +19041,9 @@
     "Last updated" : {
 
     },
+    "Later" : {
+
+    },
     "Left-handed layout" : {
 
     },
@@ -19256,6 +19277,9 @@
     "Listening for “next”, “back”, “repeat”…" : {
 
     },
+    "Load more dishes" : {
+
+    },
     "Load my Bring! lists" : {
       "localizations" : {
         "da" : {
@@ -19301,6 +19325,9 @@
           }
         }
       }
+    },
+    "Loads the next group of dishes." : {
+
     },
     "Local Safety Backups" : {
 
@@ -19456,6 +19483,9 @@
 
     },
     "Make View Only" : {
+
+    },
+    "Manage invited people" : {
 
     },
     "Manual" : {
@@ -24926,6 +24956,9 @@
     "Open in New Window" : {
 
     },
+    "Open Invitations" : {
+
+    },
     "Open MealPlan" : {
 
     },
@@ -25164,6 +25197,9 @@
 
     },
     "Opens a saved recipe in MealPlan." : {
+
+    },
+    "Opens Apple’s sharing controls to invite a person to this household." : {
 
     },
     "Opens ingredient cleanup details" : {
@@ -26020,6 +26056,9 @@
           }
         }
       }
+    },
+    "People from your previous household" : {
+
     },
     "Pepper" : {
       "localizations" : {
@@ -28164,6 +28203,9 @@
           }
         }
       }
+    },
+    "Preparing the invitation…" : {
+
     },
     "Preparing your household…" : {
 
@@ -33930,6 +33972,18 @@
     "Shared" : {
 
     },
+    "Sharing has been updated" : {
+
+    },
+    "Sharing has stopped." : {
+
+    },
+    "Sharing is still preparing" : {
+
+    },
+    "Sharing is temporarily unavailable. Try again when you’re online." : {
+
+    },
     "Sharing unavailable" : {
       "localizations" : {
         "da" : {
@@ -37175,6 +37229,12 @@
     "The imported recipes could not be saved. Please try again." : {
 
     },
+    "The invitation could not be opened right now. Check your connection and try again." : {
+
+    },
+    "The invitation could not be opened right now. Your saved household is unchanged. Check your connection and try again." : {
+
+    },
     "The invitation could not be opened." : {
 
     },
@@ -37217,6 +37277,15 @@
           }
         }
       }
+    },
+    "The invitation could not be prepared. Your household data is unchanged." : {
+
+    },
+    "The invitation was accepted. Your existing household data remains saved while the shared household finishes preparing." : {
+
+    },
+    "The invitation was accepted. Your saved information stays here while the new household finishes preparing." : {
+
     },
     "The last ingredient merge could not be reversed." : {
 
@@ -37537,6 +37606,9 @@
 
     },
     "The translation didn’t come back. Please try again." : {
+
+    },
+    "The way households are shared has changed. Ask the person who manages your household to send you a new invitation. Your existing information will be kept safe while you reconnect." : {
 
     },
     "The week shown" : {
@@ -38119,6 +38191,15 @@
 
     },
     "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation." : {
+
+    },
+    "This invitation uses the updated household system. Your saved household is safe, and this invitation will be available after its new store is ready." : {
+
+    },
+    "This is taking longer than expected. You can try again; your household data is unchanged." : {
+
+    },
+    "This list is a reminder. It does not mean someone has joined the new share." : {
 
     },
     "This meal" : {
@@ -42907,6 +42988,12 @@
         }
       }
     },
+    "Your existing household is safe. MealPlan will retry when iCloud is available." : {
+
+    },
+    "Your existing recipes and plans are still saved on this device. Ask the household organizer to send a new invitation, then open it from Messages or Mail." : {
+
+    },
     "Your family is being created." : {
       "localizations" : {
         "da" : {
@@ -42946,6 +43033,15 @@
           }
         }
       }
+    },
+    "Your household needs a new invitation" : {
+
+    },
+    "Your household share is ready." : {
+
+    },
+    "Your invitation is saved and will be opened when the household store is ready." : {
+
     },
     "Your library is empty" : {
       "localizations" : {
@@ -43081,6 +43177,15 @@
           }
         }
       }
+    },
+    "Your recipes, meal plans and shopping lists are still here. To keep planning together, please invite your household members again. You only need to do this once for each person." : {
+
+    },
+    "Your recipes, meal plans and shopping lists are still here. Please invite each household member again. The new way is more reliable, faster and smoother to use. You only need to do this once for each person." : {
+
+    },
+    "Your saved household data is being checked before sharing can resume." : {
+
     },
     "Your shopping list can be sent to Bring! — or kept in step with it, so ticking something off in either app ticks it off in the other." : {
       "localizations" : {
