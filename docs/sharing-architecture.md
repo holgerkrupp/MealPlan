@@ -1,22 +1,26 @@
-# Per-record household sharing architecture
+# SwiftData household sharing architecture
 
-Status: **approved for a pre-release clean cutover**
+Status: **in-place migration to CloudKitCollaborationKit**
 
 For how the shipped implementation works — both across one account's
 devices and between different people — see
 [`icloud-sharing.md`](icloud-sharing.md).
 
-MealPlan uses one CloudKit record per SwiftData entity, driven by
-`CKSyncEngine`. The old whole-household `MealPlanBackup` sharing asset and
-SwiftData CloudKit mirror are removed. There is intentionally no data or blob
-migration: the app has no customers yet, and its developer installations may
-be reset or restored with the existing manual backup tools if needed.
+MealPlan uses one CloudKit record per SwiftData entity. The app keeps its
+SwiftData database, record format, custom zones, and household IDs while
+`CloudKitCollaborationKit` takes ownership of share lifecycle, invitation
+acceptance, native sharing UI, and the CloudKit sync-engine pool. Existing
+household records and healthy shares are reused in place. See
+[`icloud-sharing.md`](icloud-sharing.md) for the host/package boundary and
+migration behavior.
 
 ## One CloudKit owner
 
 The App Group SwiftData store is opened with `cloudKitDatabase: .none`.
-`CKSyncEngine` is the only CloudKit writer, so there is one change stream and
-one set of conflict rules for solo multi-device use and shared households.
+The package's `CloudKitSyncEnginePool` is the only CloudKit transport owner,
+so there is one change stream and one set of conflict rules for solo
+multi-device use and shared households. MealPlan supplies record snapshots,
+its durable SwiftData-backed state adapter, and the downstream apply delegate.
 Extensions and widgets continue to open the same local store without starting
 their own engine.
 
@@ -30,8 +34,9 @@ Each household owns one custom zone named
   not copied or renamed.
 - The owner keeps addressing the zone through the private database. Accepted
   participants address it through the shared database.
-- CKSyncEngine state and local record metadata are stored per database scope,
-  zone, and owner in the App Group defaults.
+- Package engine state and MealPlan's record metadata are stored in the App
+  Group defaults, partitioned by CloudKit environment, account, and database
+  scope. The adapter reuses the prior per-household engine state on first use.
 - A share invitation upserts the household by its durable UUID before the
   engine fetches its child records.
 
@@ -62,8 +67,8 @@ the marker removes its old row. Intentional recreation uses a new UUID.
 
 Sync is requested after local saves, on foreground, when CloudKit wakes the app
 with a push, after accepting a share, and by a low-frequency foreground retry.
-CKSyncEngine owns tokens, batching, subscriptions, retries, and partial-error
-delivery.
+The package pool owns engine tokens, batching, subscriptions, retries, and
+partial-error delivery.
 
 ## Conflict policy
 

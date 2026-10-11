@@ -11,6 +11,13 @@
 		489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */ = {isa = PBXBuildFile; productRef = 489FB59E3044985000B8D666 /* ESADesignKit */; };
 		AB000000000000000000000D /* MealPlan/AppIcon.icon in Resources */ = {isa = PBXBuildFile; fileRef = AB000000000000000000000E /* MealPlan/AppIcon.icon */; };
 		BB000000000000000000000C /* MealPlanWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = BB0000000000000000000008 /* MealPlanWatch.app */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		C0FFEE000000000000000101 /* CollaborationCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000201 /* CollaborationCore */; };
+		C0FFEE000000000000000102 /* CollaborationCloudKit in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000202 /* CollaborationCloudKit */; };
+		C0FFEE000000000000000104 /* CollaborationUI in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000204 /* CollaborationUI */; };
+		C0FFEE000000000000000107 /* CollaborationCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000201 /* CollaborationCore */; };
+		C0FFEE000000000000000108 /* CollaborationCloudKit in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000202 /* CollaborationCloudKit */; };
+		C0FFEE000000000000000109 /* CollaborationCore in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000201 /* CollaborationCore */; };
+		C0FFEE000000000000000110 /* CollaborationCloudKit in Frameworks */ = {isa = PBXBuildFile; productRef = C0FFEE000000000000000202 /* CollaborationCloudKit */; };
 		DD000000000000000000000C /* MealPlanWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = DD0000000000000000000008 /* MealPlanWidgets.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		EE000000000000000000000C /* MealPlanShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EE0000000000000000000008 /* MealPlanShareExtension.appex */; platformFilter = ios; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -170,6 +177,9 @@
 			files = (
 				483FD9E0304AECEB000857EF /* SFSymbolSelector in Frameworks */,
 				489FB59F3044985000B8D666 /* ESADesignKit in Frameworks */,
+				C0FFEE000000000000000101 /* CollaborationCore in Frameworks */,
+				C0FFEE000000000000000102 /* CollaborationCloudKit in Frameworks */,
+				C0FFEE000000000000000104 /* CollaborationUI in Frameworks */,
 			);
 		};
 		BB0000000000000000000003 /* Frameworks */ = {
@@ -180,11 +190,15 @@
 		DD0000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				C0FFEE000000000000000107 /* CollaborationCore in Frameworks */,
+				C0FFEE000000000000000108 /* CollaborationCloudKit in Frameworks */,
 			);
 		};
 		EE0000000000000000000003 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			files = (
+				C0FFEE000000000000000109 /* CollaborationCore in Frameworks */,
+				C0FFEE000000000000000110 /* CollaborationCloudKit in Frameworks */,
 			);
 		};
 		FF0000000000000000000003 /* Frameworks */ = {
@@ -259,6 +273,9 @@
 			packageProductDependencies = (
 				489FB59E3044985000B8D666 /* ESADesignKit */,
 				483FD9DF304AECEB000857EF /* SFSymbolSelector */,
+				C0FFEE000000000000000201 /* CollaborationCore */,
+				C0FFEE000000000000000202 /* CollaborationCloudKit */,
+				C0FFEE000000000000000204 /* CollaborationUI */,
 			);
 			productName = MyApp;
 			productReference = 000000000000000000000120 /* MealPlan.app */;
@@ -298,6 +315,10 @@
 				DD0000000000000000000009 /* MealPlanWidgets */,
 			);
 			name = MealPlanWidgets;
+			packageProductDependencies = (
+				C0FFEE000000000000000201 /* CollaborationCore */,
+				C0FFEE000000000000000202 /* CollaborationCloudKit */,
+			);
 			productName = MealPlanWidgets;
 			productReference = DD0000000000000000000008 /* MealPlanWidgets.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -317,6 +338,10 @@
 				EE0000000000000000000009 /* MealPlanShareExtension */,
 			);
 			name = MealPlanShareExtension;
+			packageProductDependencies = (
+				C0FFEE000000000000000201 /* CollaborationCore */,
+				C0FFEE000000000000000202 /* CollaborationCloudKit */,
+			);
 			productName = MealPlanShareExtension;
 			productReference = EE0000000000000000000008 /* MealPlanShareExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
@@ -389,6 +414,7 @@
 			packageReferences = (
 				489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */,
 				483FD9DE304AECEB000857EF /* XCRemoteSwiftPackageReference "SFSymbolSelector" */,
+				C0FFEE000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */,
 			);
 			preferredProjectObjectVersion = 90;
 			productRefGroup = 000000000000000000000020 /* Products */;
@@ -619,7 +645,6 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. If you choose to publish your plan, MealPlan also adds and updates events in a calendar you pick for that purpose. No other calendar or event is ever changed.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "MealPlan looks for devices nearby only while you add someone to your household in person, or join one.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used only while hands-free voice control is on in Cooking Mode, to hear commands like \"next\" or \"repeat\". Audio is processed on your device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
@@ -698,7 +723,6 @@
 				INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace = YES;
 				INFOPLIST_KEY_NSCalendarsFullAccessUsageDescription = "Calendar access lets the meal planner show relevant scheduling context, such as whether family members are busy or away when planning meals. If you choose to publish your plan, MealPlan also adds and updates events in a calendar you pick for that purpose. No other calendar or event is ever changed.";
 				INFOPLIST_KEY_NSCameraUsageDescription = "MealPlan uses the camera so you can add dish photos and scan printed recipes.";
-				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "MealPlan looks for devices nearby only while you add someone to your household in person, or join one.";
 				INFOPLIST_KEY_NSLocationWhenInUseUsageDescription = "Used only to show restaurants near you when you plan a meal out. Your location never leaves the device.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "The microphone is used only while hands-free voice control is on in Cooking Mode, to hear commands like \"next\" or \"repeat\". Audio is processed on your device and is never recorded or sent anywhere.";
 				INFOPLIST_KEY_NSPhotoLibraryUsageDescription = "MealPlan lets you choose dish photos and recipe pages from your library.";
@@ -1027,6 +1051,13 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		C0FFEE000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ../CloudKitCollaborationKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
 /* Begin XCRemoteSwiftPackageReference section */
 		483FD9DE304AECEB000857EF /* XCRemoteSwiftPackageReference "SFSymbolSelector" */ = {
 			isa = XCRemoteSwiftPackageReference;
@@ -1056,6 +1087,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = 489FB59D3044985000B8D666 /* XCRemoteSwiftPackageReference "ESADesignKit" */;
 			productName = ESADesignKit;
+		};
+		C0FFEE000000000000000201 /* CollaborationCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0FFEE000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationCore;
+		};
+		C0FFEE000000000000000202 /* CollaborationCloudKit */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0FFEE000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationCloudKit;
+		};
+		C0FFEE000000000000000204 /* CollaborationUI */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0FFEE000000000000000010 /* XCLocalSwiftPackageReference "../CloudKitCollaborationKit" */;
+			productName = CollaborationUI;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

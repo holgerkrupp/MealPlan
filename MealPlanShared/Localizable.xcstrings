@@ -43167,6 +43167,126 @@
           }
         }
       }
+    },
+    "Invite your family to share dishes, meal plans, and the shopping list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade deine Familie ein, Gerichte, Essenspläne und die Einkaufsliste gemeinsam zu nutzen."
+          }
+        }
+      }
+    },
+    "MealPlan couldn’t prepare household sharing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan konnte die Haushaltsfreigabe nicht vorbereiten."
+          }
+        }
+      }
+    },
+    "MealPlan sharing is better" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teilen mit MealPlan ist jetzt besser"
+          }
+        }
+      }
+    },
+    "Your household moved automatically. Sharing is now more reliable, faster, and easier to use. Invite the people who already share this household again so they can continue planning with you." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt wurde automatisch übernommen. Das Teilen ist jetzt zuverlässiger, schneller und einfacher. Lade die Personen, die diesen Haushalt bereits mit dir nutzen, erneut ein, damit ihr weiterhin gemeinsam planen könnt."
+          }
+        }
+      }
+    },
+    "Review household invitations" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushaltseinladungen ansehen"
+          }
+        }
+      }
+    },
+    "Invite or share again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut einladen oder teilen"
+          }
+        }
+      }
+    },
+    "Share household" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushalt teilen"
+          }
+        }
+      }
+    },
+    "Manage access" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zugriff verwalten"
+          }
+        }
+      }
+    },
+    "People in this household" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen in diesem Haushalt"
+          }
+        }
+      }
+    },
+    "Your household is ready for invitations." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt kann jetzt geteilt werden."
+          }
+        }
+      }
+    },
+    "Plan together" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemeinsam planen"
+          }
+        }
+      }
+    },
+    "This invitation is for a different Apple Account. Ask the household owner to share it with the account on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einladung ist für einen anderen Apple Account. Bitte den Haushaltseigentümer, sie mit dem Account auf diesem Gerät zu teilen."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

@@ -119,11 +119,6 @@ struct RootView: View {
             }
             .dismissesOnOutsideClick()
         }
-        #if os(iOS)
-        .sheet(item: Binding(get: { appState.pendingNearbyJoin }, set: { appState.pendingNearbyJoin = $0 })) { request in
-            JoinNearbyHouseholdView(code: request.code)
-        }
-        #endif
         .task { await evaluateOnboarding() }
         .task { await acceptPendingCloudShares() }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDidReceiveCloudShare)) { _ in
@@ -280,10 +275,19 @@ struct RootView: View {
     private func acceptHouseholdJoin(_ metadata: CKShare.Metadata, mergeRecipes: Bool) async {
         appState.updateCloudProgress(.connecting)
         do {
+            let activeHousehold: Household?
+            if let current = appState.currentHousehold {
+                activeHousehold = current
+            } else {
+                activeHousehold = try context.fetch(FetchDescriptor<Household>()).first
+            }
+            guard let activeHousehold else { throw HouseholdSharingError.missingRootRecord }
+            let sharing = try await MealPlanCloudSharing.service(for: activeHousehold, context: context)
             let (household, isGuest) = try await HouseholdCloudSharingService.accept(
                 metadata,
                 mergeRecipes: mergeRecipes,
                 context: context,
+                sharing: sharing,
                 progress: appState.updateCloudProgress
             )
             appState.currentHousehold = household

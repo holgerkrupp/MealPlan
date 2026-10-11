@@ -1,4 +1,7 @@
 import CloudKit
+import CollaborationCloudKit
+import CollaborationCore
+import CryptoKit
 import Foundation
 import OSLog
 import SwiftData
@@ -118,7 +121,9 @@ final class HouseholdRecordSyncService {
 
     private let container = CKContainer(identifier: SharedStore.cloudKitContainerID)
     private let delegate = HouseholdRecordSyncDelegate()
-    private var engine: CKSyncEngine?
+    private var syncEnginePool: CloudKitSyncEnginePool?
+    private var packageStateStore: MealPlanCloudKitStateStore?
+    private var stateStoreAccountPartitionIdentifier: String?
     private var household: Household?
     private var context: ModelContext?
     private var modelContainer: ModelContainer?
@@ -142,29 +147,23 @@ final class HouseholdRecordSyncService {
     private var lastObservedStoreGeneration: UInt64?
     private(set) var lastError: Error?
 
-    /// CKSyncEngine is an Objective-C reference type whose public SDK
-    /// annotations vary by OS release. The detached operation boundary is
-    /// intentional and all access through this bridge is limited to the
-    /// engine's async fetch/send methods.
-    private final class CloudEngineBridge: @unchecked Sendable {
-        let engine: CKSyncEngine
-
-        init(_ engine: CKSyncEngine) {
-            self.engine = engine
-        }
-    }
-
     private init() {}
 
     var isReadOnly: Bool { locator?.isReadOnly == true }
 
     func synchronize(household: Household, context: ModelContext) async throws {
-        try activateIfNeeded(household: household, context: context)
+        try await activateIfNeeded(household: household, context: context)
         guard let locator else { return }
         observeExternalStoreGeneration()
         if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
         await performCloudOperation(fetch: true, send: !locator.isReadOnly)
         if let lastError { throw lastError }
+    }
+
+    func prepareTransport(household: Household, context: ModelContext) async throws -> CloudKitSyncEnginePool {
+        try await activateIfNeeded(household: household, context: context)
+        guard let syncEnginePool else { throw HouseholdRecordSyncError.stateStoreUnavailable }
+        return syncEnginePool
     }
 
     func fetchChanges() async {
@@ -187,8 +186,8 @@ final class HouseholdRecordSyncService {
         cloudOperationTask = nil
         if let saveObserver { NotificationCenter.default.removeObserver(saveObserver) }
         saveObserver = nil
-        await engine?.cancelOperations()
-        engine = nil
+        await syncEnginePool?.shutdown()
+        syncEnginePool = nil
         household = nil
         context = nil
         modelContainer = nil
@@ -204,13 +203,33 @@ final class HouseholdRecordSyncService {
     /// device has lost access to a shared household: if it were ever invited
     /// back, the old fingerprints would read as local deletions and queue
     /// deletes for the owner's records.
-    func discardState(for locator: HouseholdShareLocator) {
+    func discardState(for locator: HouseholdShareLocator) async {
         defaults.removeObject(forKey: stateKey(for: locator))
         defaults.removeObject(forKey: metadataKey(for: locator))
+        if !locator.isOwner, let packageStateStore {
+            await packageStateStore.discardDatabaseState(for: .shared)
+        }
     }
 
     func record(for id: CKRecord.ID) async throws -> CKRecord? {
         guard id.zoneID == locator?.zoneID else { return nil }
+        if let identity = HouseholdRecordIdentity(recordType: HouseholdRecordType.deletionMarker.rawValue, recordName: id.recordName),
+           let household {
+            guard let tombstone = metadata.tombstones.first(where: { $0.markerUUID == identity.uuid }) else { return nil }
+            let payload = HouseholdRecordPayload.deletionMarker(.init(
+                deletedType: tombstone.deletedType,
+                deletedUUID: tombstone.deletedUUID,
+                deletedAt: tombstone.deletedAt
+            ))
+            let snapshot = LocalHouseholdRecord(
+                identity: identity,
+                householdID: household.uuid,
+                modifiedAt: tombstone.deletedAt,
+                payloadData: try HouseholdRecordCodec.encode(payload)
+            )
+            let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
+            return try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+        }
         let snapshot: LocalHouseholdRecord?
         if let pending = pendingSnapshots[id.recordName] {
             snapshot = pending
@@ -225,12 +244,19 @@ final class HouseholdRecordSyncService {
     func handle(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
         do {
             switch event {
-            case .stateUpdate(let update):
-                try storeState(update.stateSerialization)
+            case .stateUpdate:
+                // The package's database-scoped state store persists engine
+                // serializations before forwarding events to this delegate.
+                break
             case .fetchedRecordZoneChanges(let changes):
                 try await applyFetchedChanges(changes)
             case .sentRecordZoneChanges(let changes):
-                try await handleSentChanges(changes, engine: syncEngine)
+                try await packageStateStore?.acknowledgeSentChanges(
+                    savedRecords: changes.savedRecords,
+                    deletedRecordIDs: changes.deletedRecordIDs,
+                    in: activeScope
+                )
+                try await handleSentChanges(changes)
             case .sentDatabaseChanges(let changes):
                 if let failure = changes.failedZoneSaves.first { lastError = failure.error }
             case .accountChange:
@@ -263,9 +289,15 @@ final class HouseholdRecordSyncService {
 
     // MARK: - Activation and local change capture
 
-    private func activateIfNeeded(household: Household, context: ModelContext) throws {
+    private func activateIfNeeded(household: Household, context: ModelContext) async throws {
         let nextLocator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
-        if self.household?.uuid == household.uuid, locator == nextLocator, engine != nil { return }
+        if self.household?.uuid == household.uuid, locator == nextLocator, syncEnginePool != nil { return }
+
+        if self.household != nil {
+            cloudOperationTask?.cancel()
+            await cloudOperationTask?.value
+            await syncEnginePool?.shutdown()
+        }
 
         if let saveObserver { NotificationCenter.default.removeObserver(saveObserver) }
         scheduledScan?.cancel()
@@ -282,19 +314,37 @@ final class HouseholdRecordSyncService {
         didRestoreTombstoneOperations = false
         lastObservedStoreGeneration = nil
 
-        let database = nextLocator.isOwner ? container.privateCloudDatabase : container.sharedCloudDatabase
-        let state = loadState(for: nextLocator)
-        var configuration = CKSyncEngine.Configuration(database: database, stateSerialization: state, delegate: delegate)
-        // We explicitly serialize operations below. Automatic operations can
-        // otherwise race a save-driven `sendChanges` and trip CloudKit's
-        // internal overlap assertion.
-        configuration.automaticallySync = false
-        configuration.subscriptionID = "MealPlan-\(nextLocator.isOwner ? "private" : "shared")"
-        let engine = CKSyncEngine(configuration)
-        self.engine = engine
+        let accountPartition = try await accountPartitionIdentifier()
+        if stateStoreAccountPartitionIdentifier != accountPartition {
+            packageStateStore = MealPlanCloudKitStateStore(
+                containerIdentifier: SharedStore.cloudKitContainerID,
+                environment: collaborationEnvironment,
+                accountPartitionIdentifier: accountPartition,
+                activeLocator: nextLocator
+            )
+            stateStoreAccountPartitionIdentifier = accountPartition
+            syncEnginePool = nil
+        } else {
+            await packageStateStore?.setActiveLocator(nextLocator)
+        }
+        guard let packageStateStore else {
+            throw HouseholdRecordSyncError.stateStoreUnavailable
+        }
+        let pool = try await CloudKitSyncEnginePool.shared(
+            containerIdentifier: SharedStore.cloudKitContainerID,
+            environment: collaborationEnvironment,
+            accountPartitionIdentifier: accountPartition,
+            container: container,
+            stateStore: packageStateStore,
+            delegate: delegate,
+            automaticallySync: false,
+            subscriptionIDPrefix: "MealPlan"
+        )
+        self.syncEnginePool = pool
+        try await pool.start()
         HouseholdSyncDiagnostics.record(event: "activated", locator: nextLocator)
         if nextLocator.isOwner {
-            engine.state.add(pendingDatabaseChanges: [.saveZone(CKRecordZone(zoneID: nextLocator.zoneID))])
+            try await pool.enqueue([.saveZone(CKRecordZone(zoneID: nextLocator.zoneID))], in: .private)
         }
 
         saveObserver = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: context, queue: .main) { [weak self] _ in
@@ -308,8 +358,8 @@ final class HouseholdRecordSyncService {
     }
 
     /// Detects commits made by the Share Extension or another process using
-    /// the App Group store. Only this main-app service reacts by scanning and
-    /// sending through CKSyncEngine.
+    /// the App Group store. Only this main-app service scans and queues them
+    /// through the package-owned CloudKit engine pool.
     private func observeExternalStoreGeneration() {
         let current = HouseholdStoreGeneration.value()
         guard let lastObservedStoreGeneration else {
@@ -341,7 +391,7 @@ final class HouseholdRecordSyncService {
     }
 
     private func scanLocalChanges() async throws {
-        guard let household, let engine, let locator, !locator.isReadOnly else { return }
+        guard let household, let syncEnginePool, let locator, !locator.isReadOnly else { return }
         var snapshots = try await snapshotRecords(for: household.uuid)
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
@@ -371,6 +421,7 @@ final class HouseholdRecordSyncService {
         }
 
         let byName = keyedSnapshots(snapshots)
+        var cloudChanges: [CloudKitRecordChange] = []
         for item in evaluated {
             let snapshot = item.snapshot
             let name = snapshot.identity.recordName
@@ -379,10 +430,11 @@ final class HouseholdRecordSyncService {
                 || metadata.pendingFingerprints[name] != item.fingerprint
             guard mustQueue else { continue }
             let id = CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: locator.zoneID)
-            engine.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
             pendingSnapshots[snapshot.identity.recordName] = snapshot
             metadata.pendingFingerprints[name] = item.fingerprint
             metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
+            let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
+            cloudChanges.append(.save(try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
         }
 
         let liveNames = Set(byName.keys)
@@ -400,10 +452,9 @@ final class HouseholdRecordSyncService {
             metadata.pendingFingerprints.removeValue(forKey: deletedName)
             metadata.pendingGroupFingerprints.removeValue(forKey: deletedName)
             pendingSnapshots.removeValue(forKey: deletedName)
-            engine.state.add(pendingRecordZoneChanges: [
-                .deleteRecord(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)),
-                .saveRecord(CKRecord.ID(recordName: HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName, zoneID: locator.zoneID))
-            ])
+            cloudChanges.append(.delete(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)))
+            let markerID = CKRecord.ID(recordName: HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName, zoneID: locator.zoneID)
+            if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
         }
 
         // Tombstones are part of the durable local intent. Restore their
@@ -413,10 +464,9 @@ final class HouseholdRecordSyncService {
         if !didRestoreTombstoneOperations {
             for tombstone in metadata.tombstones {
                 let markerName = HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName
-                engine.state.add(pendingRecordZoneChanges: [
-                    .deleteRecord(CKRecord.ID(recordName: HouseholdRecordIdentity(type: tombstone.deletedType, uuid: tombstone.deletedUUID).recordName, zoneID: locator.zoneID)),
-                    .saveRecord(CKRecord.ID(recordName: markerName, zoneID: locator.zoneID))
-                ])
+                cloudChanges.append(.delete(CKRecord.ID(recordName: HouseholdRecordIdentity(type: tombstone.deletedType, uuid: tombstone.deletedUUID).recordName, zoneID: locator.zoneID)))
+                let markerID = CKRecord.ID(recordName: markerName, zoneID: locator.zoneID)
+                if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
             }
             didRestoreTombstoneOperations = true
         }
@@ -425,6 +475,9 @@ final class HouseholdRecordSyncService {
         persistMetadata()
         needsLocalScan = false
         lastObservedStoreGeneration = HouseholdStoreGeneration.value()
+        if !cloudChanges.isEmpty {
+            try await syncEnginePool.enqueue(cloudChanges, in: activeScope)
+        }
         HouseholdSyncDiagnostics.record(
             event: "scanned",
             locator: locator,
@@ -432,16 +485,15 @@ final class HouseholdRecordSyncService {
         )
     }
 
-    /// Runs every explicit engine operation behind the previous one. The
-    /// operation itself must cross a detached task boundary: CKSyncEngine
-    /// rejects fetch/send calls that inherit a delegate callback's task
-    /// lineage, even when the calls are otherwise serialized.
+    /// Runs each explicit operation behind the previous one. Package engine
+    /// calls use the same detached boundary as the old owner so fetch/send
+    /// requests cannot overlap delegate callbacks.
     private func performCloudOperation(fetch: Bool, send: Bool) async {
         let previous = cloudOperationTask
-        guard let engine = self.engine, let locator = self.locator else { return }
-        let bridge = CloudEngineBridge(engine)
+        guard let syncEnginePool, let locator = self.locator else { return }
         let zoneID = locator.zoneID
         let maySend = send && !locator.isReadOnly
+        let scope = activeScope
 
         let detached = Task.detached(priority: .utility) {
             await previous?.value
@@ -450,9 +502,7 @@ final class HouseholdRecordSyncService {
 
             if fetch {
                 do {
-                    var options = CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([zoneID]))
-                    options.prioritizedZoneIDs = [zoneID]
-                    try await bridge.engine.fetchChanges(options)
+                    try await syncEnginePool.fetchChanges(in: scope, zoneIDs: [zoneID])
                 } catch {
                     operationError = error
                 }
@@ -463,7 +513,7 @@ final class HouseholdRecordSyncService {
             if maySend {
                 do {
                     await Task.yield()
-                    try await bridge.engine.sendChanges(.init(scope: .zoneIDs([zoneID])))
+                    try await syncEnginePool.sendChanges(in: scope, zoneIDs: [zoneID])
                 } catch {
                     if operationError == nil { operationError = error }
                 }
@@ -506,6 +556,7 @@ final class HouseholdRecordSyncService {
         var serverFingerprints: [String: String] = [:]
         var stagedSystemFields: [String: Data] = [:]
         var markerLocalWins: [String: Bool] = [:]
+        var outgoingChanges: [CloudKitRecordChange] = []
 
         do {
             try withoutUndoRegistration(in: context) {
@@ -619,16 +670,20 @@ final class HouseholdRecordSyncService {
             for name in uploadNames {
                 guard let snapshot = local[name] else { continue }
                 let id = CKRecord.ID(recordName: name, zoneID: locator.zoneID)
-                engine?.state.add(pendingRecordZoneChanges: [.saveRecord(id)])
                 pendingSnapshots[name] = snapshot
                 metadata.pendingFingerprints[name] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
+                let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
+                outgoingChanges.append(.save(try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
             }
         }
         for (name, fields) in stagedSystemFields {
             metadata.systemFields[name] = fields
         }
         persistMetadata()
+        if !outgoingChanges.isEmpty {
+            try await syncEnginePool?.enqueue(outgoingChanges, in: activeScope)
+        }
         lastError = nil
         HouseholdSyncDiagnostics.record(
             event: "fetched",
@@ -638,7 +693,7 @@ final class HouseholdRecordSyncService {
         NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
     }
 
-    private func handleSentChanges(_ changes: CKSyncEngine.Event.SentRecordZoneChanges, engine: CKSyncEngine) async throws {
+    private func handleSentChanges(_ changes: CKSyncEngine.Event.SentRecordZoneChanges) async throws {
         var didFail = false
         for record in changes.savedRecords {
             metadata.systemFields[record.recordID.recordName] = encodeSystemFields(record)
@@ -655,7 +710,7 @@ final class HouseholdRecordSyncService {
         }
         for failure in changes.failedRecordSaves {
             if failure.error.code == .serverRecordChanged, let server = failure.error.serverRecord {
-                try await applyServerConflict(server, engine: engine)
+                try await applyServerConflict(server)
             } else {
                 didFail = true
                 lastError = failure.error
@@ -677,7 +732,7 @@ final class HouseholdRecordSyncService {
         }
     }
 
-    private func applyServerConflict(_ server: CKRecord, engine: CKSyncEngine) async throws {
+    private func applyServerConflict(_ server: CKRecord) async throws {
         guard let household, let context,
               let identity = HouseholdRecordIdentity(recordType: server.recordType, recordName: server.recordID.recordName) else { return }
         let local: LocalHouseholdRecord?
@@ -714,8 +769,13 @@ final class HouseholdRecordSyncService {
                 pendingSnapshots[identity.recordName] = snapshot
                 metadata.pendingFingerprints[identity.recordName] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[identity.recordName] = snapshot.groupFingerprints
+                let updatedRecord = try HouseholdRecordCodec.makeRecord(
+                    from: snapshot,
+                    zoneID: server.recordID.zoneID,
+                    systemRecord: server
+                )
+                try await syncEnginePool?.enqueue([.save(updatedRecord)], in: activeScope)
             }
-            engine.state.add(pendingRecordZoneChanges: [.saveRecord(server.recordID)])
         } else {
             metadata.pendingFingerprints.removeValue(forKey: identity.recordName)
             metadata.pendingGroupFingerprints.removeValue(forKey: identity.recordName)
@@ -808,6 +868,26 @@ final class HouseholdRecordSyncService {
         ).fingerprint
     }
 
+    private var activeScope: CollaborationDatabaseScope {
+        locator?.isOwner == true ? .private : .shared
+    }
+
+    private var collaborationEnvironment: CollaborationEnvironment {
+        switch BuildEnvironment.cloudKit {
+        case .development: .development
+        case .production: .production
+        case .unknown: .unknown
+        }
+    }
+
+    private func accountPartitionIdentifier() async throws -> String {
+        let userRecordID = try await container.userRecordID()
+        let material = "\(SharedStore.cloudKitContainerID)|\(userRecordID.recordName)"
+        return SHA256.hash(data: Data(material.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+    }
+
     private var defaults: UserDefaults {
         UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
     }
@@ -817,7 +897,7 @@ final class HouseholdRecordSyncService {
     /// and zone state must never share a cache key even when the household's
     /// zone ID is identical. In particular, a Production build installed over
     /// a Development build keeps this App Group UserDefaults suite.
-    static func storageSuffix(for locator: HouseholdShareLocator, environment: CloudKitEnvironment) -> String {
+    nonisolated static func storageSuffix(for locator: HouseholdShareLocator, environment: CloudKitEnvironment) -> String {
         Data("\(environment.rawValue)|\(locator.isOwner ? "private" : "shared")|\(locator.zoneName)|\(locator.ownerName)".utf8).base64EncodedString()
     }
 
@@ -827,16 +907,6 @@ final class HouseholdRecordSyncService {
 
     private func stateKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.state.\(storageSuffix(for: locator))" }
     private func metadataKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.metadata.\(storageSuffix(for: locator))" }
-
-    private func loadState(for locator: HouseholdShareLocator) -> CKSyncEngine.State.Serialization? {
-        guard let data = defaults.data(forKey: stateKey(for: locator)) else { return nil }
-        return try? JSONDecoder().decode(CKSyncEngine.State.Serialization.self, from: data)
-    }
-
-    private func storeState(_ state: CKSyncEngine.State.Serialization) throws {
-        guard let locator else { return }
-        defaults.set(try JSONEncoder().encode(state), forKey: stateKey(for: locator))
-    }
 
     private func loadMetadata(for locator: HouseholdShareLocator) -> HouseholdSyncMetadata {
         guard let data = defaults.data(forKey: metadataKey(for: locator)) else { return .init() }
@@ -860,6 +930,10 @@ final class HouseholdRecordSyncService {
         defer { unarchiver.finishDecoding() }
         return CKRecord(coder: unarchiver)
     }
+}
+
+enum HouseholdRecordSyncError: Error {
+    case stateStoreUnavailable
 }
 
 private final class HouseholdRecordSyncDelegate: CKSyncEngineDelegate, @unchecked Sendable {

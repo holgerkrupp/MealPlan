@@ -7,27 +7,13 @@ struct HouseholdSettingsView: View {
     @Environment(\.modelContext) private var context
 
     @State private var showingShareSheet = false
-    #if os(iOS)
-    @State private var showingJoinNearby = false
-    #endif
-    @State private var memberPendingRemoval: HouseholdMember?
-    @State private var removingMemberID: UUID?
-    @State private var removalErrorMessage: String?
     @State private var isConfirmingLegacyRecovery = false
     @State private var isReconcilingLegacyHouseholds = false
     @State private var legacyRecoveryErrorMessage: String?
 
-    /// People who currently have access. Someone removed from the share keeps
-    /// an inactive row (see `HouseholdCloudSharingService.refreshMembers`) so
-    /// plan attribution still has a name, but no longer counts as planning.
+    /// People who currently have access. Inactive rows remain for attribution.
     private var members: [HouseholdMember] {
         (appState.currentHousehold?.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
-    }
-
-    /// Removing people is the owner's call, the same as inviting them — and
-    /// unlike inviting, it needs a share to remove them from.
-    private func canRemoveMembers(from household: Household) -> Bool {
-        !appState.isGuest && HouseholdCloudSharingService.isOwner(shareIdentifier: household.cloudKitShareIdentifier) == true
     }
 
     /// How many things the family counts as always in stock, for the row that
@@ -132,18 +118,6 @@ struct HouseholdSettingsView: View {
                     Text("Choose an exact iCloud household to restore on this device, safely reset this device, or recover an owner household moved to Recently Deleted.")
                 }
 
-                #if os(iOS)
-                Section {
-                    Button {
-                        showingJoinNearby = true
-                    } label: {
-                        Label("Join a Household Nearby", systemImage: "dot.radiowaves.left.and.right")
-                    }
-                } footer: {
-                    Text("Someone who already plans with MealPlan can add you from their device while you’re together, no email address needed.")
-                }
-                #endif
-
                 Section {
                     NavigationLink {
                         MealRoutinesView()
@@ -191,18 +165,10 @@ struct HouseholdSettingsView: View {
                 Section {
                     LabeledContent(String(localized: "You"), value: appState.currentMemberName)
                     ForEach(members) { member in
-                        memberRow(member, removable: canRemoveMembers(from: household) && HouseholdCloudSharingService.canRemove(member))
+                        LabeledContent(member.name, value: member.role.localizedName)
                     }
                 } header: {
                     Text("Who’s planning")
-                } footer: {
-                    if canRemoveMembers(from: household), members.contains(where: HouseholdCloudSharingService.canRemove) {
-                        #if os(macOS)
-                        Text("Control-click someone to remove them from the household.")
-                        #else
-                        Text("Swipe someone’s name to remove them from the household.")
-                        #endif
-                    }
                 }
 
                 #if DEBUG
@@ -231,33 +197,6 @@ struct HouseholdSettingsView: View {
                 HouseholdSharingView(household: household)
                     .dismissesOnOutsideClick()
             }
-        }
-        #if os(iOS)
-        .sheet(isPresented: $showingJoinNearby) {
-            JoinNearbyHouseholdView(code: nil)
-        }
-        #endif
-        .confirmationDialog(
-            String(localized: "Remove \(memberPendingRemoval?.name ?? "")?"),
-            isPresented: Binding(get: { memberPendingRemoval != nil }, set: { if !$0 { memberPendingRemoval = nil } }),
-            titleVisibility: .visible,
-            presenting: memberPendingRemoval
-        ) { member in
-            Button(String(localized: "Remove from Household"), role: .destructive) {
-                Task { await remove(member) }
-            }
-            Button(String(localized: "Cancel"), role: .cancel) {}
-        } message: { member in
-            Text("\(member.name) will lose access to the shared plan and shopping list right away. They keep a copy of the household’s recipes.")
-        }
-        .alert(
-            String(localized: "Couldn’t Remove"),
-            isPresented: Binding(get: { removalErrorMessage != nil }, set: { if !$0 { removalErrorMessage = nil } }),
-            presenting: removalErrorMessage
-        ) { _ in
-            Button(String(localized: "OK")) {}
-        } message: { message in
-            Text(message)
         }
         .confirmationDialog(
             String(localized: "Copy household data into the canonical household?"),
@@ -297,45 +236,6 @@ struct HouseholdSettingsView: View {
         return count == 0 ? String(localized: "All clear") : String(localized: "(count) to review")
     }
 
-    private func memberRow(_ member: HouseholdMember, removable: Bool) -> some View {
-        LabeledContent(member.name) {
-            if removingMemberID == member.uuid {
-                ProgressView()
-                    .controlSize(.small)
-            } else {
-                Text(member.role.localizedName)
-            }
-        }
-        .swipeActions {
-            if removable {
-                Button(role: .destructive) {
-                    memberPendingRemoval = member
-                } label: {
-                    Label(String(localized: "Remove"), systemImage: "person.fill.xmark")
-                }
-            }
-        }
-        .contextMenu {
-            if removable {
-                Button(role: .destructive) {
-                    memberPendingRemoval = member
-                } label: {
-                    Label(String(localized: "Remove from Household"), systemImage: "person.fill.xmark")
-                }
-            }
-        }
-    }
-
-    private func remove(_ member: HouseholdMember) async {
-        guard let household = appState.currentHousehold else { return }
-        removingMemberID = member.uuid
-        defer { removingMemberID = nil }
-        do {
-            try await HouseholdCloudSharingService.removeMember(member, from: household, context: context)
-        } catch {
-            removalErrorMessage = error.localizedDescription
-        }
-    }
 }
 
 @MainActor

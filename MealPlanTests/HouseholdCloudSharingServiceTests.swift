@@ -6,23 +6,11 @@ import UIKit
 #endif
 @testable import MealPlan
 
-/// `isShareURL` decides whether a URL that reached the app through
-/// `onOpenURL` (rather than the system's own CloudKit acceptance sheet)
-/// should still be treated as a household invitation. See
-/// `AppState.handle(openedURL:)`.
+/// Host-owned routing still queues CloudKit invitations until the household
+/// store and replacement preflight are ready. Share lifecycle itself belongs
+/// to CloudKitCollaborationKit.
 @MainActor
 struct HouseholdCloudSharingServiceTests {
-
-    @Test func recognizesICloudShareLinks() {
-        #expect(HouseholdCloudSharingService.isShareURL(URL(string: "https://www.icloud.com/share/abc123")!))
-        #expect(HouseholdCloudSharingService.isShareURL(URL(string: "https://icloud.com/share/abc123")!))
-    }
-
-    @Test func ignoresUnrelatedLinks() {
-        #expect(!HouseholdCloudSharingService.isShareURL(URL(string: "mealplan://today")!))
-        #expect(!HouseholdCloudSharingService.isShareURL(URL(string: "https://www.icloud.com/settings")!))
-        #expect(!HouseholdCloudSharingService.isShareURL(URL(string: "https://example.com/share/abc123")!))
-    }
 
     @Test func coalescesDuplicateShareDeliveriesButAllowsRetry() {
         var gate = CloudShareDeliveryGate()
@@ -35,54 +23,6 @@ struct HouseholdCloudSharingServiceTests {
         gate.allowRedelivery("container|owner|zone|share")
         let retryDelivery = gate.shouldDeliver("container|owner|zone|share")
         #expect(retryDelivery)
-    }
-
-    @Test func ownerCanRemoveInvitedParticipants() {
-        #expect(HouseholdCloudSharingService.canRemove(participant(role: .editor)))
-        #expect(HouseholdCloudSharingService.canRemove(participant(role: .guest)))
-    }
-
-    @Test func ownerCannotRemoveThemselvesOrStaleRows() {
-        #expect(!HouseholdCloudSharingService.canRemove(participant(role: .owner)))
-
-        let currentUser = participant(role: .editor)
-        currentUser.isCurrentUser = true
-        #expect(!HouseholdCloudSharingService.canRemove(currentUser))
-
-        let alreadyRemoved = participant(role: .editor)
-        alreadyRemoved.isActive = false
-        #expect(!HouseholdCloudSharingService.canRemove(alreadyRemoved))
-
-        // A member row that never came from a CKShare has nothing to revoke.
-        let localOnly = participant(role: .editor)
-        localOnly.cloudKitParticipantID = nil
-        #expect(!HouseholdCloudSharingService.canRemove(localOnly))
-    }
-
-    @Test func parsesAppleAccountEmailAddresses() {
-        #expect(HouseholdInviteAddress("  alex@example.com \n") == .email("alex@example.com"))
-        #expect(HouseholdInviteAddress("alex@example") == nil)
-        #expect(HouseholdInviteAddress("alex@@example.com") == nil)
-        #expect(HouseholdInviteAddress("@example.com") == nil)
-        #expect(HouseholdInviteAddress("alex smith@example.com") == nil)
-    }
-
-    @Test func parsesPhoneNumbersWrittenWithFormatting() {
-        #expect(HouseholdInviteAddress("+49 (170) 123-4567") == .phone("+491701234567"))
-        #expect(HouseholdInviteAddress("0170 1234567") == .phone("01701234567"))
-        #expect(HouseholdInviteAddress("12345") == nil)
-        #expect(HouseholdInviteAddress("call me") == nil)
-        #expect(HouseholdInviteAddress("") == nil)
-    }
-
-    @Test func pendingInviteesAreShownByTheAddressTheyWereInvitedAt() {
-        let invited = HouseholdShareParticipant(id: "1", name: nil, emailAddress: "alex@example.com", phoneNumber: nil, isOwner: false, canEdit: true, status: .invited)
-        #expect(invited.displayName == "alex@example.com")
-        #expect(invited.detail == nil)
-
-        let joined = HouseholdShareParticipant(id: "2", name: "Alex Smith", emailAddress: nil, phoneNumber: "+491701234567", isOwner: false, canEdit: false, status: .joined)
-        #expect(joined.displayName == "Alex Smith")
-        #expect(joined.detail == "+491701234567")
     }
 
     /// Losing access turns the household into a new one on that device, so a
@@ -106,12 +46,6 @@ struct HouseholdCloudSharingServiceTests {
         let mixed = CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [share: CKError(.zoneNotFound), root: CKError(.networkFailure)]])
         #expect(HouseholdCloudSharingService.indicatesLostAccess(allGone))
         #expect(!HouseholdCloudSharingService.indicatesLostAccess(mixed))
-    }
-
-    private func participant(role: MemberRole) -> HouseholdMember {
-        let member = HouseholdMember(name: "Alex", role: role)
-        member.cloudKitParticipantID = UUID().uuidString
-        return member
     }
 
     #if canImport(UIKit)

@@ -1,4 +1,5 @@
 import CloudKit
+import CollaborationUI
 import Foundation
 import SwiftData
 import SwiftUI
@@ -54,9 +55,6 @@ final class AppState: HouseholdRecoveryAppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
-    /// Set when the owner's single-use "add someone nearby" QR code opened
-    /// the app; `RootView` presents `JoinNearbyHouseholdView` for it.
-    var pendingNearbyJoin: NearbyJoinRequest?
     /// Covers the app while an accepted invitation downloads the household
     /// the person asked to join.
     var cloudBootstrapState: CloudBootstrapState = .ready
@@ -72,11 +70,6 @@ final class AppState: HouseholdRecoveryAppState {
     /// The migration window must preserve both graphs until recovery is chosen;
     /// this state is intentionally diagnostic/review-only.
     private(set) var legacyHouseholdRecovery: LegacyHouseholdRecoveryPlan = .noAction
-
-    struct NearbyJoinRequest: Identifiable, Equatable {
-        let id = UUID()
-        var code: String?
-    }
 
     struct PendingAddDish: Identifiable, Equatable {
         let id = UUID()
@@ -400,14 +393,6 @@ final class AppState: HouseholdRecoveryAppState {
         case .dish(let id):
             requestedDishID = id
             requestedSection = .dishes
-        case .joinNearby(let code):
-            // Adding someone nearby is iPhone and iPad only: the Mac app
-            // ships without the local-network entitlement it would need.
-            #if os(iOS)
-            pendingNearbyJoin = NearbyJoinRequest(code: code)
-            #else
-            _ = code
-            #endif
         }
     }
 
@@ -427,10 +412,13 @@ final class AppState: HouseholdRecoveryAppState {
         // MealPlan is already frontmost). When that happens the URL reaches
         // here instead, and without this fallback the invitation would
         // silently do nothing on the recipient's phone.
-        if HouseholdCloudSharingService.isShareURL(url) {
+        if InvitationAcceptanceCoordinator.isCloudShareURL(url) {
             Task {
                 do {
-                    let metadata = try await HouseholdCloudSharingService.fetchMetadata(for: url)
+                    let metadata = try await InvitationAcceptanceCoordinator.resolveMetadata(
+                        for: url,
+                        containerIdentifier: SharedStore.cloudKitContainerID
+                    )
                     HouseholdShareInvitationInbox.shared.enqueue(metadata)
                 } catch {
                     importNotice = String(localized: "Couldn’t open that invitation: \(error.localizedDescription)")
