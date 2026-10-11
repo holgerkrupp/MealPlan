@@ -393,6 +393,107 @@ final class MealPlanManagedCollaboration {
         return ManagedMealRoutineSnapshot(householdID: householdID, routines: routines, dishes: dishes, mealTypes: mealTypes)
     }
 
+    func mealTypeSnapshot(for householdID: UUID) throws -> [ManagedMealTypeChoice] {
+        let objectID = try managedHouseholdObjectID(for: householdID)
+        let root = try container.viewContext.existingObject(with: objectID)
+        let records = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        var seenKeys: Set<String> = []
+        return records.compactMap { object -> ManagedMealTypeChoice? in
+            guard let id = object.value(forKey: "uuid") as? UUID,
+                  let key = object.value(forKey: "key") as? String,
+                  let name = object.value(forKey: "name") as? String else { return nil }
+            return ManagedMealTypeChoice(
+                id: id,
+                key: key,
+                name: name,
+                symbolName: object.value(forKey: "symbolName") as? String ?? "fork.knife",
+                sortOrder: (object.value(forKey: "sortOrder") as? NSNumber)?.intValue ?? 0
+            )
+        }
+        .sorted { ($0.sortOrder, $0.id.uuidString) < ($1.sortOrder, $1.id.uuidString) }
+        .filter { seenKeys.insert($0.key).inserted }
+    }
+
+    func addManagedMealType(in householdID: UUID) throws -> ManagedMealTypeChoice {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let records = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let order = (records.compactMap { ($0.value(forKey: "sortOrder") as? NSNumber)?.intValue }.max() ?? -1) + 1
+        let meal = try insert(.mealType, into: store(for: rootID), context: context)
+        let key = UUID().uuidString
+        meal.setValue(key, forKey: "key")
+        meal.setValue("", forKey: "name")
+        meal.setValue("fork.knife", forKey: "symbolName")
+        meal.setValue(order, forKey: "sortOrder")
+        meal.setValue(root, forKey: "household")
+        root.mutableSetValue(forKey: "mealTypes").add(meal)
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+        return ManagedMealTypeChoice(id: meal.value(forKey: "uuid") as? UUID ?? UUID(), key: key, name: "", symbolName: "fork.knife", sortOrder: order)
+    }
+
+    func updateManagedMealType(_ meal: ManagedMealTypeChoice, name: String, symbolName: String, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let records = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        guard let object = records.first(where: { $0.value(forKey: "uuid") as? UUID == meal.id }),
+              canUpdate(object.objectID, in: rootID) else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        object.setValue(name, forKey: "name")
+        object.setValue(symbolName, forKey: "symbolName")
+        object.setValue(Date.now, forKey: "modifiedAt")
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func reorderManagedMealTypes(_ meals: [ManagedMealTypeChoice], in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let records = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        let byID = Dictionary(uniqueKeysWithValues: records.compactMap { record -> (UUID, NSManagedObject)? in
+            guard let id = record.value(forKey: "uuid") as? UUID else { return nil }
+            return (id, record)
+        })
+        for (index, meal) in meals.enumerated() {
+            guard let object = byID[meal.id], canUpdate(object.objectID, in: rootID) else { continue }
+            if (object.value(forKey: "sortOrder") as? NSNumber)?.intValue != index {
+                object.setValue(index, forKey: "sortOrder")
+                object.setValue(Date.now, forKey: "modifiedAt")
+            }
+        }
+        guard context.hasChanges else { return }
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
+    func managedPlannedMealCount(for mealKey: String, in householdID: UUID) throws -> Int {
+        let rootID = try managedHouseholdObjectID(for: householdID)
+        let root = try container.viewContext.existingObject(with: rootID)
+        let request = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.mealPlanEntry.rawValue)
+        request.predicate = NSPredicate(format: "household == %@ AND mealSlotRaw == %@", root, mealKey)
+        request.affectedStores = [try store(for: rootID)]
+        return try container.viewContext.count(for: request)
+    }
+
+    func deleteManagedMealType(_ mealID: UUID, in householdID: UUID) throws {
+        let (rootID, root, context) = try editableHousehold(householdID)
+        let records = (root.value(forKey: "mealTypes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
+        guard let meal = records.first(where: { $0.value(forKey: "uuid") as? UUID == mealID }),
+              canUpdate(meal.objectID, in: rootID),
+              let mealKey = meal.value(forKey: "key") as? String else {
+            throw MealPlanManagedCollaborationError.editingNotAllowed
+        }
+        let request = NSFetchRequest<NSManagedObject>(entityName: ManagedHouseholdEntity.mealPlanEntry.rawValue)
+        request.predicate = NSPredicate(format: "household == %@ AND mealSlotRaw == %@", root, mealKey)
+        request.affectedStores = [try store(for: rootID)]
+        for entry in try context.fetch(request) { context.delete(entry) }
+        context.delete(meal)
+        try context.save()
+        try finishManagedWrite(householdID: householdID, rootID: rootID)
+        SharedStore.reloadWidgets()
+    }
+
     func addManagedMealRoutine(in householdID: UUID) throws -> ManagedMealRoutineDraft {
         let (rootID, root, context) = try editableHousehold(householdID)
         let dishes = (root.value(forKey: "dishes") as? NSSet)?.allObjects.compactMap { $0 as? NSManagedObject } ?? []
