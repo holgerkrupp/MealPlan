@@ -386,11 +386,12 @@ struct RootView: View {
             )
         } catch HouseholdSharingError.accessRemoved {
             await moveToOwnHousehold(from: household)
-        } catch let cloudError as CKError where cloudError.code == .networkUnavailable || cloudError.code == .networkFailure {
-            // Offline editing remains available; a push or the next launch
-            // retries without interrupting the foreground UI.
         } catch {
-            sharingErrorMessage = error.localizedDescription
+            // CloudKit retries temporary outages. Keep the foreground plan
+            // usable and reserve the alert for failures needing an action.
+            if !HouseholdCloudSharingService.isTemporarySyncFailure(error) {
+                sharingErrorMessage = error.localizedDescription
+            }
         }
     }
 

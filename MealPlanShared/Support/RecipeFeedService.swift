@@ -85,12 +85,12 @@ enum RecipeFeedService {
         if let feedURL = candidate.feedURL {
             let resolved = try await resolveFeed(at: feedURL)
             feed.title = resolved.parsed.title.isEmpty ? candidate.title : resolved.parsed.title
-            try await merge(resolved.parsed, into: feed, context: context)
+            try merge(resolved.parsed, into: feed, context: context)
             markSuccess(feed, response: resolved.response)
         } else {
             let articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
             let parsed = ParsedRecipeFeed(title: candidate.title, homeURL: candidate.siteURL, articles: articles)
-            try await merge(parsed, into: feed, context: context)
+            try merge(parsed, into: feed, context: context)
             markSuccess(feed, fetchedAt: .now, status: 200)
         }
         try context.save()
@@ -112,7 +112,7 @@ enum RecipeFeedService {
         )
         feed.household = household
         context.insert(feed)
-        try await merge(resolved.parsed, into: feed, context: context)
+        try merge(resolved.parsed, into: feed, context: context)
         markSuccess(feed, response: resolved.response)
         try context.save()
         return feed
@@ -146,12 +146,16 @@ enum RecipeFeedService {
                 )
                 let articles = try await RecipeSiteDiscoveryService.fetchArticles(for: candidate)
                 let parsed = ParsedRecipeFeed(title: feed.title, homeURL: feed.siteURL, articles: articles)
-                try await merge(parsed, into: feed, context: context)
-                markSuccess(feed, fetchedAt: .now, status: 200)
-                try context.save()
+                try nonUndoableStoreTransaction(in: context) {
+                    try merge(parsed, into: feed, context: context)
+                    markSuccess(feed, fetchedAt: .now, status: 200)
+                    try context.save()
+                }
             } catch {
-                markFailure(feed, error: error)
-                try? context.save()
+                try? nonUndoableStoreTransaction(in: context) {
+                    markFailure(feed, error: error)
+                    try context.save()
+                }
                 throw error
             }
             return
@@ -165,8 +169,10 @@ enum RecipeFeedService {
             let (data, response) = try await URLSession.shared.data(for: request)
             guard let http = response as? HTTPURLResponse else { throw RecipeFeedParserError.unsupportedFormat }
             if http.statusCode == 304 {
-                markSuccess(feed, response: http)
-                try context.save()
+                try nonUndoableStoreTransaction(in: context) {
+                    markSuccess(feed, response: http)
+                    try context.save()
+                }
                 return
             }
             guard (200..<300).contains(http.statusCode) else {
@@ -177,14 +183,18 @@ enum RecipeFeedService {
                 contentType: http.value(forHTTPHeaderField: "Content-Type"),
                 sourceURL: url
             )
-            feed.title = parsed.title
-            if let home = parsed.homeURL { feed.siteURLString = home.absoluteString }
-            try await merge(parsed, into: feed, context: context)
-            markSuccess(feed, response: http)
-            try context.save()
+            try nonUndoableStoreTransaction(in: context) {
+                feed.title = parsed.title
+                if let home = parsed.homeURL { feed.siteURLString = home.absoluteString }
+                try merge(parsed, into: feed, context: context)
+                markSuccess(feed, response: http)
+                try context.save()
+            }
         } catch {
-            markFailure(feed, error: error)
-            try? context.save()
+            try? nonUndoableStoreTransaction(in: context) {
+                markFailure(feed, error: error)
+                try context.save()
+            }
             throw error
         }
     }
@@ -194,7 +204,7 @@ enum RecipeFeedService {
     /// high-volume magazine cannot grow the shared store without limit.
     static let archiveLimit = 600
 
-    static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) async throws {
+    static func merge(_ parsed: ParsedRecipeFeed, into feed: RecipeFeed, context: ModelContext) throws {
         // Some feeds repeat the same entry, and older versions consequently
         // stored more than one item with the same stable ID. Building a
         // dictionary with `uniqueKeysWithValues` traps on that data before a
@@ -202,35 +212,41 @@ enum RecipeFeedService {
         // Keep the most recently fetched copy and remove the others.
         var existing: [String: RecipeFeedItem] = [:]
         var duplicates: [RecipeFeedItem] = []
-        for item in feed.items ?? [] {
-            guard let current = existing[item.stableID] else {
+        for item in (feed.items ?? []).sorted(by: duplicateWinnerPrecedes) {
+            guard existing[item.stableID] != nil else {
                 existing[item.stableID] = item
                 continue
             }
-            if item.fetchedAt > current.fetchedAt {
-                existing[item.stableID] = item
-                duplicates.append(current)
-            } else {
-                duplicates.append(item)
-            }
+            duplicates.append(item)
         }
 
-        var refreshedIDs = Set<String>()
+        var incomingByID: [String: ParsedFeedArticle] = [:]
         for article in parsed.articles.prefix(100) where RecipeArticleClassifier.isLikelyRecipe(article) {
-            // A repeated entry in a single response must update the same
-            // model rather than insert another duplicate for the next launch.
-            guard refreshedIDs.insert(article.id).inserted else { continue }
-            let item = existing[article.id]
+            if let current = incomingByID[article.id] {
+                if incomingWinnerPrecedes(article, current) { incomingByID[article.id] = article }
+            } else {
+                incomingByID[article.id] = article
+            }
+        }
+        let refreshedIDs = Set(incomingByID.keys)
+        for article in incomingByID.values.sorted(by: { $0.id < $1.id }) {
+            let existingItem = existing[article.id]
+            let item = existingItem
                 ?? RecipeFeedItem(stableID: article.id, title: article.title, url: article.url)
             if item.feed == nil { context.insert(item) }
             existing[article.id] = item
+            let imageURLString = article.imageURL?.absoluteString ?? item.imageURLString
+            let changed = existingItem == nil || item.title != article.title
+                || item.urlString != article.url.absoluteString || item.author != article.author
+                || item.summary != article.summary || item.publishedAt != article.publishedAt
+                || item.imageURLString != imageURLString || item.archivedAt != nil
             item.title = article.title
             item.urlString = article.url.absoluteString
             item.author = article.author
             item.summary = article.summary
             item.publishedAt = article.publishedAt
-            item.imageURLString = article.imageURL?.absoluteString ?? item.imageURLString
-            item.fetchedAt = .now
+            item.imageURLString = imageURLString
+            if changed { item.fetchedAt = .now }
             // A post can reappear after a site edits and republishes it.
             item.archivedAt = nil
             item.feed = feed
@@ -255,6 +271,19 @@ enum RecipeFeedService {
         guard all.count > archiveLimit else { return }
         let doomed = all.dropFirst(archiveLimit).filter(\.isArchived)
         for item in doomed { context.delete(item) }
+    }
+
+    private static func duplicateWinnerPrecedes(_ lhs: RecipeFeedItem, _ rhs: RecipeFeedItem) -> Bool {
+        if lhs.fetchedAt != rhs.fetchedAt { return lhs.fetchedAt > rhs.fetchedAt }
+        return lhs.uuid.uuidString < rhs.uuid.uuidString
+    }
+
+    private static func incomingWinnerPrecedes(_ lhs: ParsedFeedArticle, _ rhs: ParsedFeedArticle) -> Bool {
+        if lhs.publishedAt != rhs.publishedAt {
+            return (lhs.publishedAt ?? .distantPast) > (rhs.publishedAt ?? .distantPast)
+        }
+        if lhs.title != rhs.title { return lhs.title < rhs.title }
+        return lhs.url.absoluteString < rhs.url.absoluteString
     }
 
     private static func markSuccess(_ feed: RecipeFeed, response: HTTPURLResponse) {

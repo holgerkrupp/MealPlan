@@ -324,7 +324,10 @@ enum HouseholdRecordCodec {
                 "profile": member.profileModifiedAt.timeIntervalSinceReferenceDate.description
             ])
         }
-        for meal in household.mealTypes ?? [] {
+        // Some upgraded stores trap while decoding Household.mealTypes.
+        // MealType.ensure already treats meals as store-wide and re-homes them
+        // to the active household, so fetch them directly here as well.
+        for meal in try context.fetch(FetchDescriptor<MealType>()) {
             try append(.init(type: .mealType, uuid: meal.uuid), meal.modifiedAt, .mealType(.init(
                 uuid: meal.uuid, key: meal.key, name: meal.name, symbolName: meal.symbolName, sortOrder: meal.sortOrder
             )))
@@ -441,16 +444,22 @@ enum HouseholdRecordCodec {
         for feed in household.recipeFeeds ?? [] {
             try append(.init(type: .recipeFeed, uuid: feed.uuid), feed.modifiedAt, .recipeFeed(.init(
                 uuid: feed.uuid, title: feed.title, siteURLString: feed.siteURLString, feedURLString: feed.feedURLString,
-                etag: feed.etag, lastModified: feed.lastModified, lastFetchedAt: feed.lastFetchedAt,
-                firstFailureAt: feed.firstFailureAt, consecutiveFailures: feed.consecutiveFailures,
-                nextRetryAt: feed.nextRetryAt, lastHTTPStatus: feed.lastHTTPStatus,
-                lastErrorMessage: feed.lastErrorMessage, dateAdded: feed.dateAdded, items: []
+                // HTTP validators and retry diagnostics belong to each
+                // device. Syncing them made an unchanged feed poll upload a
+                // household record on every launch.
+                etag: nil, lastModified: nil, lastFetchedAt: nil,
+                firstFailureAt: nil, consecutiveFailures: 0,
+                nextRetryAt: nil, lastHTTPStatus: nil,
+                lastErrorMessage: nil, dateAdded: feed.dateAdded, items: [],
+                sourceKindRaw: feed.sourceKindRaw, sourceID: feed.sourceID,
+                contentURLString: feed.contentURLString
             )))
             for item in feed.items ?? [] {
                 try append(.init(type: .recipeFeedItem, uuid: item.uuid), item.modifiedAt, .recipeFeedItem(.init(
                     feedID: feed.uuid, value: .init(uuid: item.uuid, stableID: item.stableID, title: item.title,
                         urlString: item.urlString, author: item.author, summary: item.summary,
-                        publishedAt: item.publishedAt, fetchedAt: item.fetchedAt)
+                        publishedAt: item.publishedAt, fetchedAt: item.fetchedAt,
+                        imageURLString: item.imageURLString, archivedAt: item.archivedAt)
                 )))
             }
         }
@@ -487,7 +496,12 @@ enum HouseholdRecordCodec {
         ))
     }
 
-    static func makeRecord(from snapshot: LocalHouseholdRecord, zoneID: CKRecordZone.ID, systemRecord: CKRecord? = nil) throws -> CKRecord {
+    static func makeRecord(
+        from snapshot: LocalHouseholdRecord,
+        zoneID: CKRecordZone.ID,
+        systemRecord: CKRecord? = nil,
+        assetDirectory: URL? = nil
+    ) throws -> CKRecord {
         let record = systemRecord ?? CKRecord(
             recordType: snapshot.identity.type.rawValue,
             recordID: CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: zoneID)
@@ -497,7 +511,7 @@ enum HouseholdRecordCodec {
         record[modifiedAtKey] = snapshot.modifiedAt as CKRecordValue
         record[schemaVersionKey] = schemaVersion as CKRecordValue
         if let data = snapshot.assetData {
-            let file = try assetFile(for: snapshot.identity, data: data)
+            let file = try assetFile(for: snapshot.identity, data: data, directory: assetDirectory)
             record[assetKey] = CKAsset(fileURL: file)
         } else if snapshot.identity.type == .dishImage || snapshot.identity.type == .cookedLogImage {
             // Image removal is represented by deleting the dedicated record.
@@ -536,13 +550,26 @@ enum HouseholdRecordCodec {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    private static func assetFile(for identity: HouseholdRecordIdentity, data: Data) throws -> URL {
-        let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID)
+    private static func assetFile(for identity: HouseholdRecordIdentity, data: Data, directory providedDirectory: URL?) throws -> URL {
+        let root = providedDirectory ?? FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID)
             ?? URL.cachesDirectory
         let directory = root.appending(path: "CloudSyncAssets", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let url = directory.appending(path: identity.recordName)
-        if (try? Data(contentsOf: url)) != data { try data.write(to: url, options: .atomic) }
+        // CKAsset retains the file URL while a send is in flight and the
+        // package journal retains it across launches. Reusing one URL per
+        // record could change the bytes underneath an older pending upload.
+        let digits = Array("0123456789abcdef".utf8)
+        var hashBytes: [UInt8] = []
+        hashBytes.reserveCapacity(SHA256.Digest.byteCount * 2)
+        for byte in SHA256.hash(data: data) {
+            hashBytes.append(digits[Int(byte >> 4)])
+            hashBytes.append(digits[Int(byte & 0x0f)])
+        }
+        let digest = String(decoding: hashBytes, as: UTF8.self)
+        let url = directory.appending(path: "\(identity.recordName)-\(digest)")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try data.write(to: url, options: .atomic)
+        }
         return url
     }
 
@@ -612,7 +639,7 @@ actor HouseholdSnapshotActor {
     ) throws {
         let households = try modelContext.fetch(FetchDescriptor<Household>())
         guard let household = households.first(where: { $0.uuid == householdID }) else { return }
-        touch(changes, at: date, household: household)
+        try touch(changes, at: date, household: household)
         try modelContext.save()
     }
 
@@ -624,7 +651,7 @@ actor HouseholdSnapshotActor {
         _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
         at date: Date,
         household: Household
-    ) {
+    ) throws {
         let grouped = Dictionary(grouping: changes, by: { $0.identity.type })
 
         func ids(for type: HouseholdRecordType) -> Set<UUID> {
@@ -643,7 +670,7 @@ actor HouseholdSnapshotActor {
             household.modifiedAt = date
         }
         touchModels(household.members ?? [], type: .member)
-        touchModels(household.mealTypes ?? [], type: .mealType)
+        touchModels(try modelContext.fetch(FetchDescriptor<MealType>()), type: .mealType)
         touchModels(household.ingredients ?? [], type: .ingredient)
         touchModels((household.ingredients ?? []).flatMap { $0.aliases ?? [] }, type: .ingredientAlias)
         touchModels(household.packageSizeOverrides ?? [], type: .packageSize)

@@ -4,6 +4,49 @@ import SwiftData
 
 @MainActor
 enum HouseholdRecordApplier {
+    /// A fetched CloudKit batch can contain hundreds of related rows. Fetch
+    /// each model table once for that synchronous transaction instead of
+    /// asking SwiftData to materialize the entire table for every record and
+    /// every relationship lookup. The cache never escapes the transaction.
+    private final class BatchLookup {
+        let context: ModelContext
+        var tables: [ObjectIdentifier: Any] = [:]
+
+        init(context: ModelContext) { self.context = context }
+
+        func find<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID) -> T? {
+            let key = ObjectIdentifier(type)
+            if let table = tables[key] as? [UUID: T] { return table[uuid] }
+            let models = (try? context.fetch(FetchDescriptor<T>())) ?? []
+            let table = Dictionary(models.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+            tables[key] = table
+            return table[uuid]
+        }
+
+        func insert<T: HouseholdSyncModel>(_ model: T) {
+            let key = ObjectIdentifier(T.self)
+            guard var table = tables[key] as? [UUID: T] else { return }
+            table[model.uuid] = model
+            tables[key] = table
+        }
+
+        func remove<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID) {
+            let key = ObjectIdentifier(type)
+            guard var table = tables[key] as? [UUID: T] else { return }
+            table.removeValue(forKey: uuid)
+            tables[key] = table
+        }
+    }
+
+    private static var batchLookup: BatchLookup?
+
+    static func withBatchLookup<T>(in context: ModelContext, _ operation: () throws -> T) rethrows -> T {
+        let previous = batchLookup
+        batchLookup = BatchLookup(context: context)
+        defer { batchLookup = previous }
+        return try operation()
+    }
+
     static func touch(
         _ identity: HouseholdRecordIdentity,
         at date: Date,
@@ -322,19 +365,23 @@ enum HouseholdRecordApplier {
             model.template = template
 
         case .recipeFeed(let value):
-            guard let site = URL(string: value.siteURLString), let url = URL(string: value.feedURLString) else { return }
-            let model = find(RecipeFeed.self, identity.uuid, context) ?? insert(RecipeFeed(siteURL: site, feedURL: url), identity.uuid, context)
+            guard let site = URL(string: value.siteURLString) else { return }
+            let url = value.feedURLString.isEmpty ? nil : URL(string: value.feedURLString)
+            let kind = value.sourceKindRaw.flatMap(RecipeSiteSourceKind.init(rawValue:)) ?? .feed
+            let model = find(RecipeFeed.self, identity.uuid, context) ?? insert(RecipeFeed(
+                siteURL: site, feedURL: url, sourceKind: kind,
+                sourceID: value.sourceID, contentURL: value.contentURLString.flatMap(URL.init(string:))
+            ), identity.uuid, context)
             model.title = value.title
             model.siteURLString = value.siteURLString
             model.feedURLString = value.feedURLString
-            model.etag = value.etag
-            model.lastModified = value.lastModified
-            model.lastFetchedAt = value.lastFetchedAt
-            model.firstFailureAt = value.firstFailureAt
-            model.consecutiveFailures = value.consecutiveFailures
-            model.nextRetryAt = value.nextRetryAt
-            model.lastHTTPStatus = value.lastHTTPStatus
-            model.lastErrorMessage = value.lastErrorMessage
+            if let sourceKindRaw = value.sourceKindRaw {
+                model.sourceKindRaw = sourceKindRaw
+                model.sourceID = value.sourceID
+                model.contentURLString = value.contentURLString
+            }
+            // Each device keeps its own ETag, retry schedule, and last fetch
+            // result. A remote subscription edit must not reset that cache.
             model.dateAdded = value.dateAdded
             model.modifiedAt = modifiedAt
             model.household = household
@@ -352,6 +399,8 @@ enum HouseholdRecordApplier {
             model.summary = value.summary
             model.publishedAt = value.publishedAt
             model.fetchedAt = value.fetchedAt
+            model.imageURLString = value.imageURLString
+            model.archivedAt = value.archivedAt
             model.modifiedAt = modifiedAt
             model.feed = feed
 
@@ -397,11 +446,15 @@ enum HouseholdRecordApplier {
     }
 
     private static func delete<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ context: ModelContext) {
-        if let model = find(type, uuid, context) { context.delete(model) }
+        if let model = find(type, uuid, context) {
+            context.delete(model)
+            if batchLookup?.context === context { batchLookup?.remove(type, uuid: uuid) }
+        }
     }
 
     private static func find<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ context: ModelContext) -> T? {
-        (try? context.fetch(FetchDescriptor<T>()))?.first { $0.uuid == uuid }
+        if let batchLookup, batchLookup.context === context { return batchLookup.find(type, uuid: uuid) }
+        return (try? context.fetch(FetchDescriptor<T>()))?.first { $0.uuid == uuid }
     }
 
     private static func touch<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ date: Date, _ context: ModelContext) {
@@ -411,6 +464,7 @@ enum HouseholdRecordApplier {
     private static func insert<T: HouseholdSyncModel>(_ model: T, _ uuid: UUID, _ context: ModelContext) -> T {
         model.uuid = uuid
         context.insert(model)
+        if batchLookup?.context === context { batchLookup?.insert(model) }
         return model
     }
 

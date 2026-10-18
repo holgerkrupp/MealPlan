@@ -43,7 +43,7 @@ enum MealPlanBackupSync {
 
         // MARK: Meal types
 
-        var mealTypes = partition(household.mealTypes ?? [], by: \.uuid)
+        var mealTypes = partition(try context.fetch(FetchDescriptor<MealType>()), by: \.uuid)
         for stored in backup.mealTypes {
             let model = mealTypes.map[stored.uuid] ?? insert(
                 MealType(key: stored.key, name: stored.name, symbolName: stored.symbolName, sortOrder: stored.sortOrder),
@@ -275,15 +275,25 @@ enum MealPlanBackupSync {
 
         var feeds = partition(household.recipeFeeds ?? [], by: \.uuid)
         for stored in backup.recipeFeeds ?? [] {
-            guard let siteURL = URL(string: stored.siteURLString),
-                  let feedURL = URL(string: stored.feedURLString) else { continue }
+            guard let siteURL = URL(string: stored.siteURLString) else { continue }
+            let feedURL = stored.feedURLString.isEmpty ? nil : URL(string: stored.feedURLString)
             let model = feeds.map[stored.uuid] ?? insert(
-                RecipeFeed(title: stored.title, siteURL: siteURL, feedURL: feedURL),
+                RecipeFeed(
+                    title: stored.title, siteURL: siteURL, feedURL: feedURL,
+                    sourceKind: stored.sourceKindRaw.flatMap(RecipeSiteSourceKind.init(rawValue:)) ?? .feed,
+                    sourceID: stored.sourceID,
+                    contentURL: stored.contentURLString.flatMap(URL.init(string:))
+                ),
                 uuid: stored.uuid, into: context, map: &feeds.map
             )
             model.title = stored.title
             model.siteURLString = stored.siteURLString
             model.feedURLString = stored.feedURLString
+            if let sourceKindRaw = stored.sourceKindRaw {
+                model.sourceKindRaw = sourceKindRaw
+                model.sourceID = stored.sourceID
+                model.contentURLString = stored.contentURLString
+            }
             model.etag = stored.etag
             model.lastModified = stored.lastModified
             model.lastFetchedAt = stored.lastFetchedAt
@@ -309,6 +319,8 @@ enum MealPlanBackupSync {
                 item.summary = storedItem.summary
                 item.publishedAt = storedItem.publishedAt
                 item.fetchedAt = storedItem.fetchedAt
+                item.imageURLString = storedItem.imageURLString
+                item.archivedAt = storedItem.archivedAt
                 item.feed = model
             }
             deleteMissing(items, keeping: stored.items.map(\.uuid), context: context)

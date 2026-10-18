@@ -18,19 +18,11 @@ struct HouseholdSharingView: View {
     @State private var share: CKShare?
     @State private var managedShare: ManagedShareSheet?
     @State private var isLoading = true
+    @State private var isPreparingManagement = false
     @State private var errorMessage: String?
-    @State private var isShowingMigrationSheet = false
     #if os(macOS)
     @State private var macSharingPresenter: NativeMacCloudSharingPresenter?
     #endif
-
-    private var hasExistingHouseholdMember: Bool {
-        (household.members ?? []).contains { $0.isActive && !$0.isCurrentUser }
-    }
-
-    private var migrationPromptKey: String {
-        "MealPlan.packageSharing.reinvitePromptShown.\(household.uuid.uuidString)"
-    }
 
     var body: some View {
         NavigationStack {
@@ -90,11 +82,6 @@ struct HouseholdSharingView: View {
             EmptyView()
             #endif
         }
-        .sheet(isPresented: $isShowingMigrationSheet, onDismiss: markMigrationPromptShown) {
-            migrationSheet
-                .presentationDetents([.medium])
-                .presentationDragIndicator(.visible)
-        }
     }
 
     @ViewBuilder
@@ -122,12 +109,13 @@ struct HouseholdSharingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if let share {
-                    manageSharingButton(share, using: sharing)
+                if share != nil {
+                    manageSharingButton(using: sharing)
                     CloudKitShareLink(
-                        share: share,
+                        rootID: household.uuid.uuidString,
+                        title: household.name,
                         container: sharing.cloudKitContainer,
-                        title: household.name
+                        sharing: sharing
                     ) {
                         Label(String(localized: "Invite or share again"), systemImage: "person.crop.circle.badge.plus")
                             .frame(maxWidth: .infinity)
@@ -179,77 +167,49 @@ struct HouseholdSharingView: View {
         }
     }
 
-    @ViewBuilder
-    private func manageSharingButton(_ share: CKShare, using sharing: CloudKitShareLifecycleService) -> some View {
-        #if os(iOS)
+    private func manageSharingButton(using sharing: CloudKitShareLifecycleService) -> some View {
         Button {
-            managedShare = ManagedShareSheet(share: share)
+            Task { await presentManagement(using: sharing) }
         } label: {
-            Label(String(localized: "Manage access"), systemImage: "person.2")
-                .frame(maxWidth: .infinity)
+            if isPreparingManagement {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+            } else {
+                Label(String(localized: "Manage access"), systemImage: "person.2")
+                    .frame(maxWidth: .infinity)
+            }
         }
+        .disabled(isPreparingManagement)
         .buttonStyle(.borderedProminent)
-        #else
-        Button {
+    }
+
+    private func presentManagement(using sharing: CloudKitShareLifecycleService) async {
+        guard !isPreparingManagement else { return }
+        isPreparingManagement = true
+        defer { isPreparingManagement = false }
+        do {
+            // Revalidate the authoritative share only when the owner asks to
+            // manage it. This also migrates legacy public-link shares before
+            // Apple's participant manager opens.
+            let prepared = try await sharing.prepareShare(
+                rootID: household.uuid.uuidString,
+                waitTimeout: .seconds(45)
+            )
+            share = prepared
+            errorMessage = nil
+            #if os(iOS)
+            managedShare = ManagedShareSheet(share: prepared)
+            #else
             let presenter = NativeMacCloudSharingPresenter()
             presenter.onShareSaved = { _ in Task { await refreshShareAndMembers() } }
             presenter.onSharingStopped = { _ in Task { await stopSharingLocally() } }
             presenter.onCompleted = { errorMessage = $0?.localizedDescription }
-            presenter.present(share: share, rootID: household.uuid.uuidString, sharing: sharing)
+            presenter.present(share: prepared, rootID: household.uuid.uuidString, sharing: sharing)
             macSharingPresenter = presenter
-        } label: {
-            Label(String(localized: "Manage access"), systemImage: "person.2")
-                .frame(maxWidth: .infinity)
+            #endif
+        } catch {
+            errorMessage = error.localizedDescription
         }
-        .buttonStyle(.borderedProminent)
-        #endif
-    }
-
-    private var migrationSheet: some View {
-        VStack(spacing: 18) {
-            Image(systemName: "person.2.crop.square.stack")
-                .font(.system(size: 38, weight: .semibold))
-                .foregroundStyle(Color.accentColor)
-            Text(String(localized: "MealPlan sharing is better"))
-                .font(.title2.bold())
-                .multilineTextAlignment(.center)
-            Text(String(localized: "Your household moved automatically. Sharing is now more reliable, faster, and easier to use. Invite the people who already share this household again so they can continue planning with you."))
-                .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
-            if let errorMessage {
-                Text(errorMessage)
-                    .font(.footnote)
-                    .multilineTextAlignment(.center)
-                    .foregroundStyle(.secondary)
-            }
-            if let sharing {
-                if let share {
-                    CloudKitShareLink(share: share, container: sharing.cloudKitContainer, title: household.name) {
-                        Label(String(localized: "Review household invitations"), systemImage: "person.crop.circle.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                } else {
-                    CloudKitShareLink(
-                        rootID: household.uuid.uuidString,
-                        title: household.name,
-                        container: sharing.cloudKitContainer,
-                        sharing: sharing
-                    ) {
-                        Label(String(localized: "Review household invitations"), systemImage: "person.crop.circle.badge.plus")
-                            .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(.borderedProminent)
-                }
-            } else {
-                Button(String(localized: "Done")) { isShowingMigrationSheet = false }
-                    .buttonStyle(.borderedProminent)
-            }
-            Button(String(localized: "Later")) { isShowingMigrationSheet = false }
-                .buttonStyle(.plain)
-        }
-        .padding(28)
-        .frame(maxWidth: 460)
     }
 
     private func loadSharing() async {
@@ -257,25 +217,8 @@ struct HouseholdSharingView: View {
         do {
             let service = try await MealPlanCloudSharing.service(for: household, context: modelContext)
             sharing = service
-            let existingShare = try await service.existingShare(rootID: household.uuid.uuidString)
-            share = existingShare
-            if existingShare != nil || hasExistingHouseholdMember {
-                do {
-                    share = try await service.prepareShare(
-                        rootID: household.uuid.uuidString,
-                        waitTimeout: .seconds(45)
-                    )
-                    errorMessage = nil
-                } catch {
-                    errorMessage = error.localizedDescription
-                }
-            } else {
-                errorMessage = nil
-            }
-            if hasExistingHouseholdMember,
-               UserDefaults(suiteName: SharedStore.appGroupID)?.bool(forKey: migrationPromptKey) != true {
-                isShowingMigrationSheet = true
-            }
+            share = try await service.existingShare(rootID: household.uuid.uuidString)
+            errorMessage = nil
         } catch {
             errorMessage = error.localizedDescription
         }
@@ -309,10 +252,6 @@ struct HouseholdSharingView: View {
         household.cloudKitShareIdentifier = try? HouseholdShareLocator.encode(locator)
         try? modelContext.save()
         share = nil
-    }
-
-    private func markMigrationPromptShown() {
-        UserDefaults(suiteName: SharedStore.appGroupID)?.set(true, forKey: migrationPromptKey)
     }
 }
 

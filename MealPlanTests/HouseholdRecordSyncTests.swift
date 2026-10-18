@@ -26,6 +26,202 @@ struct HouseholdRecordSyncTests {
         #expect(record.fingerprint == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
 
+    @Test func unchangedSyncedRecordsDoNotQueueAnotherUpload() {
+        var metadata = HouseholdSyncMetadata()
+        let name = "MPDish-example"
+        let server = "server-version"
+        let edit = "local-edit"
+        metadata.serverFingerprints[name] = server
+
+        #expect(!metadata.shouldQueue(name, fingerprint: server))
+        #expect(metadata.shouldQueue(name, fingerprint: edit))
+
+        metadata.pendingFingerprints[name] = edit
+        #expect(!metadata.shouldQueue(name, fingerprint: edit))
+        // A revert must replace the pending edit before it reaches CloudKit.
+        #expect(metadata.shouldQueue(name, fingerprint: server))
+
+        metadata.pendingFingerprints.removeValue(forKey: name)
+        metadata.needsFullUpload = true
+        #expect(metadata.shouldQueue(name, fingerprint: server))
+    }
+
+    @Test func olderCloudAcknowledgementCannotMarkANewerEditAsUploaded() {
+        var metadata = HouseholdSyncMetadata()
+        let name = "MPDish-example"
+        metadata.serverFingerprints[name] = "original"
+        metadata.pendingFingerprints[name] = "newer-edit"
+        metadata.pendingGroupFingerprints[name] = ["recipe": "newer-group"]
+
+        let needsRetry = metadata.acknowledgeSavedRecord(name, fingerprint: "older-edit")
+        #expect(needsRetry)
+        #expect(metadata.serverFingerprints[name] == "older-edit")
+        #expect(metadata.pendingFingerprints[name] == nil)
+        #expect(metadata.shouldQueue(name, fingerprint: "newer-edit"))
+
+        metadata.pendingFingerprints[name] = "newer-edit"
+        metadata.pendingGroupFingerprints[name] = ["recipe": "newer-group"]
+        let acknowledged = metadata.acknowledgeSavedRecord(name, fingerprint: "newer-edit")
+        #expect(!acknowledged)
+        #expect(metadata.serverFingerprints[name] == "newer-edit")
+        #expect(metadata.serverGroupFingerprints[name]?["recipe"] == "newer-group")
+        #expect(!metadata.shouldQueue(name, fingerprint: "newer-edit"))
+    }
+
+    @Test func resolvedCloudConflictsDoNotBecomeForegroundSendAlerts() {
+        let id = CKRecord.ID(recordName: "MPDish-\(UUID().uuidString)", zoneID: CKRecordZone.ID(zoneName: "test"))
+        let server = CKRecord(recordType: HouseholdRecordType.dish.rawValue, recordID: id)
+        let conflict = CKError(.serverRecordChanged, userInfo: [CKRecordChangedErrorServerRecordKey: server])
+        let partial = CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [id: conflict]])
+
+        #expect(HouseholdRecordSyncService.isResolvedConflictSendError(conflict))
+        #expect(HouseholdRecordSyncService.isResolvedConflictSendError(partial))
+        #expect(!HouseholdRecordSyncService.isResolvedConflictSendError(
+            CKError(.networkFailure)
+        ))
+        #expect(!HouseholdRecordSyncService.isResolvedConflictSendError(
+            CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [id: CKError(.permissionFailure)]])
+        ))
+    }
+
+    @Test func journalReconciliationClearsOnlyOrphanedPendingMarkers() {
+        var metadata = HouseholdSyncMetadata()
+        metadata.serverFingerprints = ["sent": "old", "stillQueued": "old"]
+        metadata.pendingFingerprints = ["sent": "latest", "stillQueued": "latest"]
+        metadata.pendingGroupFingerprints = ["sent": ["recipe": "a"], "stillQueued": ["recipe": "b"]]
+
+        #expect(metadata.prunePendingMissingFromJournal(["stillQueued"]) == 1)
+        #expect(metadata.pendingFingerprints["sent"] == nil)
+        #expect(metadata.pendingGroupFingerprints["sent"] == nil)
+        #expect(metadata.shouldQueue("sent", fingerprint: "latest"))
+        #expect(metadata.pendingFingerprints["stillQueued"] == "latest")
+        #expect(!metadata.shouldQueue("stillQueued", fingerprint: "latest"))
+    }
+
+    @Test func planEntryFromBeforeParticipantSelectionStillDecodes() throws {
+        let data = Data("""
+        {"uuid":"00000000-0000-0000-0000-000000000001",\
+        "date":"2026-10-15T00:00:00Z","mealKey":"dinner",\
+        "sortIndex":0,"skipped":false,"prepReminder":false,"isEatingOut":false}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+
+        let entry = try decoder.decode(MealPlanBackup.PortableEntry.self, from: data)
+        #expect(entry.participatingMemberUUIDs.isEmpty)
+        #expect(entry.mealKey == "dinner")
+    }
+
+    @Test func recipeFeedHTTPStateDoesNotChangeSharedRecord() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let feed = RecipeFeed(title: "Family recipes", siteURL: URL(string: "https://example.com")!, sourceKind: .builtInCollection, sourceID: "family", contentURL: URL(string: "https://example.com/family")!)
+        feed.household = household
+        context.insert(household)
+        context.insert(feed)
+        try context.save()
+
+        func sharedRecord() throws -> LocalHouseholdRecord {
+            try #require(HouseholdRecordCodec.records(for: household, context: context).first {
+                $0.identity.type == .recipeFeed
+            })
+        }
+        let before = try sharedRecord()
+        feed.etag = "new-etag"
+        feed.lastFetchedAt = .now
+        feed.firstFailureAt = .now
+        feed.consecutiveFailures = 2
+        feed.nextRetryAt = .now
+        feed.lastHTTPStatus = 503
+        feed.lastErrorMessage = "Temporary error"
+        let after = try sharedRecord()
+        #expect(after.fingerprint == before.fingerprint)
+
+        guard case .recipeFeed(let portable) = try HouseholdRecordCodec.decode(after.payloadData) else {
+            Issue.record("Expected a recipe feed payload")
+            return
+        }
+        #expect(portable.sourceKindRaw == RecipeSiteSourceKind.builtInCollection.rawValue)
+        #expect(portable.sourceID == "family")
+        #expect(portable.contentURLString == "https://example.com/family")
+    }
+
+    @Test func snapshotFindsLegacyMealTypesWithoutHouseholdRelationship() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let meal = MealType(key: "supper", name: "Supper", sortOrder: 3)
+        context.insert(household)
+        context.insert(meal)
+        try context.save()
+
+        let records = try HouseholdRecordCodec.records(for: household, context: context)
+        #expect(records.contains {
+            $0.identity.type == .mealType && $0.identity.uuid == meal.uuid
+        })
+    }
+
+    @Test func olderRecipeFeedRecordsDecodeWithoutSourceAndArticleFields() throws {
+        let data = Data("""
+        {"uuid":"00000000-0000-0000-0000-000000000001","title":"Recipes",\
+        "siteURLString":"https://example.com","feedURLString":"https://example.com/feed",\
+        "consecutiveFailures":0,"dateAdded":"2026-10-15T00:00:00Z",\
+        "items":[{"uuid":"00000000-0000-0000-0000-000000000002",\
+        "stableID":"article","title":"Soup","urlString":"https://example.com/soup",\
+        "fetchedAt":"2026-10-15T00:00:00Z"}]}
+        """.utf8)
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let feed = try decoder.decode(MealPlanBackup.PortableRecipeFeed.self, from: data)
+        #expect(feed.sourceKindRaw == nil)
+        #expect(feed.items.first?.imageURLString == nil)
+        #expect(feed.items.first?.archivedAt == nil)
+    }
+
+    @Test func replacingPhotoCannotChangeBytesOfAnInFlightCloudAsset() throws {
+        let root = FileManager.default.temporaryDirectory.appending(path: "MealPlan-asset-test-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let identity = HouseholdRecordIdentity(type: .dishImage, uuid: UUID())
+        let householdID = UUID()
+        let payload = try HouseholdRecordCodec.encode(
+            HouseholdRecordPayload.dishImage(.init(
+                dishID: UUID(), sortIndex: 0, isPrimary: true, dateAdded: .now
+            ))
+        )
+        let zoneID = CKRecordZone.ID(zoneName: "test-\(UUID().uuidString)")
+        let older = try HouseholdRecordCodec.makeRecord(from: .init(
+            identity: identity, householdID: householdID, modifiedAt: .now,
+            payloadData: payload, assetData: Data([1, 2, 3])
+        ), zoneID: zoneID, assetDirectory: root)
+        let newer = try HouseholdRecordCodec.makeRecord(from: .init(
+            identity: identity, householdID: householdID, modifiedAt: .now,
+            payloadData: payload, assetData: Data([4, 5, 6])
+        ), zoneID: zoneID, assetDirectory: root)
+        let olderURL = try #require((older[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL)
+        let newerURL = try #require((newer[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL)
+        #expect(olderURL != newerURL)
+        #expect(try Data(contentsOf: olderURL) == Data([1, 2, 3]))
+        #expect(try Data(contentsOf: newerURL) == Data([4, 5, 6]))
+    }
+
+    @Test func olderSaveCannotAcknowledgeANewerJournalEntry() throws {
+        let id = CKRecord.ID(recordName: "MPDish-\(UUID().uuidString)", zoneID: CKRecordZone.ID(zoneName: "test"))
+        let date = Date(timeIntervalSince1970: 123)
+        let pending = CKRecord(recordType: HouseholdRecordType.dish.rawValue, recordID: id)
+        pending[HouseholdRecordCodec.payloadKey] = Data("newer".utf8) as CKRecordValue
+        pending[HouseholdRecordCodec.modifiedAtKey] = date as CKRecordValue
+        let saved = CKRecord(recordType: HouseholdRecordType.dish.rawValue, recordID: id)
+        saved[HouseholdRecordCodec.payloadKey] = Data("older".utf8) as CKRecordValue
+        saved[HouseholdRecordCodec.modifiedAtKey] = date as CKRecordValue
+
+        let journalEntry = try MealPlanCloudKitStateStore.ArchivedChange(record: pending)
+        #expect(!journalEntry.matchesSavedRecord(saved))
+        saved[HouseholdRecordCodec.payloadKey] = Data("newer".utf8) as CKRecordValue
+        #expect(journalEntry.matchesSavedRecord(saved))
+    }
+
     @Test func photoLoaderDistinguishesLegacyDuplicateUUIDs() async throws {
         // A separate ModelActor needs a real SQLite connection. SwiftData's
         // in-memory configuration has no eligible background connection on

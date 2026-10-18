@@ -54,7 +54,7 @@ struct LegacyHouseholdRecoveryTests {
         #expect(plan == .reviewRequired(canonicalHouseholdID: first, competingHouseholdIDs: [second]))
     }
 
-    @Test func sharedCandidateWinsDeterministicallyBeforeAge() {
+    @Test func sharedCandidateWinsButPopulatedOtherZoneNeedsReview() {
         let plan = LegacyHouseholdRecoveryPlan.make(
             local: .init(householdID: second, contentRecordCount: 0),
             owned: [
@@ -63,7 +63,7 @@ struct LegacyHouseholdRecoveryTests {
             ]
         )
 
-        #expect(plan == .noAction)
+        #expect(plan == .reviewRequired(canonicalHouseholdID: second, competingHouseholdIDs: [first]))
     }
 
     private func candidate(_ id: UUID, shared: Bool, created: TimeInterval, content: Int) -> LegacyOwnedHouseholdSummary {

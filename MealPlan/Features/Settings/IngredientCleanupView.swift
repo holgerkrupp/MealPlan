@@ -25,6 +25,8 @@ struct IngredientCleanupView: View {
     }
 
     var body: some View {
+        let suggestions = suggestions
+        let batchSuggestions = suggestions.filter(\.isHighConfidenceAndNonConflicting)
         List {
             integritySection
 

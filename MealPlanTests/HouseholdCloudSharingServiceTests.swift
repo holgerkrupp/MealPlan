@@ -48,6 +48,27 @@ struct HouseholdCloudSharingServiceTests {
         #expect(!HouseholdCloudSharingService.indicatesLostAccess(mixed))
     }
 
+    @Test func backgroundRefreshOnlySilencesTemporaryCloudFailures() {
+        let share = CKRecord.ID(recordName: "share")
+        let root = CKRecord.ID(recordName: "root")
+        let temporary = CKError(.partialFailure, userInfo: [
+            CKPartialErrorsByItemIDKey: [
+                share: CKError(.networkFailure),
+                root: CKError(.serviceUnavailable),
+            ]
+        ])
+        let actionable = CKError(.partialFailure, userInfo: [
+            CKPartialErrorsByItemIDKey: [
+                share: CKError(.networkFailure),
+                root: CKError(.notAuthenticated),
+            ]
+        ])
+        #expect(HouseholdCloudSharingService.isTemporarySyncFailure(temporary))
+        #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(actionable))
+        #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(CKError(.notAuthenticated)))
+        #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(CKError(.quotaExceeded)))
+    }
+
     #if canImport(UIKit)
     @Test func windowScenesUseCloudSharingDelegate() {
         let configuration = AppDelegate.sceneConfiguration(for: .windowApplication)

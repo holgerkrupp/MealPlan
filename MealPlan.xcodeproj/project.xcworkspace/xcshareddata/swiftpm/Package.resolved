@@ -1,6 +1,14 @@
 {
-  "originHash" : "8364909009c6548a46fd09894e1c742c32832c51d92354010288ecc8b6554bb3",
+  "originHash" : "2b1f38ee711321fdcd8d4c875928ef9a2de95aacdd09a8876bbe1c6786d3ab5a",
   "pins" : [
+    {
+      "identity" : "cloudkitcollaborationkit",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/holgerkrupp/CloudKitCollaborationKit.git",
+      "state" : {
+        "revision" : "860b0f3d5950a9129056c2056a00e21cb08827b0"
+      }
+    },
     {
       "identity" : "esadesignkit",
       "kind" : "remoteSourceControl",

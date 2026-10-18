@@ -355,6 +355,11 @@ struct MealPlanBackup: Codable, Sendable {
         var lastErrorMessage: String?
         var dateAdded: Date
         var items: [PortableRecipeFeedItem]
+        /// Optional for backups and CloudKit records written before public
+        /// collection subscriptions were supported.
+        var sourceKindRaw: String? = nil
+        var sourceID: String? = nil
+        var contentURLString: String? = nil
     }
 
     struct PortableRecipeFeedItem: Codable, Sendable {
@@ -366,6 +371,8 @@ struct MealPlanBackup: Codable, Sendable {
         var summary: String?
         var publishedAt: Date?
         var fetchedAt: Date
+        var imageURLString: String? = nil
+        var archivedAt: Date? = nil
     }
 
     struct PortableRecipeBookmark: Codable, Sendable {
@@ -405,6 +412,42 @@ struct MealPlanBackup: Codable, Sendable {
             photos: dishes.reduce(0) { $0 + $1.images.count }
                 + cookedLogs.filter { $0.photoData != nil }.count
         )
+    }
+}
+
+extension MealPlanBackup.PortableEntry {
+    private enum CodingKeys: String, CodingKey {
+        case uuid, date, mealKey, dishUUID, servingsOverride, note, sortIndex
+        case reactionRaw, skipped, prepReminder, plannedByName, lastEditedByName
+        case lastEditedDate, isEatingOut, placeName, placeAddress, placeLatitude
+        case placeLongitude, routineUUID, participatingMemberUUIDs
+    }
+
+    /// Plans saved before household participant selection have no member list.
+    /// A stored property default does not make a synthesized Codable decoder
+    /// accept a missing nonoptional key, so decode that legacy shape explicitly.
+    init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        uuid = try values.decode(UUID.self, forKey: .uuid)
+        date = try values.decode(Date.self, forKey: .date)
+        mealKey = try values.decode(String.self, forKey: .mealKey)
+        dishUUID = try values.decodeIfPresent(UUID.self, forKey: .dishUUID)
+        servingsOverride = try values.decodeIfPresent(Int.self, forKey: .servingsOverride)
+        note = try values.decodeIfPresent(String.self, forKey: .note)
+        sortIndex = try values.decode(Int.self, forKey: .sortIndex)
+        reactionRaw = try values.decodeIfPresent(String.self, forKey: .reactionRaw)
+        skipped = try values.decode(Bool.self, forKey: .skipped)
+        prepReminder = try values.decode(Bool.self, forKey: .prepReminder)
+        plannedByName = try values.decodeIfPresent(String.self, forKey: .plannedByName)
+        lastEditedByName = try values.decodeIfPresent(String.self, forKey: .lastEditedByName)
+        lastEditedDate = try values.decodeIfPresent(Date.self, forKey: .lastEditedDate)
+        isEatingOut = try values.decode(Bool.self, forKey: .isEatingOut)
+        placeName = try values.decodeIfPresent(String.self, forKey: .placeName)
+        placeAddress = try values.decodeIfPresent(String.self, forKey: .placeAddress)
+        placeLatitude = try values.decodeIfPresent(Double.self, forKey: .placeLatitude)
+        placeLongitude = try values.decodeIfPresent(Double.self, forKey: .placeLongitude)
+        routineUUID = try values.decodeIfPresent(UUID.self, forKey: .routineUUID)
+        participatingMemberUUIDs = try values.decodeIfPresent([String].self, forKey: .participatingMemberUUIDs) ?? []
     }
 }
 
@@ -816,9 +859,14 @@ extension MealPlanBackup {
                         author: $0.author,
                         summary: $0.summary,
                         publishedAt: $0.publishedAt,
-                        fetchedAt: $0.fetchedAt
+                        fetchedAt: $0.fetchedAt,
+                        imageURLString: $0.imageURLString,
+                        archivedAt: $0.archivedAt
                     )
-                }
+                },
+                sourceKindRaw: feed.sourceKindRaw,
+                sourceID: feed.sourceID,
+                contentURLString: feed.contentURLString
             )
         }
         backup.recipeBookmarks = rows.recipeBookmarks.map {

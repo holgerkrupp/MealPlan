@@ -34,7 +34,27 @@ in the signed product rather than relying only on the source plist:
 
 ```sh
 scripts/verify-macos-entitlements.sh /path/to/MealPlan.app
+scripts/verify-macos-entitlements.sh --production /path/to/exported/MealPlan.app
 ```
 
 The check fails if the signed app has Camera or broad Photos-library access, or
 if any entitlement required by the Mac features above is missing.
+The production check also verifies the code signature and requires the signed
+CloudKit environment to be `Production`, APNs to be `production`, and debugging
+to be disabled. Run it on the exported app because Xcode can change entitlements
+when it re-signs an archive for distribution.
+
+## Build a Production Mac app without TestFlight
+
+Use the stable Xcode installation and sign in to the Apple Developer team
+`46D3VYP253` in Xcode Settings > Accounts. The signing keychain must contain a
+`Developer ID Application` identity for that team, including its private key.
+Choose My Mac, Product > Archive, then Organizer > Distribute App > Direct
+Distribution. Xcode signs and notarizes the exported app for installation
+outside the Mac App Store. The archive itself is usually Development signed;
+install and verify the exported app instead.
+
+Run `scripts/verify-macos-entitlements.sh --production` on the exported app,
+then check it with `spctl --assess --verbose=4 /path/to/MealPlan.app`. Confirm
+Settings displays `iCloud environment Production`. A Developer ID export is a
+separate distribution route from an App Store or TestFlight upload.

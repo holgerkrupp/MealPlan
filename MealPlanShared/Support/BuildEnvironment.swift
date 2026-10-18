@@ -1,4 +1,7 @@
 import Foundation
+#if os(macOS)
+import Security
+#endif
 
 /// Which CloudKit environment a build's iCloud container talks to.
 ///
@@ -22,12 +25,18 @@ enum CloudKitEnvironment: String, Sendable {
 
 enum BuildEnvironment {
 
-    /// Read from the embedded provisioning profile: an explicit
-    /// `com.apple.developer.icloud-container-environment` when the profile
-    /// carries one, otherwise `get-task-allow`, which is true only for a
-    /// development-signed build. A build with no profile at all is a simulator
-    /// or unsigned build, which talks to Development.
+    /// Prefer the signed CloudKit entitlement on macOS. When it is absent,
+    /// infer the environment from the embedded profile's signing settings.
     static let cloudKit: CloudKitEnvironment = {
+        // CloudKit selects its database from the entitlement in the signed
+        // executable. A provisioning profile may allow both environments, and
+        // the APNs entitlement describes a different service.
+        #if os(macOS)
+        if let environment = signedCloudKitEnvironment() {
+            return environment
+        }
+        #endif
+
         // A simulator carries no profile at all, and a Mac app signed to run
         // locally often doesn't either — both talk to the development
         // environment, which is exactly what a debug build is.
@@ -38,20 +47,16 @@ enum BuildEnvironment {
             return .unknown
             #endif
         }
-        // This entitlement is the authoritative environment selected for the
-        // push/iCloud container. It is present in both iOS and macOS signed
-        // builds, including profiles whose container-environment value is an
-        // array containing both Development and Production.
-        if let apsEnvironment = entitlements["aps-environment"] as? String {
+        if let debuggable = entitlements["get-task-allow"] as? Bool {
+            return debuggable ? .development : .production
+        }
+
+        if let apsEnvironment = entitlements["com.apple.developer.aps-environment"] as? String {
             switch apsEnvironment {
             case "development": return .development
             case "production": return .production
             default: break
             }
-        }
-
-        if let debuggable = entitlements["get-task-allow"] as? Bool {
-            return debuggable ? .development : .production
         }
 
         switch entitlements["com.apple.developer.icloud-container-environment"] {
@@ -73,6 +78,20 @@ enum BuildEnvironment {
         }
         return .unknown
     }()
+
+    #if os(macOS)
+    private static func signedCloudKitEnvironment() -> CloudKitEnvironment? {
+        guard let task = SecTaskCreateFromSelf(nil),
+              let key = CFStringCreateWithCString(
+                  nil,
+                  "com.apple.developer.icloud-container-environment",
+                  CFStringBuiltInEncodings.UTF8.rawValue
+              ),
+              let value = SecTaskCopyValueForEntitlement(task, key, nil) as? String
+        else { return nil }
+        return CloudKitEnvironment(rawValue: value)
+    }
+    #endif
 
     private static var provisioningProfileURL: URL? {
         #if os(macOS)

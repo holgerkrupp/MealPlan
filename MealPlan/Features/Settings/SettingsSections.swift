@@ -249,15 +249,17 @@ struct PlanSettingsSection: View {
     var header: String? = String(localized: "Calendar")
 
     @Environment(AppState.self) private var appState
+    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
+    private var configuredMeals: [MealType]
 
     var body: some View {
-        if let household = appState.currentHousehold {
+        if appState.currentHousehold != nil {
             Section {
                 if showsMealsLink {
                     NavigationLink {
                         MealsSettingsView()
                     } label: {
-                        LabeledContent(String(localized: "Meals"), value: mealsSummary(household))
+                        LabeledContent(String(localized: "Meals"), value: mealsSummary)
                     }
                 }
             } header: {
@@ -268,8 +270,11 @@ struct PlanSettingsSection: View {
         }
     }
 
-    private func mealsSummary(_ household: Household) -> String {
-        let names = household.sortedMealTypes.map(\.name).filter { !$0.isEmpty }
+    /// Use the same direct store query as the editor. Older SwiftData stores
+    /// can have relationship backing data that fails while decoding
+    /// `Household.mealTypes`; this summary must not traverse that relationship.
+    private var mealsSummary: String {
+        let names = configuredMeals.map(\.name).filter { !$0.isEmpty }
         return names.isEmpty ? String(localized: "None") : names.joined(separator: ", ")
     }
 }

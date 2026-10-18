@@ -280,35 +280,12 @@ enum HouseholdCloudBootstrapService {
         // before changing the active household underneath it.
         await HouseholdRecordSyncService.shared.stop()
 
-        let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
-        let existing = households.first { $0.uuid == householdID }
-        let household = existing ?? Household()
-        if existing == nil {
-            household.uuid = householdID
-            context.insert(household)
-        }
-
         let applicable = records.compactMap { record -> (CKRecord, HouseholdRecordIdentity)? in
             guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
                   record[HouseholdRecordCodec.payloadKey] is Data else { return nil }
             return (record, identity)
         }.sorted {
             ($0.1.type.applyPriority, $0.1.recordName) < ($1.1.type.applyPriority, $1.1.recordName)
-        }
-
-        for (offset, item) in applicable.enumerated() {
-            let (record, identity) = item
-            let data = record[HouseholdRecordCodec.payloadKey] as! Data
-            let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
-            try HouseholdRecordApplier.apply(
-                payloadData: data,
-                identity: identity,
-                modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
-                assetData: asset,
-                household: household,
-                context: context
-            )
-            progress(.importing(completed: offset + 1, total: applicable.count))
         }
 
         let fetchedShareName = records.compactMap { ($0 as? CKShare)?.recordID.recordName }.first
@@ -319,17 +296,45 @@ enum HouseholdCloudBootstrapService {
             isOwner: true,
             isReadOnly: false
         )
-        household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
-
-        if let localHousehold, localHousehold.uuid != household.uuid {
-            if adoptingLocalContent {
-                adoptContent(of: localHousehold, into: household)
-            } else if mergeRecipes {
-                HouseholdCloudSharingService.mergeDishes(from: localHousehold, into: household)
+        let household = try nonUndoableStoreTransaction(in: context) {
+            let households = try context.fetch(FetchDescriptor<Household>())
+            let existing = households.first { $0.uuid == householdID }
+            let household = existing ?? Household()
+            if existing == nil {
+                household.uuid = householdID
+                context.insert(household)
             }
-            context.delete(localHousehold)
+
+            try HouseholdRecordApplier.withBatchLookup(in: context) {
+                for (offset, item) in applicable.enumerated() {
+                    let (record, identity) = item
+                    let data = record[HouseholdRecordCodec.payloadKey] as! Data
+                    let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                    try HouseholdRecordApplier.apply(
+                        payloadData: data,
+                        identity: identity,
+                        modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
+                        assetData: asset,
+                        household: household,
+                        context: context
+                    )
+                    progress(.importing(completed: offset + 1, total: applicable.count))
+                }
+            }
+
+            household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
+
+            if let localHousehold, localHousehold.uuid != household.uuid {
+                if adoptingLocalContent {
+                    adoptContent(of: localHousehold, into: household)
+                } else if mergeRecipes {
+                    HouseholdCloudSharingService.mergeDishes(from: localHousehold, into: household)
+                }
+                context.delete(localHousehold)
+            }
+            try context.save()
+            return household
         }
-        try context.save()
         NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
         return household
     }
@@ -448,19 +453,21 @@ enum HouseholdCloudBootstrapService {
             ($0.1.type.applyPriority, $0.1.recordName) < ($1.1.type.applyPriority, $1.1.recordName)
         }
 
-        for (offset, item) in applicable.enumerated() {
-            let (record, identity) = item
-            let data = record[HouseholdRecordCodec.payloadKey] as! Data
-            let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
-            try HouseholdRecordApplier.apply(
-                payloadData: data,
-                identity: identity,
-                modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
-                assetData: asset,
-                household: household,
-                context: context
-            )
-            progress(.importing(completed: offset + 1, total: applicable.count))
+        try HouseholdRecordApplier.withBatchLookup(in: context) {
+            for (offset, item) in applicable.enumerated() {
+                let (record, identity) = item
+                let data = record[HouseholdRecordCodec.payloadKey] as! Data
+                let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                try HouseholdRecordApplier.apply(
+                    payloadData: data,
+                    identity: identity,
+                    modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
+                    assetData: asset,
+                    household: household,
+                    context: context
+                )
+                progress(.importing(completed: offset + 1, total: applicable.count))
+            }
         }
 
         household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(candidate.locator)
@@ -746,27 +753,29 @@ enum HouseholdCloudBootstrapService {
         }
 
         var imported = Set<HouseholdRecordIdentity>()
-        for (offset, item) in applicable.enumerated() {
-            let (record, identity) = item
-            let payload = record[HouseholdRecordCodec.payloadKey] as! Data
-            let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
-            do {
-                try HouseholdRecordApplier.apply(
-                    payloadData: payload,
-                    identity: identity,
-                    modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
-                    assetData: asset,
-                    household: household,
-                    context: context
-                )
-                imported.insert(identity)
-            } catch {
-                // A corrupt individual record cannot make recovery discard
-                // the rest of a household. The untouched source zone remains
-                // available for later export/support recovery.
-                LegacyHouseholdDiagnostics.record(event: "legacyRecoveryRecordSkipped", error: error)
+        HouseholdRecordApplier.withBatchLookup(in: context) {
+            for (offset, item) in applicable.enumerated() {
+                let (record, identity) = item
+                let payload = record[HouseholdRecordCodec.payloadKey] as! Data
+                let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                do {
+                    try HouseholdRecordApplier.apply(
+                        payloadData: payload,
+                        identity: identity,
+                        modifiedAt: HouseholdRecordCodec.modifiedAt(of: record),
+                        assetData: asset,
+                        household: household,
+                        context: context
+                    )
+                    imported.insert(identity)
+                } catch {
+                    // A corrupt individual record cannot make recovery discard
+                    // the rest of a household. The untouched source zone remains
+                    // available for later export/support recovery.
+                    LegacyHouseholdDiagnostics.record(event: "legacyRecoveryRecordSkipped", error: error)
+                }
+                progress(.importing(completed: offset + 1, total: applicable.count))
             }
-            progress(.importing(completed: offset + 1, total: applicable.count))
         }
         return imported
     }

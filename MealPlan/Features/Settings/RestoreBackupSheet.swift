@@ -215,7 +215,7 @@ struct RestoreBackupSheet: View {
                 .compactMap { HouseholdShareLocator.decode($0.cloudKitShareIdentifier) } ?? []
             await HouseholdRecordSyncService.shared.stop()
             for locator in oldLocators {
-                await HouseholdRecordSyncService.shared.discardState(for: locator)
+                try await HouseholdRecordSyncService.shared.discardState(for: locator)
             }
 
             try MealPlanBackupRestore.replaceEverything(

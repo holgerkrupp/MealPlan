@@ -70,12 +70,14 @@ enum IngredientCleanupService {
         guard let household else { return [] }
         let ingredients = household.ingredients ?? []
         guard ingredients.count > 1 else { return [] }
+        let matcher = IngredientMatcher(ingredients: ingredients)
+        let ingredientsByUUID = Dictionary(ingredients.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
 
         var pairs: [String: (canonical: Ingredient, duplicate: Ingredient)] = [:]
 
         for source in ingredients {
             for pending in source.pendingMergeSuggestions {
-                guard let candidate = ingredients.first(where: { $0.uuid == pending.candidateUUID }),
+                guard let candidate = ingredientsByUUID[pending.candidateUUID],
                       candidate !== source,
                       !isRejected(source: source, candidate: candidate)
                 else { continue }
@@ -83,8 +85,7 @@ enum IngredientCleanupService {
                 pairs[pairKey(chosen.0, chosen.1)] = chosen
             }
 
-            let peers = ingredients.filter { $0 !== source }
-            let result = IngredientMatching.result(for: source.name, in: peers)
+            let result = matcher.result(for: source.name, excluding: source)
             let candidates = result.candidate.map { [$0] } ?? result.candidates
             for candidate in candidates where candidate !== source {
                 guard !isRejected(source: source, candidate: candidate) else { continue }

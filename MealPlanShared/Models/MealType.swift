@@ -113,7 +113,11 @@ extension MealType {
     /// later can't cascade them away.
     @MainActor
     static func ensure(for household: Household, context: ModelContext) {
-        let all = (try? context.fetch(FetchDescriptor<MealType>())) ?? household.mealTypes ?? []
+        // An upgraded store can have unreadable Household.mealTypes backing
+        // data. Never fall back to that relationship when a direct fetch fails.
+        guard let all = try? context.fetch(FetchDescriptor<MealType>()),
+              let plannedEntries = try? context.fetch(FetchDescriptor<MealPlanEntry>())
+        else { return }
         let (kept, duplicates) = deduplicated(all)
         var meals = kept
         var changed = !duplicates.isEmpty
@@ -137,8 +141,7 @@ extension MealType {
         // Store-wide for the same reason as the de-duplication above: the
         // calendar queries entries by date, so a plan hanging off a duplicate
         // household still needs its meal.
-        let plannedKeys = (try? context.fetch(FetchDescriptor<MealPlanEntry>()))?.map(\.mealSlotRaw)
-            ?? (household.entries ?? []).map(\.mealSlotRaw)
+        let plannedKeys = plannedEntries.map(\.mealSlotRaw)
         let knownKeys = Set(meals.map(\.key))
         var nextOrder = (meals.map(\.sortOrder).max() ?? -1) + 1
         for key in backfillKeys(planned: plannedKeys, known: knownKeys) {

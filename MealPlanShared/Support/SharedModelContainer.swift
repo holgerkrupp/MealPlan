@@ -155,6 +155,21 @@ func withoutUndoRegistration<T>(in context: ModelContext, _ operation: () throws
     return try operation()
 }
 
+/// A remote or maintenance write must restore its model graph without letting
+/// SwiftData's UI UndoManager snapshot deleted or modified objects. Keep the
+/// rollback inside the disabled-registration scope as well as the save.
+@MainActor
+func nonUndoableStoreTransaction<T>(in context: ModelContext, _ operation: () throws -> T) throws -> T {
+    try withoutUndoRegistration(in: context) {
+        do {
+            return try operation()
+        } catch {
+            context.rollback()
+            throw error
+        }
+    }
+}
+
 extension Notification.Name {
     /// Posted after app data that can appear in widgets, Spotlight, or Siri
     /// changes. The main app debounces it before refreshing its semantic index.

@@ -210,7 +210,10 @@ enum HouseholdCloudSharingService {
 
         progress(.downloading(0))
 
+        let share = acceptedShare
+        let zoneID = share.recordID.zoneID
         var lastError: Error = HouseholdSharingError.missingRootRecord
+        var householdRecord: CKRecord?
         for attempt in 0..<6 {
             do {
                 // `accept` returns the authoritative share immediately, but
@@ -218,14 +221,38 @@ enum HouseholdCloudSharingService {
                 // the shared database. Reusing it avoids an unnecessary race
                 // on fetching the CKShare itself; only the root data record
                 // needs the bounded retry below.
-                let share = acceptedShare
-                let zoneID = share.recordID.zoneID
-                let householdRecord = try await fetchHouseholdRecord(from: share, zoneID: zoneID, database: database)
-                guard let identity = HouseholdRecordIdentity(recordType: householdRecord.recordType, recordName: householdRecord.recordID.recordName),
-                      let payload = householdRecord[HouseholdRecordCodec.payloadKey] as? Data else {
+                let fetched = try await fetchHouseholdRecord(from: share, zoneID: zoneID, database: database)
+                guard HouseholdRecordIdentity(recordType: fetched.recordType, recordName: fetched.recordID.recordName) != nil,
+                      fetched[HouseholdRecordCodec.payloadKey] is Data else {
                     throw HouseholdSharingError.missingRootRecord
                 }
+                householdRecord = fetched
+                break
+            } catch {
+                lastError = error
+                if attempt < 5 { try? await Task.sleep(for: .milliseconds(650)) }
+            }
+        }
+        guard let householdRecord,
+              let identity = HouseholdRecordIdentity(recordType: householdRecord.recordType, recordName: householdRecord.recordID.recordName),
+              let payload = householdRecord[HouseholdRecordCodec.payloadKey] as? Data else {
+            throw lastError
+        }
 
+        let isReadOnly = share.currentUserParticipant?.permission == .readOnly
+        let locator = HouseholdShareLocator(
+            zoneName: zoneID.zoneName,
+            ownerName: zoneID.ownerName,
+            shareRecordName: share.recordID.recordName,
+            isOwner: false,
+            isReadOnly: isReadOnly
+        )
+        // This is a local-only transaction. Keep cascade deletion, save, and
+        // rollback under the same disabled UndoManager scope; no network await
+        // is allowed inside it. Once committed, a later CloudKit sync failure
+        // leaves the accepted household available for the normal retry path.
+        let household = try withoutUndoRegistration(in: context) {
+            do {
                 let localHouseholds = try context.fetch(FetchDescriptor<Household>())
                 let existing = localHouseholds.first { $0.uuid == identity.uuid }
                 let household = existing ?? Household()
@@ -233,22 +260,8 @@ enum HouseholdCloudSharingService {
                     household.uuid = identity.uuid
                     context.insert(household)
                 }
-                // The app keeps exactly one household per device (see
-                // `Household`'s doc comment). Joining a share replaces
-                // whatever solo household this device already had rather
-                // than adding a second one alongside it — otherwise the
-                // invitation looked like it did nothing, since bootstrap's
-                // "the household" fetch could still return the old one on
-                // the next launch. The cascade delete this triggers is
-                // picked up by the same safety-net scan that reports any
-                // other local deletion, so the old household's own zone gets
-                // cleaned up in CloudKit too. `RootView` warns about this
-                // before ever calling `accept`, and offers `mergeRecipes` as
-                // a way to keep the old household's dishes.
                 for other in localHouseholds where other.uuid != identity.uuid {
-                    if mergeRecipes {
-                        mergeDishes(from: other, into: household)
-                    }
+                    if mergeRecipes { mergeDishes(from: other, into: household) }
                     context.delete(other)
                 }
                 try HouseholdRecordApplier.apply(
@@ -259,26 +272,26 @@ enum HouseholdCloudSharingService {
                     household: household,
                     context: context
                 )
-
-                let isReadOnly = share.currentUserParticipant?.permission == .readOnly
-                let locator = HouseholdShareLocator(
-                    zoneName: zoneID.zoneName,
-                    ownerName: zoneID.ownerName,
-                    shareRecordName: share.recordID.recordName,
-                    isOwner: false,
-                    isReadOnly: isReadOnly
-                )
                 household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
                 refreshMembers(from: share, household: household, context: context)
                 try context.save()
-                try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
-                return (household, isReadOnly)
+                return household
             } catch {
-                lastError = error
-                if attempt < 5 { try? await Task.sleep(for: .milliseconds(650)) }
+                context.rollback()
+                throw error
             }
         }
-        throw lastError
+
+        // The invitation and its root are committed locally at this point.
+        // A later fetch failure must not make the caller keep displaying the
+        // household that was just replaced. RootView switches to this root,
+        // then its household task retries the remaining record download.
+        do {
+            try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+        } catch {
+            // The accepted share remains attached for the normal retry path.
+        }
+        return (household, isReadOnly)
     }
 
     /// Runs a sync round and refreshes the member roster from the share.
@@ -330,9 +343,7 @@ enum HouseholdCloudSharingService {
                     household.modifiedAt = .now
                 }
                 refreshMembers(from: participants, household: household, context: context)
-                // `refreshMembers` saves its cache as well. A second save here
-                // is harmless and ensures the corrected locator commits with
-                // the same local transaction.
+                // Commit the corrected locator and roster together.
                 try context.save()
                 if let session {
                     session.reconcile(household: household, role: role, participantID: current?.id, fallbackName: current?.displayName)
@@ -376,6 +387,29 @@ enum HouseholdCloudSharingService {
         return [.unknownItem, .zoneNotFound, .userDeletedZone].contains(error.code)
     }
 
+    /// Background refreshes should retry ordinary CloudKit interruptions
+    /// without opening an alert over the person's current task.
+    static func isTemporarySyncFailure(_ error: Error) -> Bool {
+        if let failure = error as? CollaborationFailure {
+            return failure == .offline || failure == .cancelled
+        }
+        if let backendError = error as? CloudKitShareBackendError,
+           case .cloudKit(let failure) = backendError {
+            return failure == .offline || failure == .cancelled
+        }
+        guard let cloudError = error as? CKError else { return false }
+        if cloudError.code == .partialFailure {
+            guard let itemErrors = cloudError.partialErrorsByItemID?.values,
+                  !itemErrors.isEmpty else { return false }
+            return itemErrors.allSatisfy(isTemporarySyncFailure)
+        }
+        return [
+            .networkUnavailable, .networkFailure, .serviceUnavailable,
+            .requestRateLimited, .zoneBusy, .accountTemporarilyUnavailable,
+            .operationCancelled,
+        ].contains(cloudError.code)
+    }
+
     /// Moves this device off a shared household it can no longer reach onto
     /// a new household of its own. The recipes come along, as with joining's
     /// Merge Recipes; the shared plan, shopping list, history, and routines
@@ -387,7 +421,7 @@ enum HouseholdCloudSharingService {
         // deletion scan would queue deletes for the owner's records.
         await HouseholdRecordSyncService.shared.stop()
         if let locator = HouseholdShareLocator.decode(old.cloudKitShareIdentifier) {
-            await HouseholdRecordSyncService.shared.discardState(for: locator)
+            try await HouseholdRecordSyncService.shared.discardState(for: locator)
         }
 
         let household = Household(name: String(localized: "Family"))
@@ -482,7 +516,6 @@ enum HouseholdCloudSharingService {
                 member.modifiedAt = now
             }
         }
-        try? context.save()
     }
 
     /// Projects package-owned participant snapshots into MealPlan's local
@@ -528,7 +561,6 @@ enum HouseholdCloudSharingService {
                 member.modifiedAt = now
             }
         }
-        try? context.save()
     }
 
     private static func fetchHouseholdRecord(from share: CKShare, zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> CKRecord {

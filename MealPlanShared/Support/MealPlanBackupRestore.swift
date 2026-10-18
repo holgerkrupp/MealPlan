@@ -334,9 +334,14 @@ enum MealPlanBackupRestore {
         }
 
         for stored in backup.recipeFeeds ?? [] {
-            guard let siteURL = URL(string: stored.siteURLString),
-                  let feedURL = URL(string: stored.feedURLString) else { continue }
-            let feed = RecipeFeed(title: stored.title, siteURL: siteURL, feedURL: feedURL)
+            guard let siteURL = URL(string: stored.siteURLString) else { continue }
+            let feedURL = stored.feedURLString.isEmpty ? nil : URL(string: stored.feedURLString)
+            let feed = RecipeFeed(
+                title: stored.title, siteURL: siteURL, feedURL: feedURL,
+                sourceKind: stored.sourceKindRaw.flatMap(RecipeSiteSourceKind.init(rawValue:)) ?? .feed,
+                sourceID: stored.sourceID,
+                contentURL: stored.contentURLString.flatMap(URL.init(string:))
+            )
             feed.uuid = stored.uuid
             feed.etag = stored.etag
             feed.lastModified = stored.lastModified
@@ -357,6 +362,8 @@ enum MealPlanBackupRestore {
                 item.summary = storedItem.summary
                 item.publishedAt = storedItem.publishedAt
                 item.fetchedAt = storedItem.fetchedAt
+                item.imageURLString = storedItem.imageURLString
+                item.archivedAt = storedItem.archivedAt
                 item.feed = feed
                 context.insert(item)
             }

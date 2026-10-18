@@ -50,9 +50,6 @@
         }
       }
     },
-    "(count) to review" : {
-
-    },
     "(dish removed)" : {
       "localizations" : {
         "da" : {
@@ -266,9 +263,6 @@
           }
         }
       }
-    },
-    "%@ will lose access to the shared plan and shopping list right away. They keep a copy of the household’s recipes." : {
-
     },
     "%@, %@" : {
       "localizations" : {
@@ -2300,6 +2294,7 @@
       }
     },
     "Access" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -2338,9 +2333,6 @@
           }
         }
       }
-    },
-    "Access for people you add" : {
-
     },
     "Active" : {
       "localizations" : {
@@ -3419,9 +3411,6 @@
     "Add size" : {
 
     },
-    "Add Someone Nearby" : {
-
-    },
     "Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later." : {
       "localizations" : {
         "da" : {
@@ -4048,9 +4037,6 @@
         }
       }
     },
-    "All clear" : {
-
-    },
     "All day" : {
       "localizations" : {
         "da" : {
@@ -4379,12 +4365,6 @@
         }
       }
     },
-    "Allow editing" : {
-
-    },
-    "Allow Editing" : {
-
-    },
     "Already have this" : {
 
     },
@@ -4677,6 +4657,9 @@
 
     },
     "An estimate, not a nutrition label." : {
+
+    },
+    "Another copy of MealPlan is syncing this household. Quit the other copy and reopen MealPlan." : {
 
     },
     "Another household needs review" : {
@@ -7363,9 +7346,6 @@
     "Change the aisle, or mark as a pantry staple" : {
 
     },
-    "Change to view only" : {
-
-    },
     "Check ingredient data" : {
 
     },
@@ -8635,9 +8615,6 @@
         }
       }
     },
-    "Connected. Adding you to the household…" : {
-
-    },
     "Connecting to iCloud" : {
 
     },
@@ -8792,9 +8769,6 @@
       }
     },
     "Continue opening" : {
-
-    },
-    "Control-click someone to remove them from the household." : {
 
     },
     "Cook" : {
@@ -9478,6 +9452,7 @@
 
     },
     "Copy Invitation Link" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -10015,9 +9990,6 @@
     "Couldn’t refresh recipe" : {
 
     },
-    "Couldn’t Remove" : {
-
-    },
     "Couldn’t restore that backup" : {
       "localizations" : {
         "da" : {
@@ -10193,9 +10165,6 @@
     "Couldn’t translate recipe" : {
 
     },
-    "Couldn’t Update Sharing" : {
-
-    },
     "Count" : {
 
     },
@@ -10239,16 +10208,10 @@
         }
       }
     },
-    "Create a New Invitation?" : {
-
-    },
     "Create a portable MealPlan backup yourself before a recovery, or keep one somewhere outside this device. Recovery also creates its own local safety checkpoint automatically." : {
 
     },
     "Create Meal Routine" : {
-
-    },
-    "Create New Invitation" : {
 
     },
     "Created %@" : {
@@ -12470,9 +12433,6 @@
     "Edited" : {
 
     },
-    "Email or phone number" : {
-
-    },
     "Emoji" : {
       "localizations" : {
         "da" : {
@@ -13623,6 +13583,7 @@
       }
     },
     "Everyone who accepts sees the same dishes and plan." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -15885,9 +15846,6 @@
     "Get Week Templates" : {
 
     },
-    "Getting ready…" : {
-
-    },
     "Getting started" : {
       "localizations" : {
         "da" : {
@@ -16876,10 +16834,8 @@
         }
       }
     },
-    "iCloud couldn’t find an Apple Account for “%@”. Check it for typos, or try another email address or phone number they use with their Apple Account." : {
-
-    },
     "iCloud did not create an invitation link. Please try again." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -17000,9 +16956,6 @@
       }
     },
     "iCloud is preparing the shared meal plan." : {
-
-    },
-    "iCloud is taking too long to prepare this invitation. Check your connection and try again." : {
 
     },
     "iCloud sharing is unavailable on this device." : {
@@ -18095,6 +18048,7 @@
 
     },
     "Invitation Copied" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -18134,11 +18088,15 @@
         }
       }
     },
-    "Invite" : {
-
-    },
-    "Invite by Apple Account" : {
-
+    "Invite or share again" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erneut einladen oder teilen"
+          }
+        }
+      }
     },
     "Invite people as editors, or as view-only guests who can look but not change." : {
       "localizations" : {
@@ -18187,6 +18145,7 @@
       }
     },
     "Invite someone to plan with you" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -18272,11 +18231,15 @@
         }
       }
     },
-    "Invited" : {
-
-    },
-    "Invited person" : {
-
+    "Invite your family to share dishes, meal plans, and the shopping list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Lade deine Familie ein, Gerichte, Essenspläne und die Einkaufsliste gemeinsam zu nutzen."
+          }
+        }
+      }
     },
     "It contains" : {
       "localizations" : {
@@ -18371,6 +18334,7 @@
       }
     },
     "Join %@ in MealPlan" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -18409,18 +18373,6 @@
           }
         }
       }
-    },
-    "Join a Household Nearby" : {
-
-    },
-    "Join Nearby" : {
-
-    },
-    "Joined" : {
-
-    },
-    "Joining the household…" : {
-
     },
     "Jump to date" : {
       "localizations" : {
@@ -18644,9 +18596,6 @@
 
     },
     "Keep separate" : {
-
-    },
-    "Keep this screen open near the device showing the code. You’re added as soon as it finds you." : {
 
     },
     "Kid-friendly" : {
@@ -19357,9 +19306,6 @@
     "Looking for iCloud households…" : {
 
     },
-    "Looking for the owner’s device…" : {
-
-    },
     "Low" : {
 
     },
@@ -19455,8 +19401,15 @@
     "Main dishes" : {
 
     },
-    "Make View Only" : {
-
+    "Manage access" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zugriff verwalten"
+          }
+        }
+      }
     },
     "Manual" : {
 
@@ -19942,11 +19895,15 @@
         }
       }
     },
-    "MealPlan can’t be found by nearby devices. Allow it to find devices on your local network in the Settings app, then try again." : {
-
-    },
-    "MealPlan can’t look for nearby devices. Allow it to find devices on your local network in the Settings app, then reopen this screen." : {
-
+    "MealPlan couldn’t prepare household sharing." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan konnte die Haushaltsfreigabe nicht vorbereiten."
+          }
+        }
+      }
     },
     "MealPlan couldn’t save the Bring! password to the keychain: %@" : {
       "localizations" : {
@@ -20416,6 +20373,17 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Valores de referência do MealPlan"
+          }
+        }
+      }
+    },
+    "MealPlan sharing is better" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Teilen mit MealPlan ist jetzt besser"
           }
         }
       }
@@ -24386,9 +24354,6 @@
         }
       }
     },
-    "On the owner’s device, open Share with family. Your name appears under Add Someone Nearby, and they add you with one tap." : {
-
-    },
     "On the shopping list" : {
       "localizations" : {
         "da" : {
@@ -24614,6 +24579,7 @@
 
     },
     "Only the household owner can invite people." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -24652,9 +24618,6 @@
           }
         }
       }
-    },
-    "Only the household owner can remove people." : {
-
     },
     "Only what's planned in this window is published. It updates automatically as the window rolls forward." : {
 
@@ -25115,6 +25078,7 @@
       }
     },
     "Open this invitation to plan meals together in MealPlan." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -25972,9 +25936,6 @@
     "PDF" : {
 
     },
-    "People" : {
-
-    },
     "People are free at different times." : {
       "localizations" : {
         "da" : {
@@ -26017,6 +25978,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "As pessoas estão livres em alturas diferentes."
+          }
+        }
+      }
+    },
+    "People in this household" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Personen in diesem Haushalt"
           }
         }
       }
@@ -27309,6 +27280,16 @@
     "Plan this place without a map match" : {
 
     },
+    "Plan together" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gemeinsam planen"
+          }
+        }
+      }
+    },
     "Plan without limits" : {
       "localizations" : {
         "da" : {
@@ -28126,6 +28107,7 @@
 
     },
     "Preparing a secure iCloud invitation…" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -30115,9 +30097,6 @@
         }
       }
     },
-    "Remove %@?" : {
-
-    },
     "Remove from group" : {
       "localizations" : {
         "da" : {
@@ -30163,9 +30142,6 @@
           }
         }
       }
-    },
-    "Remove from Household" : {
-
     },
     "Remove from plan" : {
       "localizations" : {
@@ -31229,9 +31205,6 @@
     "Resumed %@ routine." : {
 
     },
-    "Retry" : {
-
-    },
     "Reverse last ingredient merge" : {
 
     },
@@ -31277,6 +31250,17 @@
     },
     "Review and Copy Household Data" : {
 
+    },
+    "Review household invitations" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushaltseinladungen ansehen"
+          }
+        }
+      }
     },
     "Review ingredient" : {
 
@@ -33049,6 +33033,7 @@
       }
     },
     "Send Invitation" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -33133,9 +33118,6 @@
           }
         }
       }
-    },
-    "Send them the link" : {
-
     },
     "Send to Bring!" : {
       "localizations" : {
@@ -33681,13 +33663,20 @@
     "Share all" : {
 
     },
+    "Share household" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushalt teilen"
+          }
+        }
+      }
+    },
     "Share Image Title" : {
 
     },
     "Share Images" : {
-
-    },
-    "Share it by Messages, Mail, or AirDrop. It only opens the household for the people listed above." : {
 
     },
     "Share or open a .paprikarecipes or .mealplanrecipes file to bring a whole recipe collection over at once." : {
@@ -34326,9 +34315,6 @@
     "Show translation" : {
 
     },
-    "Shown on the owner’s device so they know it’s you." : {
-
-    },
     "Shows ingredients and recipe ideas." : {
 
     },
@@ -34427,9 +34413,6 @@
     "Shows what this site has published lately" : {
 
     },
-    "Sign in to iCloud on this device to join a household." : {
-
-    },
     "Signed in as" : {
       "localizations" : {
         "da" : {
@@ -34477,9 +34460,6 @@
       }
     },
     "Simulated fold posture" : {
-
-    },
-    "Single-use QR code for adding someone nearby" : {
 
     },
     "singular/plural form" : {
@@ -34693,16 +34673,10 @@
     "Sodium" : {
 
     },
-    "Some people who joined with the old link couldn’t be moved to personal invitations. Use Create New Invitation, then invite everyone again." : {
-
-    },
     "Some planned recipes are missing ingredients" : {
 
     },
     "Some sources could not be refreshed: %@." : {
-
-    },
-    "Someone who already plans with MealPlan can add you from their device while you’re together, no email address needed." : {
 
     },
     "Someone with MealPlan" : {
@@ -36080,9 +36054,6 @@
     "Surprise me" : {
 
     },
-    "Swipe someone’s name to remove them from the household." : {
-
-    },
     "Sync mode" : {
 
     },
@@ -36760,9 +36731,6 @@
     "That calendar isn’t available anymore. Choose another." : {
 
     },
-    "That code has already been used. Ask for a new one." : {
-
-    },
     "That cooking timer no longer exists." : {
 
     },
@@ -37018,9 +36986,6 @@
     "That week template no longer exists." : {
 
     },
-    "That’s your own Apple Account. Your other devices signed in to it get the household automatically." : {
-
-    },
     "The bottom row plans it as an extra on that day, without using one of your meals." : {
       "localizations" : {
         "da" : {
@@ -37070,13 +37035,7 @@
     "The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Review the differences above before continuing." : {
 
     },
-    "The connection was lost." : {
-
-    },
     "The cooking timer could not be started." : {
-
-    },
-    "The current link will stop working and everyone you invited will lose access until you invite them again. Your household, dishes, and meal plan will stay intact." : {
 
     },
     "The current recipe has no more steps." : {
@@ -37175,10 +37134,8 @@
     "The imported recipes could not be saved. Please try again." : {
 
     },
-    "The invitation could not be opened." : {
-
-    },
     "The invitation could not be prepared." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -37219,9 +37176,6 @@
       }
     },
     "The last ingredient merge could not be reversed." : {
-
-    },
-    "The link will stop working for %@." : {
 
     },
     "The list is clear." : {
@@ -37735,9 +37689,6 @@
         }
       }
     },
-    "They can also choose Join a Household Nearby in MealPlan’s Household settings, and show up here." : {
-
-    },
     "This aisle name will be remembered for the ingredient." : {
       "localizations" : {
         "da" : {
@@ -38115,8 +38066,15 @@
         }
       }
     },
-    "This invitation is for a different Apple Account. Ask the household’s owner to invite the email address or phone number of the Apple Account on this device." : {
-
+    "This invitation is for a different Apple Account. Ask the household owner to share it with the account on this device." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Einladung ist für einen anderen Apple Account. Bitte den Haushaltseigentümer, sie mit dem Account auf diesem Gerät zu teilen."
+          }
+        }
+      }
     },
     "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation." : {
 
@@ -38290,9 +38248,6 @@
 
     },
     "This page is no longer available" : {
-
-    },
-    "This person can’t be removed from the household." : {
 
     },
     "This planned meal may have been removed." : {
@@ -39039,9 +38994,6 @@
           }
         }
       }
-    },
-    "Together in the same room? They scan this code with their camera and are added straight away, no email address needed. Each code works once." : {
-
     },
     "Tomato pasta" : {
       "localizations" : {
@@ -40552,9 +40504,6 @@
         }
       }
     },
-    "Use the email address or phone number of their Apple Account — with the country code for a phone number. Only the people you invite can open the link." : {
-
-    },
     "Use the standard times" : {
       "localizations" : {
         "da" : {
@@ -40600,9 +40549,6 @@
           }
         }
       }
-    },
-    "Use this if iCloud says the current invitation no longer exists. It creates a different link without deleting your household data." : {
-
     },
     "Use this instead" : {
       "localizations" : {
@@ -41259,9 +41205,6 @@
 
     },
     "Waiting for household data." : {
-
-    },
-    "Waiting for the owner to add you…" : {
 
     },
     "Water" : {
@@ -42367,12 +42310,6 @@
         }
       }
     },
-    "Withdraw Invitation" : {
-
-    },
-    "Withdraw the invitation for %@?" : {
-
-    },
     "Within days" : {
 
     },
@@ -42584,6 +42521,9 @@
           }
         }
       }
+    },
+    "You · %@" : {
+
     },
     "You can say these phrases to Siri. Siri asks for the dish, day, or meal when a detail is missing." : {
 
@@ -42947,6 +42887,27 @@
         }
       }
     },
+    "Your household is ready for invitations." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt kann jetzt geteilt werden."
+          }
+        }
+      }
+    },
+    "Your household moved automatically. Sharing is now more reliable, faster, and easier to use. Invite the people who already share this household again so they can continue planning with you." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Haushalt wurde automatisch übernommen. Das Teilen ist jetzt zuverlässiger, schneller und einfacher. Lade die Personen, die diesen Haushalt bereits mit dir nutzen, erneut ein, damit ihr weiterhin gemeinsam planen könnt."
+          }
+        }
+      }
+    },
     "Your library is empty" : {
       "localizations" : {
         "da" : {
@@ -42992,9 +42953,6 @@
           }
         }
       }
-    },
-    "Your name" : {
-
     },
     "Your plan and dishes are stored on your device and shared with your family through iCloud." : {
       "localizations" : {
@@ -43164,126 +43122,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A tua semana está pronta em PDF."
-          }
-        }
-      }
-    },
-    "Invite your family to share dishes, meal plans, and the shopping list." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Lade deine Familie ein, Gerichte, Essenspläne und die Einkaufsliste gemeinsam zu nutzen."
-          }
-        }
-      }
-    },
-    "MealPlan couldn’t prepare household sharing." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MealPlan konnte die Haushaltsfreigabe nicht vorbereiten."
-          }
-        }
-      }
-    },
-    "MealPlan sharing is better" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Teilen mit MealPlan ist jetzt besser"
-          }
-        }
-      }
-    },
-    "Your household moved automatically. Sharing is now more reliable, faster, and easier to use. Invite the people who already share this household again so they can continue planning with you." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dein Haushalt wurde automatisch übernommen. Das Teilen ist jetzt zuverlässiger, schneller und einfacher. Lade die Personen, die diesen Haushalt bereits mit dir nutzen, erneut ein, damit ihr weiterhin gemeinsam planen könnt."
-          }
-        }
-      }
-    },
-    "Review household invitations" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Haushaltseinladungen ansehen"
-          }
-        }
-      }
-    },
-    "Invite or share again" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Erneut einladen oder teilen"
-          }
-        }
-      }
-    },
-    "Share household" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Haushalt teilen"
-          }
-        }
-      }
-    },
-    "Manage access" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zugriff verwalten"
-          }
-        }
-      }
-    },
-    "People in this household" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Personen in diesem Haushalt"
-          }
-        }
-      }
-    },
-    "Your household is ready for invitations." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dein Haushalt kann jetzt geteilt werden."
-          }
-        }
-      }
-    },
-    "Plan together" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gemeinsam planen"
-          }
-        }
-      }
-    },
-    "This invitation is for a different Apple Account. Ask the household owner to share it with the account on this device." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Diese Einladung ist für einen anderen Apple Account. Bitte den Haushaltseigentümer, sie mit dem Account auf diesem Gerät zu teilen."
           }
         }
       }
