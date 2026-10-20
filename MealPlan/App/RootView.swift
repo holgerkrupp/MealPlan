@@ -370,7 +370,9 @@ struct RootView: View {
         // An empty household on a new device may be about to be replaced by
         // the one this account already has in iCloud. Syncing it first would
         // leave an extra, empty zone behind in the private database.
-        while appState.isLookingForCloudHousehold, !Task.isCancelled {
+        while appState.isLookingForCloudHousehold,
+              !appState.canSyncCurrentHouseholdWhileLooking,
+              !Task.isCancelled {
             try? await Task.sleep(for: .milliseconds(150))
         }
         guard !Task.isCancelled, let household = appState.currentHousehold else { return }

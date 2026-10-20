@@ -13,6 +13,9 @@ struct LegacyOwnedHouseholdSummary: Codable, Equatable, Sendable, Identifiable {
     /// Records that represent user content, excluding the root, members,
     /// default meal types, and deletion markers.
     let contentRecordCount: Int
+    /// Latest server modification of user content. A previous reconciliation
+    /// must be retried if an older installation writes to a competing zone.
+    let lastContentModification: Date?
 
     var id: UUID { householdID }
 
@@ -22,7 +25,8 @@ struct LegacyOwnedHouseholdSummary: Codable, Equatable, Sendable, Identifiable {
         shareRecordName: String? = nil,
         isShared: Bool,
         dateCreated: Date,
-        contentRecordCount: Int
+        contentRecordCount: Int,
+        lastContentModification: Date? = nil
     ) {
         self.householdID = householdID
         self.zoneName = zoneName
@@ -30,6 +34,51 @@ struct LegacyOwnedHouseholdSummary: Codable, Equatable, Sendable, Identifiable {
         self.isShared = isShared
         self.dateCreated = dateCreated
         self.contentRecordCount = contentRecordCount
+        self.lastContentModification = lastContentModification
+    }
+}
+
+/// Device-local proof that every then-visible competing zone was copied into
+/// the canonical household. Source zones remain recoverable, but they no
+/// longer keep prompting the user on every launch.
+struct LegacyHouseholdReconciliationReceipt: Codable, Equatable {
+    let canonicalHouseholdID: UUID
+    let sources: [LegacyOwnedHouseholdSummary]
+
+    func covers(localHouseholdID: UUID, owned: [LegacyOwnedHouseholdSummary]) -> Bool {
+        guard localHouseholdID == canonicalHouseholdID else { return false }
+        let current = owned.filter { $0.householdID != canonicalHouseholdID }
+        return Set(current.map(\.householdID)) == Set(sources.map(\.householdID))
+            && current.allSatisfy { candidate in
+                sources.contains {
+                    $0.householdID == candidate.householdID
+                        && $0.zoneName == candidate.zoneName
+                        && $0.contentRecordCount == candidate.contentRecordCount
+                        && $0.lastContentModification == candidate.lastContentModification
+                }
+            }
+    }
+}
+
+enum LegacyHouseholdReconciliationStore {
+    private static let keyPrefix = "LegacyHouseholdReconciliation.v1"
+
+    static func load(canonicalHouseholdID: UUID, defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> LegacyHouseholdReconciliationReceipt? {
+        let key = key(for: canonicalHouseholdID)
+        guard let data = defaults.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(LegacyHouseholdReconciliationReceipt.self, from: data)
+    }
+
+    static func save(canonicalHouseholdID: UUID, owned: [LegacyOwnedHouseholdSummary], defaults: UserDefaults = HouseholdCollaborationStore.defaults) {
+        let receipt = LegacyHouseholdReconciliationReceipt(
+            canonicalHouseholdID: canonicalHouseholdID,
+            sources: owned.filter { $0.householdID != canonicalHouseholdID }
+        )
+        defaults.set(try? JSONEncoder().encode(receipt), forKey: key(for: canonicalHouseholdID))
+    }
+
+    private static func key(for id: UUID) -> String {
+        "\(keyPrefix).\(BuildEnvironment.cloudKit.rawValue).\(id.uuidString)"
     }
 }
 
@@ -60,9 +109,9 @@ struct LegacyLocalHouseholdSummary: Equatable, Sendable {
     }
 }
 
-/// A conservative decision for the legacy migration window. It never merges
-/// or deletes anything; ambiguous populated households must be shown to a
-/// person/support workflow before either graph can be changed.
+/// A conservative decision for the legacy migration window. The plan is pure;
+/// its reviewRequired case tells startup to copy populated zones before it
+/// selects the canonical household. Recovery UI remains available on failure.
 enum LegacyHouseholdRecoveryPlan: Equatable, Sendable {
     case noAction
     case adoptRemote(UUID)
@@ -80,11 +129,11 @@ enum LegacyHouseholdRecoveryPlan: Equatable, Sendable {
         let competing = candidates.filter { $0.householdID != canonical.householdID }
         let localMatchesCanonical = local.householdID == canonical.householdID
 
-        // A device with no user content may safely adopt the deterministic
-        // canonical zone. Shared households win, then the oldest zone, exactly
-        // as the old bootstrap did, but now only after the competing zones have
-        // been inventoried and recorded.
-        if local.contentRecordCount == 0, !localMatchesCanonical {
+        // An empty device can adopt directly only when every other zone is
+        // empty. Otherwise it must copy those zones into the canonical one.
+        // Shared households win, then the oldest zone.
+        if local.contentRecordCount == 0, !localMatchesCanonical,
+           competing.allSatisfy({ $0.contentRecordCount == 0 }) {
             return .adoptRemote(canonical.householdID)
         }
 

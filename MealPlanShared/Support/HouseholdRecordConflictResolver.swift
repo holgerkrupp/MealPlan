@@ -67,7 +67,7 @@ enum HouseholdRecordConflictResolver {
                 assetData: nil
             )
         case (.planEntry(let lhs), .planEntry(let rhs)):
-            let merged = merge(lhs, rhs)
+            let merged = merge(lhs, rhs, localModifiedAt: local.modifiedAt, serverModifiedAt: serverDate)
             let data = try HouseholdRecordCodec.encode(HouseholdRecordPayload.planEntry(merged))
             return .init(
                 payloadData: data,
@@ -76,7 +76,7 @@ enum HouseholdRecordConflictResolver {
                 assetData: nil
             )
         case (.shoppingItem(let lhs), .shoppingItem(let rhs)):
-            let merged = merge(lhs, rhs)
+            let merged = merge(lhs, rhs, localModifiedAt: local.modifiedAt, serverModifiedAt: serverDate)
             let data = try HouseholdRecordCodec.encode(HouseholdRecordPayload.shoppingItem(merged))
             return .init(
                 payloadData: data,
@@ -105,9 +105,23 @@ enum HouseholdRecordConflictResolver {
         }
     }
 
-    static func merge(_ lhs: PlanEntryPayload, _ rhs: PlanEntryPayload) -> PlanEntryPayload {
-        let placement = lhs.placementModifiedAt >= rhs.placementModifiedAt ? lhs : rhs
-        let content = lhs.contentModifiedAt >= rhs.contentModifiedAt ? lhs : rhs
+    static func merge(
+        _ lhs: PlanEntryPayload,
+        _ rhs: PlanEntryPayload,
+        localModifiedAt: Date = .distantPast,
+        serverModifiedAt: Date = .distantPast
+    ) -> PlanEntryPayload {
+        // Older clients moved meals without advancing the placement clock.
+        // When the domain clocks tie, use the enclosing record timestamp;
+        // an exact tie follows the fetched server version so both devices
+        // converge instead of each re-uploading its own stale placement.
+        let localWinsTie = localModifiedAt > serverModifiedAt
+        let placement = lhs.placementModifiedAt == rhs.placementModifiedAt
+            ? (localWinsTie ? lhs : rhs)
+            : (lhs.placementModifiedAt > rhs.placementModifiedAt ? lhs : rhs)
+        let content = lhs.contentModifiedAt == rhs.contentModifiedAt
+            ? (localWinsTie ? lhs : rhs)
+            : (lhs.contentModifiedAt > rhs.contentModifiedAt ? lhs : rhs)
         var value = content.value
         value.date = placement.value.date
         value.mealKey = placement.value.mealKey
@@ -119,8 +133,17 @@ enum HouseholdRecordConflictResolver {
         )
     }
 
-    static func merge(_ lhs: ShoppingItemPayload, _ rhs: ShoppingItemPayload) -> ShoppingItemPayload {
-        let content = lhs.contentModifiedAt >= rhs.contentModifiedAt ? lhs : rhs
+    static func merge(
+        _ lhs: ShoppingItemPayload,
+        _ rhs: ShoppingItemPayload,
+        localModifiedAt: Date = .distantPast,
+        serverModifiedAt: Date = .distantPast
+    ) -> ShoppingItemPayload {
+        // Legacy generated rows can have equal content clocks even when their
+        // quantities differ. Resolve that tie the same way on both devices.
+        let content = lhs.contentModifiedAt == rhs.contentModifiedAt
+            ? (localModifiedAt > serverModifiedAt ? lhs : rhs)
+            : (lhs.contentModifiedAt > rhs.contentModifiedAt ? lhs : rhs)
         let check: ShoppingItemPayload
         if lhs.checkStateModifiedAt == rhs.checkStateModifiedAt {
             check = lhs.value.isChecked ? lhs : rhs

@@ -63,6 +63,9 @@ final class AppState: HouseholdRecoveryAppState {
     /// on screen the whole time — but syncing, the first-run tour and
     /// invitations wait for the answer rather than racing it.
     private(set) var isLookingForCloudHousehold = true
+    /// A previously reconciled owner household can use its normal incremental
+    /// sync while the legacy-zone inventory runs in the background.
+    private(set) var canSyncCurrentHouseholdWhileLooking = false
     /// Set once the lookup has actually found a household and is fetching it,
     /// so the first-run tour knows it is worth waiting for.
     private(set) var isDownloadingCloudHousehold = false
@@ -207,53 +210,105 @@ final class AppState: HouseholdRecoveryAppState {
         }
     }
 
-    /// Local first, iCloud behind it. The device's own household is set up
-    /// and usable immediately; only when it is still empty — a new install,
-    /// or a placeholder an older build created — does this go on to look for
-    /// a household this Apple Account already has in iCloud, silently, and
-    /// swap it in once it has been downloaded.
+    /// Local first, iCloud behind it. Every owner installation converges on
+    /// the same canonical household, including older devices that already
+    /// populated a different zone before this rule existed.
     ///
-    /// Anything the person adds to the empty household in the meantime moves
-    /// into the restored one (see `HouseholdCloudBootstrapService`), so using
-    /// the app while the lookup runs costs nothing. A lookup that fails —
-    /// offline, no iCloud account — is not reported: the app is already
-    /// working, and the next launch looks again while the household is still
-    /// empty.
+    /// Local edits made while discovery runs move into the canonical household.
+    /// A failed lookup leaves the local data available and retries next launch.
     func bootstrapFromCloud(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) async {
-        let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
-        let local = households.count == 1 ? households[0] : nil
-        let shouldDiscover = households.isEmpty || (local.map(isReplaceableCloudPlaceholder) == true)
-
         bootstrap(context: context, planningThrough: latestPlanningDate)
-
-        // Always inventory old owned zones, even once this device has content.
-        // The previous empty-placeholder guard is what allowed two populated
-        // same-account installations to silently remain split.
-        await inspectLegacyHouseholds(context: context)
-
-        guard shouldDiscover, let placeholder = currentHousehold else {
+        guard let local = currentHousehold else {
             isLookingForCloudHousehold = false
             return
         }
+        if let locator = HouseholdShareLocator.decode(local.cloudKitShareIdentifier), !locator.isOwner {
+            legacyHouseholdRecovery = .noAction
+            isLookingForCloudHousehold = false
+            return
+        }
+        canSyncCurrentHouseholdWhileLooking = LegacyHouseholdReconciliationStore.load(
+            canonicalHouseholdID: local.uuid
+        ) != nil
         isLookingForCloudHousehold = true
         defer {
             isLookingForCloudHousehold = false
             isDownloadingCloudHousehold = false
         }
-        do {
-            let restored = try await HouseholdCloudBootstrapService.restoreOwnedHouseholdIfAvailable(
-                replacing: placeholder,
+        if canSyncCurrentHouseholdWhileLooking {
+            // Fetch the active zone first. Legacy inventory scans every old
+            // zone and must not delay a normal per-record plan update.
+            try? await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                household: local,
                 context: context,
-                progress: { [weak self] progress in
-                    if progress != .lookingForHousehold { self?.isDownloadingCloudHousehold = true }
-                }
+                session: collaboration
             )
-            if restored != nil {
-                bootstrap(context: context, planningThrough: latestPlanningDate)
-            }
-        } catch {
-            // Deliberately silent; see above.
         }
+        var attemptedPlan: LegacyHouseholdRecoveryPlan = .noAction
+        do {
+            let owned = try await HouseholdCloudBootstrapService.ownedHouseholdInventory()
+            let plan = LegacyHouseholdRecoveryPlan.make(local: .init(household: local), owned: owned)
+            attemptedPlan = plan
+            let progress: @MainActor (HouseholdCloudDownloadProgress) -> Void = { [weak self] _ in
+                self?.isDownloadingCloudHousehold = true
+                // Automatic owner recovery stays behind the visible plan.
+                // The full-screen progress view is reserved for accepting an
+                // invitation the person explicitly chose to join.
+            }
+            switch plan {
+            case .noAction:
+                if owned.contains(where: { $0.householdID == local.uuid }) {
+                    LegacyHouseholdReconciliationStore.save(canonicalHouseholdID: local.uuid, owned: owned)
+                }
+            case .adoptRemote(let canonicalID):
+                guard let canonical = owned.first(where: { $0.householdID == canonicalID }) else { break }
+                let zoneID = CKRecordZone.ID(zoneName: canonical.zoneName, ownerName: CKCurrentUserDefaultName)
+                let restored = try await HouseholdCloudBootstrapService.restoreOwnedHousehold(
+                    in: zoneID,
+                    shareRecordName: canonical.shareRecordName,
+                    replacing: local,
+                    mergeRecipes: false,
+                    adoptingLocalContent: true,
+                    context: context,
+                    progress: progress
+                )
+                currentHousehold = restored
+                collaboration.restore(for: restored)
+                MealType.ensure(for: restored, context: context)
+                LegacyHouseholdReconciliationStore.save(canonicalHouseholdID: canonicalID, owned: owned)
+            case .reviewRequired(let canonicalID, _):
+                if LegacyHouseholdReconciliationStore.load(canonicalHouseholdID: canonicalID)?
+                    .covers(localHouseholdID: local.uuid, owned: owned) == true {
+                    break
+                }
+                guard let canonical = owned.first(where: { $0.householdID == canonicalID }) else { break }
+                let reconciled = try await HouseholdCloudBootstrapService.reconcileOwnedHouseholds(
+                    canonical: canonical,
+                    owned: owned,
+                    preserving: local,
+                    context: context,
+                    progress: progress
+                )
+                currentHousehold = reconciled
+                collaboration.restore(for: reconciled)
+                MealType.ensure(for: reconciled, context: context)
+                LegacyHouseholdReconciliationStore.save(canonicalHouseholdID: canonicalID, owned: owned)
+            }
+            legacyHouseholdRecovery = .noAction
+            canSyncCurrentHouseholdWhileLooking = true
+            LegacyHouseholdDiagnostics.record(event: "ownedZonesConverged", activeHouseholdID: currentHousehold?.uuid, owned: owned)
+        } catch {
+            // Keep the local household usable; retry convergence next launch.
+            if case .reviewRequired = attemptedPlan { legacyHouseholdRecovery = attemptedPlan }
+            if let households = try? context.fetch(FetchDescriptor<Household>()),
+               !households.contains(where: { $0.uuid == local.uuid }),
+               let recovered = households.first {
+                currentHousehold = recovered
+                collaboration.restore(for: recovered)
+            }
+            LegacyHouseholdDiagnostics.record(event: "ownedZoneConvergenceFailed", activeHouseholdID: local.uuid, error: error)
+        }
+        finishCloudDownload()
     }
 
     /// Re-runs the non-destructive legacy-zone inventory used by launch and by
@@ -276,9 +331,15 @@ final class AppState: HouseholdRecoveryAppState {
                 local: .init(household: household),
                 owned: owned
             )
-            legacyHouseholdRecovery = plan
+            if case .reviewRequired(let canonicalID, _) = plan,
+               LegacyHouseholdReconciliationStore.load(canonicalHouseholdID: canonicalID)?
+                .covers(localHouseholdID: household.uuid, owned: owned) == true {
+                legacyHouseholdRecovery = .noAction
+            } else {
+                legacyHouseholdRecovery = plan
+            }
             LegacyHouseholdDiagnostics.record(
-                event: plan == .noAction ? "ownedZonesInventoried" : "ownedZoneRecoveryRequired",
+                event: legacyHouseholdRecovery == .noAction ? "ownedZonesInventoried" : "ownedZoneRecoveryRequired",
                 activeHouseholdID: household.uuid,
                 owned: owned
             )
@@ -291,10 +352,8 @@ final class AppState: HouseholdRecoveryAppState {
         }
     }
 
-    /// Copies unmatched data from competing same-account legacy zones only
-    /// after the settings UI has obtained the person's confirmation. The
-    /// original CloudKit zones are retained; this is a reversible handoff,
-    /// not a destructive automatic reconciliation.
+    /// Manual retry for a failed automatic convergence. Source zones remain
+    /// recoverable until a future verified cleanup.
     func reconcileLegacyHouseholds(context: ModelContext) async throws {
         cloudBootstrapState = .connecting
         defer { finishCloudDownload() }
@@ -324,6 +383,7 @@ final class AppState: HouseholdRecoveryAppState {
             currentHousehold = recovered
             collaboration.restore(for: recovered)
             legacyHouseholdRecovery = .noAction
+            LegacyHouseholdReconciliationStore.save(canonicalHouseholdID: canonicalID, owned: owned)
             LegacyHouseholdDiagnostics.record(
                 event: "ownedZonesReconciled",
                 activeHouseholdID: recovered.uuid,
@@ -359,17 +419,6 @@ final class AppState: HouseholdRecoveryAppState {
 
     func finishCloudDownload() {
         cloudBootstrapState = .ready
-    }
-
-    private func isReplaceableCloudPlaceholder(_ household: Household) -> Bool {
-        (household.dishes ?? []).isEmpty
-            && (household.entries ?? []).isEmpty
-            && (household.shoppingItems ?? []).isEmpty
-            && (household.cookedLogs ?? []).isEmpty
-            && (household.mealRoutines ?? []).isEmpty
-            && (household.weekTemplates ?? []).isEmpty
-            && (household.recipeFeeds ?? []).isEmpty
-            && (household.recipeBookmarks ?? []).isEmpty
     }
 
     /// Route a `mealplan://` deep link (or an App Intent hand-off).

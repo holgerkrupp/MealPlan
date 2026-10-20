@@ -166,13 +166,15 @@ enum HouseholdCloudBootstrapService {
                   case .household(let payload) = try? HouseholdRecordCodec.decode(data)
             else { continue }
 
+            let content = try await userContentSummary(in: zone.zoneID, database: database)
             summaries.append(.init(
                 householdID: householdID,
                 zoneName: zone.zoneID.zoneName,
                 shareRecordName: zone.share?.recordID.recordName,
                 isShared: zone.share != nil,
                 dateCreated: payload.dateCreated,
-                contentRecordCount: try await userContentRecordCount(in: zone.zoneID, database: database)
+                contentRecordCount: content.count,
+                lastContentModification: content.lastModified
             ))
         }
         return summaries
@@ -783,9 +785,10 @@ enum HouseholdCloudBootstrapService {
     /// Counts only records that represent actual user content. Requesting no
     /// fields keeps the discovery pass from downloading recipe bodies/photos;
     /// record type and ID are enough for a safe recovery decision.
-    private static func userContentRecordCount(in zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> Int {
+    private static func userContentSummary(in zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> (count: Int, lastModified: Date?) {
         var token: CKServerChangeToken?
         var count = 0
+        var lastModified: Date?
         var moreComing = true
         while moreComing {
             let page = try await database.recordZoneChanges(
@@ -802,12 +805,16 @@ enum HouseholdCloudBootstrapService {
                     break
                 default:
                     count += 1
+                    if let modified = record.modificationDate,
+                       lastModified.map({ modified > $0 }) ?? true {
+                        lastModified = modified
+                    }
                 }
             }
             token = page.changeToken
             moreComing = page.moreComing
         }
-        return count
+        return (count, lastModified)
     }
 }
 

@@ -343,8 +343,10 @@ enum HouseholdCloudSharingService {
                     household.modifiedAt = .now
                 }
                 refreshMembers(from: participants, household: household, context: context)
-                // Commit the corrected locator and roster together.
-                try context.save()
+                // Commit the corrected locator and roster together. A no-op
+                // save still notifies store observers and can start another
+                // full household scan immediately after a CloudKit push.
+                if context.hasChanges { try context.save() }
                 if let session {
                     session.reconcile(household: household, role: role, participantID: current?.id, fallbackName: current?.displayName)
                 } else {

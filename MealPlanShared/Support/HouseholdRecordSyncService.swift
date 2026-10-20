@@ -90,6 +90,11 @@ struct HouseholdSyncMetadata: Codable, Sendable {
         return serverFingerprints[name] != fingerprint
     }
 
+    func shouldTouch(_ name: String, fingerprint: String) -> Bool {
+        guard let server = serverFingerprints[name], server != fingerprint else { return false }
+        return pendingFingerprints[name] != fingerprint
+    }
+
     /// An older upload may finish after a newer edit was staged for the same
     /// record ID. Only acknowledge the bytes the server actually saved.
     /// Return true when the current local record must be queued again.
@@ -149,6 +154,12 @@ struct HouseholdSyncMetadata: Codable, Sendable {
     }
 }
 
+enum HouseholdRemoteFetchOutcome: Sendable {
+    case newData
+    case noData
+    case failed
+}
+
 /// The sole CloudKit transport for the App Group SwiftData store. It scans
 /// stable per-record fingerprints after saves, and lets CKSyncEngine own
 /// subscriptions, change tokens, retries, and partial failures.
@@ -176,6 +187,12 @@ final class HouseholdRecordSyncService {
     private var metadata = HouseholdSyncMetadata()
     private var saveObserver: NSObjectProtocol?
     private var scheduledScan: Task<Void, Never>?
+    /// CloudKit pushes can be delayed even while the iPhone is open. A modest
+    /// foreground fetch cadence bounds visible plan latency in that case.
+    private var foregroundPollTask: Task<Void, Never>?
+    /// Only one snapshot/fingerprint pass may run at once. A second caller
+    /// joins the pass instead of reading the same large store concurrently.
+    private var localScanTask: Task<Void, Error>?
     /// CKSyncEngine traps when explicit fetch/send operations overlap. Keep a
     /// single ordered chain for launch sync, save-driven sends, and pushes.
     private var cloudOperationTask: Task<Void, Never>?
@@ -186,6 +203,13 @@ final class HouseholdRecordSyncService {
     private var needsLocalScan = true
     private var didRestoreTombstoneOperations = false
     private var isApplyingRemoteChanges = false
+    private var isWaitingToApplyRemoteChanges = false
+    /// The scene lifecycle closes admission for new unbounded scans as soon
+    /// as the UI leaves the foreground. Already-entered persistence units are
+    /// allowed to finish so cancellation never tears through a save.
+    private var admitsForegroundWork = true
+    private var appliedRemoteRecordCount = 0
+    private var cancelAtPersistenceBoundary = false
     /// Generation observed after the last local scan. A missing value from an
     /// older app is deliberately treated as dirty once, not as clean.
     private var lastObservedStoreGeneration: UInt64?
@@ -197,8 +221,16 @@ final class HouseholdRecordSyncService {
 
     var isReadOnly: Bool { locator?.isReadOnly == true }
 
+    /// A push has already applied zone changes. Only an actual CKShare needs
+    /// the scene's follow-up participant/role refresh.
+    var hasActiveShare: Bool { locator?.shareRecordID != nil }
+
     func synchronize(household: Household, context: ModelContext) async throws {
+        guard admitsForegroundWork else { return }
         try await activateIfNeeded(household: household, context: context)
+        #if os(iOS)
+        startForegroundPolling()
+        #endif
         guard let locator else { return }
         observeExternalStoreGeneration()
         if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
@@ -212,22 +244,60 @@ final class HouseholdRecordSyncService {
         return syncEnginePool
     }
 
-    func fetchChanges() async {
-        guard locator != nil else { return }
-        observeExternalStoreGeneration()
+    func setForegroundWorkAdmission(_ admitted: Bool) {
+        logger.info("scene.lifecycle foregroundWork=\(admitted, privacy: .public)")
+        admitsForegroundWork = admitted
+        if admitted {
+            cancelAtPersistenceBoundary = false
+            #if os(iOS)
+            startForegroundPolling()
+            #endif
+            if needsLocalScan { scheduleScan() }
+            return
+        }
+        foregroundPollTask?.cancel()
+        foregroundPollTask = nil
+        scheduledScan?.cancel()
+        scheduledScan = nil
+        // A scan interrupted between persistence units remains dirty and is
+        // retried after the next foreground activation.
+        needsLocalScan = true
+    }
+
+    /// Requests an expiring background fetch to stop before its next database
+    /// transaction. An entered transaction is allowed to save or roll back.
+    func requestCancellationAtPersistenceBoundary() {
+        cancelAtPersistenceBoundary = true
+    }
+
+    func prepareRemoteFetch() {
+        cancelAtPersistenceBoundary = false
+    }
+
+    func fetchChanges(shouldScanLocalChanges: Bool = true) async -> HouseholdRemoteFetchOutcome {
+        guard let locator else { return .noData }
+        if shouldScanLocalChanges { observeExternalStoreGeneration() }
         // A fetch can arrive through launch/bootstrap without the explicit
         // synchronize() path. Capture local edits first so that this fetch
         // cannot make them look acknowledged.
-        if locator?.isReadOnly != true, needsLocalScan {
+        if shouldScanLocalChanges, admitsForegroundWork, !locator.isReadOnly, needsLocalScan {
             do { try await scanLocalChanges() }
-            catch { lastError = error; return }
+            catch { lastError = error; return .failed }
         }
+        let previousAppliedCount = appliedRemoteRecordCount
         await performCloudOperation(fetch: true, send: false)
+        if lastError != nil { return .failed }
+        return appliedRemoteRecordCount == previousAppliedCount ? .noData : .newData
     }
 
     func stop() async {
         scheduledScan?.cancel()
         scheduledScan = nil
+        foregroundPollTask?.cancel()
+        foregroundPollTask = nil
+        localScanTask?.cancel()
+        try? await localScanTask?.value
+        localScanTask = nil
         cloudOperationTask?.cancel()
         cloudOperationTask = nil
         if let saveObserver { NotificationCenter.default.removeObserver(saveObserver) }
@@ -251,6 +321,19 @@ final class HouseholdRecordSyncService {
         needsLocalScan = true
         didRestoreTombstoneOperations = false
         lastObservedStoreGeneration = nil
+    }
+
+    private func startForegroundPolling() {
+        guard admitsForegroundWork, foregroundPollTask == nil else { return }
+        foregroundPollTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(15))
+                guard !Task.isCancelled else { return }
+                if let service = self, service.admitsForegroundWork, service.locator != nil {
+                    _ = await service.fetchChanges(shouldScanLocalChanges: false)
+                }
+            }
+        }
     }
 
     /// Forgets everything stored for syncing `locator`'s zone. Used once this
@@ -289,7 +372,7 @@ final class HouseholdRecordSyncService {
                 payloadData: try HouseholdRecordCodec.encode(payload)
             )
             let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
-            return try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+            return try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
         }
         let snapshot: LocalHouseholdRecord?
         if let pending = pendingSnapshots[id.recordName] {
@@ -301,7 +384,27 @@ final class HouseholdRecordSyncService {
         }
         guard let snapshot else { return nil }
         let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
-        return try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+        return try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+    }
+
+    private func makeCloudRecord(
+        from snapshot: LocalHouseholdRecord,
+        zoneID: CKRecordZone.ID,
+        systemRecord: CKRecord?
+    ) async throws -> CKRecord {
+        var uploadSnapshot = snapshot
+        if uploadSnapshot.identity.type == .dishImage, uploadSnapshot.assetData == nil,
+           let snapshotActor = await backgroundSnapshotActor() {
+            uploadSnapshot.assetData = try await snapshotActor.imageData(
+                for: uploadSnapshot.identity.uuid,
+                matching: uploadSnapshot.assetDigest
+            )
+        }
+        return try HouseholdRecordCodec.makeRecord(
+            from: uploadSnapshot,
+            zoneID: zoneID,
+            systemRecord: systemRecord
+        )
     }
 
     func handle(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
@@ -388,6 +491,9 @@ final class HouseholdRecordSyncService {
         try acquireSyncOwnership()
 
         if self.household != nil {
+            localScanTask?.cancel()
+            try? await localScanTask?.value
+            localScanTask = nil
             cloudOperationTask?.cancel()
             await cloudOperationTask?.value
             await syncEnginePool?.shutdown()
@@ -452,10 +558,14 @@ final class HouseholdRecordSyncService {
             try await pool.enqueue([.saveZone(CKRecordZone(zoneID: nextLocator.zoneID))], in: .private)
         }
 
-        saveObserver = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: context, queue: .main) { [weak self] _ in
+        saveObserver = NotificationCenter.default.addObserver(forName: ModelContext.didSave, object: context, queue: nil) { [weak self] _ in
+            // The UI context posts synchronously during its save. Capture
+            // its origin now: checking inside
+            // the Task below is too late, after the apply flag has reset.
+            let wasRemoteApply = MainActor.assumeIsolated { self?.isApplyingRemoteChanges == true }
+            guard !wasRemoteApply else { return }
             Task { @MainActor in
                 guard let self else { return }
-                guard !self.isApplyingRemoteChanges else { return }
                 HouseholdStoreGeneration.markDirty()
                 self.needsLocalScan = true
                 self.scheduleScan()
@@ -480,27 +590,61 @@ final class HouseholdRecordSyncService {
     }
 
     private func scheduleScan() {
-        guard !isApplyingRemoteChanges, locator?.isReadOnly != true else { return }
+        guard admitsForegroundWork, !isApplyingRemoteChanges, !isWaitingToApplyRemoteChanges,
+              locator?.isReadOnly != true else { return }
         scheduledScan?.cancel()
         scheduledScan = Task { @MainActor [weak self] in
-            // Keep database serialization and photo hashing out of the burst
-            // of layout work that normally follows an edit or tab switch.
-            try? await Task.sleep(for: .seconds(5))
-            guard !Task.isCancelled, let self else { return }
+            // Coalesce a burst of saves without making another device wait
+            // five seconds before CloudKit even sees a plan edit.
+            try? await Task.sleep(for: .milliseconds(750))
+            guard !Task.isCancelled, let self, self.admitsForegroundWork else { return }
             do {
                 try await self.scanLocalChanges()
+                guard !Task.isCancelled, self.admitsForegroundWork else { return }
                 await self.performCloudOperation(fetch: false, send: true)
             } catch {
-                self.lastError = error
+                if !(error is CancellationError) { self.lastError = error }
             }
         }
     }
 
     private func scanLocalChanges() async throws {
-        guard let household, let syncEnginePool, let locator, !locator.isReadOnly else { return }
+        while admitsForegroundWork, needsLocalScan, !isApplyingRemoteChanges, !isWaitingToApplyRemoteChanges {
+            if let localScanTask {
+                try await localScanTask.value
+                // The owner clears the task after completion. Recheck that
+                // slot before attempting another scan: multiple callers can
+                // wake from the same task at once.
+                if self.localScanTask != nil { await Task.yield() }
+                continue
+            }
+            let task = Task { @MainActor [weak self] in
+                guard let self else { return }
+                try await self.performLocalScan()
+            }
+            localScanTask = task
+            do {
+                try await task.value
+            } catch {
+                localScanTask = nil
+                throw error
+            }
+            localScanTask = nil
+        }
+    }
+
+    private func performLocalScan() async throws {
+        guard admitsForegroundWork, let household, let syncEnginePool, let locator, !locator.isReadOnly else { return }
+        let startedGeneration = HouseholdStoreGeneration.value()
+        let startedAt = ContinuousClock.now
+        logger.info("scan.start")
+        defer {
+            let duration = startedAt.duration(to: .now)
+            logger.info("scan.end duration=\(duration, privacy: .public)")
+        }
         let previousMetadata = metadata
         let previousTombstoneRestoreState = didRestoreTombstoneOperations
-        var snapshots = try await snapshotRecords(for: household.uuid)
+        var snapshots = Self.canonicalSnapshots(try await snapshotRecords(for: household.uuid))
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
         let initialSnapshots = snapshots
@@ -509,26 +653,34 @@ final class HouseholdRecordSyncService {
         }.value
         var changesToTouch: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)] = []
 
-        for item in evaluated where metadata.serverFingerprints[item.snapshot.identity.recordName] != nil
-            && metadata.serverFingerprints[item.snapshot.identity.recordName] != item.fingerprint {
+        for item in evaluated where metadata.shouldTouch(item.snapshot.identity.recordName, fingerprint: item.fingerprint) {
             let snapshot = item.snapshot
-            let previousGroups = metadata.serverGroupFingerprints[snapshot.identity.recordName] ?? [:]
+            // A record already queued for upload will differ from the server
+            // until CloudKit acknowledges it. Touching that same difference
+            // on every scan changes modifiedAt again and creates an endless
+            // stream of uploads. Compare with the pending local value first.
+            let previousGroups = metadata.pendingGroupFingerprints[snapshot.identity.recordName]
+                ?? metadata.serverGroupFingerprints[snapshot.identity.recordName] ?? [:]
             let changedGroups = Set(snapshot.groupFingerprints.compactMap { previousGroups[$0.key] == $0.value ? nil : $0.key })
+            if !snapshot.groupFingerprints.isEmpty, changedGroups.isEmpty { continue }
             changesToTouch.append((snapshot.identity, changedGroups))
         }
         if !changesToTouch.isEmpty {
+            let touchTypes = Dictionary(grouping: changesToTouch, by: { $0.identity.type.rawValue })
+                .map { "\($0.key):\($0.value.count)" }.sorted().joined(separator: ",")
+            logger.info("scan.touch.types \(touchTypes, privacy: .public)")
             // Advancing sync clocks can update hundreds of legacy records.
             // Save them through a private SwiftData executor so SQLite never
             // blocks the scrolling main context.
             try await touchRecords(changesToTouch, householdID: household.uuid)
-            snapshots = try await snapshotRecords(for: household.uuid)
+            snapshots = Self.canonicalSnapshots(try await snapshotRecords(for: household.uuid))
             let touchedSnapshots = snapshots
             evaluated = await Task.detached(priority: .utility) {
                 touchedSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
             }.value
         }
 
-        let byName = keyedSnapshots(snapshots)
+        let byName = Self.keyedSnapshots(snapshots)
         var cloudChanges: [CloudKitRecordChange] = []
         for item in evaluated {
             let snapshot = item.snapshot
@@ -539,7 +691,7 @@ final class HouseholdRecordSyncService {
             metadata.pendingFingerprints[name] = item.fingerprint
             metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
             let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
-            cloudChanges.append(.save(try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
+            cloudChanges.append(.save(try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
         }
 
         let liveNames = Set(byName.keys)
@@ -608,8 +760,10 @@ final class HouseholdRecordSyncService {
         let shouldPersistMetadata = metadata.needsFullUpload || !cloudChanges.isEmpty
         metadata.needsFullUpload = false
         if shouldPersistMetadata { try await persistMetadata() }
-        needsLocalScan = false
-        lastObservedStoreGeneration = HouseholdStoreGeneration.value()
+        let finishedGeneration = HouseholdStoreGeneration.value()
+        needsLocalScan = !admitsForegroundWork || finishedGeneration != startedGeneration
+        lastObservedStoreGeneration = finishedGeneration
+        if needsLocalScan { scheduleScan() }
         HouseholdSyncDiagnostics.record(
             event: "scanned",
             locator: locator,
@@ -622,13 +776,28 @@ final class HouseholdRecordSyncService {
     /// requests cannot overlap delegate callbacks.
     private func performCloudOperation(fetch: Bool, send: Bool) async {
         let previous = cloudOperationTask
-        await previous?.value
+        // Reserve our place before the first suspension. Otherwise two push
+        // handlers can await the same predecessor and enter CKSyncEngine at
+        // the same time once it completes.
+        let task = Task { @MainActor [weak self] in
+            await previous?.value
+            guard !Task.isCancelled, let self else { return }
+            await self.runCloudOperation(fetch: fetch, send: send)
+        }
+        cloudOperationTask = task
+        await task.value
+    }
+
+    private func runCloudOperation(fetch: Bool, send: Bool) async {
         guard let syncEnginePool, let locator = self.locator else { return }
         lastError = nil
         let zoneID = locator.zoneID
         let maySend = send && !locator.isReadOnly
         let scope = activeScope
         let stateStore = packageStateStore
+        let startedAt = ContinuousClock.now
+        if fetch { logger.info("sync.fetch.start") }
+        if maySend { logger.info("sync.send.start") }
 
         let detached = Task.detached(priority: .utility) {
             guard !Task.isCancelled else { return nil as Error? }
@@ -671,50 +840,59 @@ final class HouseholdRecordSyncService {
 
             return operationError
         }
-        let task = Task { @MainActor [weak self] in
-            let error = await detached.value
-            // CKSyncEngine also throws the aggregate partial failure after it
-            // has delivered per-record conflicts to our delegate. Those
-            // conflicts have already been merged and requeued with the server
-            // change tags; showing the aggregate as an alert is misleading.
-            if let self, let error {
-                let failure = error as NSError
-                let codes = Self.partialFailureCodes(error)
-                if Self.isResolvedConflictSendError(error) {
-                    self.logger.info("CloudKit delivered recoverable record conflicts (count=\(codes.count, privacy: .public)).")
-                } else {
-                    self.logger.error("CloudKit operation failed (domain=\(failure.domain, privacy: .public), code=\(failure.code, privacy: .public), itemCodes=\(codes.description, privacy: .public)).")
-                    self.lastError = error
-                }
+        let error = await detached.value
+        // CKSyncEngine also throws the aggregate partial failure after it
+        // has delivered per-record conflicts to our delegate. Those
+        // conflicts have already been merged and requeued with the server
+        // change tags; showing the aggregate as an alert is misleading.
+        if let error {
+            let failure = error as NSError
+            let codes = Self.partialFailureCodes(error)
+            if Self.isResolvedConflictSendError(error) {
+                logger.info("CloudKit delivered recoverable record conflicts (count=\(codes.count, privacy: .public)).")
+            } else {
+                logger.error("CloudKit operation failed (domain=\(failure.domain, privacy: .public), code=\(failure.code, privacy: .public), itemCodes=\(codes.description, privacy: .public)).")
+                lastError = error
             }
         }
-        cloudOperationTask = task
-        await task.value
+        let duration = startedAt.duration(to: .now)
+        if fetch { logger.info("sync.fetch.end duration=\(duration, privacy: .public)") }
+        if maySend { logger.info("sync.send.end duration=\(duration, privacy: .public)") }
     }
 
     // MARK: - Remote change application
 
     private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) async throws {
         guard let household, let context, let locator else { return }
+        // A launch/save scan may still be building its baseline when a push
+        // arrives. Let it finish before the incoming records mutate the same
+        // metadata and SwiftData store.
+        isWaitingToApplyRemoteChanges = true
+        while let localScanTask { try? await localScanTask.value; await Task.yield() }
+        isWaitingToApplyRemoteChanges = false
         isApplyingRemoteChanges = true
         defer {
             isApplyingRemoteChanges = false
             if needsLocalScan { scheduleScan() }
         }
 
-        var local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
+        var local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
         let modifications = changes.modifications
             .filter { $0.record.recordID.zoneID == locator.zoneID }
             .sorted { priority($0.record) < priority($1.record) }
         let deletions = changes.deletions
             .filter { $0.recordID.zoneID == locator.zoneID }
             .sorted { deletionPriority(recordType: $0.recordType) < deletionPriority(recordType: $1.recordType) }
+        try Task.checkCancellation()
+        guard !cancelAtPersistenceBoundary else { throw CancellationError() }
         let counts = Dictionary(grouping: modifications) { $0.record.recordType }
             .mapValues(\.count)
             .map { "\($0.key)=\($0.value)" }
             .sorted()
             .joined(separator: ",")
         SharedStore.logger.debug("Applying household fetch: modifications=\(modifications.count), deletions=\(deletions.count), types=\(counts, privacy: .public)")
+        let transactionStartedAt = ContinuousClock.now
+        logger.info("db.transaction.start records=\(modifications.count + deletions.count, privacy: .public)")
 
         var uploadNames = Set<String>()
         var modifiedNames = Set<String>()
@@ -725,8 +903,13 @@ final class HouseholdRecordSyncService {
         var outgoingChanges: [CloudKitRecordChange] = []
 
         do {
+            try Task.checkCancellation()
+            guard !cancelAtPersistenceBoundary else { throw CancellationError() }
             try nonUndoableStoreTransaction(in: context) {
-                try HouseholdRecordApplier.withBatchLookup(in: context) {
+                try HouseholdRecordApplier.withBatchLookup(
+                    in: context,
+                    expectedRecordCount: modifications.count + deletions.count
+                ) {
                     for modification in modifications {
                         let record = modification.record
                         guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
@@ -821,7 +1004,11 @@ final class HouseholdRecordSyncService {
             throw error
         }
 
-        local = keyedSnapshots(try await snapshotRecords(for: household.uuid))
+        appliedRemoteRecordCount += modifications.count + deletions.count
+        let transactionDuration = transactionStartedAt.duration(to: .now)
+        logger.info("db.transaction.end records=\(modifications.count + deletions.count, privacy: .public) duration=\(transactionDuration, privacy: .public)")
+
+        local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
         let metadataBeforeQueue = metadata
         for (name, value) in serverFingerprints {
             metadata.serverFingerprints[name] = value
@@ -851,7 +1038,7 @@ final class HouseholdRecordSyncService {
                 metadata.pendingFingerprints[name] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
                 let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
-                outgoingChanges.append(.save(try HouseholdRecordCodec.makeRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
+                outgoingChanges.append(.save(try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
             }
         }
         for (name, fields) in stagedSystemFields {
@@ -938,7 +1125,7 @@ final class HouseholdRecordSyncService {
     private func applyServerConflicts(_ servers: [CKRecord]) async throws {
         guard let household, let context else { return }
         let local: [String: LocalHouseholdRecord]
-        do { local = keyedSnapshots(try await snapshotRecords(for: household.uuid)) }
+        do { local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid)) }
         catch {
             logConflictFailure(error, stage: "localSnapshot")
             throw error
@@ -964,7 +1151,7 @@ final class HouseholdRecordSyncService {
         }
         do {
             try nonUndoableStoreTransaction(in: context) {
-                try HouseholdRecordApplier.withBatchLookup(in: context) {
+                try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: resolved.count) {
                     for item in resolved {
                         do {
                             try HouseholdRecordApplier.apply(
@@ -988,7 +1175,7 @@ final class HouseholdRecordSyncService {
             throw error
         }
         let current: [String: LocalHouseholdRecord]
-        do { current = keyedSnapshots(try await snapshotRecords(for: household.uuid)) }
+        do { current = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid)) }
         catch {
             logConflictFailure(error, stage: "updatedSnapshot")
             throw error
@@ -1006,7 +1193,7 @@ final class HouseholdRecordSyncService {
                 metadata.pendingFingerprints[name] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
                 do {
-                    outgoing.append(.save(try HouseholdRecordCodec.makeRecord(
+                    outgoing.append(.save(try await makeCloudRecord(
                         from: snapshot,
                         zoneID: item.server.recordID.zoneID,
                         systemRecord: item.server
@@ -1060,9 +1247,14 @@ final class HouseholdRecordSyncService {
 
     private func snapshotRecords(for householdID: UUID) async throws -> [LocalHouseholdRecord] {
         guard let snapshotActor = await backgroundSnapshotActor() else { return [] }
-        return try await Task.detached(priority: .utility) {
+        let startedAt = ContinuousClock.now
+        let records = try await Task.detached(priority: .utility) {
             try await snapshotActor.records(for: householdID)
         }.value
+        let duration = startedAt.duration(to: .now)
+        let assetBytes = records.reduce(into: 0) { $0 += $1.assetBytesRead }
+        logger.info("snapshot.complete records=\(records.count, privacy: .public) assetBytes=\(assetBytes, privacy: .public) duration=\(duration, privacy: .public)")
+        return records
     }
 
     private func touchRecords(
@@ -1087,7 +1279,7 @@ final class HouseholdRecordSyncService {
             ))
             records.append(.init(identity: identity, householdID: household.uuid, modifiedAt: tombstone.deletedAt, payloadData: try HouseholdRecordCodec.encode(payload)))
         }
-        return keyedSnapshots(records)
+        return Self.keyedSnapshots(records)
     }
 
     /// An old development store can contain duplicate UUID defaults from a
@@ -1095,7 +1287,17 @@ final class HouseholdRecordSyncService {
     /// but sync must still degrade safely instead of crashing while the local
     /// developer store is being replaced. Prefer the newest snapshot and use
     /// its stable fingerprint as a deterministic tie-breaker.
-    private func keyedSnapshots(_ records: [LocalHouseholdRecord]) -> [String: LocalHouseholdRecord] {
+    nonisolated static func canonicalSnapshots(_ records: [LocalHouseholdRecord]) -> [LocalHouseholdRecord] {
+        let selected = keyedSnapshots(records)
+        var seen = Set<String>()
+        return records.compactMap { record in
+            let name = record.identity.recordName
+            guard seen.insert(name).inserted else { return nil }
+            return selected[name]
+        }
+    }
+
+    nonisolated private static func keyedSnapshots(_ records: [LocalHouseholdRecord]) -> [String: LocalHouseholdRecord] {
         records.reduce(into: [:]) { result, record in
             let name = record.identity.recordName
             guard let existing = result[name] else {
@@ -1281,12 +1483,15 @@ final class HouseholdRecordSyncService {
         guard let locator else { throw HouseholdRecordSyncError.stateStoreUnavailable }
         let url = try metadataFileURL(for: locator)
         let snapshot = metadata
+        let startedAt = ContinuousClock.now
+        logger.info("state.persist.start")
         // Encoding and verifying the metadata of a large household can take
         // seconds. Keep that work off the UI actor; the writer actor also
         // preserves write order if callbacks arrive while one write is active.
         let byteCount = try await metadataWriter.write(snapshot, to: url)
         defaults.removeObject(forKey: metadataKey(for: locator))
-        logger.info("Persisted household sync metadata (bytes=\(byteCount, privacy: .public), fingerprints=\(snapshot.serverFingerprints.count, privacy: .public), pending=\(snapshot.pendingFingerprints.count, privacy: .public), systemFields=\(snapshot.systemFields.count, privacy: .public), tombstones=\(snapshot.tombstones.count, privacy: .public)).")
+        let duration = startedAt.duration(to: .now)
+        logger.info("state.persist.end bytes=\(byteCount, privacy: .public) duration=\(duration, privacy: .public) fingerprints=\(snapshot.serverFingerprints.count, privacy: .public) pending=\(snapshot.pendingFingerprints.count, privacy: .public) tombstones=\(snapshot.tombstones.count, privacy: .public)")
     }
 
     nonisolated static func isResolvedConflictSendError(_ error: Error) -> Bool {

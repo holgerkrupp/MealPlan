@@ -1,4 +1,5 @@
 import CloudKit
+import CryptoKit
 import Foundation
 import SwiftData
 import Testing
@@ -6,6 +7,34 @@ import Testing
 
 @MainActor
 struct HouseholdRecordSyncTests {
+    @Test func smallRemoteDeletionKeepsUnrelatedPlanEntries() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        dish.household = household
+        let removed = MealPlanEntry(date: .now, slot: .dinner, dish: dish)
+        removed.household = household
+        let retained = MealPlanEntry(date: .now.addingTimeInterval(86_400), slot: .dinner, dish: dish)
+        retained.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(removed)
+        context.insert(retained)
+        try context.save()
+
+        HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+            // CloudKit can deliver a marker and its raw deletion together.
+            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+        }
+        try context.save()
+
+        let entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
+        #expect(entries.map(\.uuid) == [retained.uuid])
+        #expect(entries.first?.dish?.uuid == dish.uuid)
+    }
+
     @Test func unsavedPhotoStaysInItsOwningContext() {
         let container = SharedStore.make(cloudKit: false, inMemory: true)
         let image = DishImage(data: Data([1, 2, 3]))
@@ -44,6 +73,41 @@ struct HouseholdRecordSyncTests {
         metadata.pendingFingerprints.removeValue(forKey: name)
         metadata.needsFullUpload = true
         #expect(metadata.shouldQueue(name, fingerprint: server))
+    }
+
+    @Test func pendingUploadIsNotRetouchedOnEveryScan() {
+        var metadata = HouseholdSyncMetadata()
+        let name = "MPDish-example"
+        metadata.serverFingerprints[name] = "server"
+
+        #expect(metadata.shouldTouch(name, fingerprint: "first-edit"))
+        metadata.pendingFingerprints[name] = "first-edit"
+        #expect(!metadata.shouldTouch(name, fingerprint: "first-edit"))
+        #expect(metadata.shouldTouch(name, fingerprint: "second-edit"))
+        #expect(!metadata.shouldTouch(name, fingerprint: "server"))
+        #expect(!metadata.shouldTouch("unknown", fingerprint: "new-record"))
+    }
+
+    @Test func localScanUsesOneCanonicalRecordPerCloudIdentity() {
+        let householdID = UUID()
+        let duplicateID = UUID()
+        let old = LocalHouseholdRecord(
+            identity: .init(type: .ingredient, uuid: duplicateID), householdID: householdID,
+            modifiedAt: Date(timeIntervalSince1970: 1), payloadData: Data("old".utf8)
+        )
+        let newer = LocalHouseholdRecord(
+            identity: old.identity, householdID: householdID,
+            modifiedAt: Date(timeIntervalSince1970: 2), payloadData: Data("new".utf8)
+        )
+        let other = LocalHouseholdRecord(
+            identity: .init(type: .dish, uuid: UUID()), householdID: householdID,
+            modifiedAt: .now, payloadData: Data("other".utf8)
+        )
+
+        let canonical = HouseholdRecordSyncService.canonicalSnapshots([old, other, newer])
+        #expect(canonical.count == 2)
+        #expect(canonical[0].payloadData == newer.payloadData)
+        #expect(canonical[1].payloadData == other.payloadData)
     }
 
     @Test func olderCloudAcknowledgementCannotMarkANewerEditAsUploaded() {
@@ -256,6 +320,45 @@ struct HouseholdRecordSyncTests {
         #expect(await loader.data(for: secondID, uuid: duplicateUUID) == Data([7, 8, 9]))
     }
 
+    @Test func syncPhotoBytesMatchTheSelectedDuplicateSnapshot() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-sync-photo-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = SharedStore.makeSchema()
+        let configuration = ModelConfiguration(
+            schema: schema, url: directory.appending(path: "test.sqlite"), cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        dish.household = household
+        let first = DishImage(data: Data([1, 2, 3]))
+        let second = DishImage(data: Data([7, 8, 9]))
+        second.uuid = first.uuid
+        second.modifiedAt = first.modifiedAt
+        first.dish = dish
+        second.dish = dish
+        context.insert(household)
+        context.insert(dish)
+        context.insert(first)
+        context.insert(second)
+        try context.save()
+
+        let actor = HouseholdSnapshotActor(modelContainer: container)
+        let snapshots = try await actor.records(for: household.uuid)
+            .filter { $0.identity.type == .dishImage }
+        #expect(snapshots.count == 2)
+        let digests = snapshots.compactMap(\.assetDigest)
+        #expect(Set(digests).count == 2)
+        for snapshot in snapshots {
+            let bytes = try await actor.imageData(for: first.uuid, matching: snapshot.assetDigest)
+            let loaded = try #require(bytes)
+            #expect(Data(SHA256.hash(data: loaded)) == snapshot.assetDigest)
+        }
+    }
+
     @Test func photoLoaderFindsPrimaryImageWithoutMainContextRelationshipFault() async throws {
         let storeDirectory = FileManager.default.temporaryDirectory
             .appending(path: "MealPlan-primary-photo-loader-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -369,6 +472,90 @@ struct HouseholdRecordSyncTests {
         #expect(merged.contentModifiedAt == later)
     }
 
+    @Test func legacyPlanMoveWithEqualPlacementClocksUsesNewerRecord() {
+        let clock = Date(timeIntervalSince1970: 100)
+        let localValue = planValue(date: clock, meal: "lunch", note: nil)
+        var serverValue = localValue
+        serverValue.date = clock.addingTimeInterval(86_400)
+        serverValue.mealKey = "dinner"
+        let local = PlanEntryPayload(value: localValue, placementModifiedAt: clock, contentModifiedAt: clock)
+        let server = PlanEntryPayload(value: serverValue, placementModifiedAt: clock, contentModifiedAt: clock)
+
+        let merged = HouseholdRecordConflictResolver.merge(
+            local, server,
+            localModifiedAt: clock,
+            serverModifiedAt: clock.addingTimeInterval(10)
+        )
+        #expect(merged.value.date == serverValue.date)
+        #expect(merged.value.mealKey == "dinner")
+        #expect(HouseholdRecordConflictResolver.merge(local, server).value.date == serverValue.date)
+    }
+
+    @Test func movingPlanEntryAdvancesPlacementClock() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let dish = Dish(name: "Soup")
+        dish.household = household
+        let entry = MealPlanEntry(date: .now, slot: .lunch, dish: dish)
+        entry.household = household
+        let oldDate = Date(timeIntervalSince1970: 100)
+        entry.modifiedAt = oldDate
+        entry.placementModifiedAt = oldDate
+        entry.contentModifiedAt = oldDate
+        context.insert(household)
+        context.insert(dish)
+        context.insert(entry)
+        try context.save()
+
+        #expect(MealPlanner.move(entry, to: entry.date.addingTimeInterval(86_400), mealKey: "dinner", memberName: "Tester", context: context))
+        #expect(entry.placementModifiedAt > oldDate)
+        #expect(entry.modifiedAt == entry.placementModifiedAt)
+        #expect(entry.contentModifiedAt == oldDate)
+    }
+
+    @Test func snapshotReaderSeesMealMoveSavedByAnotherContext() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-snapshot-refresh-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = SharedStore.makeSchema()
+        let container = try ModelContainer(for: schema, configurations: [ModelConfiguration(
+            schema: schema,
+            url: directory.appending(path: "test.sqlite"),
+            cloudKitDatabase: .none
+        )])
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let dish = Dish(name: "Soup")
+        dish.household = household
+        let entry = MealPlanEntry(date: .now, slot: .lunch, dish: dish)
+        entry.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(entry)
+        try context.save()
+
+        let reader = HouseholdSnapshotActor(modelContainer: container)
+        let before = try await reader.records(for: household.uuid)
+            .first { $0.identity.type == .planEntry && $0.identity.uuid == entry.uuid }
+        #expect(before != nil)
+
+        let destination = entry.date.addingTimeInterval(86_400)
+        #expect(MealPlanner.move(entry, to: destination, mealKey: "dinner", memberName: "Tester", context: context))
+
+        let after = try await reader.records(for: household.uuid)
+            .first { $0.identity.type == .planEntry && $0.identity.uuid == entry.uuid }
+        #expect(after != nil)
+        #expect(after?.fingerprint != before?.fingerprint)
+        if let after, case .planEntry(let payload) = try HouseholdRecordCodec.decode(after.payloadData) {
+            #expect(payload.value.date == destination)
+            #expect(payload.value.mealKey == "dinner")
+        } else {
+            Issue.record("The updated plan entry was missing from the second snapshot")
+        }
+    }
+
     @Test func shoppingCheckAndQuantityEditMergeIndependently() {
         let earlier = Date(timeIntervalSince1970: 100)
         let later = Date(timeIntervalSince1970: 200)
@@ -392,6 +579,25 @@ struct HouseholdRecordSyncTests {
         let checked = ShoppingItemPayload(value: shoppingValue(amount: 1, checked: true), ingredientID: nil, contentModifiedAt: clock, checkStateModifiedAt: clock)
 
         #expect(HouseholdRecordConflictResolver.merge(unchecked, checked).value.isChecked)
+    }
+
+    @Test func equalShoppingContentClockUsesNewerRecord() {
+        let clock = Date(timeIntervalSince1970: 100)
+        let local = ShoppingItemPayload(
+            value: shoppingValue(amount: 1, checked: false), ingredientID: nil,
+            contentModifiedAt: clock, checkStateModifiedAt: clock
+        )
+        let server = ShoppingItemPayload(
+            value: shoppingValue(amount: 2, checked: false), ingredientID: nil,
+            contentModifiedAt: clock, checkStateModifiedAt: clock
+        )
+        let merged = HouseholdRecordConflictResolver.merge(
+            local, server,
+            localModifiedAt: clock,
+            serverModifiedAt: clock.addingTimeInterval(10)
+        )
+        #expect(merged.value.canonicalValue == 2)
+        #expect(HouseholdRecordConflictResolver.merge(local, server).value.canonicalValue == 2)
     }
 
     @Test func newerLocalRecordWinsAndIsResubmitted() throws {

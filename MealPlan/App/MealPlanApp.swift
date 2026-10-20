@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import CloudKit
+import OSLog
 #if canImport(UIKit)
 import UIKit
 #elseif os(macOS)
@@ -106,6 +107,9 @@ struct MealPlanApp: App {
                         )
                     }
                     .onChange(of: scenePhase) { _, phase in
+                        #if os(iOS)
+                        HouseholdRecordSyncService.shared.setForegroundWorkAdmission(phase == .active)
+                        #endif
                         // Calendar access can be revoked while the app is away.
                         guard phase == .active, !Self.isRunningTests else { return }
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
@@ -229,6 +233,7 @@ struct MealPlanApp: App {
 /// Scene-based iOS versions deliver invitations to `MealPlanSceneDelegate`
 /// below. It only queues the invitation — actually accepting it needs the
 /// `ModelContext` that exists once SwiftUI has built the view hierarchy.
+@MainActor
 final class AppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
@@ -266,11 +271,86 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         didReceiveRemoteNotification userInfo: [AnyHashable: Any],
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
-        Task {
-            await HouseholdRecordSyncService.shared.fetchChanges()
-            NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
-            completionHandler(.newData)
+        let completion = BackgroundFetchCompletion(completionHandler)
+        let task = UIApplicationBackgroundTask(application: application, completion: completion)
+        HouseholdRecordSyncService.shared.prepareRemoteFetch()
+        guard task.begin() else {
+            completion.finish(.failed)
+            return
         }
+
+        Task { @MainActor in
+            defer { task.end() }
+            let outcome = await HouseholdRecordSyncService.shared.fetchChanges(shouldScanLocalChanges: false)
+            switch outcome {
+            case .newData:
+                if HouseholdRecordSyncService.shared.hasActiveShare {
+                    NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
+                }
+                completion.finish(.newData)
+            case .noData:
+                completion.finish(.noData)
+            case .failed:
+                completion.finish(.failed)
+            }
+        }
+    }
+}
+
+/// The UIKit completion handler can be reached by both normal completion and
+/// background-task expiration. Keep the exactly-once guarantee independent of
+/// which callback wins.
+private final class BackgroundFetchCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var hasFinished = false
+    private let handler: (UIBackgroundFetchResult) -> Void
+
+    init(_ handler: @escaping (UIBackgroundFetchResult) -> Void) {
+        self.handler = handler
+    }
+
+    func finish(_ result: UIBackgroundFetchResult) {
+        lock.lock()
+        guard !hasFinished else { lock.unlock(); return }
+        hasFinished = true
+        lock.unlock()
+        handler(result)
+    }
+}
+
+@MainActor
+private final class UIApplicationBackgroundTask {
+    private let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "background-task")
+    private let application: UIApplication
+    private let completion: BackgroundFetchCompletion
+    private var identifier: UIBackgroundTaskIdentifier = .invalid
+    private var ended = false
+
+    init(application: UIApplication, completion: BackgroundFetchCompletion) {
+        self.application = application
+        self.completion = completion
+    }
+
+    func begin() -> Bool {
+        identifier = application.beginBackgroundTask(withName: "MealPlan household sync") { [weak self] in
+            Task { @MainActor in
+                guard let self else { return }
+                HouseholdRecordSyncService.shared.requestCancellationAtPersistenceBoundary()
+                self.logger.error("backgroundTask.expire")
+                self.completion.finish(.failed)
+                self.end()
+            }
+        }
+        if identifier != .invalid { logger.info("backgroundTask.start") }
+        return identifier != .invalid
+    }
+
+    func end() {
+        guard !ended, identifier != .invalid else { return }
+        ended = true
+        application.endBackgroundTask(identifier)
+        identifier = .invalid
+        logger.info("backgroundTask.end")
     }
 }
 
@@ -313,8 +393,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, didReceiveRemoteNotification userInfo: [String: Any]) {
         Task {
-            await HouseholdRecordSyncService.shared.fetchChanges()
-            NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
+            let outcome = await HouseholdRecordSyncService.shared.fetchChanges(shouldScanLocalChanges: false)
+            if case .newData = outcome, HouseholdRecordSyncService.shared.hasActiveShare {
+                NotificationCenter.default.post(name: .mealPlanCollaborationRefreshRequested, object: nil)
+            }
         }
     }
 }

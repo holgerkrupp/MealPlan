@@ -4,18 +4,38 @@ import SwiftData
 
 @MainActor
 enum HouseholdRecordApplier {
-    /// A fetched CloudKit batch can contain hundreds of related rows. Fetch
-    /// each model table once for that synchronous transaction instead of
-    /// asking SwiftData to materialize the entire table for every record and
-    /// every relationship lookup. The cache never escapes the transaction.
+    /// Small CloudKit batches fetch individual rows. Large imports materialize
+    /// each model table once for the transaction. The cache never escapes it.
+    @MainActor
     private final class BatchLookup {
         let context: ModelContext
+        let usesTargetedFetches: Bool
         var tables: [ObjectIdentifier: Any] = [:]
+        var targetedValues: [ObjectIdentifier: Any] = [:]
+        var missingValues: [ObjectIdentifier: Set<UUID>] = [:]
 
-        init(context: ModelContext) { self.context = context }
+        init(context: ModelContext, expectedRecordCount: Int) {
+            self.context = context
+            // A push normally contains only one meal edit. Materializing every
+            // row of each SwiftData table on the UI actor makes that edit block
+            // touches in a household with a large recipe library.
+            usesTargetedFetches = expectedRecordCount <= 12
+        }
 
         func find<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID) -> T? {
             let key = ObjectIdentifier(type)
+            if usesTargetedFetches {
+                if let value = (targetedValues[key] as? [UUID: T])?[uuid] { return value }
+                if missingValues[key]?.contains(uuid) == true { return nil }
+                if let value = HouseholdRecordApplier.fetch(type, uuid: uuid, in: context) {
+                    var values = targetedValues[key] as? [UUID: T] ?? [:]
+                    values[uuid] = value
+                    targetedValues[key] = values
+                    return value
+                }
+                missingValues[key, default: []].insert(uuid)
+                return nil
+            }
             if let table = tables[key] as? [UUID: T] { return table[uuid] }
             let models = (try? context.fetch(FetchDescriptor<T>())) ?? []
             let table = Dictionary(models.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
@@ -25,6 +45,13 @@ enum HouseholdRecordApplier {
 
         func insert<T: HouseholdSyncModel>(_ model: T) {
             let key = ObjectIdentifier(T.self)
+            if usesTargetedFetches {
+                var values = targetedValues[key] as? [UUID: T] ?? [:]
+                values[model.uuid] = model
+                targetedValues[key] = values
+                missingValues[key]?.remove(model.uuid)
+                return
+            }
             guard var table = tables[key] as? [UUID: T] else { return }
             table[model.uuid] = model
             tables[key] = table
@@ -32,6 +59,13 @@ enum HouseholdRecordApplier {
 
         func remove<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID) {
             let key = ObjectIdentifier(type)
+            if usesTargetedFetches {
+                var values = targetedValues[key] as? [UUID: T] ?? [:]
+                values.removeValue(forKey: uuid)
+                targetedValues[key] = values
+                missingValues[key, default: []].insert(uuid)
+                return
+            }
             guard var table = tables[key] as? [UUID: T] else { return }
             table.removeValue(forKey: uuid)
             tables[key] = table
@@ -40,9 +74,9 @@ enum HouseholdRecordApplier {
 
     private static var batchLookup: BatchLookup?
 
-    static func withBatchLookup<T>(in context: ModelContext, _ operation: () throws -> T) rethrows -> T {
+    static func withBatchLookup<T>(in context: ModelContext, expectedRecordCount: Int = .max, _ operation: () throws -> T) rethrows -> T {
         let previous = batchLookup
-        batchLookup = BatchLookup(context: context)
+        batchLookup = BatchLookup(context: context, expectedRecordCount: expectedRecordCount)
         defer { batchLookup = previous }
         return try operation()
     }
@@ -454,7 +488,13 @@ enum HouseholdRecordApplier {
 
     private static func find<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ context: ModelContext) -> T? {
         if let batchLookup, batchLookup.context === context { return batchLookup.find(type, uuid: uuid) }
-        return (try? context.fetch(FetchDescriptor<T>()))?.first { $0.uuid == uuid }
+        return fetch(type, uuid: uuid, in: context)
+    }
+
+    private static func fetch<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID, in context: ModelContext) -> T? {
+        var descriptor = FetchDescriptor<T>(predicate: #Predicate<T> { $0.uuid == uuid })
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
     }
 
     private static func touch<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ date: Date, _ context: ModelContext) {

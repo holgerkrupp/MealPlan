@@ -251,13 +251,21 @@ struct LocalHouseholdRecord: Sendable {
     var modifiedAt: Date
     var payloadData: Data
     var assetData: Data?
+    /// Digest retained by the snapshot actor for an unchanged external image.
+    /// This lets fingerprint scans avoid faulting the image bytes back in.
+    var assetDigest: Data? = nil
+    var assetBytesRead: Int = 0
     /// Independent field-family hashes used to advance just the applicable
     /// conflict clock when a plan or shopping item changes locally.
     var groupFingerprints: [String: String] = [:]
 
     var fingerprint: String {
         var data = payloadData
-        if let assetData { data.append(contentsOf: SHA256.hash(data: assetData)) }
+        if let assetData {
+            data.append(contentsOf: SHA256.hash(data: assetData))
+        } else if let assetDigest {
+            data.append(contentsOf: assetDigest)
+        }
         // Avoid Foundation's variadic formatter here. Besides being much
         // slower across hundreds of records, passing UInt8 through C varargs
         // has crashed in concurrent scans on iOS 27 beta.
@@ -270,6 +278,11 @@ struct LocalHouseholdRecord: Sendable {
         }
         return String(decoding: bytes, as: UTF8.self)
     }
+}
+
+struct HouseholdImageDigestCacheEntry: Sendable {
+    var modifiedAt: Date
+    var digest: Data?
 }
 
 enum HouseholdRecordCodec {
@@ -294,15 +307,21 @@ enum HouseholdRecordCodec {
         return try makeRecord(from: snapshot, zoneID: zoneID)
     }
 
-    static func records(for household: Household, context: ModelContext) throws -> [LocalHouseholdRecord] {
+    static func records(
+        for household: Household,
+        context: ModelContext,
+        imageDigestCache: inout [PersistentIdentifier: HouseholdImageDigestCacheEntry]
+    ) throws -> [LocalHouseholdRecord] {
         var result: [LocalHouseholdRecord] = []
-        func append(_ identity: HouseholdRecordIdentity, _ modifiedAt: Date, _ payload: HouseholdRecordPayload, asset: Data? = nil, groups: [String: String] = [:]) throws {
+        func append(_ identity: HouseholdRecordIdentity, _ modifiedAt: Date, _ payload: HouseholdRecordPayload, asset: Data? = nil, assetDigest: Data? = nil, assetBytesRead: Int = 0, groups: [String: String] = [:]) throws {
             result.append(LocalHouseholdRecord(
                 identity: identity,
                 householdID: household.uuid,
                 modifiedAt: modifiedAt,
                 payloadData: try encode(payload),
                 assetData: asset,
+                assetDigest: assetDigest,
+                assetBytesRead: assetBytesRead,
                 groupFingerprints: groups
             ))
         }
@@ -373,12 +392,25 @@ enum HouseholdRecordCodec {
                 leftKey: rule.leftKey, rightKey: rule.rightKey, kindRaw: rule.kindRaw
             )))
         }
+        var liveImageIDs = Set<PersistentIdentifier>()
         for dish in household.dishes ?? [] {
             try append(.init(type: .dish, uuid: dish.uuid), dish.modifiedAt, .dish(portableDish(dish)))
             for image in dish.images ?? [] {
+                let imageID = image.persistentModelID
+                liveImageIDs.insert(imageID)
+                let digest: Data?
+                var bytesRead = 0
+                if let cached = imageDigestCache[imageID], cached.modifiedAt == image.modifiedAt {
+                    digest = cached.digest
+                } else {
+                    let bytes = image.data
+                    bytesRead = bytes?.count ?? 0
+                    digest = bytes.map { Data(SHA256.hash(data: $0)) }
+                    imageDigestCache[imageID] = .init(modifiedAt: image.modifiedAt, digest: digest)
+                }
                 try append(.init(type: .dishImage, uuid: image.uuid), image.modifiedAt, .dishImage(.init(
                     dishID: dish.uuid, sortIndex: image.sortIndex, isPrimary: image.isPrimary, dateAdded: image.dateAdded
-                )), asset: image.data)
+                )), assetDigest: digest, assetBytesRead: bytesRead)
             }
             for line in dish.ingredients ?? [] {
                 try append(.init(type: .dishIngredient, uuid: line.uuid), line.modifiedAt, .dishIngredient(.init(
@@ -390,6 +422,7 @@ enum HouseholdRecordCodec {
                 )))
             }
         }
+        imageDigestCache = imageDigestCache.filter { liveImageIDs.contains($0.key) }
         for entry in household.entries ?? [] {
             let value = portableEntry(entry)
             let placement = try hash(encode([entry.date.timeIntervalSinceReferenceDate.description, entry.mealSlotRaw, entry.sortIndex.description]))
@@ -469,6 +502,11 @@ enum HouseholdRecordCodec {
             )))
         }
         return result
+    }
+
+    static func records(for household: Household, context: ModelContext) throws -> [LocalHouseholdRecord] {
+        var imageDigestCache: [PersistentIdentifier: HouseholdImageDigestCacheEntry] = [:]
+        return try records(for: household, context: context, imageDigestCache: &imageDigestCache)
     }
 
     private static func householdPayload(for household: Household) -> HouseholdRecordPayload {
@@ -626,10 +664,28 @@ enum HouseholdRecordCodec {
 /// a large household without monopolizing the app's main actor.
 @ModelActor
 actor HouseholdSnapshotActor {
+    private var imageDigestCache: [PersistentIdentifier: HouseholdImageDigestCacheEntry] = [:]
+
     func records(for householdID: UUID) throws -> [LocalHouseholdRecord] {
-        let households = try modelContext.fetch(FetchDescriptor<Household>())
+        // A ModelContext keeps registered models in memory. Reusing the actor's
+        // context after the UI context saves can serialize yesterday's values
+        // and make a local edit look identical to the server fingerprint.
+        let context = ModelContext(modelContainer)
+        let households = try context.fetch(FetchDescriptor<Household>())
         guard let household = households.first(where: { $0.uuid == householdID }) else { return [] }
-        return try HouseholdRecordCodec.records(for: household, context: modelContext)
+        return try HouseholdRecordCodec.records(
+            for: household,
+            context: context,
+            imageDigestCache: &imageDigestCache
+        )
+    }
+
+    func imageData(for imageID: UUID, matching digest: Data?) throws -> Data? {
+        let context = ModelContext(modelContainer)
+        let descriptor = FetchDescriptor<DishImage>(predicate: #Predicate { $0.uuid == imageID })
+        let images = try context.fetch(descriptor)
+        guard let digest else { return images.first?.data }
+        return images.compactMap(\.data).first { Data(SHA256.hash(data: $0)) == digest }
     }
 
     func touch(
@@ -637,10 +693,11 @@ actor HouseholdSnapshotActor {
         at date: Date,
         householdID: UUID
     ) throws {
-        let households = try modelContext.fetch(FetchDescriptor<Household>())
+        let context = ModelContext(modelContainer)
+        let households = try context.fetch(FetchDescriptor<Household>())
         guard let household = households.first(where: { $0.uuid == householdID }) else { return }
-        try touch(changes, at: date, household: household)
-        try modelContext.save()
+        try touch(changes, at: date, household: household, context: context)
+        try context.save()
     }
 
     /// Advance local conflict clocks without issuing one whole-table SwiftData
@@ -650,7 +707,8 @@ actor HouseholdSnapshotActor {
     private func touch(
         _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
         at date: Date,
-        household: Household
+        household: Household,
+        context: ModelContext
     ) throws {
         let grouped = Dictionary(grouping: changes, by: { $0.identity.type })
 
@@ -670,7 +728,7 @@ actor HouseholdSnapshotActor {
             household.modifiedAt = date
         }
         touchModels(household.members ?? [], type: .member)
-        touchModels(try modelContext.fetch(FetchDescriptor<MealType>()), type: .mealType)
+        touchModels(try context.fetch(FetchDescriptor<MealType>()), type: .mealType)
         touchModels(household.ingredients ?? [], type: .ingredient)
         touchModels((household.ingredients ?? []).flatMap { $0.aliases ?? [] }, type: .ingredientAlias)
         touchModels(household.packageSizeOverrides ?? [], type: .packageSize)

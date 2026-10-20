@@ -104,11 +104,16 @@ enum MealPlanner {
         let previousSortIndex = entry.sortIndex
         let previousEditor = entry.lastEditedByName
         let previousEditDate = entry.lastEditedDate
+        let previousModifiedAt = entry.modifiedAt
+        let previousPlacementModifiedAt = entry.placementModifiedAt
+        let editDate = Date.now
         entry.date = destination
         entry.mealKey = mealKey
         entry.sortIndex = nextSortIndex(for: destination, mealKey: mealKey, household: entry.household, context: context)
         entry.lastEditedByName = memberName
-        entry.lastEditedDate = .now
+        entry.lastEditedDate = editDate
+        entry.placementModifiedAt = editDate
+        entry.modifiedAt = editDate
         do {
             try context.save()
         } catch {
@@ -117,6 +122,8 @@ enum MealPlanner {
             entry.sortIndex = previousSortIndex
             entry.lastEditedByName = previousEditor
             entry.lastEditedDate = previousEditDate
+            entry.placementModifiedAt = previousPlacementModifiedAt
+            entry.modifiedAt = previousModifiedAt
             return false
         }
         SharedStore.reloadWidgets()
