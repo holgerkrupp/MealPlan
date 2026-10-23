@@ -23,16 +23,47 @@ struct HouseholdRecordSyncTests {
         context.insert(retained)
         try context.save()
 
-        HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
-            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
             // CloudKit can deliver a marker and its raw deletion together.
-            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
         }
         try context.save()
 
         let entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
         #expect(entries.map(\.uuid) == [retained.uuid])
         #expect(entries.first?.dish?.uuid == dish.uuid)
+    }
+
+    @Test func targetedDeletionRemovesDishIngredientsAndPlanEntries() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        let ingredient = Ingredient(name: "Tomato")
+        let line = DishIngredient(rawText: "1 tomato")
+        let entry = MealPlanEntry(date: .now, slot: .dinner, dish: dish)
+        dish.household = household
+        ingredient.household = household
+        line.dish = dish
+        line.ingredient = ingredient
+        entry.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(ingredient)
+        context.insert(line)
+        context.insert(entry)
+        try context.save()
+
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 2) {
+            try HouseholdRecordApplier.delete(type: .dishIngredient, uuid: line.uuid, context: context)
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: entry.uuid, context: context)
+        }
+        try context.save()
+
+        #expect(try context.fetch(FetchDescriptor<DishIngredient>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<MealPlanEntry>()).isEmpty)
+        #expect(try context.fetch(FetchDescriptor<Dish>()).first?.name == "Soup")
     }
 
     @Test func unsavedPhotoStaysInItsOwningContext() {
@@ -747,7 +778,7 @@ struct HouseholdRecordSyncTests {
         #expect(!resolution.shouldUpload)
     }
 
-    @Test func applyingMissingPhotoAssetPreservesStoredBytes() throws {
+    @Test func smallBatchTargetedLookupOnDiskUpdatesDishAndReconcilesRelationships() throws {
         // External-storage attributes need a real SQLite connection on macOS;
         // the in-memory store can report "No eligible connection available".
         let storeDirectory = FileManager.default.temporaryDirectory
@@ -772,24 +803,236 @@ struct HouseholdRecordSyncTests {
         context.insert(image)
         try context.save()
 
-        let payload = HouseholdRecordPayload.dishImage(.init(
+        let portableDish = MealPlanBackup.PortableDish(
+            uuid: dish.uuid,
+            name: "Server Soup",
+            recipeText: nil,
+            sourceURLString: nil,
+            deepLinkURLString: nil,
+            importedSourceApp: nil,
+            importedSourceID: nil,
+            variantGroupID: nil,
+            variantGroupName: nil,
+            isFavorite: false,
+            rating: 0,
+            collectionNames: [],
+            tagNames: [],
+            servings: 2,
+            prepTimeMinutes: nil,
+            cookTimeMinutes: nil,
+            mealTypeTagsRaw: [],
+            dietaryTagsRaw: [],
+            seasonRaw: nil,
+            createdByName: nil,
+            dateCreated: .now,
+            lastUsedDate: nil,
+            usageCount: 0,
+            needsReview: false,
+            glyphRaw: nil,
+            glyphIsAuto: true,
+            images: [],
+            ingredients: []
+        )
+        var localDish = portableDish
+        localDish.name = "Local Soup"
+        let localRecord = LocalHouseholdRecord(
+            identity: .init(type: .dish, uuid: dish.uuid),
+            householdID: household.uuid,
+            modifiedAt: Date(timeIntervalSince1970: 1),
+            payloadData: try HouseholdRecordCodec.encode(HouseholdRecordPayload.dish(localDish))
+        )
+        let serverRecord = CKRecord(
+            recordType: HouseholdRecordType.dish.rawValue,
+            recordID: CKRecord.ID(
+                recordName: localRecord.identity.recordName,
+                zoneID: CKRecordZone.ID(zoneName: "test")
+            )
+        )
+        serverRecord[HouseholdRecordCodec.payloadKey] = try HouseholdRecordCodec.encode(
+            HouseholdRecordPayload.dish(portableDish)
+        ) as CKRecordValue
+        serverRecord[HouseholdRecordCodec.modifiedAtKey] = Date(timeIntervalSince1970: 2) as CKRecordValue
+        let resolution = try HouseholdRecordConflictResolver.resolve(local: localRecord, server: serverRecord)
+        let imagePayload = HouseholdRecordPayload.dishImage(.init(
             dishID: dish.uuid,
             sortIndex: 2,
             isPrimary: false,
             dateAdded: image.dateAdded
         ))
-        try HouseholdRecordApplier.apply(
-            payloadData: HouseholdRecordCodec.encode(payload),
-            identity: .init(type: .dishImage, uuid: image.uuid),
-            modifiedAt: .now,
-            assetData: nil,
-            household: household,
-            context: context
-        )
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: resolution.payloadData,
+                identity: localRecord.identity,
+                modifiedAt: resolution.modifiedAt,
+                assetData: resolution.assetData,
+                household: household,
+                context: context
+            )
+            try HouseholdRecordApplier.apply(
+                payloadData: HouseholdRecordCodec.encode(imagePayload),
+                identity: .init(type: .dishImage, uuid: image.uuid),
+                modifiedAt: .now,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+            var entryValue = planValue(date: .now, meal: "dinner", note: nil)
+            entryValue.dishUUID = dish.uuid
+            let entry = PlanEntryPayload(value: entryValue, placementModifiedAt: .now, contentModifiedAt: .now)
+            try HouseholdRecordApplier.apply(
+                payloadData: HouseholdRecordCodec.encode(HouseholdRecordPayload.planEntry(entry)),
+                identity: .init(type: .planEntry, uuid: entryValue.uuid),
+                modifiedAt: .now,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+        }
 
+        #expect(dish.name == "Server Soup")
         #expect(image.data == Data([7, 8, 9]))
         #expect(image.sortIndex == 2)
         #expect(!image.isPrimary)
+        let savedEntry = try context.fetch(FetchDescriptor<MealPlanEntry>()).first
+        #expect(savedEntry?.dish?.uuid == dish.uuid)
+    }
+
+    @Test func unresolvedDishConflictCanBeReappliedAfterDiskStoreReopen() throws {
+        let storeDirectory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-conflict-relaunch-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: storeDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let schema = SharedStore.makeSchema()
+        let storeURL = storeDirectory.appending(path: "test.sqlite")
+        let configuration = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+
+        var container: ModelContainer? = try ModelContainer(for: schema, configurations: [configuration])
+        let firstContext = try #require(container?.mainContext)
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Unsynced local version")
+        dish.modifiedAt = Date(timeIntervalSince1970: 3)
+        dish.household = household
+        firstContext.insert(household)
+        firstContext.insert(dish)
+        try firstContext.save()
+        let dishID = dish.uuid
+        let householdID = household.uuid
+        let serverPayload = MealPlanBackup.PortableDish(
+            uuid: dishID,
+            name: "Older server version",
+            recipeText: nil,
+            sourceURLString: nil,
+            deepLinkURLString: nil,
+            importedSourceApp: nil,
+            importedSourceID: nil,
+            variantGroupID: nil,
+            variantGroupName: nil,
+            isFavorite: false,
+            rating: 0,
+            collectionNames: [],
+            tagNames: [],
+            servings: 2,
+            prepTimeMinutes: nil,
+            cookTimeMinutes: nil,
+            mealTypeTagsRaw: [],
+            dietaryTagsRaw: [],
+            seasonRaw: nil,
+            createdByName: nil,
+            dateCreated: .now,
+            lastUsedDate: nil,
+            usageCount: 0,
+            needsReview: false,
+            glyphRaw: nil,
+            glyphIsAuto: true,
+            images: [],
+            ingredients: []
+        )
+        let serverRecord = CKRecord(
+            recordType: HouseholdRecordType.dish.rawValue,
+            recordID: CKRecord.ID(
+                recordName: HouseholdRecordIdentity(type: .dish, uuid: dishID).recordName,
+                zoneID: CKRecordZone.ID(zoneName: "test")
+            )
+        )
+        serverRecord[HouseholdRecordCodec.payloadKey] = try HouseholdRecordCodec.encode(
+            HouseholdRecordPayload.dish(serverPayload)
+        ) as CKRecordValue
+        serverRecord[HouseholdRecordCodec.modifiedAtKey] = Date(timeIntervalSince1970: 2) as CKRecordValue
+
+        let unsyncedPayload = MealPlanBackup.PortableDish(
+            uuid: dishID,
+            name: dish.name,
+            recipeText: nil,
+            sourceURLString: nil,
+            deepLinkURLString: nil,
+            importedSourceApp: nil,
+            importedSourceID: nil,
+            variantGroupID: nil,
+            variantGroupName: nil,
+            isFavorite: false,
+            rating: 0,
+            collectionNames: [],
+            tagNames: [],
+            servings: 2,
+            prepTimeMinutes: nil,
+            cookTimeMinutes: nil,
+            mealTypeTagsRaw: [],
+            dietaryTagsRaw: [],
+            seasonRaw: nil,
+            createdByName: nil,
+            dateCreated: .now,
+            lastUsedDate: nil,
+            usageCount: 0,
+            needsReview: false,
+            glyphRaw: nil,
+            glyphIsAuto: true,
+            images: [],
+            ingredients: []
+        )
+        let identity = HouseholdRecordIdentity(type: .dish, uuid: dishID)
+        let localRecord = LocalHouseholdRecord(
+            identity: identity,
+            householdID: householdID,
+            modifiedAt: Date(timeIntervalSince1970: 3),
+            payloadData: try HouseholdRecordCodec.encode(HouseholdRecordPayload.dish(unsyncedPayload))
+        )
+        let resolution = try HouseholdRecordConflictResolver.resolve(local: localRecord, server: serverRecord)
+
+        try HouseholdRecordApplier.withBatchLookup(in: firstContext, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: resolution.payloadData,
+                identity: identity,
+                modifiedAt: resolution.modifiedAt,
+                assetData: resolution.assetData,
+                household: household,
+                context: firstContext
+            )
+        }
+        try firstContext.save()
+
+        // Releasing the first container models termination before CloudKit
+        // acknowledges the conflict upload. Reopening must retain the local edit.
+        container = nil
+        let relaunched = try ModelContainer(for: schema, configurations: [configuration])
+        let relaunchedContext = relaunched.mainContext
+        let relaunchedDish = try #require(relaunchedContext.fetch(FetchDescriptor<Dish>()).first)
+        #expect(relaunchedDish.name == "Unsynced local version")
+
+        // If CloudKit redelivers the same conflict after relaunch, applying it
+        // again must be idempotent and must not discard the unsynchronized row.
+        try HouseholdRecordApplier.withBatchLookup(in: relaunchedContext, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: resolution.payloadData,
+                identity: identity,
+                modifiedAt: resolution.modifiedAt,
+                assetData: resolution.assetData,
+                household: try #require(relaunchedContext.fetch(FetchDescriptor<Household>()).first),
+                context: relaunchedContext
+            )
+        }
+        try relaunchedContext.save()
+        #expect(relaunchedDish.name == "Unsynced local version")
+        #expect(relaunchedDish.household?.uuid == householdID)
     }
 
     @Test func assetBackedRecordCannotUploadWithoutBytes() throws {

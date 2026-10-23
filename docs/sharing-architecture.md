@@ -75,6 +75,14 @@ with a push, after accepting a share, and by a low-frequency foreground retry.
 The package pool owns engine tokens, batching, subscriptions, retries, and
 partial-error delivery.
 
+Incoming record application uses concrete SwiftData UUID predicates for every
+sync model when a batch contains at most 12 records. This keeps small push and
+conflict batches targeted without asking SwiftData to compile a protocol
+requirement key path. Larger batches materialize each touched model table once
+inside the transaction. Both paths throw lookup errors with the affected model
+type and lookup stage; a failed lookup aborts and rolls back the batch rather
+than being mistaken for a missing row.
+
 ## Conflict policy
 
 Most entities use per-record last-writer-wins based on `modifiedAt`. Therefore
@@ -95,6 +103,11 @@ Those groups merge independently when CloudKit reports
 `serverRecordChanged`, so moving a meal does not erase a simultaneous note and
 editing an amount does not undo a check. Equal shopping check clocks prefer
 checked; a later intentional uncheck still wins normally.
+
+Conflict batches are applied and saved in one non-undoable SwiftData
+transaction. Server fingerprints and system fields advance only after that
+save succeeds, so a failed lookup or relationship reconciliation remains
+retryable and does not acknowledge a partial merge.
 
 ## Roles and members
 
