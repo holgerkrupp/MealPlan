@@ -195,8 +195,9 @@ struct HouseholdSharingView: View {
         defer { isPreparingManagement = false }
         do {
             // Revalidate the authoritative share only when the owner asks to
-            // manage it. This also migrates legacy public-link shares before
-            // Apple's participant manager opens.
+            // manage it. The host skips a redundant full-household flush when
+            // this share already exists, while the package still hardens any
+            // legacy public-link share before Apple's participant manager opens.
             let prepared = try await sharing.prepareShare(
                 rootID: household.uuid.uuidString,
                 waitTimeout: .seconds(45)

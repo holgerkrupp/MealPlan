@@ -17,8 +17,17 @@ enum MealPlanCloudSharing {
             rootResolver: resolver,
             syncEngines: pool
         )
-        service.onPreparingShare = { requestedRootID in
+        service.onPreparingShare = { [weak service] requestedRootID in
             guard requestedRootID == rootID else { return }
+            // Share preparation also runs when the owner reopens Apple's
+            // invitation UI or when a legacy public-link share is hardened.
+            // Existing shares already have a complete CloudKit zone, so
+            // flushing the full local household again only adds latency. A
+            // first share still needs its records uploaded before the
+            // zone-wide CKShare can be created.
+            if let service, try await service.existingShare(rootID: rootID) != nil {
+                return
+            }
             try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
         }
         service.onSharePrepared = { share in
