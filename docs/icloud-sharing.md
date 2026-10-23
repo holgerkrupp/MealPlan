@@ -61,10 +61,60 @@ already queued for CloudKit. A server acknowledgement removes a journal entry
 only when it matches the queued record version.
 
 Opening the sharing screen reads the existing share without preparing or
-rewriting it. Invitation and management actions prepare the authoritative
-share when tapped. Accepted participants keep their access when the package
-can verify their identities; an unresolved legacy participant leaves the
-share unchanged and produces an actionable error.
+rewriting it. When a private-recipient share exists, the invitation control
+passes that exact `CKShare` to CloudKitCollaborationKit's existing-share
+`CloudKitShareLink` initializer. This uses Apple's `.existing(share, ...)`
+transfer representation and avoids doing household synchronization inside the
+Messages/Mail attachment export. A legacy share with anyone-with-the-link
+access is explicitly prepared before export so the package can restore
+verifiable accepted participants and their previous permissions, then set
+public access to none. The host callback checks for the existing share and
+skips the full household sync during this hardening. If participant identity
+cannot be verified, the package leaves the share unchanged and reports an
+actionable error. When a household has not yet been shared, the owner
+explicitly starts bounded preparation in MealPlan, sees progress and can
+cancel waiting; after preparation the same existing-share representation is
+used for export. A retry reuses a share that may have completed after the owner
+canceled waiting. The owner can always open Manage access and use Copy Link as
+a fallback.
+
+The issue #132 source investigation confirmed that the pinned package has both
+transfer paths and that the previous MealPlan UI always selected the deferred
+root-ID path. Its share preparation callback also synchronized household data
+unconditionally, including when an existing share was being resent. The fix
+selects the package's existing-share path for private shares, and invokes the
+bounded lifecycle preparation first only for a first share or a legacy public
+share. Preparation skips full household synchronization whenever the share
+already exists. Source-level evidence does not prove the Messages attachment
+completes or is accepted by a second Apple Account; that remains a signed
+TestFlight release gate.
+
+### Invitation release check for issue #132
+
+On signed TestFlight builds, run these cases with the owner's existing
+household and a different Apple Account as recipient. Record app build, OS,
+account role, and Development/Production environment without recording account
+names or share URLs:
+
+1. For a household with no share, start the first invitation on a reliable
+   connection and on a slow/interrupted connection. Confirm progress is shown,
+   Cancel returns to the sharing screen, timeout/failure is actionable, and a
+   retry reuses any share that completed after cancellation.
+2. Send invitations for an existing household through Messages and Mail.
+   Confirm the attachment becomes sendable, the recipient receives it and
+   accepts it, and their existing household data is preserved.
+3. Send another invitation without recreating the share. Confirm the accepted
+   participant remains active with the same access, and invite a second Apple
+   Account. Cancel the native sheet once and repeat the invitation.
+4. Open Manage access and use Copy Link. Confirm this fallback works and does
+   not enable anyone-with-the-link access.
+5. Repeat on supported iOS 26 and iOS 27 devices, including iOS 26.6.2 where
+   the regression was reported. Also test macOS where native sharing is used.
+
+Automated tests cover host preparation policy and error propagation. They do
+not simulate Messages/Mail delivery, CloudKit attachment processing, or a
+recipient's acceptance. Leave the release gate open until signed-device
+results are recorded.
 
 ## Sync and sharing
 

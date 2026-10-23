@@ -27,27 +27,12 @@ struct HouseholdCloudSharingServiceTests {
         #expect(retryDelivery)
     }
 
-    @Test func inviteAndReshareAlwaysSynchronizeEvenWhenShareExists() async throws {
+    @Test func reusingExistingShareSkipsHouseholdSynchronization() async throws {
         let zoneID = CKRecordZone.ID(zoneName: "MealPlanHousehold-test", ownerName: CKCurrentUserDefaultName)
         let existingShare = CKShare(recordZoneID: zoneID)
         var syncCount = 0
 
         try await MealPlanSharePreparation.run(
-            mode: .invitation,
-            existingShare: { existingShare },
-            synchronize: { syncCount += 1 }
-        )
-
-        #expect(syncCount == 1)
-    }
-
-    @Test func managementSkipsSyncOnlyWhenShareExists() async throws {
-        let zoneID = CKRecordZone.ID(zoneName: "MealPlanHousehold-test", ownerName: CKCurrentUserDefaultName)
-        let existingShare = CKShare(recordZoneID: zoneID)
-        var syncCount = 0
-
-        try await MealPlanSharePreparation.run(
-            mode: .management,
             existingShare: { existingShare },
             synchronize: { syncCount += 1 }
         )
@@ -55,16 +40,42 @@ struct HouseholdCloudSharingServiceTests {
         #expect(syncCount == 0)
     }
 
-    @Test func managementFallsBackToSyncWhenShareIsMissing() async throws {
+    @Test func legacyPublicShareIsHardenedBeforeDirectInvitationExport() {
+        let share = CKShare(recordZoneID: CKRecordZone.ID(zoneName: "MealPlanHousehold-test", ownerName: CKCurrentUserDefaultName))
+
+        #expect(!MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+        share.publicPermission = .readOnly
+        #expect(MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+        share.publicPermission = .readWrite
+        #expect(MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+    }
+
+    @Test func firstInvitationSynchronizesLocalChangesBeforeCreatingShare() async throws {
         var syncCount = 0
 
         try await MealPlanSharePreparation.run(
-            mode: .management,
             existingShare: { nil },
             synchronize: { syncCount += 1 }
         )
 
         #expect(syncCount == 1)
+    }
+
+    @Test func existingShareLookupFailureStopsBeforeSynchronization() async throws {
+        var syncCount = 0
+        let lookupError = CKError(.networkUnavailable)
+
+        do {
+            try await MealPlanSharePreparation.run(
+                existingShare: { throw lookupError },
+                synchronize: { syncCount += 1 }
+            )
+            Issue.record("Expected share lookup failure to be propagated.")
+        } catch let error as CKError {
+            #expect(error.code == .networkUnavailable)
+        }
+
+        #expect(syncCount == 0)
     }
 
     @Test @MainActor func sharedHouseholdFetchWaiterIsBoundedAndAcceptsEarlyCompletion() async throws {
