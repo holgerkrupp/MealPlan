@@ -75,7 +75,7 @@ struct HouseholdMetadataMigrationTests {
 
         #expect(migrated == expected)
         #expect(defaults.data(forKey: key) == nil)
-        #expect(try Data(contentsOf: fileURL) == legacyData)
+        #expect(try JSONDecoder().decode(HouseholdSyncMetadata.self, from: Data(contentsOf: fileURL)) == expected)
 
         // A process killed after the atomic file write but before retiring the
         // defaults key can repeat safely when both decoded states agree.
@@ -83,6 +83,41 @@ struct HouseholdMetadataMigrationTests {
         let resumed = try await writer.load(legacyKey: key, legacyFileURL: legacyFileURL, activeFileURL: fileURL)
         #expect(resumed == expected)
         #expect(defaults.data(forKey: key) == nil)
+    }
+
+    @Test func activeFileDivergencePreservesBothMetadataCopies() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "HouseholdRecordSync.metadata.active"
+        let fileURL = try makeFileURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let legacyFileURL = fileURL.appendingPathExtension("legacy")
+
+        var defaultsMetadata = HouseholdSyncMetadata()
+        defaultsMetadata.pendingFingerprints["dish"] = "defaults-pending"
+        var activeMetadata = HouseholdSyncMetadata()
+        activeMetadata.pendingFingerprints["dish"] = "active-pending"
+        let defaultsData = try JSONEncoder().encode(defaultsMetadata)
+        let activeData = try JSONEncoder().encode(activeMetadata)
+        defaults.set(defaultsData, forKey: key)
+        try activeData.write(to: fileURL, options: .atomic)
+
+        do {
+            _ = try await HouseholdMetadataWriter(suiteName: suite).load(
+                legacyKey: key,
+                legacyFileURL: legacyFileURL,
+                activeFileURL: fileURL
+            )
+            Issue.record("Expected divergent active and defaults metadata to pause migration.")
+        } catch let error as HouseholdRecordSyncError {
+            guard case .metadataCopiesDiverged = error else {
+                Issue.record("Expected a recoverable metadata divergence error, got \(error).")
+                return
+            }
+        }
+
+        #expect(defaults.data(forKey: key) == defaultsData)
+        #expect(try Data(contentsOf: fileURL) == activeData)
     }
 
     @Test func equalStateWithDifferentJSONBytesCompletesMigration() async throws {

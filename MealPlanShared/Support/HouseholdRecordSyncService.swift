@@ -1673,7 +1673,8 @@ actor HouseholdMetadataWriter {
                     sha256: "unavailable"
                 )
             }
-            do { return try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) }
+            let activeMetadata: HouseholdSyncMetadata
+            do { activeMetadata = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) }
             catch {
                 throw HouseholdRecordSyncError.migrationVerificationFailed(
                     stage: .decodeExistingFile,
@@ -1681,6 +1682,14 @@ actor HouseholdMetadataWriter {
                     sha256: HouseholdRecordSyncService.digest(data)
                 )
             }
+            try retireEqualLegacyCopies(
+                legacyKey: legacyKey,
+                legacyFileURL: legacyFileURL,
+                activeFileURL: activeFileURL,
+                activeData: data,
+                activeMetadata: activeMetadata
+            )
+            return activeMetadata
         }
 
         let legacyDefaultsData = defaults.data(forKey: legacyKey)
@@ -1736,7 +1745,7 @@ actor HouseholdMetadataWriter {
         catch {
             throw HouseholdRecordSyncError.migrationVerificationFailed(stage: .stageWrite, bytes: 0, sha256: "unavailable")
         }
-        do { try data.write(to: url, options: .atomic) }
+        do { try writeDurably(data, to: url) }
         catch {
             throw HouseholdRecordSyncError.migrationVerificationFailed(
                 stage: .stageWrite,
@@ -1772,9 +1781,111 @@ actor HouseholdMetadataWriter {
         return verified
     }
 
+    private func retireEqualLegacyCopies(
+        legacyKey: String,
+        legacyFileURL: URL,
+        activeFileURL: URL,
+        activeData: Data,
+        activeMetadata: HouseholdSyncMetadata
+    ) throws {
+        let legacyDefaultsData = defaults.data(forKey: legacyKey)
+        let legacyFileData: Data?
+        do {
+            legacyFileData = FileManager.default.fileExists(atPath: legacyFileURL.path)
+                ? try Data(contentsOf: legacyFileURL)
+                : nil
+        } catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .readExistingFile,
+                bytes: 0,
+                sha256: "unavailable"
+            )
+        }
+
+        let resolution = try HouseholdSyncMetadataMigrationResolution.resolve(
+            legacyData: legacyDefaultsData,
+            fileData: legacyFileData
+        )
+        let shouldRetireDefaults: Bool
+        switch resolution {
+        case .empty:
+            return
+        case .migrate(let legacyMetadata, _):
+            guard legacyMetadata == activeMetadata else {
+                throw metadataCopiesDiverged(
+                    legacyData: legacyDefaultsData ?? Data(),
+                    activeData: activeData,
+                    legacyMetadata: legacyMetadata,
+                    activeMetadata: activeMetadata
+                )
+            }
+            shouldRetireDefaults = true
+        case .existing(let legacyMetadata, let retireLegacy):
+            guard legacyMetadata == activeMetadata else {
+                let encodedLegacy = try JSONEncoder().encode(legacyMetadata)
+                throw metadataCopiesDiverged(
+                    legacyData: legacyDefaultsData ?? encodedLegacy,
+                    activeData: activeData,
+                    legacyMetadata: legacyMetadata,
+                    activeMetadata: activeMetadata
+                )
+            }
+            shouldRetireDefaults = retireLegacy
+        }
+
+        // Re-sync on restart too: the active file may be present because the
+        // previous process ended after rename but before its directory entry
+        // reached durable storage.
+        do { try synchronizeFileAndDirectory(at: activeFileURL) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: activeData.count,
+                sha256: HouseholdRecordSyncService.digest(activeData)
+            )
+        }
+        if shouldRetireDefaults { defaults.removeObject(forKey: legacyKey) }
+    }
+
+    private func metadataCopiesDiverged(
+        legacyData: Data,
+        activeData: Data,
+        legacyMetadata: HouseholdSyncMetadata,
+        activeMetadata: HouseholdSyncMetadata
+    ) -> HouseholdRecordSyncError {
+        HouseholdRecordSyncError.metadataCopiesDiverged(
+            legacyBytes: legacyData.count,
+            fileBytes: activeData.count,
+            legacyHash: HouseholdRecordSyncService.digest(legacyData),
+            fileHash: HouseholdRecordSyncService.digest(activeData),
+            legacyPending: legacyMetadata.pendingFingerprints.count,
+            filePending: activeMetadata.pendingFingerprints.count,
+            legacyTombstones: legacyMetadata.tombstones.count,
+            fileTombstones: activeMetadata.tombstones.count
+        )
+    }
+
+    private func writeDurably(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        try synchronizeFileAndDirectory(at: url)
+    }
+
+    private func synchronizeFileAndDirectory(at url: URL) throws {
+        let file = try FileHandle(forWritingTo: url)
+        try file.synchronize()
+        try file.close()
+
+        let directoryFD = open(url.deletingLastPathComponent().path, O_RDONLY)
+        guard directoryFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let result = fsync(directoryFD)
+        let syncError = errno
+        close(directoryFD)
+        guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: syncError) ?? .EIO) }
+    }
+
     func write(_ metadata: HouseholdSyncMetadata, to url: URL) throws -> Int {
         let data = try JSONEncoder().encode(metadata)
-        try data.write(to: url, options: .atomic)
+        try writeDurably(data, to: url)
         let stored = try Data(contentsOf: url)
         let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
         guard stored == data, verified == metadata else {
