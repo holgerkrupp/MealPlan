@@ -69,3 +69,31 @@ devices.
   durable-cursor recovery, and performance evidence.
 
 No claim of Production sharing completion is made by this audit.
+
+## Signed-device Production test matrix
+
+Run with a TestFlight or equivalently signed build using the Production
+CloudKit environment, two different Apple Accounts, and physical iOS/iPadOS
+and macOS devices. Attach build numbers, device/OS versions, account roles,
+steps, logs with private identifiers removed, and observed results for every
+case. Unit and simulator tests do not satisfy these cases.
+
+| # | Scenario | Result | Evidence / notes |
+| --- | --- | --- | --- |
+| 1 | Owner on iPhone; participant on another iPhone | Not run | Requires two Production accounts and devices. |
+| 2 | Owner on iPhone and Mac using the same Apple Account | Not run | Verify private-database household adoption and convergence. |
+| 3 | Existing shared household before updating either device | Not run | Capture existing zone, record, and share identity before upgrade. |
+| 4 | Owner updated first; participant remains on the older published version | Not run | Verify forward/backward compatibility during staged rollout. |
+| 5 | Participant updated first; owner remains on the older published version | Not run | Verify forward/backward compatibility during staged rollout. |
+| 6 | Both devices updated | Not run | Verify household records converge after both upgrades. |
+| 7 | New, accepted, duplicate-delivery, and expired invitations | Not run | Record each invitation state and retry outcome. |
+| 8 | Existing share and member survive upgrade without re-invitation | Not run | Verify stable CKShare identity and participant access. |
+| 9 | Owner opens their own share link on another device | Not run | Verify private-database adoption rather than shared-database acceptance. |
+| 10 | Owner, editor, and view-only permissions; role changes | Not run | Check app, widget, Share Extension, App Intents, and Watch writes. |
+| 11 | Offline edits on both sides followed by reconnection | Not run | Include edits to shared and local-only data. |
+| 12 | Simultaneous recipe, meal-position, and shopping-check changes | Not run | Record conflict outcome and duplicate-write behavior. |
+| 13 | Share removal, confirmed revocation, and temporary CloudKit failure | Not run | Confirm only authoritative revocation enters recovery. |
+| 14 | Interrupted sync, app termination, and device restart | Not run | Verify state, journal, deletions, assets, and retry recovery. |
+| 15 | Large household with many recipes, images, and historical entries | Not run | Record sync duration, CPU, memory, and battery/energy impact. |
+| 16 | Development versus Production state isolation | Not run | Verify no metadata, state, or share crosses environments. |
+| 17 | Source household preserved when a join is canceled or fails | Not run | Verify all records and images remain recoverable after restart. |
