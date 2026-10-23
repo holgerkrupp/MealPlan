@@ -7,6 +7,10 @@ import UIKit
 private enum AppIconOption: String, CaseIterable, Identifiable, Hashable {
     case pumpkin = "Pumpkin"
     case classic = "AppIcon"
+    case avocado = "Avocado"
+    case cinnamon = "Cinnamon"
+    case lemon = "Lemon"
+    case strawberry = "Strawberry"
 
     var id: String { rawValue }
 
@@ -21,6 +25,14 @@ private enum AppIconOption: String, CaseIterable, Identifiable, Hashable {
             String(localized: "Pumpkin")
         case .classic:
             String(localized: "Classic")
+        case .avocado:
+            String(localized: "Avocado")
+        case .cinnamon:
+            String(localized: "Cinnamon")
+        case .lemon:
+            String(localized: "Lemon")
+        case .strawberry:
+            String(localized: "Strawberry")
         }
     }
 

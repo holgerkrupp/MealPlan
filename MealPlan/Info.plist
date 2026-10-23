@@ -49,10 +49,10 @@
 				<key>CFBundleIconName</key>
 				<string>Avocado</string>
 			</dict>
-			<key>Cinamon</key>
+			<key>Cinnamon</key>
 			<dict>
 				<key>CFBundleIconName</key>
-				<string>Cinamon</string>
+				<string>Cinnamon</string>
 			</dict>
 			<key>Lemon</key>
 			<dict>
