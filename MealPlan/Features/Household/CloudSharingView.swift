@@ -3,12 +3,14 @@ import CollaborationCloudKit
 import CollaborationUI
 import SwiftData
 import SwiftUI
+import os
 #if os(macOS)
 import AppKit
 #endif
 
 @MainActor
 struct HouseholdSharingView: View {
+    private static let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "HouseholdSharing")
     @Environment(\.dismiss) private var dismiss
     @Environment(\.modelContext) private var modelContext
 
@@ -19,6 +21,9 @@ struct HouseholdSharingView: View {
     @State private var managedShare: ManagedShareSheet?
     @State private var isLoading = true
     @State private var isPreparingManagement = false
+    @State private var isPreparingInvitation = false
+    @State private var invitationPreparationTask: Task<Void, Never>?
+    @State private var invitationPreparationID: UUID?
     @State private var errorMessage: String?
     #if os(macOS)
     @State private var macSharingPresenter: NativeMacCloudSharingPresenter?
@@ -67,6 +72,7 @@ struct HouseholdSharingView: View {
         .frame(minWidth: 420, minHeight: 420)
         #endif
         .task { await loadSharing() }
+        .onDisappear { cancelInvitationPreparation() }
         .onChange(of: household.cloudKitShareIdentifier) {
             Task { await refreshShare() }
         }
@@ -113,29 +119,43 @@ struct HouseholdSharingView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
-                if share != nil {
+                if let existingShare = share {
                     manageSharingButton()
-                    CloudKitShareLink(
-                        rootID: household.uuid.uuidString,
-                        title: household.name,
-                        container: sharing.cloudKitContainer,
-                        sharing: sharing
-                    ) {
+                    CloudKitShareLink(share: existingShare, container: sharing.cloudKitContainer, title: household.name) {
                         Label(String(localized: "Invite or share again"), systemImage: "person.crop.circle.badge.plus")
                             .frame(maxWidth: .infinity)
                     }
                     .buttonStyle(.bordered)
+                    .simultaneousGesture(TapGesture().onEnded {
+                        Self.logger.info("Existing-share invitation export requested.")
+                    })
+                    Text(String(localized: "If an invitation can’t be sent, open Manage access and choose Copy Link."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
-                    CloudKitShareLink(
-                        rootID: household.uuid.uuidString,
-                        title: household.name,
-                        container: sharing.cloudKitContainer,
-                        sharing: sharing
-                    ) {
-                        Label(String(localized: "Share household"), systemImage: "person.crop.circle.badge.plus")
-                            .frame(maxWidth: .infinity)
+                    if isPreparingInvitation {
+                        VStack(spacing: 10) {
+                            ProgressView(String(localized: "Preparing household invitation…"))
+                            Button(String(localized: "Cancel"), role: .cancel) {
+                                cancelInvitationPreparation()
+                            }
+                            .buttonStyle(.bordered)
+                        }
+                        .frame(maxWidth: .infinity)
+                    } else {
+                        Button {
+                            beginInvitationPreparation(using: sharing)
+                        } label: {
+                            Label(String(localized: "Share household"), systemImage: "person.crop.circle.badge.plus")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.borderedProminent)
                     }
-                    .buttonStyle(.borderedProminent)
+                    Text(String(localized: "MealPlan will prepare the household share first. You can then choose Messages, Mail, or another sharing option."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
 
                 VStack(alignment: .leading, spacing: 12) {
@@ -229,6 +249,7 @@ struct HouseholdSharingView: View {
             let service = try await MealPlanCloudSharing.service(for: household, context: modelContext)
             sharing = service
             share = try await service.existingShare(rootID: household.uuid.uuidString)
+            Self.logger.info("Loaded household share state (existing: \(self.share != nil, privacy: .public)).")
             errorMessage = nil
         } catch {
             if let localized = error as? LocalizedError,
@@ -239,6 +260,57 @@ struct HouseholdSharingView: View {
             }
         }
         isLoading = false
+    }
+
+    private func beginInvitationPreparation(using service: CloudKitShareLifecycleService) {
+        guard !isPreparingInvitation else { return }
+        Self.logger.info("Invitation preparation requested.")
+        isPreparingInvitation = true
+        errorMessage = nil
+        let preparationID = UUID()
+        invitationPreparationID = preparationID
+        invitationPreparationTask = Task { @MainActor in
+            defer {
+                if invitationPreparationID == preparationID {
+                    isPreparingInvitation = false
+                    invitationPreparationTask = nil
+                    invitationPreparationID = nil
+                }
+            }
+            do {
+                Self.logger.info("Starting bounded first-share preparation.")
+                let prepared = try await service.prepareShare(
+                    rootID: household.uuid.uuidString,
+                    waitTimeout: .seconds(45)
+                )
+                try Task.checkCancellation()
+                guard invitationPreparationID == preparationID else { return }
+                share = prepared
+                Self.logger.info("Household share preparation completed.")
+            } catch is CancellationError {
+                Self.logger.info("Invitation preparation wait canceled by user.")
+                if invitationPreparationID == preparationID {
+                    errorMessage = String(localized: "Invitation preparation was canceled. You can try again; any share created in the background will be reused.")
+                }
+            } catch {
+                Self.logger.error("Household share preparation failed: \(String(describing: error), privacy: .private)")
+                guard invitationPreparationID == preparationID else { return }
+                if (error as? CloudKitShareBackendError) == .preparationWaitTimedOut {
+                    errorMessage = String(localized: "Preparing the household share took too long. Check your connection and try again. If the share was created, MealPlan will reuse it.")
+                } else {
+                    errorMessage = "\(String(localized: "MealPlan couldn’t prepare the household invitation.")) \(error.localizedDescription)"
+                }
+            }
+        }
+    }
+
+    private func cancelInvitationPreparation() {
+        guard let invitationPreparationTask else { return }
+        Self.logger.info("Canceling invitation preparation wait.")
+        invitationPreparationTask.cancel()
+        self.invitationPreparationTask = nil
+        invitationPreparationID = nil
+        isPreparingInvitation = false
     }
 
     private func refreshShare() async {
