@@ -85,7 +85,7 @@ struct HouseholdMetadataMigrationTests {
         #expect(defaults.data(forKey: key) == nil)
     }
 
-    @Test func activeFileDivergencePreservesBothMetadataCopies() async throws {
+    @Test func activeFileDivergenceArchivesOlderDefaultsAndResumes() async throws {
         let (defaults, suite) = try makeDefaults()
         defer { defaults.removePersistentDomain(forName: suite) }
         let key = "HouseholdRecordSync.metadata.active"
@@ -102,22 +102,27 @@ struct HouseholdMetadataMigrationTests {
         defaults.set(defaultsData, forKey: key)
         try activeData.write(to: fileURL, options: .atomic)
 
-        do {
-            _ = try await HouseholdMetadataWriter(suiteName: suite).load(
-                legacyKey: key,
-                legacyFileURL: legacyFileURL,
-                activeFileURL: fileURL
-            )
-            Issue.record("Expected divergent active and defaults metadata to pause migration.")
-        } catch let error as HouseholdRecordSyncError {
-            guard case .metadataCopiesDiverged = error else {
-                Issue.record("Expected a recoverable metadata divergence error, got \(error).")
-                return
-            }
-        }
-
-        #expect(defaults.data(forKey: key) == defaultsData)
+        let loaded = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: key,
+            legacyFileURL: legacyFileURL,
+            activeFileURL: fileURL
+        )
+        #expect(loaded == activeMetadata)
+        #expect(defaults.data(forKey: key) == nil)
         #expect(try Data(contentsOf: fileURL) == activeData)
+        let recoveryDirectory = fileURL.deletingLastPathComponent().appending(path: "Recovery", directoryHint: .isDirectory)
+        let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
+        #expect(recoveryFiles.count == 1)
+        #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsData)
+
+        defaults.set(defaultsData, forKey: key)
+        let resumed = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: key,
+            legacyFileURL: legacyFileURL,
+            activeFileURL: fileURL
+        )
+        #expect(resumed == activeMetadata)
+        #expect(defaults.data(forKey: key) == nil)
     }
 
     @Test func equalStateWithDifferentJSONBytesCompletesMigration() async throws {

@@ -7,6 +7,33 @@ import Testing
 @testable import MealPlan
 
 struct MealPlanCloudKitStateStoreTests {
+    @Test func fetchedAssetBytesMustBeReadableAndNonempty() throws {
+        #expect(try HouseholdRecordSyncService.readAssetData(nil) == nil)
+
+        let root = FileManager.default.temporaryDirectory.appending(path: "HouseholdAssetTest-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let assetURL = root.appendingPathExtension("bin")
+        let bytes = Data([0x10, 0x20, 0x30])
+        try bytes.write(to: assetURL)
+        #expect(try HouseholdRecordSyncService.readAssetData(CKAsset(fileURL: assetURL)) == bytes)
+
+        do {
+            _ = try HouseholdRecordSyncService.readAssetData(CKAsset(fileURL: root))
+            Issue.record("Expected a missing/unreadable asset to fail.")
+        } catch HouseholdRecordSyncError.requiredAssetUnavailable {
+            // Fetch application must fail before mutating the household.
+        }
+
+        let emptyURL = root.appendingPathExtension("empty")
+        try Data().write(to: emptyURL)
+        do {
+            _ = try HouseholdRecordSyncService.readAssetData(CKAsset(fileURL: emptyURL))
+            Issue.record("Expected an empty asset to fail.")
+        } catch HouseholdRecordSyncError.requiredAssetUnavailable {
+            // Zero bytes cannot replace the image content associated with this record.
+        }
+    }
+
     @Test func stateDefaultsMigrationCanResumeAfterFileWriteFailure() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
@@ -86,7 +113,7 @@ struct MealPlanCloudKitStateStoreTests {
         }
     }
 
-    @Test func divergentStateCopiesRemainAvailableThroughRealLoadPath() async throws {
+    @Test func divergentStateCopiesArchiveOldDefaultsAndResumeThroughRealLoadPath() async throws {
         let fixture = try Fixture()
         defer { fixture.cleanUp() }
         let fileCopy = Data([0x01, 0x02])
@@ -99,14 +126,47 @@ struct MealPlanCloudKitStateStoreTests {
         )
         try fileCopy.write(to: fixture.stateURL(scope: .private), options: .atomic)
 
+        let recovered = try await fixture.makeStore().loadState(for: .private)
+        #expect(recovered == fileCopy)
+        #expect(fixture.defaults.data(forKey: key) == nil)
+        #expect(try Data(contentsOf: fixture.stateURL(scope: .private)) == fileCopy)
+        let recoveryDirectory = fixture.root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
+        let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
+        #expect(recoveryFiles.count == 1)
+        #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsCopy)
+    }
+
+    @Test func interruptedDivergenceArchiveKeepsBothCopiesAndRetryCompletes() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let fileCopy = Data([0x31, 0x32])
+        let defaultsCopy = Data([0x41, 0x42])
+        let key = fixture.stateKey(scope: .private)
+        fixture.defaults.set(defaultsCopy, forKey: key)
+        try FileManager.default.createDirectory(
+            at: fixture.stateURL(scope: .private).deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try fileCopy.write(to: fixture.stateURL(scope: .private), options: .atomic)
+
         do {
-            _ = try await fixture.makeStore().loadState(for: .private)
-            Issue.record("Expected divergent copies to stop the load.")
-        } catch MealPlanCloudKitStateStoreError.stateCopiesDiverged {
-            // Neither copy is modified or retired.
+            _ = try await fixture.makeStore { point in
+                if point == .stateFileWrite { throw InjectedFault.fileWrite }
+            }.loadState(for: .private)
+            Issue.record("Expected interrupted recovery-copy write.")
+        } catch InjectedFault.fileWrite {
+            // Neither source is retired until the recovery archive is committed.
         }
         #expect(fixture.defaults.data(forKey: key) == defaultsCopy)
         #expect(try Data(contentsOf: fixture.stateURL(scope: .private)) == fileCopy)
+
+        let recovered = try await fixture.makeStore().loadState(for: .private)
+        #expect(recovered == fileCopy)
+        #expect(fixture.defaults.data(forKey: key) == nil)
+        let recoveryDirectory = fixture.root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
+        let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
+        #expect(recoveryFiles.count == 1)
+        #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsCopy)
     }
 
     @Test func journalMigrationRetainsCursorPendingSavesDeletesAndRecordFields() async throws {

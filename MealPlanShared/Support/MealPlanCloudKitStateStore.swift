@@ -47,16 +47,6 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         case journalDefaultsRetirement
     }
 
-    /// A file copy is committed before its UserDefaults copy is retired. If
-    /// both exist, only identical bytes prove that this was an interrupted
-    /// retirement. A mismatch may contain a newer engine token or queued
-    /// operation, so leave both copies intact and stop instead of guessing.
-    static func verifyInterruptedStateRetirement(fileData: Data, defaultsData: Data) throws {
-        guard fileData == defaultsData else {
-            throw MealPlanCloudKitStateStoreError.stateCopiesDiverged
-        }
-    }
-
     private let defaults: UserDefaults
     private let fileManager = FileManager.default
     private let storageRootURL: URL?
@@ -95,10 +85,8 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
             let url = try fileURL(kind: "state", scope: scope)
             if fileManager.fileExists(atPath: url.path) {
                 if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
-                    try Self.verifyInterruptedStateRetirement(
-                        fileData: Data(contentsOf: url),
-                        defaultsData: defaultsData
-                    )
+                    let fileData = try Data(contentsOf: url)
+                    try reconcileCommittedFile(fileData, defaultsData: defaultsData, kind: "state", scope: scope)
                     try synchronizeFileAndDirectory(at: url, injectFaults: false)
                 }
                 try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
@@ -118,7 +106,8 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         guard let data = defaults.data(forKey: legacyStateKey) else { return false }
         let url = try fileURL(kind: "state", scope: activeScope)
         if fileManager.fileExists(atPath: url.path) {
-            try Self.verifyInterruptedStateRetirement(fileData: Data(contentsOf: url), defaultsData: data)
+            let fileData = try Data(contentsOf: url)
+            try reconcileCommittedFile(fileData, defaultsData: data, kind: "state", scope: activeScope)
             try synchronizeFileAndDirectory(at: url, injectFaults: false)
         } else {
             try writeVerified(data, to: url, at: .stateFileWrite)
@@ -133,11 +122,11 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         if fileManager.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
             if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
-                try Self.verifyInterruptedStateRetirement(fileData: data, defaultsData: defaultsData)
+                try reconcileCommittedFile(data, defaultsData: defaultsData, kind: "state", scope: scope)
                 try synchronizeFileAndDirectory(at: url, injectFaults: false)
             }
             if scope == activeScope, let legacyData = defaults.data(forKey: legacyStateKey) {
-                try Self.verifyInterruptedStateRetirement(fileData: data, defaultsData: legacyData)
+                try reconcileCommittedFile(data, defaultsData: legacyData, kind: "state", scope: scope)
                 try synchronizeFileAndDirectory(at: url, injectFaults: false)
             }
             try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
@@ -268,7 +257,7 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
             let fileData = try Data(contentsOf: url)
             let journal = try JSONDecoder().decode(Journal.self, from: fileData)
             if let defaultsData = defaults.data(forKey: journalKey(for: scope)) {
-                try Self.verifyInterruptedStateRetirement(fileData: fileData, defaultsData: defaultsData)
+                try reconcileCommittedFile(fileData, defaultsData: defaultsData, kind: "journal", scope: scope)
                 try synchronizeFileAndDirectory(at: url, injectFaults: false)
             }
             try retireDefaultsValue(forKey: journalKey(for: scope), at: .journalDefaultsRetirement)
@@ -312,21 +301,62 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         guard stored == data else { throw MealPlanCloudKitStateStoreError.verificationFailed }
     }
 
+    /// The new file is the commit point: all writers fsync it and its parent
+    /// directory before retiring the old defaults value. If termination lands
+    /// between those steps, archive the older bytes durably, then continue
+    /// from the committed file instead of blocking every future sync attempt.
+    private func reconcileCommittedFile(
+        _ fileData: Data,
+        defaultsData: Data,
+        kind: String,
+        scope: CollaborationDatabaseScope
+    ) throws {
+        guard fileData != defaultsData else { return }
+        let backupURL = try recoveryFileURL(kind: kind, scope: scope, data: defaultsData)
+        if fileManager.fileExists(atPath: backupURL.path) {
+            let existing = try Data(contentsOf: backupURL)
+            guard existing == defaultsData else { throw MealPlanCloudKitStateStoreError.verificationFailed }
+            try synchronizeFileAndDirectory(at: backupURL, injectFaults: false)
+        } else {
+            try writeVerified(defaultsData, to: backupURL, at: kind == "state" ? .stateFileWrite : .journalFileWrite)
+        }
+        logger.error("Archived a superseded \(kind, privacy: .public) defaults copy (bytes=\(defaultsData.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
+    }
+
+    private func recoveryFileURL(kind: String, scope: CollaborationDatabaseScope, data: Data) throws -> URL {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
+        }
+        let directory = root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        try synchronizeDirectory(at: directory.deletingLastPathComponent())
+        let material = "\(environment.rawValue)|\(accountPartitionIdentifier)|\(scope.rawValue)|\(kind)|\(Self.digest(data))"
+        let nameDigest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+        let fileExtension = kind == "state" ? "bin" : "json"
+        return directory.appending(path: "\(kind)-recovery-v1-\(nameDigest).\(fileExtension)")
+    }
+
     private func synchronizeFileAndDirectory(at url: URL, injectFaults: Bool) throws {
         let file = try FileHandle(forWritingTo: url)
         try file.synchronize()
         try file.close()
         if injectFaults { try migrationFaultInjector(.afterFileSynchronization) }
 
-        let directoryFD = open(url.deletingLastPathComponent().path, O_RDONLY)
-        guard directoryFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
-        let directorySyncResult = fsync(directoryFD)
-        let directorySyncError = errno
-        close(directoryFD)
-        guard directorySyncResult == 0 else {
-            throw POSIXError(POSIXErrorCode(rawValue: directorySyncError) ?? .EIO)
-        }
+        try synchronizeDirectory(at: url.deletingLastPathComponent())
         if injectFaults { try migrationFaultInjector(.afterDirectorySynchronization) }
+    }
+
+    private func synchronizeDirectory(at url: URL) throws {
+        let directoryFD = open(url.path, O_RDONLY)
+        guard directoryFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let result = fsync(directoryFD)
+        let syncError = errno
+        close(directoryFD)
+        guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: syncError) ?? .EIO) }
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     private func retireDefaultsValue(forKey key: String, at faultPoint: MigrationFaultPoint) throws {
@@ -442,5 +472,4 @@ enum MealPlanCloudKitStateStoreError: Error {
     case unsupportedRecordField(String)
     case appGroupUnavailable
     case verificationFailed
-    case stateCopiesDiverged
 }
