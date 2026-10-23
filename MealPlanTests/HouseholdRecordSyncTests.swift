@@ -451,6 +451,26 @@ struct HouseholdRecordSyncTests {
         #expect(development != production)
     }
 
+    @Test func interruptedEngineStateRetirementRequiresIdenticalCopies() throws {
+        let committed = Data([0x01, 0x02, 0x03, 0x04])
+        try MealPlanCloudKitStateStore.verifyInterruptedStateRetirement(
+            fileData: committed,
+            defaultsData: committed
+        )
+
+        let possiblyNewerDefaultsCopy = Data([0x01, 0x02, 0x03, 0x05])
+        do {
+            try MealPlanCloudKitStateStore.verifyInterruptedStateRetirement(
+                fileData: committed,
+                defaultsData: possiblyNewerDefaultsCopy
+            )
+            Issue.record("Expected divergent engine-state copies to fail closed.")
+        } catch MealPlanCloudKitStateStoreError.stateCopiesDiverged {
+            // Both source copies remain available for recovery.
+        }
+        #expect(committed != possiblyNewerDefaultsCopy)
+    }
+
     @Test func planMoveAndContentEditMergeIndependently() {
         let earlier = Date(timeIntervalSince1970: 100)
         let later = Date(timeIntervalSince1970: 200)

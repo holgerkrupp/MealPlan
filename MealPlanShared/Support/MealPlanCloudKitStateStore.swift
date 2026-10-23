@@ -37,6 +37,16 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         case asset(URL)
     }
 
+    /// A file copy is committed before its UserDefaults copy is retired. If
+    /// both exist, only identical bytes prove that this was an interrupted
+    /// retirement. A mismatch may contain a newer engine token or queued
+    /// operation, so leave both copies intact and stop instead of guessing.
+    static func verifyInterruptedStateRetirement(fileData: Data, defaultsData: Data) throws {
+        guard fileData == defaultsData else {
+            throw MealPlanCloudKitStateStoreError.stateCopiesDiverged
+        }
+    }
+
     private let defaults: UserDefaults
     private let fileManager = FileManager.default
     private var activeLocator: HouseholdShareLocator
@@ -67,6 +77,12 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         for scope in [CollaborationDatabaseScope.private, .shared] {
             let url = try fileURL(kind: "state", scope: scope)
             if fileManager.fileExists(atPath: url.path) {
+                if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
+                    try Self.verifyInterruptedStateRetirement(
+                        fileData: Data(contentsOf: url),
+                        defaultsData: defaultsData
+                    )
+                }
                 defaults.removeObject(forKey: stateKey(for: scope))
             } else if let data = defaults.data(forKey: stateKey(for: scope)) {
                 try writeVerified(data, to: url)
@@ -84,7 +100,7 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         guard let data = defaults.data(forKey: legacyStateKey) else { return false }
         let url = try fileURL(kind: "state", scope: activeScope)
         if fileManager.fileExists(atPath: url.path) {
-            guard try Data(contentsOf: url) == data else { return false }
+            try Self.verifyInterruptedStateRetirement(fileData: Data(contentsOf: url), defaultsData: data)
         } else {
             try writeVerified(data, to: url)
         }
@@ -97,6 +113,9 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         let url = try fileURL(kind: "state", scope: scope)
         if fileManager.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
+            if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
+                try Self.verifyInterruptedStateRetirement(fileData: data, defaultsData: defaultsData)
+            }
             defaults.removeObject(forKey: stateKey(for: scope))
             if scope == activeScope { defaults.removeObject(forKey: legacyStateKey) }
             return data
@@ -365,4 +384,5 @@ enum MealPlanCloudKitStateStoreError: Error {
     case unsupportedRecordField(String)
     case appGroupUnavailable
     case verificationFailed
+    case stateCopiesDiverged
 }
