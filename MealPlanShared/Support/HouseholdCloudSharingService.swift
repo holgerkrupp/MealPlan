@@ -317,6 +317,12 @@ enum HouseholdCloudSharingService {
                 progress: progress
             )
         }
+        defer {
+            // The lifecycle service is reused. Do not retain this join's
+            // waiter/context or let a later fetch satisfy a stale callback.
+            sharing.onSharedDatabaseFetchResult = nil
+            sharing.onShareAccepted = nil
+        }
         do {
             try await sharing.accept(metadata)
         } catch {
@@ -335,19 +341,31 @@ enum HouseholdCloudSharingService {
             throw error
         }
         guard let importedHousehold else { throw HouseholdSharingError.missingRootRecord }
-        try await fetchWaiter.wait(timeout: sharedHouseholdFetchTimeout)
-        // The app delegate reports apply failures through `lastError` instead
-        // of throwing through CloudKitSyncEnginePool. Treat either condition
-        // as an unsuccessful prerequisite and keep source roots untouched.
-        if let applyError = HouseholdRecordSyncService.shared.lastError {
-            throw applyError
-        }
-        try finalizeAcceptedHousehold(
+        try await finishAcceptedHouseholdAfterSharedFetch(
+            fetchWaiter,
             importedHousehold.household,
             mergeRecipes: mergeRecipes,
             context: context
         )
         return importedHousehold
+    }
+
+    /// Keeps source roots in place unless CloudKitCollaborationKit's first
+    /// shared-zone fetch completed and the host adapter applied it cleanly.
+    /// A package fetch result alone is insufficient because the sync engine
+    /// delegate reports host apply failures through `lastError`.
+    static func finishAcceptedHouseholdAfterSharedFetch(
+        _ fetchWaiter: SharedHouseholdFetchWaiter,
+        _ household: Household,
+        mergeRecipes: Bool,
+        context: ModelContext,
+        timeout: Duration = sharedHouseholdFetchTimeout
+    ) async throws {
+        try await fetchWaiter.wait(timeout: timeout)
+        if let applyError = HouseholdRecordSyncService.shared.lastError {
+            throw applyError
+        }
+        try finalizeAcceptedHousehold(household, mergeRecipes: mergeRecipes, context: context)
     }
 
     private static func importAcceptedShare(

@@ -1,6 +1,8 @@
 import Testing
 import CloudKit
 import Foundation
+import SwiftData
+import CollaborationCore
 #if canImport(UIKit)
 import UIKit
 #endif
@@ -39,6 +41,45 @@ struct HouseholdCloudSharingServiceTests {
         } catch {
             Issue.record("Unexpected fetch waiter error: \(error)")
         }
+    }
+
+    @Test @MainActor func packageFetchFailureRetainsIncomingAndSourceHouseholdRoots() async throws {
+        try await assertFailedJoinRetainsAllRoots(timeout: false)
+    }
+
+    @Test @MainActor func packageFetchTimeoutRetainsIncomingAndSourceHouseholdRoots() async throws {
+        try await assertFailedJoinRetainsAllRoots(timeout: true)
+    }
+
+    private func assertFailedJoinRetainsAllRoots(timeout: Bool) async throws {
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let context = container.mainContext
+        let firstSource = Household(name: "First source")
+        let secondSource = Household(name: "Second source")
+        let incoming = Household(name: "Incoming")
+        context.insert(firstSource)
+        context.insert(secondSource)
+        context.insert(incoming)
+        try context.save()
+
+        let waiter = SharedHouseholdFetchWaiter()
+        if !timeout { waiter.complete(.offline) }
+        do {
+            try await HouseholdCloudSharingService.finishAcceptedHouseholdAfterSharedFetch(
+                waiter,
+                incoming,
+                mergeRecipes: false,
+                context: context,
+                timeout: .milliseconds(1)
+            )
+            Issue.record("Expected the failed shared-zone fetch to keep source roots.")
+        } catch {
+            // A fetch failure or timeout must not reach the destructive finalize step.
+        }
+
+        let retainedIDs = Set(try context.fetch(FetchDescriptor<Household>()).map(\.uuid))
+        #expect(retainedIDs == Set([firstSource.uuid, secondSource.uuid, incoming.uuid]))
     }
 
     @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {
