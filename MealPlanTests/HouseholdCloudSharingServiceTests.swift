@@ -51,6 +51,35 @@ struct HouseholdCloudSharingServiceTests {
         try await assertFailedJoinRetainsAllRoots(timeout: true)
     }
 
+    @Test func bootstrapAssetReadsFailClosedForMissingEmptyAndUnreadableFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-bootstrap-assets-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        #expect(try HouseholdCloudBootstrapService.readAssetData(nil) == nil)
+
+        let validURL = directory.appending(path: "valid.png")
+        let validData = Data([0x89, 0x50, 0x4E, 0x47])
+        try validData.write(to: validURL)
+        #expect(try HouseholdCloudBootstrapService.readAssetData(CKAsset(fileURL: validURL)) == validData)
+
+        let emptyURL = directory.appending(path: "empty.png")
+        try Data().write(to: emptyURL)
+        #expect(throws: HouseholdRecoveryError.self) {
+            try HouseholdCloudBootstrapService.readAssetData(CKAsset(fileURL: emptyURL))
+        }
+
+        let missingURL = directory.appending(path: "missing.png")
+        #expect(throws: HouseholdRecoveryError.self) {
+            try HouseholdCloudBootstrapService.readAssetData(CKAsset(fileURL: missingURL))
+        }
+
+        #expect(throws: HouseholdRecoveryError.self) {
+            try HouseholdCloudBootstrapService.readAssetData(CKAsset(fileURL: directory))
+        }
+    }
+
     private func assertFailedJoinRetainsAllRoots(timeout: Bool) async throws {
         let (container, storeDirectory) = try makeTestModelContainer()
         defer { try? FileManager.default.removeItem(at: storeDirectory) }
@@ -85,6 +114,9 @@ struct HouseholdCloudSharingServiceTests {
     @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {
         let household = Household(name: String(localized: "Family"))
         #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))
+        household.unlockedByPurchase = true
+        #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))
+        household.unlockedByPurchase = false
 
         household.didSeedPantryStaples = true
         household.ingredients = PantryStaples.defaultSeeds.map { seed in

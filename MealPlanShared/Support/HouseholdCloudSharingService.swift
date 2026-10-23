@@ -231,7 +231,6 @@ enum HouseholdCloudSharingService {
             || household.energyUnitRaw != EnergyUnit.kilocalories.rawValue
             || household.localeIdentifier != Locale.current.identifier
             || household.ingredientMergeAuditData != nil
-            || household.unlockedByPurchase
             || household.bringListUuid != nil
             || household.bringListName != nil
             || !household.bringShadowKeys.isEmpty
