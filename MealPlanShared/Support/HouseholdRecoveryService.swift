@@ -1,4 +1,6 @@
 import CloudKit
+import CryptoKit
+import Darwin
 import Foundation
 import SwiftData
 
@@ -214,6 +216,13 @@ struct HouseholdSafetyBackup: Identifiable {
     var backup: MealPlanBackup
     var shareIdentifier: String?
 
+    /// A detached archive restores under a fresh household UUID, so restoring
+    /// local data cannot write into the old or revoked CloudKit zone.
+    var isDetachedArchive: Bool { url.lastPathComponent.contains("-archive-") }
+    var detachedHouseholdUUID: UUID? {
+        isDetachedArchive ? HouseholdRecoveryService.detachedHouseholdUUID(for: url) : nil
+    }
+
     var id: URL { url }
 }
 
@@ -374,9 +383,10 @@ enum HouseholdRecoveryService {
     private static func validate(
         _ household: Household,
         matching backup: MealPlanBackup,
-        context: ModelContext
+        context: ModelContext,
+        expectedHouseholdUUID: UUID? = nil
     ) throws {
-        guard household.uuid == backup.household.uuid,
+        guard household.uuid == (expectedHouseholdUUID ?? backup.household.uuid),
               household.name == backup.household.name,
               (try context.fetchCount(FetchDescriptor<Dish>())) == backup.contents.dishes,
               (try context.fetchCount(FetchDescriptor<MealPlanEntry>())) == backup.contents.plannedMeals else {
@@ -396,8 +406,8 @@ enum HouseholdRecoveryService {
         ))
     }
 
-    static func safetyBackups() -> [HouseholdSafetyBackup] {
-        let folder = safetyBackupFolder
+    static func safetyBackups(at folder: URL? = nil) -> [HouseholdSafetyBackup] {
+        let folder = folder ?? safetyBackupFolder
         guard let urls = try? FileManager.default.contentsOfDirectory(
             at: folder,
             includingPropertiesForKeys: [.contentModificationDateKey],
@@ -405,7 +415,7 @@ enum HouseholdRecoveryService {
         ) else { return [] }
         return urls.compactMap { url in
             guard url.pathExtension == BackupFileType.fileExtension,
-                  url.lastPathComponent.contains("-recovery-") else { return nil }
+                  url.lastPathComponent.contains("-recovery-") || url.lastPathComponent.contains("-archive-") else { return nil }
             guard let backup = try? MealPlanBackup.decode(Data(contentsOf: url)) else { return nil }
             let descriptor = descriptor(at: descriptorURL(for: url))
             return HouseholdSafetyBackup(url: url, backup: backup, shareIdentifier: descriptor?.shareIdentifier)
@@ -430,13 +440,23 @@ enum HouseholdRecoveryService {
 
         await HouseholdRecordSyncService.shared.stop()
         do {
-            try MealPlanBackupRestore.replaceEverything(with: checkpoint.backup, context: context)
+            let restoredUUID = checkpoint.detachedHouseholdUUID
+            try MealPlanBackupRestore.replaceEverything(
+                with: checkpoint.backup,
+                context: context,
+                householdUUID: restoredUUID
+            )
             guard let restored = try context.fetch(FetchDescriptor<Household>()).first else {
                 throw HouseholdRecoveryError.validationFailed
             }
-            restored.cloudKitShareIdentifier = checkpoint.shareIdentifier
+            restored.cloudKitShareIdentifier = checkpoint.isDetachedArchive ? nil : checkpoint.shareIdentifier
             try context.save()
-            try validate(restored, matching: checkpoint.backup, context: context)
+            try validate(
+                restored,
+                matching: checkpoint.backup,
+                context: context,
+                expectedHouseholdUUID: restoredUUID ?? checkpoint.backup.household.uuid
+            )
             appState.bootstrap(context: context, planningThrough: nil)
             let didRestartSync = await restartSync(for: restored, context: context)
             SharedStore.reloadWidgets()
@@ -485,9 +505,78 @@ enum HouseholdRecoveryService {
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let filename = "\(MealPlanBackup.baseFilename(for: backup.exportedAt))-recovery-\(UUID().uuidString).\(BackupFileType.fileExtension)"
         let url = folder.appending(path: filename)
-        try MealPlanBackup.encode(backup).write(to: url, options: .atomic)
+        try writeAtomicallyAndVerify(backup, to: url)
         let descriptorData = try JSONEncoder().encode(SafetyBackupDescriptor(shareIdentifier: shareIdentifier))
         try descriptorData.write(to: descriptorURL(for: url), options: .atomic)
+        try synchronizeDirectory(folder)
         return url
+    }
+
+    /// Captures the whole SwiftData graph before any join/revocation code can
+    /// delete a household root. The deterministic operation key makes a
+    /// repeated preflight/retry update the same archive instead of producing
+    /// an unbounded series of copies. The filename marks the checkpoint as
+    /// detached so it remains discoverable even if the process stops before a
+    /// sidecar or UI refresh.
+    @discardableResult
+    static func archiveBeforeReplacement(
+        context: ModelContext,
+        operationID: String,
+        preferredHouseholdID: UUID? = nil,
+        folder: URL? = nil
+    ) throws -> URL {
+        let backup = try MealPlanBackup.make(
+            from: context,
+            includePhotos: true,
+            preferredHouseholdID: preferredHouseholdID
+        )
+        let directory = folder ?? safetyBackupFolder
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let token = SHA256.hash(data: Data(operationID.utf8))
+            .map { String(format: "%02x", $0) }
+            .joined()
+        let url = directory.appending(path: "MealPlan-archive-\(token).\(BackupFileType.fileExtension)")
+        try writeAtomicallyAndVerify(backup, to: url)
+        try synchronizeDirectory(directory)
+        return url
+    }
+
+    private static func writeAtomicallyAndVerify(_ backup: MealPlanBackup, to url: URL) throws {
+        let data = try MealPlanBackup.encode(backup)
+        try data.write(to: url, options: .atomic)
+        let handle = try FileHandle(forWritingTo: url)
+        try handle.synchronize()
+        try handle.close()
+
+        let persisted = try Data(contentsOf: url)
+        let decoded = try MealPlanBackup.decode(persisted)
+        guard decoded.household.uuid == backup.household.uuid,
+              decoded.contents == backup.contents,
+              decoded.includesPhotos,
+              try MealPlanBackup.encode(decoded) == persisted else {
+            throw HouseholdRecoveryError.validationFailed
+        }
+    }
+
+    private static func synchronizeDirectory(_ directory: URL) throws {
+        let descriptor = Darwin.open(directory.path, O_RDONLY)
+        guard descriptor >= 0 else { throw CocoaError(.fileWriteUnknown) }
+        let syncResult = Darwin.fsync(descriptor)
+        let closeResult = Darwin.close(descriptor)
+        guard syncResult == 0, closeResult == 0 else { throw CocoaError(.fileWriteUnknown) }
+    }
+
+    /// A stable restore identity makes replay after termination idempotent:
+    /// the same archive cannot create a fresh CloudKit zone on every retry.
+    nonisolated static func detachedHouseholdUUID(for archiveURL: URL) -> UUID {
+        var bytes = Array(SHA256.hash(data: Data(archiveURL.lastPathComponent.utf8)).prefix(16))
+        bytes[6] = (bytes[6] & 0x0F) | 0x50
+        bytes[8] = (bytes[8] & 0x3F) | 0x80
+        return UUID(uuid: (
+            bytes[0], bytes[1], bytes[2], bytes[3],
+            bytes[4], bytes[5], bytes[6], bytes[7],
+            bytes[8], bytes[9], bytes[10], bytes[11],
+            bytes[12], bytes[13], bytes[14], bytes[15]
+        ))
     }
 }

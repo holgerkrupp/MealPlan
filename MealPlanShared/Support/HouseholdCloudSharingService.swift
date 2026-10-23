@@ -106,13 +106,15 @@ enum HouseholdCloudSharingService {
     /// doing anything destructive. An empty result means there is no household
     /// with user content at risk, or the only populated household is already
     /// the one behind this invitation (re-opening a link just refreshes it).
+    /// Fetch failures are propagated so callers cannot mistake an unreadable
+    /// local store for an empty one.
     ///
     /// Deliberately does no networking — `metadata.share` is already on
     /// hand — so a household that would be lost is never touched unless the
     /// person actually chooses to continue.
-    static func localHouseholdsAtRisk(ofAccepting metadata: CKShare.Metadata, context: ModelContext) -> [Household] {
+    static func localHouseholdsAtRisk(ofAccepting metadata: CKShare.Metadata, context: ModelContext) throws -> [Household] {
         let incomingShareRecordName = metadata.share.recordID.recordName
-        let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
+        let households = try context.fetch(FetchDescriptor<Household>())
         return households.filter { household in
             guard hasRecoverableUserContent(household) else { return false }
             let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
@@ -125,15 +127,83 @@ enum HouseholdCloudSharingService {
     /// data outside recipes and planned meals cannot bypass the confirmation.
     static func hasRecoverableUserContent(_ household: Household) -> Bool {
         func containsItems<T>(_ items: [T]?) -> Bool { !(items ?? []).isEmpty }
-        return containsItems(household.dishes)
-            || containsItems(household.ingredients)
+        let mealTypes = household.mealTypes ?? []
+        let defaultMealSeeds = MealType.defaultSeeds
+        let hasCustomizedMealTypes = !mealTypes.isEmpty && (
+            mealTypes.count != defaultMealSeeds.count
+                || defaultMealSeeds.enumerated().contains { index, seed in
+                    !mealTypes.contains {
+                        $0.key == seed.key
+                            && $0.name == seed.name
+                            && $0.symbolName == seed.symbol
+                            && $0.sortOrder == index
+                    }
+                }
+        )
+        let ingredients = household.ingredients ?? []
+        let defaultPantrySeeds = PantryStaples.defaultSeeds
+        let actualPantryNames = Set(ingredients.map(\.normalizedName))
+        let expectedPantryNames = Set(defaultPantrySeeds.map { Ingredient.normalize($0.name) })
+        let hasOnlyUntouchedDefaultPantry = household.didSeedPantryStaples
+            && ingredients.count == defaultPantrySeeds.count
+            && actualPantryNames == expectedPantryNames
+            && defaultPantrySeeds.allSatisfy { seed in
+                ingredients.contains { ingredient in
+                    ingredient.name == seed.name
+                        && ingredient.normalizedName == Ingredient.normalize(seed.name)
+                        && ingredient.categoryRaw == seed.category.rawValue
+                        && ingredient.isPantryStaple
+                        && ingredient.customAisleName == nil
+                        && ingredient.inventoryModeRaw == InventoryMode.none.rawValue
+                        && ingredient.inventoryCanonicalValue == nil
+                        && ingredient.inventoryDimensionRaw == nil
+                        && ingredient.inventoryBestBefore == nil
+                        && ingredient.inventoryStorageLocationRaw == nil
+                        && ingredient.inventoryCustomStorageLocation == nil
+                        && ingredient.inventoryUpdatedAt == nil
+                        && ingredient.nutritionEnergyKcal == nil
+                        && ingredient.nutritionProteinGrams == nil
+                        && ingredient.nutritionCarbGrams == nil
+                        && ingredient.nutritionFatGrams == nil
+                        && ingredient.nutritionReferenceRaw == nil
+                        && ingredient.nutritionSourceRaw == nil
+                        && (ingredient.rejectedMatchKeys).isEmpty
+                        && ingredient.pendingMergeSuggestionsData == nil
+                        && (ingredient.aliases ?? []).isEmpty
+                        && (ingredient.dishIngredients ?? []).isEmpty
+                        && (ingredient.shoppingItems ?? []).isEmpty
+                }
+            }
+        let hasCustomSettings = household.name != ""
+            && household.name != String(localized: "Family")
+            || household.unitSystemRaw != UnitSystem.metric.rawValue
+            || household.unitPresentationOverrideRaw != nil
+            || !household.roundsDisplayedAmounts
+            || household.standardServings != Household.defaultStandardServings
+            || !household.showsNutritionEstimates
+            || household.leftoverSuggestionsEnabled
+            || household.inventoryEnabled
+            || household.packageSizeCountryCode != Household.defaultPackageSizeCountryCode
+            || household.energyUnitRaw != EnergyUnit.kilocalories.rawValue
+            || household.localeIdentifier != Locale.current.identifier
+            || household.ingredientMergeAuditData != nil
+            || household.unlockedByPurchase
+            || household.bringListUuid != nil
+            || household.bringListName != nil
+            || !household.bringShadowKeys.isEmpty
+            || !household.bringAutoSync
+            || household.bringLastSyncedAt != nil
+            || household.cloudKitShareIdentifier != nil
+        return hasCustomSettings
+            || containsItems(household.dishes)
+            || (!ingredients.isEmpty && !hasOnlyUntouchedDefaultPantry)
             || containsItems(household.matchRules)
             || containsItems(household.entries)
             || containsItems(household.shoppingItems)
             || containsItems(household.cookedLogs)
             || containsItems(household.weekTemplates)
             || containsItems(household.members)
-            || containsItems(household.mealTypes)
+            || hasCustomizedMealTypes
             || containsItems(household.mealRoutines)
             || containsItems(household.recipeFeeds)
             || containsItems(household.recipeBookmarks)
@@ -142,10 +212,9 @@ enum HouseholdCloudSharingService {
 
     /// Joins the household behind `metadata`. `mergeRecipes` decides what
     /// happens to any other local household this device already has (see
-    /// `localHouseholdsAtRisk(ofAccepting:context:)`): `false` drops them along
-    /// with everything in it, `true` moves its dishes — and the ingredients
-    /// they need — into the joined household first, so its recipes survive
-    /// even though its plan, shopping list, and history don't.
+    /// `localHouseholdsAtRisk(ofAccepting:context:)`): `false` replaces them
+    /// only after a verified recovery archive exists, while `true` moves their
+    /// dishes and required ingredients into the joined household first.
     static func accept(
         _ metadata: CKShare.Metadata,
         mergeRecipes: Bool = false,
@@ -155,24 +224,39 @@ enum HouseholdCloudSharingService {
     ) async throws -> (household: Household, isGuest: Bool) {
         guard metadata.containerIdentifier == SharedStore.cloudKitContainerID else { throw HouseholdSharingError.invalidInvitation }
 
+        let localHouseholds = try context.fetch(FetchDescriptor<Household>())
         // An owner's second device already has access through the private
         // database. CloudKit rejects accepting that owner's own share into the
         // shared database, so use its zone ID as a precise download locator.
         let privateDatabase = CKContainer(identifier: metadata.containerIdentifier).privateCloudDatabase
         let zoneIsInPrivateDatabase = (try? await privateDatabase.recordZone(for: metadata.share.recordID.zoneID)) != nil
         if metadata.share.currentUserParticipant?.role == .owner || zoneIsInPrivateDatabase {
-            let local = (try? context.fetch(FetchDescriptor<Household>()))?.first {
-                $0.uuid != HouseholdShareLocator.householdID(from: metadata.share.recordID.zoneID)
-            }
+            let targetHouseholdID = HouseholdShareLocator.householdID(from: metadata.share.recordID.zoneID)
+            let replacements = localHouseholds.filter { $0.uuid != targetHouseholdID }
             let household = try await HouseholdCloudBootstrapService.restoreOwnedHousehold(
                 in: metadata.share.recordID.zoneID,
                 shareRecordName: metadata.share.recordID.recordName,
-                replacing: local,
+                replacing: replacements.first,
+                alsoReplacing: Array(replacements.dropFirst()),
                 mergeRecipes: mergeRecipes,
                 context: context,
                 progress: progress
             )
             return (household, false)
+        }
+
+        let atRisk = localHouseholds.filter {
+            hasRecoverableUserContent($0)
+                && HouseholdShareLocator.decode($0.cloudKitShareIdentifier)?.shareRecordName != metadata.share.recordID.recordName
+        }
+        if !atRisk.isEmpty {
+            let shareID = metadata.share.recordID
+            let sourceIDs = atRisk.map { $0.uuid.uuidString }.sorted().joined(separator: ",")
+            try HouseholdRecoveryService.archiveBeforeReplacement(
+                context: context,
+                operationID: "join|\(BuildEnvironment.cloudKit.rawValue)|\(metadata.containerIdentifier)|\(shareID.zoneID.ownerName)|\(shareID.zoneID.zoneName)|\(shareID.recordName)|\(sourceIDs)",
+                preferredHouseholdID: localHouseholds.first?.uuid
+            )
         }
 
         progress(.connecting)
@@ -437,6 +521,11 @@ enum HouseholdCloudSharingService {
     /// Household preferences (units, portions, nutrition) carry over; the
     /// synced App Store unlock deliberately doesn't.
     static func startOwnHousehold(afterLosingAccessTo old: Household, context: ModelContext) async throws -> Household {
+        try HouseholdRecoveryService.archiveBeforeReplacement(
+            context: context,
+            operationID: "revoked-access|\(BuildEnvironment.cloudKit.rawValue)|\(old.uuid.uuidString)",
+            preferredHouseholdID: old.uuid
+        )
         // Stop syncing the lost zone before anything is deleted, or the
         // deletion scan would queue deletes for the owner's records.
         await HouseholdRecordSyncService.shared.stop()

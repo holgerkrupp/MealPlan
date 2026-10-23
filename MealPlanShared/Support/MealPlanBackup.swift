@@ -86,6 +86,12 @@ struct MealPlanBackup: Codable, Sendable {
         var packageSizeCountryCode: String? = nil
         var unitPresentationOverrideRaw: String? = nil
         var inventoryEnabled: Bool? = nil
+        var unlockedByPurchase: Bool? = nil
+        var bringListUuid: String? = nil
+        var bringListName: String? = nil
+        var bringShadowKeys: [String]? = nil
+        var bringAutoSync: Bool? = nil
+        var bringLastSyncedAt: Date? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -97,6 +103,7 @@ struct MealPlanBackup: Codable, Sendable {
     }
 
     struct PortableMember: Codable, Sendable {
+        var uuid: UUID? = nil
         var name: String
         var roleRaw: String
         var isCurrentUser: Bool
@@ -508,8 +515,16 @@ extension MealPlanBackup {
     }
 
     @MainActor
-    static func make(from context: ModelContext, includePhotos: Bool = true) throws -> MealPlanBackup {
-        make(from: try StoreRows(fetchedFrom: context), includePhotos: includePhotos)
+    static func make(
+        from context: ModelContext,
+        includePhotos: Bool = true,
+        preferredHouseholdID: UUID? = nil
+    ) throws -> MealPlanBackup {
+        make(
+            from: try StoreRows(fetchedFrom: context),
+            includePhotos: includePhotos,
+            preferredHouseholdID: preferredHouseholdID
+        )
     }
 
     /// Snapshot the whole store.
@@ -518,9 +533,19 @@ extension MealPlanBackup {
     /// re-attached to it on restore, which folds a split store back into the
     /// one family this app is designed around.
     @MainActor
-    static func make(from rows: StoreRows, includePhotos: Bool = true) -> MealPlanBackup {
-        let households = rows.households
-            .sorted { ($0.dateCreated, $0.uuid.uuidString) < ($1.dateCreated, $1.uuid.uuidString) }
+    static func make(
+        from rows: StoreRows,
+        includePhotos: Bool = true,
+        preferredHouseholdID: UUID? = nil
+    ) -> MealPlanBackup {
+        let households = rows.households.sorted {
+            if let preferredHouseholdID {
+                let lhsPreferred = $0.uuid == preferredHouseholdID
+                let rhsPreferred = $1.uuid == preferredHouseholdID
+                if lhsPreferred != rhsPreferred { return lhsPreferred }
+            }
+            return ($0.dateCreated, $0.uuid.uuidString) < ($1.dateCreated, $1.uuid.uuidString)
+        }
         let primary = households.first
 
         // One catalogue entry per normalized name. CloudKit has no unique
@@ -602,7 +627,13 @@ extension MealPlanBackup {
                 leftoverSuggestionsEnabled: primary?.leftoverSuggestionsEnabled,
                 packageSizeCountryCode: primary?.packageSizeCountryCode,
                 unitPresentationOverrideRaw: primary?.unitPresentationOverrideRaw,
-                inventoryEnabled: primary?.inventoryEnabled
+                inventoryEnabled: primary?.inventoryEnabled,
+                unlockedByPurchase: primary?.unlockedByPurchase,
+                bringListUuid: primary?.bringListUuid,
+                bringListName: primary?.bringListName,
+                bringShadowKeys: primary?.bringShadowKeys,
+                bringAutoSync: primary?.bringAutoSync,
+                bringLastSyncedAt: primary?.bringLastSyncedAt
             )
         )
         backup.includesPhotos = includePhotos
@@ -660,6 +691,7 @@ extension MealPlanBackup {
 
         backup.members = rows.members.map {
             PortableMember(
+                uuid: $0.uuid,
                 name: $0.name,
                 roleRaw: $0.roleRaw,
                 isCurrentUser: $0.isCurrentUser,

@@ -260,6 +260,7 @@ enum HouseholdCloudBootstrapService {
         in zoneID: CKRecordZone.ID,
         shareRecordName: String?,
         replacing localHousehold: Household?,
+        alsoReplacing additionalHouseholds: [Household] = [],
         mergeRecipes: Bool,
         adoptingLocalContent: Bool = false,
         context: ModelContext,
@@ -276,6 +277,17 @@ enum HouseholdCloudBootstrapService {
             HouseholdRecordIdentity(recordType: $0.recordType, recordName: $0.recordID.recordName)?.type == .household
         }) else {
             throw HouseholdSharingError.missingRootRecord
+        }
+
+        let replacements = ([localHousehold].compactMap { $0 } + additionalHouseholds)
+            .filter { $0.uuid != householdID }
+        if let firstReplacement = replacements.first,
+           replacements.contains(where: HouseholdCloudSharingService.hasRecoverableUserContent) {
+            try HouseholdRecoveryService.archiveBeforeReplacement(
+                context: context,
+                operationID: "owned-household-adoption|\(BuildEnvironment.cloudKit.rawValue)|\(replacements.map { $0.uuid.uuidString }.sorted().joined(separator: ","))|\(householdID.uuidString)",
+                preferredHouseholdID: firstReplacement.uuid
+            )
         }
 
         // Stop an engine that may currently be attached to a placeholder zone
@@ -326,13 +338,13 @@ enum HouseholdCloudBootstrapService {
 
             household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
 
-            if let localHousehold, localHousehold.uuid != household.uuid {
+            for replacement in replacements where replacement.uuid != household.uuid {
                 if adoptingLocalContent {
-                    adoptContent(of: localHousehold, into: household)
+                    adoptContent(of: replacement, into: household)
                 } else if mergeRecipes {
-                    HouseholdCloudSharingService.mergeDishes(from: localHousehold, into: household)
+                    HouseholdCloudSharingService.mergeDishes(from: replacement, into: household)
                 }
-                context.delete(localHousehold)
+                context.delete(replacement)
             }
             try context.save()
             return household

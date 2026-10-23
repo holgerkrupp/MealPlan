@@ -26,8 +26,25 @@ struct HouseholdCloudSharingServiceTests {
     }
 
     @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {
-        let household = Household(name: "Local")
+        let household = Household(name: String(localized: "Family"))
         #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))
+
+        household.didSeedPantryStaples = true
+        household.ingredients = PantryStaples.defaultSeeds.map { seed in
+            let ingredient = Ingredient(name: seed.name, category: seed.category)
+            ingredient.isPantryStaple = true
+            ingredient.household = household
+            return ingredient
+        }
+        household.mealTypes = MealType.defaultSeeds.enumerated().map { index, seed in
+            let meal = MealType(key: seed.key, name: seed.name, symbolName: seed.symbol, sortOrder: index)
+            meal.household = household
+            return meal
+        }
+        #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))
+
+        household.ingredients?.first?.inventoryMode = .have
+        #expect(HouseholdCloudSharingService.hasRecoverableUserContent(household))
 
         household.shoppingItems = [ShoppingListItem(name: "Offline item", isManual: true)]
         #expect(HouseholdCloudSharingService.hasRecoverableUserContent(household))

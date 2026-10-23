@@ -188,12 +188,12 @@ struct RootView: View {
             }
         } message: { pending in
             Text(pending.householdCount > 1
-                ? "Joining will replace \(pending.householdCount) local households. Their plans, shopping lists, history, routines, and preferences will be removed from this device. Merge Recipes keeps their dishes."
+                ? "Joining will replace \(pending.householdCount) local households. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps dishes in the joined household."
                 : pending.dishCount == 0
-                ? "This device already has its own “\(pending.existingHouseholdName)” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device."
+                ? "This device already has its own “\(pending.existingHouseholdName)” household. MealPlan first saves a full local archive, including its plan, shopping list, history, routines, preferences, and photos. You can restore it later from Household Recovery."
                 : pending.dishCount == 1
-                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way."
-                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way.")
+                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps that dish in the joined household."
+                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps those dishes in the joined household.")
         }
         // Everything the menu bar can reach from any section. Published here
         // rather than read from `AppState` directly so the menu items update —
@@ -263,7 +263,16 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(150))
         }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
-            let atRisk = HouseholdCloudSharingService.localHouseholdsAtRisk(ofAccepting: metadata, context: context)
+            let atRisk: [Household]
+            do {
+                atRisk = try HouseholdCloudSharingService.localHouseholdsAtRisk(ofAccepting: metadata, context: context)
+            } catch {
+                // A failed SwiftData fetch cannot mean "nothing to preserve".
+                // Keep the invitation eligible for redelivery and fail closed.
+                HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+                sharingErrorMessage = error.localizedDescription
+                continue
+            }
             if let firstAtRisk = atRisk.first {
                 pendingHouseholdJoin = PendingHouseholdJoin(
                     metadata: metadata,

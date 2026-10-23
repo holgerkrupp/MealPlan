@@ -194,7 +194,10 @@ struct HouseholdRecoveryView: View {
                                     .font(.title3)
                                     .foregroundStyle(.secondary)
                                 VStack(alignment: .leading, spacing: 4) {
-                                    Text(backup.backup.household.name).font(.headline)
+                                    Text(backup.isDetachedArchive
+                                         ? String(localized: "Local archive · \(backup.backup.household.name)")
+                                         : backup.backup.household.name)
+                                        .font(.headline)
                                     Text(BackupSummary.sentence(for: backup.backup.contents))
                                         .font(.subheadline)
                                         .foregroundStyle(.secondary)
@@ -370,7 +373,9 @@ struct HouseholdRecoveryView: View {
         case .restore(let household):
             Text("Target: \(household.name), \(household.dishCount) dishes, \(household.entryCount) planned meals. Only the data on this device will be replaced. MealPlan downloads and validates that exact iCloud zone first, writes a timestamped safety backup, then restarts sync only after a successful replacement. Your iCloud household is not deleted.")
         case .restoreSafetyBackup(let backup):
-            Text("Target: \(backup.backup.household.name), written \(backup.backup.exportedAt, format: .dateTime.day().month().year().hour().minute()). Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this ordinary MealPlan backup and its original local iCloud locator.")
+            Text(backup.isDetachedArchive
+                ? "Target: \(backup.backup.household.name), written \(backup.backup.exportedAt, format: .dateTime.day().month().year().hour().minute()). Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this archive as a new household with a fresh identity so it cannot write into the old CloudKit zone."
+                : "Target: \(backup.backup.household.name), written \(backup.backup.exportedAt, format: .dateTime.day().month().year().hour().minute()). Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this ordinary MealPlan backup and its original local iCloud locator.")
         case .moveToRecentlyDeleted(let household):
             Text("Target: \(household.name). MealPlan first saves a timestamped local backup and records the exact iCloud zone in your private recovery index. This device will start with a new empty household. The original household, its UUID, and its iCloud share stay recoverable for 30 days.")
         case .purge(let household):
