@@ -51,6 +51,38 @@ struct HouseholdCloudSharingServiceTests {
         try await assertFailedJoinRetainsAllRoots(timeout: true)
     }
 
+    @Test @MainActor func failedSourceTransportRestoreStopsTheStagedTransport() async throws {
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let context = container.mainContext
+        let source = Household(name: "Source")
+        let incoming = Household(name: "Incoming")
+        context.insert(source)
+        context.insert(incoming)
+        try context.save()
+
+        var stoppedTransport = false
+        do {
+            try await HouseholdCloudSharingService.finishAcceptedHouseholdAfterSharedFetch(
+                SharedHouseholdFetchWaiter(),
+                incoming,
+                sourceHousehold: source,
+                mergeRecipes: false,
+                context: context,
+                timeout: .milliseconds(1),
+                restoreTransport: { _, _ in throw HouseholdRecoveryError.requiredAssetUnavailable },
+                stopTransport: { stoppedTransport = true }
+            )
+            Issue.record("Expected the missing fetch callback to fail the join.")
+        } catch {
+            // A failed rollback must stop the incoming observer before the
+            // join error reaches the caller.
+        }
+
+        #expect(stoppedTransport)
+        #expect(try context.fetch(FetchDescriptor<Household>()).count == 2)
+    }
+
     @Test func bootstrapAssetReadsFailClosedForMissingEmptyAndUnreadableFiles() throws {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "MealPlan-bootstrap-assets-\(UUID().uuidString)", directoryHint: .isDirectory)
@@ -94,13 +126,18 @@ struct HouseholdCloudSharingServiceTests {
 
         let waiter = SharedHouseholdFetchWaiter()
         if !timeout { waiter.complete(.offline) }
+        var restoredSourceID: UUID?
+        var stoppedTransport = false
         do {
             try await HouseholdCloudSharingService.finishAcceptedHouseholdAfterSharedFetch(
                 waiter,
                 incoming,
+                sourceHousehold: firstSource,
                 mergeRecipes: false,
                 context: context,
-                timeout: .milliseconds(1)
+                timeout: .milliseconds(1),
+                restoreTransport: { source, _ in restoredSourceID = source.uuid },
+                stopTransport: { stoppedTransport = true }
             )
             Issue.record("Expected the failed shared-zone fetch to keep source roots.")
         } catch {
@@ -109,6 +146,8 @@ struct HouseholdCloudSharingServiceTests {
 
         let retainedIDs = Set(try context.fetch(FetchDescriptor<Household>()).map(\.uuid))
         #expect(retainedIDs == Set([firstSource.uuid, secondSource.uuid, incoming.uuid]))
+        #expect(restoredSourceID == firstSource.uuid)
+        #expect(!stoppedTransport)
     }
 
     @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {

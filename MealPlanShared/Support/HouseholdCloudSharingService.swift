@@ -260,6 +260,7 @@ enum HouseholdCloudSharingService {
     /// `true` also moves their dishes and required ingredients into the join.
     static func accept(
         _ metadata: CKShare.Metadata,
+        sourceHousehold: Household,
         mergeRecipes: Bool = false,
         context: ModelContext,
         sharing: CloudKitShareLifecycleService,
@@ -325,6 +326,7 @@ enum HouseholdCloudSharingService {
         do {
             try await sharing.accept(metadata)
         } catch {
+            await restoreSourceTransportAfterFailedJoin(sourceHousehold, context: context)
             if let cloudError = error as? CKError {
                 switch cloudError.code {
                 case .unknownItem, .zoneNotFound: throw HouseholdSharingError.invitationNotFound
@@ -339,10 +341,14 @@ enum HouseholdCloudSharingService {
             }
             throw error
         }
-        guard let importedHousehold else { throw HouseholdSharingError.missingRootRecord }
+        guard let importedHousehold else {
+            await restoreSourceTransportAfterFailedJoin(sourceHousehold, context: context)
+            throw HouseholdSharingError.missingRootRecord
+        }
         try await finishAcceptedHouseholdAfterSharedFetch(
             fetchWaiter,
             importedHousehold.household,
+            sourceHousehold: sourceHousehold,
             mergeRecipes: mergeRecipes,
             context: context
         )
@@ -356,15 +362,50 @@ enum HouseholdCloudSharingService {
     static func finishAcceptedHouseholdAfterSharedFetch(
         _ fetchWaiter: SharedHouseholdFetchWaiter,
         _ household: Household,
+        sourceHousehold: Household,
         mergeRecipes: Bool,
         context: ModelContext,
-        timeout: Duration = sharedHouseholdFetchTimeout
+        timeout: Duration = sharedHouseholdFetchTimeout,
+        restoreTransport: (@MainActor (Household, ModelContext) async throws -> Void)? = nil,
+        stopTransport: @MainActor () async -> Void = { await HouseholdRecordSyncService.shared.stop() }
     ) async throws {
-        try await fetchWaiter.wait(timeout: timeout)
-        if let applyError = HouseholdRecordSyncService.shared.lastError {
-            throw applyError
+        do {
+            try await fetchWaiter.wait(timeout: timeout)
+            if let applyError = HouseholdRecordSyncService.shared.lastError {
+                throw applyError
+            }
+            try finalizeAcceptedHousehold(household, mergeRecipes: mergeRecipes, context: context)
+        } catch {
+            await restoreSourceTransportAfterFailedJoin(
+                sourceHousehold,
+                context: context,
+                restoreTransport: restoreTransport,
+                stopTransport: stopTransport
+            )
+            throw error
         }
-        try finalizeAcceptedHousehold(household, mergeRecipes: mergeRecipes, context: context)
+    }
+
+    private static func restoreSourceTransportAfterFailedJoin(
+        _ sourceHousehold: Household,
+        context: ModelContext,
+        restoreTransport: (@MainActor (Household, ModelContext) async throws -> Void)? = nil,
+        stopTransport: @MainActor () async -> Void = { await HouseholdRecordSyncService.shared.stop() }
+    ) async {
+        do {
+            if let restoreTransport {
+                try await restoreTransport(sourceHousehold, context)
+            } else {
+                _ = try await HouseholdRecordSyncService.shared.prepareTransport(
+                    household: sourceHousehold,
+                    context: context
+                )
+            }
+        } catch {
+            // Never leave observers attached to the staged incoming root if
+            // the prior transport cannot be reactivated.
+            await stopTransport()
+        }
     }
 
     private static func importAcceptedShare(

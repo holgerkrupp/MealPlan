@@ -301,6 +301,7 @@ struct RootView: View {
             let sharing = try await MealPlanCloudSharing.service(for: activeHousehold, context: context)
             let (household, isGuest) = try await HouseholdCloudSharingService.accept(
                 metadata,
+                sourceHousehold: activeHousehold,
                 mergeRecipes: mergeRecipes,
                 context: context,
                 sharing: sharing,
