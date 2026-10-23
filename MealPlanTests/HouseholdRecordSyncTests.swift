@@ -23,10 +23,10 @@ struct HouseholdRecordSyncTests {
         context.insert(retained)
         try context.save()
 
-        HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
-            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
             // CloudKit can deliver a marker and its raw deletion together.
-            HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: removed.uuid, context: context)
         }
         try context.save()
 
@@ -747,7 +747,7 @@ struct HouseholdRecordSyncTests {
         #expect(!resolution.shouldUpload)
     }
 
-    @Test func applyingMissingPhotoAssetPreservesStoredBytes() throws {
+    @Test func smallBatchTargetedLookupOnDiskUpdatesDishAndReconcilesRelationships() throws {
         // External-storage attributes need a real SQLite connection on macOS;
         // the in-memory store can report "No eligible connection available".
         let storeDirectory = FileManager.default.temporaryDirectory
@@ -772,24 +772,98 @@ struct HouseholdRecordSyncTests {
         context.insert(image)
         try context.save()
 
-        let payload = HouseholdRecordPayload.dishImage(.init(
+        let portableDish = MealPlanBackup.PortableDish(
+            uuid: dish.uuid,
+            name: "Server Soup",
+            recipeText: nil,
+            sourceURLString: nil,
+            deepLinkURLString: nil,
+            importedSourceApp: nil,
+            importedSourceID: nil,
+            variantGroupID: nil,
+            variantGroupName: nil,
+            isFavorite: false,
+            rating: 0,
+            collectionNames: [],
+            tagNames: [],
+            servings: 2,
+            prepTimeMinutes: nil,
+            cookTimeMinutes: nil,
+            mealTypeTagsRaw: [],
+            dietaryTagsRaw: [],
+            seasonRaw: nil,
+            createdByName: nil,
+            dateCreated: .now,
+            lastUsedDate: nil,
+            usageCount: 0,
+            needsReview: false,
+            glyphRaw: nil,
+            glyphIsAuto: true,
+            images: [],
+            ingredients: []
+        )
+        var localDish = portableDish
+        localDish.name = "Local Soup"
+        let localRecord = LocalHouseholdRecord(
+            identity: .init(type: .dish, uuid: dish.uuid),
+            householdID: household.uuid,
+            modifiedAt: Date(timeIntervalSince1970: 1),
+            payloadData: try HouseholdRecordCodec.encode(HouseholdRecordPayload.dish(localDish))
+        )
+        let serverRecord = CKRecord(
+            recordType: HouseholdRecordType.dish.rawValue,
+            recordID: CKRecord.ID(
+                recordName: localRecord.identity.recordName,
+                zoneID: CKRecordZone.ID(zoneName: "test")
+            )
+        )
+        serverRecord[HouseholdRecordCodec.payloadKey] = try HouseholdRecordCodec.encode(
+            HouseholdRecordPayload.dish(portableDish)
+        ) as CKRecordValue
+        serverRecord[HouseholdRecordCodec.modifiedAtKey] = Date(timeIntervalSince1970: 2) as CKRecordValue
+        let resolution = try HouseholdRecordConflictResolver.resolve(local: localRecord, server: serverRecord)
+        let imagePayload = HouseholdRecordPayload.dishImage(.init(
             dishID: dish.uuid,
             sortIndex: 2,
             isPrimary: false,
             dateAdded: image.dateAdded
         ))
-        try HouseholdRecordApplier.apply(
-            payloadData: HouseholdRecordCodec.encode(payload),
-            identity: .init(type: .dishImage, uuid: image.uuid),
-            modifiedAt: .now,
-            assetData: nil,
-            household: household,
-            context: context
-        )
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: resolution.payloadData,
+                identity: localRecord.identity,
+                modifiedAt: resolution.modifiedAt,
+                assetData: resolution.assetData,
+                household: household,
+                context: context
+            )
+            try HouseholdRecordApplier.apply(
+                payloadData: HouseholdRecordCodec.encode(imagePayload),
+                identity: .init(type: .dishImage, uuid: image.uuid),
+                modifiedAt: .now,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+            var entryValue = planValue(date: .now, meal: "dinner", note: nil)
+            entryValue.dishUUID = dish.uuid
+            let entry = PlanEntryPayload(value: entryValue, placementModifiedAt: .now, contentModifiedAt: .now)
+            try HouseholdRecordApplier.apply(
+                payloadData: HouseholdRecordCodec.encode(HouseholdRecordPayload.planEntry(entry)),
+                identity: .init(type: .planEntry, uuid: entryValue.uuid),
+                modifiedAt: .now,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+        }
 
+        #expect(dish.name == "Server Soup")
         #expect(image.data == Data([7, 8, 9]))
         #expect(image.sortIndex == 2)
         #expect(!image.isPrimary)
+        let savedEntry = try context.fetch(FetchDescriptor<MealPlanEntry>()).first
+        #expect(savedEntry?.dish?.uuid == dish.uuid)
     }
 
     @Test func assetBackedRecordCannotUploadWithoutBytes() throws {

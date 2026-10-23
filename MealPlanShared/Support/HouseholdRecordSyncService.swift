@@ -1043,7 +1043,7 @@ final class HouseholdRecordSyncService {
                             if localWins {
                                 uploadNames.insert(target.recordName)
                             } else {
-                                HouseholdRecordApplier.delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
+                                try HouseholdRecordApplier.delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
                                 removedNames.insert(target.recordName)
                             }
                             serverFingerprints[name] = recordFingerprint(payloadData, assetData: nil)
@@ -1101,7 +1101,7 @@ final class HouseholdRecordSyncService {
                             }
                             continue
                         }
-                        HouseholdRecordApplier.delete(type: identity.type, uuid: identity.uuid, context: context)
+                        try HouseholdRecordApplier.delete(type: identity.type, uuid: identity.uuid, context: context)
                         removedNames.insert(name)
                         serverFingerprints.removeValue(forKey: name)
                         stagedSystemFields.removeValue(forKey: name)
