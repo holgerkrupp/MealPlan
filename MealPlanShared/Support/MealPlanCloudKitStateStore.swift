@@ -4,6 +4,7 @@ import CollaborationCloudKit
 import Foundation
 import OSLog
 import CryptoKit
+import Darwin
 
 /// Durable adapter between MealPlan's existing record snapshots and the
 /// package-owned CKSyncEngine pool. The journal stores the exact fields being
@@ -37,8 +38,19 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         case asset(URL)
     }
 
+    enum MigrationFaultPoint: Sendable, Equatable {
+        case stateFileWrite
+        case afterFileSynchronization
+        case afterDirectorySynchronization
+        case stateDefaultsRetirement
+        case journalFileWrite
+        case journalDefaultsRetirement
+    }
+
     private let defaults: UserDefaults
     private let fileManager = FileManager.default
+    private let storageRootURL: URL?
+    private let migrationFaultInjector: @Sendable (MigrationFaultPoint) throws -> Void
     private var activeLocator: HouseholdShareLocator
     private let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "collaboration-state")
 
@@ -46,13 +58,18 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         containerIdentifier: String,
         environment: CollaborationEnvironment,
         accountPartitionIdentifier: String,
-        activeLocator: HouseholdShareLocator
+        activeLocator: HouseholdShareLocator,
+        defaultsSuiteName: String? = nil,
+        storageRootURL: URL? = nil,
+        migrationFaultInjector: @escaping @Sendable (MigrationFaultPoint) throws -> Void = { _ in }
     ) {
         self.containerIdentifier = containerIdentifier
         self.environment = environment
         self.accountPartitionIdentifier = accountPartitionIdentifier
         self.activeLocator = activeLocator
-        self.defaults = UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
+        self.defaults = UserDefaults(suiteName: defaultsSuiteName ?? SharedStore.appGroupID) ?? .standard
+        self.storageRootURL = storageRootURL
+        self.migrationFaultInjector = migrationFaultInjector
     }
 
     func setActiveLocator(_ locator: HouseholdShareLocator) {
@@ -67,10 +84,15 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         for scope in [CollaborationDatabaseScope.private, .shared] {
             let url = try fileURL(kind: "state", scope: scope)
             if fileManager.fileExists(atPath: url.path) {
-                defaults.removeObject(forKey: stateKey(for: scope))
+                if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
+                    let fileData = try Data(contentsOf: url)
+                    try reconcileCommittedFile(fileData, defaultsData: defaultsData, kind: "state", scope: scope)
+                    try synchronizeFileAndDirectory(at: url, injectFaults: false)
+                }
+                try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
             } else if let data = defaults.data(forKey: stateKey(for: scope)) {
-                try writeVerified(data, to: url)
-                defaults.removeObject(forKey: stateKey(for: scope))
+                try writeVerified(data, to: url, at: .stateFileWrite)
+                try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
             }
         }
         // The legacy engine used a zone-scoped key. It belongs only to the
@@ -84,11 +106,13 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         guard let data = defaults.data(forKey: legacyStateKey) else { return false }
         let url = try fileURL(kind: "state", scope: activeScope)
         if fileManager.fileExists(atPath: url.path) {
-            guard try Data(contentsOf: url) == data else { return false }
+            let fileData = try Data(contentsOf: url)
+            try reconcileCommittedFile(fileData, defaultsData: data, kind: "state", scope: activeScope)
+            try synchronizeFileAndDirectory(at: url, injectFaults: false)
         } else {
-            try writeVerified(data, to: url)
+            try writeVerified(data, to: url, at: .stateFileWrite)
         }
-        defaults.removeObject(forKey: legacyStateKey)
+        try retireDefaultsValue(forKey: legacyStateKey, at: .stateDefaultsRetirement)
         logger.info("Migrated legacy household engine state (bytes=\(data.count, privacy: .public), scope=\(self.activeScope.rawValue, privacy: .public)).")
         return true
     }
@@ -97,8 +121,18 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         let url = try fileURL(kind: "state", scope: scope)
         if fileManager.fileExists(atPath: url.path) {
             let data = try Data(contentsOf: url)
-            defaults.removeObject(forKey: stateKey(for: scope))
-            if scope == activeScope { defaults.removeObject(forKey: legacyStateKey) }
+            if let defaultsData = defaults.data(forKey: stateKey(for: scope)) {
+                try reconcileCommittedFile(data, defaultsData: defaultsData, kind: "state", scope: scope)
+                try synchronizeFileAndDirectory(at: url, injectFaults: false)
+            }
+            if scope == activeScope, let legacyData = defaults.data(forKey: legacyStateKey) {
+                try reconcileCommittedFile(data, defaultsData: legacyData, kind: "state", scope: scope)
+                try synchronizeFileAndDirectory(at: url, injectFaults: false)
+            }
+            try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
+            if scope == activeScope {
+                try retireDefaultsValue(forKey: legacyStateKey, at: .stateDefaultsRetirement)
+            }
             return data
         }
 
@@ -113,17 +147,19 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
             legacy = nil
         }
         guard let (legacyKey, data) = legacy else { return nil }
-        try writeVerified(data, to: url)
-        defaults.removeObject(forKey: legacyKey)
+        try writeVerified(data, to: url, at: .stateFileWrite)
+        try retireDefaultsValue(forKey: legacyKey, at: .stateDefaultsRetirement)
         logger.info("Migrated CloudKit engine state to file storage (bytes=\(data.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
         return data
     }
 
     func saveState(_ data: Data, for scope: CollaborationDatabaseScope) async throws {
-        try writeVerified(data, to: fileURL(kind: "state", scope: scope))
+        try writeVerified(data, to: fileURL(kind: "state", scope: scope), at: .stateFileWrite)
         // Remove legacy copies only after the new durable copy is verified.
-        defaults.removeObject(forKey: stateKey(for: scope))
-        if scope == activeScope { defaults.removeObject(forKey: legacyStateKey) }
+        try retireDefaultsValue(forKey: stateKey(for: scope), at: .stateDefaultsRetirement)
+        if scope == activeScope {
+            try retireDefaultsValue(forKey: legacyStateKey, at: .stateDefaultsRetirement)
+        }
         logger.info("Persisted CloudKit engine state (bytes=\(data.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
     }
 
@@ -187,8 +223,10 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
     func discardDatabaseState(for scope: CollaborationDatabaseScope) throws {
         let stateURL = try fileURL(kind: "state", scope: scope)
         let journalURL = try fileURL(kind: "journal", scope: scope)
+        let recoveryURL = try recoveryDirectory(for: scope)
         if fileManager.fileExists(atPath: stateURL.path) { try fileManager.removeItem(at: stateURL) }
         if fileManager.fileExists(atPath: journalURL.path) { try fileManager.removeItem(at: journalURL) }
+        if fileManager.fileExists(atPath: recoveryURL.path) { try fileManager.removeItem(at: recoveryURL) }
         defaults.removeObject(forKey: stateKey(for: scope))
         defaults.removeObject(forKey: journalKey(for: scope))
         if scope == activeScope { defaults.removeObject(forKey: legacyStateKey) }
@@ -218,29 +256,34 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
     private func loadJournal(for scope: CollaborationDatabaseScope) throws -> Journal {
         let url = try fileURL(kind: "journal", scope: scope)
         if fileManager.fileExists(atPath: url.path) {
-            let journal = try JSONDecoder().decode(Journal.self, from: Data(contentsOf: url))
-            defaults.removeObject(forKey: journalKey(for: scope))
+            let fileData = try Data(contentsOf: url)
+            let journal = try JSONDecoder().decode(Journal.self, from: fileData)
+            if let defaultsData = defaults.data(forKey: journalKey(for: scope)) {
+                try reconcileCommittedFile(fileData, defaultsData: defaultsData, kind: "journal", scope: scope)
+                try synchronizeFileAndDirectory(at: url, injectFaults: false)
+            }
+            try retireDefaultsValue(forKey: journalKey(for: scope), at: .journalDefaultsRetirement)
             return journal
         }
         guard let data = defaults.data(forKey: journalKey(for: scope)) else { return Journal() }
         // A corrupt old journal may contain the only copy of unsent changes.
         // Keep it in defaults and fail closed until it can be recovered.
         let journal = try JSONDecoder().decode(Journal.self, from: data)
-        try writeVerified(data, to: url)
-        defaults.removeObject(forKey: journalKey(for: scope))
+        try writeVerified(data, to: url, at: .journalFileWrite)
+        try retireDefaultsValue(forKey: journalKey(for: scope), at: .journalDefaultsRetirement)
         logger.info("Migrated household change journal to file storage (bytes=\(data.count, privacy: .public), entries=\(journal.entries.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
         return journal
     }
 
     private func saveJournal(_ journal: Journal, for scope: CollaborationDatabaseScope) throws {
         let data = try JSONEncoder().encode(journal)
-        try writeVerified(data, to: fileURL(kind: "journal", scope: scope))
-        defaults.removeObject(forKey: journalKey(for: scope))
+        try writeVerified(data, to: fileURL(kind: "journal", scope: scope), at: .journalFileWrite)
+        try retireDefaultsValue(forKey: journalKey(for: scope), at: .journalDefaultsRetirement)
         logger.info("Persisted household change journal (bytes=\(data.count, privacy: .public), entries=\(journal.entries.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
     }
 
     private func fileURL(kind: String, scope: CollaborationDatabaseScope) throws -> URL {
-        guard let root = fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
             throw MealPlanCloudKitStateStoreError.appGroupUnavailable
         }
         let material = "\(environment.rawValue)|\(accountPartitionIdentifier)|\(scope.rawValue)"
@@ -251,10 +294,98 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         return directory.appending(path: "\(kind)-v1-\(digest).\(fileExtension)")
     }
 
-    private func writeVerified(_ data: Data, to url: URL) throws {
+    private func writeVerified(_ data: Data, to url: URL, at faultPoint: MigrationFaultPoint) throws {
+        try migrationFaultInjector(faultPoint)
         try data.write(to: url, options: .atomic)
+        try synchronizeFileAndDirectory(at: url, injectFaults: true)
+
         let stored = try Data(contentsOf: url)
         guard stored == data else { throw MealPlanCloudKitStateStoreError.verificationFailed }
+    }
+
+    /// The new file is the commit point: all writers fsync it and its parent
+    /// directory before retiring the old defaults value. If termination lands
+    /// between those steps, archive the older bytes durably, then continue
+    /// from the committed file instead of blocking every future sync attempt.
+    private func reconcileCommittedFile(
+        _ fileData: Data,
+        defaultsData: Data,
+        kind: String,
+        scope: CollaborationDatabaseScope
+    ) throws {
+        guard fileData != defaultsData else { return }
+        let backupURL = try recoveryFileURL(kind: kind, scope: scope, data: defaultsData)
+        if fileManager.fileExists(atPath: backupURL.path) {
+            let existing = try Data(contentsOf: backupURL)
+            guard existing == defaultsData else { throw MealPlanCloudKitStateStoreError.verificationFailed }
+            try synchronizeFileAndDirectory(at: backupURL, injectFaults: false)
+        } else {
+            try writeVerified(defaultsData, to: backupURL, at: kind == "state" ? .stateFileWrite : .journalFileWrite)
+        }
+        logger.error("Archived a superseded \(kind, privacy: .public) defaults copy (bytes=\(defaultsData.count, privacy: .public), scope=\(scope.rawValue, privacy: .public)).")
+    }
+
+    private func recoveryFileURL(kind: String, scope: CollaborationDatabaseScope, data: Data) throws -> URL {
+        let directory = try ensureRecoveryDirectory(for: scope)
+        let material = "\(environment.rawValue)|\(accountPartitionIdentifier)|\(scope.rawValue)|\(kind)|\(Self.digest(data))"
+        let nameDigest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+        let fileExtension = kind == "state" ? "bin" : "json"
+        return directory.appending(path: "\(kind)-recovery-v1-\(nameDigest).\(fileExtension)")
+    }
+
+    private func recoveryDirectory(for scope: CollaborationDatabaseScope) throws -> URL {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
+        }
+        let accountDigest = Self.digest(Data(accountPartitionIdentifier.utf8))
+        let directory = root.appending(
+            path: "HouseholdSyncState/Recovery/\(environment.rawValue)/\(accountDigest)/\(scope.rawValue)",
+            directoryHint: .isDirectory
+        )
+        return directory
+    }
+
+    private func ensureRecoveryDirectory(for scope: CollaborationDatabaseScope) throws -> URL {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
+        }
+        let directory = try recoveryDirectory(for: scope)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        var parent = directory.deletingLastPathComponent()
+        while parent.path != root.path {
+            try synchronizeDirectory(at: parent)
+            parent.deleteLastPathComponent()
+        }
+        try synchronizeDirectory(at: root)
+        return directory
+    }
+
+    private func synchronizeFileAndDirectory(at url: URL, injectFaults: Bool) throws {
+        let file = try FileHandle(forWritingTo: url)
+        try file.synchronize()
+        try file.close()
+        if injectFaults { try migrationFaultInjector(.afterFileSynchronization) }
+
+        try synchronizeDirectory(at: url.deletingLastPathComponent())
+        if injectFaults { try migrationFaultInjector(.afterDirectorySynchronization) }
+    }
+
+    private func synchronizeDirectory(at url: URL) throws {
+        let directoryFD = open(url.path, O_RDONLY)
+        guard directoryFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let result = fsync(directoryFD)
+        let syncError = errno
+        close(directoryFD)
+        guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: syncError) ?? .EIO) }
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func retireDefaultsValue(forKey key: String, at faultPoint: MigrationFaultPoint) throws {
+        try migrationFaultInjector(faultPoint)
+        defaults.removeObject(forKey: key)
     }
 
     private static func entryKey(recordName: String, zoneName: String, ownerName: String) -> String {

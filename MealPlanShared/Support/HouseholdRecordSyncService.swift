@@ -346,6 +346,10 @@ final class HouseholdRecordSyncService {
 
     func prepareRemoteFetch() {
         cancelAtPersistenceBoundary = false
+        // A package-owned shared-database fetch runs outside
+        // performCloudOperation. Clear its prior result so the caller can use
+        // lastError to distinguish this fetch's delegate apply outcome.
+        lastError = nil
     }
 
     func fetchChanges(shouldScanLocalChanges: Bool = true) async -> HouseholdRemoteFetchOutcome {
@@ -417,8 +421,12 @@ final class HouseholdRecordSyncService {
     func discardState(for locator: HouseholdShareLocator) async throws {
         let metadataURL = try metadataFileURL(for: locator)
         let legacyMetadataURL = try legacyMetadataFileURL(for: locator)
+        let metadataRecoveryURL = HouseholdMetadataWriter.recoveryDirectory(for: metadataURL)
         if FileManager.default.fileExists(atPath: metadataURL.path) {
             try FileManager.default.removeItem(at: metadataURL)
+        }
+        if FileManager.default.fileExists(atPath: metadataRecoveryURL.path) {
+            try FileManager.default.removeItem(at: metadataRecoveryURL)
         }
         if FileManager.default.fileExists(atPath: legacyMetadataURL.path) {
             try FileManager.default.removeItem(at: legacyMetadataURL)
@@ -1043,7 +1051,7 @@ final class HouseholdRecordSyncService {
                         }
 
                         let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
-                        let serverAssetData = serverAsset?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                        let serverAssetData = try Self.readAssetData(serverAsset)
                         let incomingFingerprint = recordFingerprint(payloadData, assetData: serverAssetData)
                         if let current = local[name],
                            current.fingerprint == incomingFingerprint,
@@ -1177,7 +1185,7 @@ final class HouseholdRecordSyncService {
             if let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data {
                 let savedFingerprint = recordFingerprint(
                     payloadData,
-                    assetData: (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                    assetData: try Self.readAssetData(record[HouseholdRecordCodec.assetKey] as? CKAsset)
                 )
                 if metadata.acknowledgeSavedRecord(name, fingerprint: savedFingerprint) {
                     needsRescanAfterAcknowledgement = true
@@ -1240,7 +1248,7 @@ final class HouseholdRecordSyncService {
         for server in servers.sorted(by: { priority($0) < priority($1) }) {
             guard let identity = HouseholdRecordIdentity(recordType: server.recordType, recordName: server.recordID.recordName) else { continue }
             let asset = server[HouseholdRecordCodec.assetKey] as? CKAsset
-            let assetData = asset?.fileURL.flatMap { try? Data(contentsOf: $0) }
+            let assetData = try Self.readAssetData(asset)
             let resolution: HouseholdRecordResolution
             do {
                 resolution = try HouseholdRecordConflictResolver.resolve(
@@ -1446,6 +1454,16 @@ final class HouseholdRecordSyncService {
         ).fingerprint
     }
 
+    nonisolated static func readAssetData(_ asset: CKAsset?) throws -> Data? {
+        guard let asset else { return nil }
+        guard let fileURL = asset.fileURL,
+              let data = try? Data(contentsOf: fileURL),
+              !data.isEmpty else {
+            throw HouseholdRecordSyncError.requiredAssetUnavailable
+        }
+        return data
+    }
+
     private var activeScope: CollaborationDatabaseScope {
         locator?.isOwner == true ? .private : .shared
     }
@@ -1616,11 +1634,14 @@ enum HouseholdRecordSyncError: LocalizedError {
     case metadataMissingForPendingJournal(entries: Int)
     case syncLockUnavailable
     case anotherAppCopyIsSyncing
+    case requiredAssetUnavailable
 
     var errorDescription: String? {
         switch self {
         case .anotherAppCopyIsSyncing:
             String(localized: "Another copy of MealPlan is syncing this household. Quit the other copy and reopen MealPlan.")
+        case .requiredAssetUnavailable:
+            String(localized: "A household image could not be downloaded completely. Your existing household data was kept. Retry the sync before continuing.")
         case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal:
             String(localized: "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support.")
         default: nil
@@ -1643,6 +1664,7 @@ enum HouseholdRecordSyncError: LocalizedError {
             "stage=existingFileDivergence; legacyBytes=\(legacyBytes); fileBytes=\(fileBytes); legacySHA256=\(legacyHash); fileSHA256=\(fileHash); legacyPending=\(legacyPending); filePending=\(filePending); legacyTombstones=\(legacyTombstones); fileTombstones=\(fileTombstones)"
         case .metadataMissingForPendingJournal(let entries): "stage=metadataMissingForPendingJournal; journalEntries=\(entries)"
         case .stateStoreUnavailable: "stage=stateStoreUnavailable"
+        case .requiredAssetUnavailable: "stage=requiredAssetUnavailable"
         case .appGroupUnavailable: "stage=appGroupUnavailable"
         case .syncLockUnavailable: "stage=syncLockUnavailable"
         case .anotherAppCopyIsSyncing: "stage=anotherAppCopyIsSyncing"
@@ -1655,6 +1677,12 @@ actor HouseholdMetadataWriter {
 
     init(suiteName: String = SharedStore.appGroupID) {
         defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
+    nonisolated static func recoveryDirectory(for activeFileURL: URL) -> URL {
+        let namespace = activeFileURL.deletingPathExtension().lastPathComponent
+        return activeFileURL.deletingLastPathComponent()
+            .appending(path: "Recovery/Metadata/\(namespace)", directoryHint: .isDirectory)
     }
 
     func load(
@@ -1673,7 +1701,8 @@ actor HouseholdMetadataWriter {
                     sha256: "unavailable"
                 )
             }
-            do { return try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) }
+            let activeMetadata: HouseholdSyncMetadata
+            do { activeMetadata = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) }
             catch {
                 throw HouseholdRecordSyncError.migrationVerificationFailed(
                     stage: .decodeExistingFile,
@@ -1681,6 +1710,14 @@ actor HouseholdMetadataWriter {
                     sha256: HouseholdRecordSyncService.digest(data)
                 )
             }
+            try retireEqualLegacyCopies(
+                legacyKey: legacyKey,
+                legacyFileURL: legacyFileURL,
+                activeFileURL: activeFileURL,
+                activeData: data,
+                activeMetadata: activeMetadata
+            )
+            return activeMetadata
         }
 
         let legacyDefaultsData = defaults.data(forKey: legacyKey)
@@ -1736,7 +1773,7 @@ actor HouseholdMetadataWriter {
         catch {
             throw HouseholdRecordSyncError.migrationVerificationFailed(stage: .stageWrite, bytes: 0, sha256: "unavailable")
         }
-        do { try data.write(to: url, options: .atomic) }
+        do { try writeDurably(data, to: url) }
         catch {
             throw HouseholdRecordSyncError.migrationVerificationFailed(
                 stage: .stageWrite,
@@ -1772,9 +1809,87 @@ actor HouseholdMetadataWriter {
         return verified
     }
 
+    private func retireEqualLegacyCopies(
+        legacyKey: String,
+        legacyFileURL: URL,
+        activeFileURL: URL,
+        activeData: Data,
+        activeMetadata: HouseholdSyncMetadata
+    ) throws {
+        guard let legacyDefaultsData = defaults.data(forKey: legacyKey) else { return }
+
+        // The active metadata file is the commit point for this namespace.
+        // Preserve older or malformed defaults bytes durably before retiring
+        // them so a restart can resume without losing the old evidence.
+        do { try synchronizeFileAndDirectory(at: activeFileURL) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: activeData.count,
+                sha256: HouseholdRecordSyncService.digest(activeData)
+            )
+        }
+
+        let legacyMetadata = try? JSONDecoder().decode(HouseholdSyncMetadata.self, from: legacyDefaultsData)
+        if legacyMetadata != activeMetadata {
+            try preserveLegacyMetadata(legacyDefaultsData, activeFileURL: activeFileURL)
+        }
+        defaults.removeObject(forKey: legacyKey)
+    }
+
+    private func writeDurably(_ data: Data, to url: URL) throws {
+        try data.write(to: url, options: .atomic)
+        try synchronizeFileAndDirectory(at: url)
+    }
+
+    private func synchronizeFileAndDirectory(at url: URL) throws {
+        let file = try FileHandle(forWritingTo: url)
+        try file.synchronize()
+        try file.close()
+
+        try synchronizeDirectory(at: url.deletingLastPathComponent())
+    }
+
+    private func synchronizeDirectory(at url: URL) throws {
+        let directoryFD = open(url.path, O_RDONLY)
+        guard directoryFD >= 0 else { throw POSIXError(POSIXErrorCode(rawValue: errno) ?? .EIO) }
+        let result = fsync(directoryFD)
+        let syncError = errno
+        close(directoryFD)
+        guard result == 0 else { throw POSIXError(POSIXErrorCode(rawValue: syncError) ?? .EIO) }
+    }
+
+    private func preserveLegacyMetadata(_ data: Data, activeFileURL: URL) throws {
+        let directory = Self.recoveryDirectory(for: activeFileURL)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let namespaceRoot = activeFileURL.deletingLastPathComponent()
+        var parent = directory.deletingLastPathComponent()
+        while parent.path != namespaceRoot.path {
+            try synchronizeDirectory(at: parent)
+            parent.deleteLastPathComponent()
+        }
+        try synchronizeDirectory(at: namespaceRoot)
+        let material = "\(activeFileURL.lastPathComponent)|\(HouseholdRecordSyncService.digest(data))"
+        let nameDigest = HouseholdRecordSyncService.digest(Data(material.utf8))
+        let recoveryURL = directory.appending(path: "metadata-recovery-v1-\(nameDigest).json")
+        if FileManager.default.fileExists(atPath: recoveryURL.path) {
+            let existing = try Data(contentsOf: recoveryURL)
+            guard existing == data else {
+                throw HouseholdRecordSyncError.migrationVerificationFailed(
+                    stage: .verifyReadback,
+                    bytes: existing.count,
+                    sha256: HouseholdRecordSyncService.digest(existing)
+                )
+            }
+            try synchronizeFileAndDirectory(at: recoveryURL)
+        } else {
+            try writeDurably(data, to: recoveryURL)
+        }
+    }
+
     func write(_ metadata: HouseholdSyncMetadata, to url: URL) throws -> Int {
         let data = try JSONEncoder().encode(metadata)
-        try data.write(to: url, options: .atomic)
+        try writeDurably(data, to: url)
         let stored = try Data(contentsOf: url)
         let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
         guard stored == data, verified == metadata else {

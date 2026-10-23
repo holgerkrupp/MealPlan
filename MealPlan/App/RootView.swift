@@ -65,6 +65,7 @@ struct RootView: View {
         let metadata: CKShare.Metadata
         let existingHouseholdName: String
         let dishCount: Int
+        let householdCount: Int
     }
 
     var body: some View {
@@ -156,7 +157,9 @@ struct RootView: View {
             Text("The owner removed you or stopped sharing the household. Your recipes are still here, in a new household of your own; the shared plan and shopping list are gone from this device.")
         }
         .confirmationDialog(
-            String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
+            pendingHouseholdJoin?.householdCount == 1
+                ? String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?")
+                : String(localized: "Replace Local Households?"),
             isPresented: Binding(
                 get: { pendingHouseholdJoin != nil },
                 set: { isPresented in
@@ -184,11 +187,13 @@ struct RootView: View {
                 pendingHouseholdJoin = nil
             }
         } message: { pending in
-            Text(pending.dishCount == 0
-                ? "This device already has its own “\(pending.existingHouseholdName)” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device."
+            Text(pending.householdCount > 1
+                ? "Joining will replace \(pending.householdCount) local households. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps dishes in the joined household."
+                : pending.dishCount == 0
+                ? "This device already has its own “\(pending.existingHouseholdName)” household. MealPlan first saves a full local archive, including its plan, shopping list, history, routines, preferences, and photos. You can restore it later from Household Recovery."
                 : pending.dishCount == 1
-                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way."
-                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way.")
+                    ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps that dish in the joined household."
+                    : "This device already has its own “\(pending.existingHouseholdName)” household with \(pending.dishCount) dishes. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps those dishes in the joined household.")
         }
         // Everything the menu bar can reach from any section. Published here
         // rather than read from `AppState` directly so the menu items update —
@@ -258,11 +263,22 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(150))
         }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
-            if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
+            let atRisk: [Household]
+            do {
+                atRisk = try HouseholdCloudSharingService.localHouseholdsAtRisk(ofAccepting: metadata, context: context)
+            } catch {
+                // A failed SwiftData fetch cannot mean "nothing to preserve".
+                // Keep the invitation eligible for redelivery and fail closed.
+                HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
+                sharingErrorMessage = error.localizedDescription
+                continue
+            }
+            if let firstAtRisk = atRisk.first {
                 pendingHouseholdJoin = PendingHouseholdJoin(
                     metadata: metadata,
-                    existingHouseholdName: atRisk.name,
-                    dishCount: (atRisk.dishes ?? []).count
+                    existingHouseholdName: firstAtRisk.name,
+                    dishCount: atRisk.reduce(0) { $0 + ($1.dishes ?? []).count },
+                    householdCount: atRisk.count
                 )
             } else {
                 await acceptHouseholdJoin(metadata, mergeRecipes: false)
@@ -285,6 +301,7 @@ struct RootView: View {
             let sharing = try await MealPlanCloudSharing.service(for: activeHousehold, context: context)
             let (household, isGuest) = try await HouseholdCloudSharingService.accept(
                 metadata,
+                sourceHousehold: activeHousehold,
                 mergeRecipes: mergeRecipes,
                 context: context,
                 sharing: sharing,
