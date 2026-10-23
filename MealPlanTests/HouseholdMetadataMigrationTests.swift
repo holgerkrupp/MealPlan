@@ -75,7 +75,7 @@ struct HouseholdMetadataMigrationTests {
 
         #expect(migrated == expected)
         #expect(defaults.data(forKey: key) == nil)
-        #expect(try Data(contentsOf: fileURL) == legacyData)
+        #expect(try JSONDecoder().decode(HouseholdSyncMetadata.self, from: Data(contentsOf: fileURL)) == expected)
 
         // A process killed after the atomic file write but before retiring the
         // defaults key can repeat safely when both decoded states agree.
@@ -83,6 +83,86 @@ struct HouseholdMetadataMigrationTests {
         let resumed = try await writer.load(legacyKey: key, legacyFileURL: legacyFileURL, activeFileURL: fileURL)
         #expect(resumed == expected)
         #expect(defaults.data(forKey: key) == nil)
+    }
+
+    @Test func activeFileDivergenceArchivesOlderDefaultsAndResumes() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let key = "HouseholdRecordSync.metadata.active"
+        let fileURL = try makeFileURL()
+        defer { try? FileManager.default.removeItem(at: fileURL.deletingLastPathComponent()) }
+        let legacyFileURL = fileURL.appendingPathExtension("legacy")
+
+        var defaultsMetadata = HouseholdSyncMetadata()
+        defaultsMetadata.pendingFingerprints["dish"] = "defaults-pending"
+        var activeMetadata = HouseholdSyncMetadata()
+        activeMetadata.pendingFingerprints["dish"] = "active-pending"
+        let defaultsData = try JSONEncoder().encode(defaultsMetadata)
+        let activeData = try JSONEncoder().encode(activeMetadata)
+        defaults.set(defaultsData, forKey: key)
+        try activeData.write(to: fileURL, options: .atomic)
+
+        let loaded = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: key,
+            legacyFileURL: legacyFileURL,
+            activeFileURL: fileURL
+        )
+        #expect(loaded == activeMetadata)
+        #expect(defaults.data(forKey: key) == nil)
+        #expect(try Data(contentsOf: fileURL) == activeData)
+        let recoveryDirectory = HouseholdMetadataWriter.recoveryDirectory(for: fileURL)
+        let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
+        #expect(recoveryFiles.count == 1)
+        #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsData)
+
+        defaults.set(defaultsData, forKey: key)
+        let resumed = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: key,
+            legacyFileURL: legacyFileURL,
+            activeFileURL: fileURL
+        )
+        #expect(resumed == activeMetadata)
+        #expect(defaults.data(forKey: key) == nil)
+    }
+
+    @Test func metadataRecoveryDirectoriesAreScopedToActiveNamespace() async throws {
+        let (defaults, suite) = try makeDefaults()
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let firstURL = try makeFileURL()
+        let secondURL = try makeFileURL()
+        defer { try? FileManager.default.removeItem(at: firstURL.deletingLastPathComponent()) }
+        let firstKey = "HouseholdRecordSync.metadata.first"
+        let secondKey = "HouseholdRecordSync.metadata.second"
+        var oldValue = HouseholdSyncMetadata()
+        oldValue.pendingFingerprints["recipe"] = "old"
+        let oldBytes = try JSONEncoder().encode(oldValue)
+        var activeValue = HouseholdSyncMetadata()
+        activeValue.pendingFingerprints["recipe"] = "active"
+        let activeBytes = try JSONEncoder().encode(activeValue)
+        defaults.set(oldBytes, forKey: firstKey)
+        defaults.set(oldBytes, forKey: secondKey)
+        try activeBytes.write(to: firstURL, options: .atomic)
+        try activeBytes.write(to: secondURL, options: .atomic)
+
+        _ = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: firstKey,
+            legacyFileURL: firstURL.appendingPathExtension("legacy"),
+            activeFileURL: firstURL
+        )
+        _ = try await HouseholdMetadataWriter(suiteName: suite).load(
+            legacyKey: secondKey,
+            legacyFileURL: secondURL.appendingPathExtension("legacy"),
+            activeFileURL: secondURL
+        )
+        let firstRecovery = HouseholdMetadataWriter.recoveryDirectory(for: firstURL)
+        let secondRecovery = HouseholdMetadataWriter.recoveryDirectory(for: secondURL)
+        #expect(firstRecovery != secondRecovery)
+        #expect(FileManager.default.fileExists(atPath: firstRecovery.path))
+        #expect(FileManager.default.fileExists(atPath: secondRecovery.path))
+
+        try FileManager.default.removeItem(at: firstRecovery)
+        #expect(!FileManager.default.fileExists(atPath: firstRecovery.path))
+        #expect(FileManager.default.fileExists(atPath: secondRecovery.path))
     }
 
     @Test func equalStateWithDifferentJSONBytesCompletesMigration() async throws {
