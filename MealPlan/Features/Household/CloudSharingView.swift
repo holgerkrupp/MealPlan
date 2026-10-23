@@ -39,10 +39,16 @@ struct HouseholdSharingView: View {
                         description: Text(errorMessage ?? String(localized: "MealPlan couldn’t prepare household sharing."))
                     )
                     .overlay(alignment: .bottom) {
-                        Button(String(localized: "Try Again")) {
-                            Task { await loadSharing() }
+                        VStack(spacing: 12) {
+                            Button(String(localized: "Try Again")) {
+                                Task { await loadSharing() }
+                            }
+                            .buttonStyle(.borderedProminent)
+
+                            ShareLink(item: HouseholdSyncDiagnostics.supportReport()) {
+                                Label(String(localized: "Share Diagnostics"), systemImage: "square.and.arrow.up")
+                            }
                         }
-                        .buttonStyle(.borderedProminent)
                         .padding(.bottom, 28)
                     }
                 }
@@ -214,13 +220,21 @@ struct HouseholdSharingView: View {
 
     private func loadSharing() async {
         isLoading = true
+        sharing = nil
+        share = nil
+        errorMessage = nil
         do {
             let service = try await MealPlanCloudSharing.service(for: household, context: modelContext)
             sharing = service
             share = try await service.existingShare(rootID: household.uuid.uuidString)
             errorMessage = nil
         } catch {
-            errorMessage = error.localizedDescription
+            if let localized = error as? LocalizedError,
+               let suggestion = localized.recoverySuggestion {
+                errorMessage = "\(error.localizedDescription)\n\n\(suggestion)"
+            } else {
+                errorMessage = error.localizedDescription
+            }
         }
         isLoading = false
     }

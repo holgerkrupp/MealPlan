@@ -158,6 +158,7 @@ struct HouseholdSyncDiagnostic: Codable, Equatable, Sendable {
     var databaseScope: String
     var role: HouseholdCollaborationRole
     var pendingCount: Int
+    var detail: String?
 }
 
 enum HouseholdSyncDiagnostics {
@@ -168,6 +169,7 @@ enum HouseholdSyncDiagnostics {
         event: String,
         locator: HouseholdShareLocator,
         pendingCount: Int = 0,
+        detail: String? = nil,
         defaults: UserDefaults = HouseholdCollaborationStore.defaults
     ) {
         var entries = (defaults.data(forKey: key)).flatMap {
@@ -179,7 +181,8 @@ enum HouseholdSyncDiagnostics {
             zoneName: locator.zoneName,
             databaseScope: locator.isOwner ? "private" : "shared",
             role: .initial(locator: locator),
-            pendingCount: pendingCount
+            pendingCount: pendingCount,
+            detail: detail
         ))
         if entries.count > limit { entries.removeFirst(entries.count - limit) }
         defaults.set(try? JSONEncoder().encode(entries), forKey: key)
@@ -188,6 +191,23 @@ enum HouseholdSyncDiagnostics {
     static func recent(defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> [HouseholdSyncDiagnostic] {
         guard let data = defaults.data(forKey: key) else { return [] }
         return (try? JSONDecoder().decode([HouseholdSyncDiagnostic].self, from: data)) ?? []
+    }
+
+    static func supportReport(defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let version = info["CFBundleShortVersionString"] as? String ?? "unknown"
+        let build = info["CFBundleVersion"] as? String ?? "unknown"
+        var lines = [
+            "MealPlan collaboration diagnostics",
+            "Version: \(version) (\(build))",
+            "CloudKit environment: \(BuildEnvironment.cloudKit.localizedName)",
+            "Recent events:"
+        ]
+        lines += recent(defaults: defaults).suffix(20).map { entry in
+            let detail = entry.detail.map { " · \($0)" } ?? ""
+            return "\(entry.at.ISO8601Format()) · \(entry.event) · \(entry.databaseScope) · \(entry.role.rawValue) · pending=\(entry.pendingCount)\(detail)"
+        }
+        return lines.joined(separator: "\n")
     }
 }
 

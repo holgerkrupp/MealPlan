@@ -283,6 +283,15 @@ struct HouseholdRecoveryView: View {
             if showsDiagnostics {
                 Section(String(localized: "Diagnostics")) {
                     LabeledContent(String(localized: "iCloud environment"), value: BuildEnvironment.cloudKit.localizedName)
+                    if let lastSync = HouseholdSyncDiagnostics.recent().last {
+                        LabeledContent(String(localized: "Last sync event"), value: lastSync.event)
+                        LabeledContent(String(localized: "Pending records"), value: "\(lastSync.pendingCount)")
+                        if let detail = lastSync.detail {
+                            Text(detail)
+                                .font(.caption.monospaced())
+                                .textSelection(.enabled)
+                        }
+                    }
                     ForEach(households + recentlyDeleted) { household in
                         VStack(alignment: .leading, spacing: 3) {
                             Text(household.householdID.uuidString)
@@ -291,6 +300,12 @@ struct HouseholdRecoveryView: View {
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
+                    }
+                    ShareLink(item: HouseholdSyncDiagnostics.supportReport()) {
+                        Label(String(localized: "Share Diagnostics"), systemImage: "square.and.arrow.up")
+                    }
+                    Link(destination: URL(string: "https://github.com/holgerkrupp/MealPlan/issues")!) {
+                        Label(String(localized: "Get Help"), systemImage: "questionmark.circle")
                     }
                 }
             }

@@ -49,14 +49,14 @@ struct HouseholdShareLocator: Codable, Equatable, Sendable {
     }
 }
 
-struct HouseholdSyncTombstone: Codable, Sendable {
+struct HouseholdSyncTombstone: Codable, Equatable, Sendable {
     var markerUUID: UUID
     var deletedType: HouseholdRecordType
     var deletedUUID: UUID
     var deletedAt: Date
 }
 
-struct HouseholdSyncMetadata: Codable, Sendable {
+struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
     /// The last value confirmed by CloudKit. A local scan must always compare
     /// against this baseline, never against the value merely put into the
     /// engine's pending queue.
@@ -151,6 +151,80 @@ struct HouseholdSyncMetadata: Codable, Sendable {
         try values.encode(systemFields, forKey: .systemFields)
         try values.encode(tombstones, forKey: .tombstones)
         try values.encode(needsFullUpload, forKey: .needsFullUpload)
+    }
+}
+
+enum HouseholdSyncMetadataMigrationStage: String, Codable, Sendable {
+    case decodeLegacy
+    case readExistingFile
+    case decodeExistingFile
+    case compareCopies
+    case stageWrite
+    case verifyReadback
+}
+
+enum HouseholdSyncMetadataMigrationResolution {
+    case empty
+    case existing(HouseholdSyncMetadata, retireLegacy: Bool)
+    case migrate(HouseholdSyncMetadata, Data)
+
+    static func resolve(legacyData: Data?, fileData: Data?) throws -> Self {
+        let legacy: HouseholdSyncMetadata?
+        if let legacyData {
+            do { legacy = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: legacyData) }
+            catch {
+                throw HouseholdRecordSyncError.migrationVerificationFailed(
+                    stage: .decodeLegacy,
+                    bytes: legacyData.count,
+                    sha256: digest(legacyData)
+                )
+            }
+        } else {
+            legacy = nil
+        }
+
+        let file: HouseholdSyncMetadata?
+        if let fileData {
+            do { file = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: fileData) }
+            catch {
+                throw HouseholdRecordSyncError.migrationVerificationFailed(
+                    stage: .decodeExistingFile,
+                    bytes: fileData.count,
+                    sha256: digest(fileData)
+                )
+            }
+        } else {
+            file = nil
+        }
+
+        switch (legacy, legacyData, file, fileData) {
+        case (nil, nil, nil, nil):
+            return .empty
+        case (let existing?, let data?, nil, nil):
+            return .migrate(existing, data)
+        case (nil, nil, let existing?, _):
+            return .existing(existing, retireLegacy: false)
+        case (let old?, _, let current?, _):
+            guard old == current else {
+                throw HouseholdRecordSyncError.metadataCopiesDiverged(
+                    legacyBytes: legacyData?.count ?? 0,
+                    fileBytes: fileData?.count ?? 0,
+                    legacyHash: digest(legacyData ?? Data()),
+                    fileHash: digest(fileData ?? Data()),
+                    legacyPending: old.pendingFingerprints.count,
+                    filePending: current.pendingFingerprints.count,
+                    legacyTombstones: old.tombstones.count,
+                    fileTombstones: current.tombstones.count
+                )
+            }
+            return .existing(current, retireLegacy: true)
+        default:
+            throw HouseholdRecordSyncError.migrationVerificationFailed(stage: .compareCopies, bytes: 0, sha256: "unavailable")
+        }
+    }
+
+    private static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 }
 
@@ -342,14 +416,18 @@ final class HouseholdRecordSyncService {
     /// deletes for the owner's records.
     func discardState(for locator: HouseholdShareLocator) async throws {
         let metadataURL = try metadataFileURL(for: locator)
+        let legacyMetadataURL = try legacyMetadataFileURL(for: locator)
         if FileManager.default.fileExists(atPath: metadataURL.path) {
             try FileManager.default.removeItem(at: metadataURL)
+        }
+        if FileManager.default.fileExists(atPath: legacyMetadataURL.path) {
+            try FileManager.default.removeItem(at: legacyMetadataURL)
         }
         if !locator.isOwner, let packageStateStore {
             try await packageStateStore.discardDatabaseState(for: .shared)
         }
         defaults.removeObject(forKey: stateKey(for: locator))
-        defaults.removeObject(forKey: metadataKey(for: locator))
+        defaults.removeObject(forKey: legacyMetadataKey(for: locator))
     }
 
     func record(
@@ -509,8 +587,7 @@ final class HouseholdRecordSyncService {
             modelContainer = context.container
         }
         locator = nextLocator
-        try migrateLegacyMetadataDefaults()
-        metadata = try loadMetadata(for: nextLocator)
+        metadata = .init()
         pendingSnapshots.removeAll(keepingCapacity: false)
         needsLocalScan = true
         didRestoreTombstoneOperations = false
@@ -529,10 +606,39 @@ final class HouseholdRecordSyncService {
         } else {
             await packageStateStore?.setActiveLocator(nextLocator)
         }
+        stateStoreAccountPartitionIdentifier = accountPartition
         guard let packageStateStore else {
             throw HouseholdRecordSyncError.stateStoreUnavailable
         }
         try await packageStateStore.prepareStorage()
+        let migrationJournalCount = try await packageStateStore.pendingLocalChanges(in: activeScope).filter {
+            $0.recordID.zoneID == nextLocator.zoneID
+        }.count
+        let metadataURL = try metadataFileURL(for: nextLocator)
+        let legacyMetadataURL = try legacyMetadataFileURL(for: nextLocator)
+        do {
+            metadata = try await metadataWriter.load(
+                legacyKey: legacyMetadataKey(for: nextLocator),
+                legacyFileURL: legacyMetadataURL,
+                activeFileURL: metadataURL,
+                journalEntryCount: migrationJournalCount
+            )
+        } catch {
+            lastError = error
+            let failure = error as? HouseholdRecordSyncError
+            let namespace = "\(accountPartition)|\(Self.storageSuffix(for: nextLocator, environment: BuildEnvironment.cloudKit))"
+            let namespaceHash = Self.digest(Data(namespace.utf8))
+            let binarySHA = await metadataWriter.executableSHA256() ?? "unavailable"
+            let eventDetail = "\(failure?.supportDiagnostic ?? "stage=unknown"); journalEntries=\(migrationJournalCount); buildArtifactSHA256=\(binarySHA)"
+            logger.error("metadata.migration.failed environment=\(BuildEnvironment.cloudKit.rawValue, privacy: .public) namespace=\(namespaceHash, privacy: .public) build=\(Self.buildIdentifier, privacy: .public) \(eventDetail, privacy: .public)")
+            HouseholdSyncDiagnostics.record(
+                event: "metadataMigrationFailed",
+                locator: nextLocator,
+                pendingCount: migrationJournalCount,
+                detail: "environment=\(BuildEnvironment.cloudKit.rawValue); namespace=\(namespaceHash); build=\(Self.buildIdentifier); \(eventDetail)"
+            )
+            throw error
+        }
         let pool = try await CloudKitSyncEnginePool.shared(
             containerIdentifier: SharedStore.cloudKitContainerID,
             environment: collaborationEnvironment,
@@ -1364,6 +1470,16 @@ final class HouseholdRecordSyncService {
         UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard
     }
 
+    private static var buildIdentifier: String {
+        let version = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown"
+        let build = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "unknown"
+        return "\(version)(\(build))"
+    }
+
+    nonisolated fileprivate static func digest(_ data: Data) -> String {
+        SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// CloudKit's Development and Production databases are completely
     /// independent. Their sync tokens, pending changes, record change tags,
     /// and zone state must never share a cache key even when the household's
@@ -1378,10 +1494,21 @@ final class HouseholdRecordSyncService {
     }
 
     private func stateKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.state.\(storageSuffix(for: locator))" }
-    private func metadataKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.metadata.\(storageSuffix(for: locator))" }
+    private func legacyMetadataKey(for locator: HouseholdShareLocator) -> String { "HouseholdRecordSync.metadata.\(storageSuffix(for: locator))" }
 
     private func metadataFileURL(for locator: HouseholdShareLocator) throws -> URL {
-        try metadataFileURL(storageSuffix: storageSuffix(for: locator), environment: BuildEnvironment.cloudKit.rawValue)
+        guard let stateStoreAccountPartitionIdentifier else {
+            throw HouseholdRecordSyncError.stateStoreUnavailable
+        }
+        return try metadataFileURL(
+            storageSuffix: storageSuffix(for: locator),
+            environment: BuildEnvironment.cloudKit.rawValue,
+            accountPartitionIdentifier: stateStoreAccountPartitionIdentifier
+        )
+    }
+
+    private func legacyMetadataFileURL(for locator: HouseholdShareLocator) throws -> URL {
+        try legacyMetadataFileURL(storageSuffix: storageSuffix(for: locator), environment: BuildEnvironment.cloudKit.rawValue)
     }
 
     private func acquireSyncOwnership() throws {
@@ -1402,7 +1529,7 @@ final class HouseholdRecordSyncService {
         #endif
     }
 
-    private func metadataFileURL(storageSuffix: String, environment: String) throws -> URL {
+    private func legacyMetadataFileURL(storageSuffix: String, environment: String) throws -> URL {
         guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
             throw HouseholdRecordSyncError.appGroupUnavailable
         }
@@ -1413,70 +1540,19 @@ final class HouseholdRecordSyncService {
         return directory.appending(path: "metadata-v1-\(digest).json")
     }
 
-    private func migrateLegacyMetadataDefaults() throws {
-        let prefix = "HouseholdRecordSync.metadata."
-        for key in defaults.dictionaryRepresentation().keys where key.hasPrefix(prefix) {
-            let suffix = String(key.dropFirst(prefix.count))
-            guard let namespaceData = Data(base64Encoded: suffix),
-                  let namespace = String(data: namespaceData, encoding: .utf8),
-                  let environment = namespace.split(separator: "|", omittingEmptySubsequences: false).first,
-                  let legacyData = defaults.data(forKey: key) else {
-                throw HouseholdRecordSyncError.legacyMetadataUnrecoverable
-            }
-            let legacy = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: legacyData)
-            let url = try metadataFileURL(storageSuffix: suffix, environment: String(environment))
-            if FileManager.default.fileExists(atPath: url.path) {
-                let stored = try Data(contentsOf: url)
-                let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
-                guard stored == legacyData,
-                      verified.serverFingerprints == legacy.serverFingerprints,
-                      verified.pendingFingerprints == legacy.pendingFingerprints,
-                      verified.tombstones.count == legacy.tombstones.count else {
-                    throw HouseholdRecordSyncError.migrationVerificationFailed
-                }
-            } else {
-                try legacyData.write(to: url, options: .atomic)
-                let stored = try Data(contentsOf: url)
-                let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
-                guard stored == legacyData,
-                      verified.serverFingerprints == legacy.serverFingerprints,
-                      verified.pendingFingerprints == legacy.pendingFingerprints,
-                      verified.tombstones.count == legacy.tombstones.count else {
-                    throw HouseholdRecordSyncError.migrationVerificationFailed
-                }
-            }
-            defaults.removeObject(forKey: key)
-            logger.info("Migrated household sync metadata (bytes=\(legacyData.count, privacy: .public), fingerprints=\(legacy.serverFingerprints.count, privacy: .public), pending=\(legacy.pendingFingerprints.count, privacy: .public), systemFields=\(legacy.systemFields.count, privacy: .public), tombstones=\(legacy.tombstones.count, privacy: .public)).")
+    private func metadataFileURL(
+        storageSuffix: String,
+        environment: String,
+        accountPartitionIdentifier: String
+    ) throws -> URL {
+        guard let root = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw HouseholdRecordSyncError.appGroupUnavailable
         }
-    }
-
-    private func loadMetadata(for locator: HouseholdShareLocator) throws -> HouseholdSyncMetadata {
-        let url = try metadataFileURL(for: locator)
-        if FileManager.default.fileExists(atPath: url.path) {
-            let data = try Data(contentsOf: url)
-            let decoded = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data)
-            defaults.removeObject(forKey: metadataKey(for: locator))
-            logger.info("Loaded household sync metadata (bytes=\(data.count, privacy: .public), fingerprints=\(decoded.serverFingerprints.count, privacy: .public), pending=\(decoded.pendingFingerprints.count, privacy: .public), systemFields=\(decoded.systemFields.count, privacy: .public), tombstones=\(decoded.tombstones.count, privacy: .public)).")
-            return decoded
-        }
-
-        let legacyKey = metadataKey(for: locator)
-        guard let legacyData = defaults.data(forKey: legacyKey) else { return .init() }
-        // The old value may be the only record of pending uploads or deletes.
-        // Decode and verify the file before deleting the recoverable defaults copy.
-        let decoded = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: legacyData)
-        try legacyData.write(to: url, options: .atomic)
-        let stored = try Data(contentsOf: url)
-        let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
-        guard stored == legacyData,
-              verified.serverFingerprints == decoded.serverFingerprints,
-              verified.pendingFingerprints == decoded.pendingFingerprints,
-              verified.tombstones.count == decoded.tombstones.count else {
-            throw HouseholdRecordSyncError.migrationVerificationFailed
-        }
-        defaults.removeObject(forKey: legacyKey)
-        logger.info("Migrated household sync metadata (bytes=\(stored.count, privacy: .public), fingerprints=\(decoded.serverFingerprints.count, privacy: .public), pending=\(decoded.pendingFingerprints.count, privacy: .public), systemFields=\(decoded.systemFields.count, privacy: .public), tombstones=\(decoded.tombstones.count, privacy: .public)).")
-        return verified
+        let directory = root.appending(path: "HouseholdSyncState", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let material = "\(environment)|\(accountPartitionIdentifier)|\(storageSuffix)"
+        let digest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
+        return directory.appending(path: "metadata-v2-\(digest).json")
     }
 
     private func persistMetadata() async throws {
@@ -1489,7 +1565,7 @@ final class HouseholdRecordSyncService {
         // seconds. Keep that work off the UI actor; the writer actor also
         // preserves write order if callbacks arrive while one write is active.
         let byteCount = try await metadataWriter.write(snapshot, to: url)
-        defaults.removeObject(forKey: metadataKey(for: locator))
+        defaults.removeObject(forKey: legacyMetadataKey(for: locator))
         let duration = startedAt.duration(to: .now)
         logger.info("state.persist.end bytes=\(byteCount, privacy: .public) duration=\(duration, privacy: .public) fingerprints=\(snapshot.serverFingerprints.count, privacy: .public) pending=\(snapshot.pendingFingerprints.count, privacy: .public) tombstones=\(snapshot.tombstones.count, privacy: .public)")
     }
@@ -1526,8 +1602,18 @@ final class HouseholdRecordSyncService {
 enum HouseholdRecordSyncError: LocalizedError {
     case stateStoreUnavailable
     case appGroupUnavailable
-    case migrationVerificationFailed
-    case legacyMetadataUnrecoverable
+    case migrationVerificationFailed(stage: HouseholdSyncMetadataMigrationStage, bytes: Int, sha256: String)
+    case metadataCopiesDiverged(
+        legacyBytes: Int,
+        fileBytes: Int,
+        legacyHash: String,
+        fileHash: String,
+        legacyPending: Int,
+        filePending: Int,
+        legacyTombstones: Int,
+        fileTombstones: Int
+    )
+    case metadataMissingForPendingJournal(entries: Int)
     case syncLockUnavailable
     case anotherAppCopyIsSyncing
 
@@ -1535,22 +1621,168 @@ enum HouseholdRecordSyncError: LocalizedError {
         switch self {
         case .anotherAppCopyIsSyncing:
             String(localized: "Another copy of MealPlan is syncing this household. Quit the other copy and reopen MealPlan.")
+        case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal:
+            String(localized: "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support.")
         default: nil
+        }
+    }
+
+    var recoverySuggestion: String? {
+        switch self {
+        case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal:
+            String(localized: "Keep MealPlan installed and retry. If the problem continues, open Household Recovery → Recovery Diagnostics and share the diagnostics with support.")
+        default: nil
+        }
+    }
+
+    var supportDiagnostic: String {
+        switch self {
+        case .migrationVerificationFailed(let stage, let bytes, let sha256):
+            "stage=\(stage.rawValue); bytes=\(bytes); sha256=\(sha256)"
+        case .metadataCopiesDiverged(let legacyBytes, let fileBytes, let legacyHash, let fileHash, let legacyPending, let filePending, let legacyTombstones, let fileTombstones):
+            "stage=existingFileDivergence; legacyBytes=\(legacyBytes); fileBytes=\(fileBytes); legacySHA256=\(legacyHash); fileSHA256=\(fileHash); legacyPending=\(legacyPending); filePending=\(filePending); legacyTombstones=\(legacyTombstones); fileTombstones=\(fileTombstones)"
+        case .metadataMissingForPendingJournal(let entries): "stage=metadataMissingForPendingJournal; journalEntries=\(entries)"
+        case .stateStoreUnavailable: "stage=stateStoreUnavailable"
+        case .appGroupUnavailable: "stage=appGroupUnavailable"
+        case .syncLockUnavailable: "stage=syncLockUnavailable"
+        case .anotherAppCopyIsSyncing: "stage=anotherAppCopyIsSyncing"
         }
     }
 }
 
-private actor HouseholdMetadataWriter {
+actor HouseholdMetadataWriter {
+    private let defaults: UserDefaults
+
+    init(suiteName: String = SharedStore.appGroupID) {
+        defaults = UserDefaults(suiteName: suiteName) ?? .standard
+    }
+
+    func load(
+        legacyKey: String,
+        legacyFileURL: URL,
+        activeFileURL: URL,
+        journalEntryCount: Int = 0
+    ) throws -> HouseholdSyncMetadata {
+        if FileManager.default.fileExists(atPath: activeFileURL.path) {
+            let data: Data
+            do { data = try Data(contentsOf: activeFileURL) }
+            catch {
+                throw HouseholdRecordSyncError.migrationVerificationFailed(
+                    stage: .readExistingFile,
+                    bytes: 0,
+                    sha256: "unavailable"
+                )
+            }
+            do { return try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) }
+            catch {
+                throw HouseholdRecordSyncError.migrationVerificationFailed(
+                    stage: .decodeExistingFile,
+                    bytes: data.count,
+                    sha256: HouseholdRecordSyncService.digest(data)
+                )
+            }
+        }
+
+        let legacyDefaultsData = defaults.data(forKey: legacyKey)
+        let legacyFileData: Data?
+        do {
+            legacyFileData = FileManager.default.fileExists(atPath: legacyFileURL.path)
+                ? try Data(contentsOf: legacyFileURL)
+                : nil
+        } catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .readExistingFile,
+                bytes: 0,
+                sha256: "unavailable"
+            )
+        }
+
+        switch try HouseholdSyncMetadataMigrationResolution.resolve(legacyData: legacyDefaultsData, fileData: legacyFileData) {
+        case .empty:
+            guard journalEntryCount == 0 else {
+                throw HouseholdRecordSyncError.metadataMissingForPendingJournal(entries: journalEntryCount)
+            }
+            return .init()
+        case .existing(let metadata, let retireLegacy):
+            let verified = try stage(metadata, to: activeFileURL)
+            if retireLegacy { defaults.removeObject(forKey: legacyKey) }
+            return verified
+        case .migrate(let metadata, _):
+            let verified = try stage(metadata, to: activeFileURL)
+            defaults.removeObject(forKey: legacyKey)
+            return verified
+        }
+    }
+
+    func executableSHA256() -> String? {
+        guard let executableURL = Bundle.main.executableURL,
+              let file = try? FileHandle(forReadingFrom: executableURL)
+        else { return nil }
+        defer { try? file.close() }
+        var hasher = SHA256()
+        do {
+            while let chunk = try file.read(upToCount: 1024 * 1024), !chunk.isEmpty {
+                hasher.update(data: chunk)
+            }
+        } catch {
+            return nil
+        }
+        return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func stage(_ metadata: HouseholdSyncMetadata, to url: URL) throws -> HouseholdSyncMetadata {
+        let data: Data
+        do { data = try JSONEncoder().encode(metadata) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(stage: .stageWrite, bytes: 0, sha256: "unavailable")
+        }
+        do { try data.write(to: url, options: .atomic) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .stageWrite,
+                bytes: data.count,
+                sha256: HouseholdRecordSyncService.digest(data)
+            )
+        }
+        let stored: Data
+        do { stored = try Data(contentsOf: url) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: data.count,
+                sha256: HouseholdRecordSyncService.digest(data)
+            )
+        }
+        let verified: HouseholdSyncMetadata
+        do { verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored) }
+        catch {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: stored.count,
+                sha256: HouseholdRecordSyncService.digest(stored)
+            )
+        }
+        guard verified == metadata else {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: stored.count,
+                sha256: HouseholdRecordSyncService.digest(stored)
+            )
+        }
+        return verified
+    }
+
     func write(_ metadata: HouseholdSyncMetadata, to url: URL) throws -> Int {
         let data = try JSONEncoder().encode(metadata)
         try data.write(to: url, options: .atomic)
         let stored = try Data(contentsOf: url)
         let verified = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: stored)
-        guard stored == data,
-              verified.serverFingerprints == metadata.serverFingerprints,
-              verified.pendingFingerprints == metadata.pendingFingerprints,
-              verified.tombstones.count == metadata.tombstones.count else {
-            throw HouseholdRecordSyncError.migrationVerificationFailed
+        guard stored == data, verified == metadata else {
+            throw HouseholdRecordSyncError.migrationVerificationFailed(
+                stage: .verifyReadback,
+                bytes: stored.count,
+                sha256: HouseholdRecordSyncService.digest(stored)
+            )
         }
         return data.count
     }

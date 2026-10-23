@@ -5159,6 +5159,9 @@
     "average per meal" : {
 
     },
+    "Avocado" : {
+
+    },
     "Back" : {
       "localizations" : {
         "da" : {
@@ -7796,6 +7799,9 @@
           }
         }
       }
+    },
+    "Cinnamon" : {
+
     },
     "Citrus" : {
 
@@ -15702,6 +15708,9 @@
     "Get Expiring Ingredients" : {
 
     },
+    "Get Help" : {
+
+    },
     "Get Ingredient Inventory" : {
 
     },
@@ -18592,6 +18601,9 @@
         }
       }
     },
+    "Keep MealPlan installed and retry. If the problem continues, open Household Recovery → Recovery Diagnostics and share the diagnostics with support." : {
+
+    },
     "Keep opening to see what is already at home and what you can make from it." : {
 
     },
@@ -18923,6 +18935,9 @@
         }
       }
     },
+    "Last sync event" : {
+
+    },
     "Last synced" : {
       "localizations" : {
         "da" : {
@@ -18979,6 +18994,9 @@
 
     },
     "Leftovers and nutrition" : {
+
+    },
+    "Lemon" : {
 
     },
     "Lentils" : {
@@ -19894,6 +19912,9 @@
           }
         }
       }
+    },
+    "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support." : {
+
     },
     "MealPlan couldn’t prepare household sharing." : {
       "localizations" : {
@@ -25934,6 +25955,9 @@
 
     },
     "PDF" : {
+
+    },
+    "Pending records" : {
 
     },
     "People are free at different times." : {
@@ -33663,6 +33687,9 @@
     "Share all" : {
 
     },
+    "Share Diagnostics" : {
+
+    },
     "Share household" : {
       "localizations" : {
         "de" : {
@@ -35595,6 +35622,9 @@
 
     },
     "Storage location" : {
+
+    },
+    "Strawberry" : {
 
     },
     "Subscribe" : {

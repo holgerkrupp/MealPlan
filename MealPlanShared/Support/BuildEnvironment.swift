@@ -41,10 +41,21 @@ enum BuildEnvironment {
         // locally often doesn't either — both talk to the development
         // environment, which is exactly what a debug build is.
         guard let entitlements = provisioningEntitlements() else {
+            #if os(iOS)
+            // App Store and TestFlight iOS installs may not retain an
+            // embedded provisioning profile. A device Release build is the
+            // production CloudKit build; simulators always use Development.
+            #if targetEnvironment(simulator) || DEBUG
+            return .development
+            #else
+            return .production
+            #endif
+            #else
             #if DEBUG
             return .development
             #else
             return .unknown
+            #endif
             #endif
         }
         if let debuggable = entitlements["get-task-allow"] as? Bool {
@@ -76,7 +87,15 @@ enum BuildEnvironment {
         default:
             break
         }
+        #if os(iOS)
+        #if targetEnvironment(simulator) || DEBUG
+        return .development
+        #else
+        return .production
+        #endif
+        #else
         return .unknown
+        #endif
     }()
 
     #if os(macOS)
