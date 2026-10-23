@@ -130,7 +130,7 @@ struct MealPlanCloudKitStateStoreTests {
         #expect(recovered == fileCopy)
         #expect(fixture.defaults.data(forKey: key) == nil)
         #expect(try Data(contentsOf: fixture.stateURL(scope: .private)) == fileCopy)
-        let recoveryDirectory = fixture.root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
+        let recoveryDirectory = fixture.recoveryDirectory(scope: .private)
         let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
         #expect(recoveryFiles.count == 1)
         #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsCopy)
@@ -163,7 +163,7 @@ struct MealPlanCloudKitStateStoreTests {
         let recovered = try await fixture.makeStore().loadState(for: .private)
         #expect(recovered == fileCopy)
         #expect(fixture.defaults.data(forKey: key) == nil)
-        let recoveryDirectory = fixture.root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
+        let recoveryDirectory = fixture.recoveryDirectory(scope: .private)
         let recoveryFiles = try FileManager.default.contentsOfDirectory(at: recoveryDirectory, includingPropertiesForKeys: nil)
         #expect(recoveryFiles.count == 1)
         #expect(try Data(contentsOf: #require(recoveryFiles.first)) == defaultsCopy)
@@ -269,6 +269,36 @@ struct MealPlanCloudKitStateStoreTests {
         })
         #expect((savedEntry["systemFields"] as? String).flatMap { Data(base64Encoded: $0) }?.isEmpty == false)
     }
+
+    @Test func discardRemovesOnlyMatchingEnvironmentAccountAndScopeArchives() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let otherScopes: [(CollaborationEnvironment, String, CollaborationDatabaseScope)] = [
+            (.development, fixture.accountPartitionIdentifier, .private),
+            (.production, "other-account-partition", .private),
+            (.production, fixture.accountPartitionIdentifier, .shared),
+        ]
+
+        let ownArchive = fixture.recoveryDirectory(scope: .private).appending(path: "state-test.bin")
+        try FileManager.default.createDirectory(at: ownArchive.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data([1]).write(to: ownArchive)
+
+        var unrelatedArchives: [URL] = []
+        for (environment, account, scope) in otherScopes {
+            let url = fixture.recoveryDirectory(scope: scope, environment: environment, account: account)
+                .appending(path: "state-test.bin")
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data([2]).write(to: url)
+            unrelatedArchives.append(url)
+        }
+
+        try await fixture.makeStore().discardDatabaseState(for: .private)
+
+        #expect(!FileManager.default.fileExists(atPath: ownArchive.deletingLastPathComponent().path))
+        for archive in unrelatedArchives {
+            #expect(try Data(contentsOf: archive) == Data([2]))
+        }
+    }
 }
 
 private enum InjectedFault: Error, Sendable {
@@ -332,6 +362,20 @@ private struct Fixture {
 
     func journalURL(scope: CollaborationDatabaseScope) -> URL {
         fileURL(kind: "journal", scope: scope, extension: "json")
+    }
+
+    func recoveryDirectory(
+        scope: CollaborationDatabaseScope,
+        environment: CollaborationEnvironment? = nil,
+        account: String? = nil
+    ) -> URL {
+        let environment = environment ?? self.environment
+        let account = account ?? accountPartitionIdentifier
+        let accountDigest = SHA256.hash(data: Data(account.utf8)).map { String(format: "%02x", $0) }.joined()
+        return root.appending(
+            path: "HouseholdSyncState/Recovery/\(environment.rawValue)/\(accountDigest)/\(scope.rawValue)",
+            directoryHint: .isDirectory
+        )
     }
 
     func cleanUp() {

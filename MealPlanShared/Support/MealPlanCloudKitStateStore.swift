@@ -223,8 +223,10 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
     func discardDatabaseState(for scope: CollaborationDatabaseScope) throws {
         let stateURL = try fileURL(kind: "state", scope: scope)
         let journalURL = try fileURL(kind: "journal", scope: scope)
+        let recoveryURL = try recoveryDirectory(for: scope)
         if fileManager.fileExists(atPath: stateURL.path) { try fileManager.removeItem(at: stateURL) }
         if fileManager.fileExists(atPath: journalURL.path) { try fileManager.removeItem(at: journalURL) }
+        if fileManager.fileExists(atPath: recoveryURL.path) { try fileManager.removeItem(at: recoveryURL) }
         defaults.removeObject(forKey: stateKey(for: scope))
         defaults.removeObject(forKey: journalKey(for: scope))
         if scope == activeScope { defaults.removeObject(forKey: legacyStateKey) }
@@ -324,16 +326,38 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
     }
 
     private func recoveryFileURL(kind: String, scope: CollaborationDatabaseScope, data: Data) throws -> URL {
-        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
-            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
-        }
-        let directory = root.appending(path: "HouseholdSyncState/Recovery", directoryHint: .isDirectory)
-        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        try synchronizeDirectory(at: directory.deletingLastPathComponent())
+        let directory = try ensureRecoveryDirectory(for: scope)
         let material = "\(environment.rawValue)|\(accountPartitionIdentifier)|\(scope.rawValue)|\(kind)|\(Self.digest(data))"
         let nameDigest = SHA256.hash(data: Data(material.utf8)).map { String(format: "%02x", $0) }.joined()
         let fileExtension = kind == "state" ? "bin" : "json"
         return directory.appending(path: "\(kind)-recovery-v1-\(nameDigest).\(fileExtension)")
+    }
+
+    private func recoveryDirectory(for scope: CollaborationDatabaseScope) throws -> URL {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
+        }
+        let accountDigest = Self.digest(Data(accountPartitionIdentifier.utf8))
+        let directory = root.appending(
+            path: "HouseholdSyncState/Recovery/\(environment.rawValue)/\(accountDigest)/\(scope.rawValue)",
+            directoryHint: .isDirectory
+        )
+        return directory
+    }
+
+    private func ensureRecoveryDirectory(for scope: CollaborationDatabaseScope) throws -> URL {
+        guard let root = storageRootURL ?? fileManager.containerURL(forSecurityApplicationGroupIdentifier: SharedStore.appGroupID) else {
+            throw MealPlanCloudKitStateStoreError.appGroupUnavailable
+        }
+        let directory = try recoveryDirectory(for: scope)
+        try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+        var parent = directory.deletingLastPathComponent()
+        while parent.path != root.path {
+            try synchronizeDirectory(at: parent)
+            parent.deleteLastPathComponent()
+        }
+        try synchronizeDirectory(at: root)
+        return directory
     }
 
     private func synchronizeFileAndDirectory(at url: URL, injectFaults: Bool) throws {

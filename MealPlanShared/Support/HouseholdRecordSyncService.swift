@@ -421,8 +421,12 @@ final class HouseholdRecordSyncService {
     func discardState(for locator: HouseholdShareLocator) async throws {
         let metadataURL = try metadataFileURL(for: locator)
         let legacyMetadataURL = try legacyMetadataFileURL(for: locator)
+        let metadataRecoveryURL = HouseholdMetadataWriter.recoveryDirectory(for: metadataURL)
         if FileManager.default.fileExists(atPath: metadataURL.path) {
             try FileManager.default.removeItem(at: metadataURL)
+        }
+        if FileManager.default.fileExists(atPath: metadataRecoveryURL.path) {
+            try FileManager.default.removeItem(at: metadataRecoveryURL)
         }
         if FileManager.default.fileExists(atPath: legacyMetadataURL.path) {
             try FileManager.default.removeItem(at: legacyMetadataURL)
@@ -1675,6 +1679,12 @@ actor HouseholdMetadataWriter {
         defaults = UserDefaults(suiteName: suiteName) ?? .standard
     }
 
+    nonisolated static func recoveryDirectory(for activeFileURL: URL) -> URL {
+        let namespace = activeFileURL.deletingPathExtension().lastPathComponent
+        return activeFileURL.deletingLastPathComponent()
+            .appending(path: "Recovery/Metadata/\(namespace)", directoryHint: .isDirectory)
+    }
+
     func load(
         legacyKey: String,
         legacyFileURL: URL,
@@ -1850,10 +1860,15 @@ actor HouseholdMetadataWriter {
     }
 
     private func preserveLegacyMetadata(_ data: Data, activeFileURL: URL) throws {
-        let directory = activeFileURL.deletingLastPathComponent()
-            .appending(path: "Recovery", directoryHint: .isDirectory)
+        let directory = Self.recoveryDirectory(for: activeFileURL)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        try synchronizeDirectory(at: directory.deletingLastPathComponent())
+        let namespaceRoot = activeFileURL.deletingLastPathComponent()
+        var parent = directory.deletingLastPathComponent()
+        while parent.path != namespaceRoot.path {
+            try synchronizeDirectory(at: parent)
+            parent.deleteLastPathComponent()
+        }
+        try synchronizeDirectory(at: namespaceRoot)
         let material = "\(activeFileURL.lastPathComponent)|\(HouseholdRecordSyncService.digest(data))"
         let nameDigest = HouseholdRecordSyncService.digest(Data(material.utf8))
         let recoveryURL = directory.appending(path: "metadata-recovery-v1-\(nameDigest).json")
