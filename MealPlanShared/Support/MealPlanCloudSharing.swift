@@ -4,8 +4,37 @@ import CollaborationCore
 import SwiftData
 
 @MainActor
+enum MealPlanSharePreparationMode {
+    case invitation
+    case management
+}
+
+@MainActor
+enum MealPlanSharePreparation {
+    /// Invitations flush local edits before opening Apple's invite flow.
+    /// Management may skip that flush only after confirming the share exists.
+    static func run(
+        mode: MealPlanSharePreparationMode,
+        existingShare: @MainActor () async throws -> CKShare?,
+        synchronize: @MainActor () async throws -> Void
+    ) async throws {
+        switch mode {
+        case .invitation:
+            try await synchronize()
+        case .management:
+            guard try await existingShare() == nil else { return }
+            try await synchronize()
+        }
+    }
+}
+
+@MainActor
 enum MealPlanCloudSharing {
-    static func service(for household: Household, context: ModelContext) async throws -> CloudKitShareLifecycleService {
+    static func service(
+        for household: Household,
+        context: ModelContext,
+        preparationMode: MealPlanSharePreparationMode = .invitation
+    ) async throws -> CloudKitShareLifecycleService {
         let pool = try await HouseholdRecordSyncService.shared.prepareTransport(household: household, context: context)
         let rootID = household.uuid.uuidString
         let resolver = MealPlanShareRootResolver(context: context)
@@ -17,9 +46,22 @@ enum MealPlanCloudSharing {
             rootResolver: resolver,
             syncEngines: pool
         )
-        service.onPreparingShare = { requestedRootID in
+        service.onPreparingShare = { [weak service] requestedRootID in
             guard requestedRootID == rootID else { return }
-            try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+            // Invitations always flush pending local edits. The management
+            // service skips that work only after confirming the authoritative
+            // share exists; CloudKitCollaborationKit still handles reuse and
+            // legacy public-link hardening after this callback.
+            try await MealPlanSharePreparation.run(
+                mode: preparationMode,
+                existingShare: {
+                    guard let service else { return nil }
+                    return try await service.existingShare(rootID: rootID)
+                },
+                synchronize: {
+                    try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+                }
+            )
         }
         service.onSharePrepared = { share in
             var updated = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
@@ -30,6 +72,10 @@ enum MealPlanCloudSharing {
             try context.save()
         }
         return service
+    }
+
+    static func managementService(for household: Household, context: ModelContext) async throws -> CloudKitShareLifecycleService {
+        try await service(for: household, context: context, preparationMode: .management)
     }
 
     private static var collaborationEnvironment: CollaborationEnvironment {
