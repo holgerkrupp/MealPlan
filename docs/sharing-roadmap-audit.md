@@ -49,15 +49,33 @@ devices.
 | [#116](https://github.com/holgerkrupp/MealPlan/issues/116) | Superseded by the SwiftData decision | The re-invitation onboarding requirement conflicts with reusing healthy existing shares. Use the native package UI and only request a new invitation when a verified incompatibility requires one. |
 | [#117](https://github.com/holgerkrupp/MealPlan/issues/117) | Superseded by the SwiftData decision | Owner cutover to a new Core Data store is not planned. Offline edits and staged recovery remain required within the existing SwiftData transport. |
 
+## Implementation merged after the audit baseline (2026-10-23)
+
+These focused PRs have since been merged into `main`:
+
+- [#126](https://github.com/holgerkrupp/MealPlan/pull/126) — owner share management and invitation sync behavior.
+- [#127](https://github.com/holgerkrupp/MealPlan/pull/127) — durable state/journal migration, scoped recovery cleanup, and sync apply-error visibility.
+- [#128](https://github.com/holgerkrupp/MealPlan/pull/128) — architecture and roadmap documentation.
+- [#129](https://github.com/holgerkrupp/MealPlan/pull/129) — lossless local join/recovery archives, accepted-root verification, and source-transport rollback.
+- [#130](https://github.com/holgerkrupp/MealPlan/pull/130) — Watch/widget write authorization and mutation signaling.
+
+Combined focused macOS coverage passed 33/33 tests; focused iOS Simulator
+authorization coverage passed 4/4 tests; and the combined iOS Simulator
+`build-for-testing` succeeded. These results verify code and simulator behavior,
+not Production CloudKit collaboration. GitHub Actions returned no PR workflow
+runs. The signed-device matrix below remains unrun, as do representative
+CPU/energy measurements and immediate cross-process wakeup/convergence tests.
+
 ## Release gates still open
 
-- Make household replacement, rejoin, and confirmed revocation lossless and
-  restart-safe. Never delete the only local copy of plans, shopping state,
-  history, routines, or offline edits.
+- Verify the merged household replacement, rejoin, and confirmed-revocation
+  recovery flows on signed devices and after interruption. Confirm that plans,
+  shopping state, history, routines, preferences, and offline edits remain
+  recoverable.
 - Verify CloudKitCollaborationKit remains the only engine owner per account,
   environment, and database scope. Keep SwiftData mirroring disabled.
-- Audit write permissions across the app, widgets, Share Extension, App
-  Intents, and Watch pathways.
+- Finish device verification of effective write permissions across the app,
+  widgets, Share Extension, App Intents, and Watch pathways.
 - Complete the signed-device two-account Production matrix in issue #90. Unit
   tests and a presented share sheet do not prove Production collaboration.
 - Record explicit pass/fail results for upgrade compatibility, existing-share
