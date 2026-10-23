@@ -118,17 +118,19 @@ enum HouseholdCollaborationStore {
     }
 
     /// The extension uses this to decide whether it may commit a shared write.
-    /// Pre-session installs already have the locator's read-only bit, so a
-    /// missing sidecar preserves their editable workflow while still denying a
-    /// known view-only participant. The main app seeds the richer cache at its
-    /// first bootstrap/refresh.
-    static func canMutate(_ household: Household?) -> Bool {
-        guard HouseholdCollaborationMigration.supportsCurrentOrOlderFormat() else { return false }
+    /// A missing permission snapshot is safe for solo households and known
+    /// owners. A shared participant without a persisted role must wait for the
+    /// main app to reconcile the CloudKit share before extensions may write.
+    static func canMutate(
+        _ household: Household?,
+        defaults: UserDefaults = defaults
+    ) -> Bool {
+        guard HouseholdCollaborationMigration.supportsCurrentOrOlderFormat(defaults: defaults) else { return false }
         guard let household else { return true }
         let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         if locator.shareRecordName == nil { return true }
         if locator.isReadOnly { return false }
-        return load(for: household.uuid)?.role.canEdit ?? true
+        return load(for: household.uuid, defaults: defaults)?.role.canEdit ?? locator.isOwner
     }
 }
 
