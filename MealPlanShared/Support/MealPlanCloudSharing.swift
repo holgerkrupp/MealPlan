@@ -4,6 +4,19 @@ import CollaborationCore
 import SwiftData
 
 @MainActor
+enum MealPlanSharePreparation {
+    /// Existing zone shares are already synchronized by the app's normal
+    /// transport lifecycle. Only a new share needs a full pre-share flush.
+    static func run(
+        existingShare: @MainActor () async throws -> CKShare?,
+        synchronize: @MainActor () async throws -> Void
+    ) async throws {
+        guard try await existingShare() == nil else { return }
+        try await synchronize()
+    }
+}
+
+@MainActor
 enum MealPlanCloudSharing {
     static func service(for household: Household, context: ModelContext) async throws -> CloudKitShareLifecycleService {
         let pool = try await HouseholdRecordSyncService.shared.prepareTransport(household: household, context: context)
@@ -25,10 +38,15 @@ enum MealPlanCloudSharing {
             // flushing the full local household again only adds latency. A
             // first share still needs its records uploaded before the
             // zone-wide CKShare can be created.
-            if let service, try await service.existingShare(rootID: rootID) != nil {
-                return
-            }
-            try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+            try await MealPlanSharePreparation.run(
+                existingShare: {
+                    guard let service else { return nil }
+                    return try await service.existingShare(rootID: rootID)
+                },
+                synchronize: {
+                    try await HouseholdRecordSyncService.shared.synchronize(household: household, context: context)
+                }
+            )
         }
         service.onSharePrepared = { share in
             var updated = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)

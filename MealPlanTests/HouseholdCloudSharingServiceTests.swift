@@ -25,6 +25,30 @@ struct HouseholdCloudSharingServiceTests {
         #expect(retryDelivery)
     }
 
+    @Test func existingShareSkipsFullHouseholdPreparationSync() async throws {
+        let zoneID = CKRecordZone.ID(zoneName: "MealPlanHousehold-test", ownerName: CKCurrentUserDefaultName)
+        let existingShare = CKShare(recordZoneID: zoneID)
+        var syncCount = 0
+
+        try await MealPlanSharePreparation.run(
+            existingShare: { existingShare },
+            synchronize: { syncCount += 1 }
+        )
+
+        #expect(syncCount == 0)
+    }
+
+    @Test func newShareRunsPreparationSyncBeforeCreation() async throws {
+        var syncCount = 0
+
+        try await MealPlanSharePreparation.run(
+            existingShare: { nil },
+            synchronize: { syncCount += 1 }
+        )
+
+        #expect(syncCount == 1)
+    }
+
     /// Losing access turns the household into a new one on that device, so a
     /// passing network or server hiccup must never be read as removal.
     @Test func onlyAMissingShareOrZoneMeansAccessWasLost() {
