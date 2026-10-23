@@ -1,6 +1,6 @@
 # SwiftData household sharing architecture
 
-Status: **in-place migration to CloudKitCollaborationKit**
+Status: **SwiftData + CloudKitCollaborationKit; release verification in progress**
 
 For how the shipped implementation works — both across one account's
 devices and between different people — see
@@ -13,6 +13,11 @@ acceptance, native sharing UI, and the CloudKit sync-engine pool. Existing
 household records and healthy shares are reused in place. See
 [`icloud-sharing.md`](icloud-sharing.md) for the host/package boundary and
 migration behavior.
+
+The authoritative issue-by-issue audit and outstanding release gates are in
+[`sharing-roadmap-audit.md`](sharing-roadmap-audit.md). The older Core Data
+migration roadmap is superseded; its dormant scaffolding is not the active
+store and remains in the repository pending separate cleanup review.
 
 ## One CloudKit owner
 

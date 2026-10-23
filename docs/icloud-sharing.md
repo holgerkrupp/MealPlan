@@ -5,6 +5,13 @@ MealPlan keeps SwiftData as its app database and uses the sibling
 ownership, invitation acceptance, and native sharing UI. MealPlan continues to
 own its household schema, record codec, merge rules, and SwiftData import.
 
+Release verification remains in progress. Source integration and unit tests do
+not establish Production two-account behavior. Household replacement and
+lost-access recovery must preserve all local user data before this integration
+is considered production-ready. See
+[`sharing-roadmap-audit.md`](sharing-roadmap-audit.md) for audited issue
+statuses and required signed-device evidence.
+
 ## Ownership
 
 | Component | Responsibility |

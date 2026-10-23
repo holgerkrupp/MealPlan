@@ -12,6 +12,12 @@ with other household members.
   with an editable review before it is saved.
 - Build shopping lists from planned meals and pantry staples.
 - Share a household through CloudKit and keep working offline.
+
+Household sharing keeps the App Group SwiftData store as MealPlan's only local
+database. CloudKitCollaborationKit owns CloudKit sharing and sync-engine
+lifecycle; MealPlan supplies its SwiftData record codec and conflict handling.
+See [the sharing architecture](docs/sharing-architecture.md) and
+[the audited rollout roadmap](docs/sharing-roadmap-audit.md).
 - Cook on Apple Vision Pro with independently placeable ingredient,
   instruction, and timer windows that share live progress.
 - Add meal plans to a calendar and send shopping lists to supported services.
