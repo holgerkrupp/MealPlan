@@ -102,7 +102,9 @@ enum MealPlanBackupRestore {
         household.packageSizeCountryCode = backup.household.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
         household.unitPresentationOverrideRaw = backup.household.unitPresentationOverrideRaw
         household.inventoryEnabled = backup.household.inventoryEnabled ?? false
-        household.unlockedByPurchase = backup.household.unlockedByPurchase ?? false
+        // Purchase unlock is an Apple Account entitlement, not portable
+        // household data. The active account's PurchaseManager reconciles it.
+        household.unlockedByPurchase = false
         household.bringListUuid = backup.household.bringListUuid
         household.bringListName = backup.household.bringListName
         household.bringShadowKeys = backup.household.bringShadowKeys ?? []

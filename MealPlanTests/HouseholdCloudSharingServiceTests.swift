@@ -25,6 +25,22 @@ struct HouseholdCloudSharingServiceTests {
         #expect(retryDelivery)
     }
 
+    @Test @MainActor func sharedHouseholdFetchWaiterIsBoundedAndAcceptsEarlyCompletion() async throws {
+        let completed = SharedHouseholdFetchWaiter()
+        completed.complete(nil)
+        try await completed.wait(timeout: .milliseconds(1))
+
+        let timedOut = SharedHouseholdFetchWaiter()
+        do {
+            try await timedOut.wait(timeout: .milliseconds(1))
+            Issue.record("Expected the shared-household fetch waiter to time out.")
+        } catch HouseholdSharingError.sharedHouseholdFetchTimedOut {
+            // Expected: a missing package callback must not hold up the join forever.
+        } catch {
+            Issue.record("Unexpected fetch waiter error: \(error)")
+        }
+    }
+
     @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {
         let household = Household(name: String(localized: "Family"))
         #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))

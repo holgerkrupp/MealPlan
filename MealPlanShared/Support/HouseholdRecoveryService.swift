@@ -450,6 +450,12 @@ enum HouseholdRecoveryService {
                 throw HouseholdRecoveryError.validationFailed
             }
             restored.cloudKitShareIdentifier = checkpoint.isDetachedArchive ? nil : checkpoint.shareIdentifier
+            if checkpoint.isDetachedArchive {
+                // Detached archives may originate from a participant's copy
+                // of an owner's inherited household unlock. The new identity
+                // must be reconciled against this Apple Account's entitlement.
+                restored.unlockedByPurchase = false
+            }
             try context.save()
             try validate(
                 restored,
@@ -513,11 +519,14 @@ enum HouseholdRecoveryService {
     }
 
     /// Captures the whole SwiftData graph before any join/revocation code can
-    /// delete a household root. The deterministic operation key makes a
-    /// repeated preflight/retry update the same archive instead of producing
-    /// an unbounded series of copies. The filename marks the checkpoint as
-    /// detached so it remains discoverable even if the process stops before a
-    /// sidecar or UI refresh.
+    /// delete a household root. Each root gets a complete archive whose
+    /// household settings come from that root, while all content rows from
+    /// the store remain included. This keeps every root's preferences
+    /// recoverable when several roots are folded into one household. The
+    /// deterministic operation key makes a repeated preflight/retry update
+    /// the same archives instead of producing an unbounded series of copies.
+    /// The filename marks the checkpoint as detached so it remains
+    /// discoverable even if the process stops before a sidecar or UI refresh.
     @discardableResult
     static func archiveBeforeReplacement(
         context: ModelContext,
@@ -525,20 +534,36 @@ enum HouseholdRecoveryService {
         preferredHouseholdID: UUID? = nil,
         folder: URL? = nil
     ) throws -> URL {
-        let backup = try MealPlanBackup.make(
-            from: context,
-            includePhotos: true,
-            preferredHouseholdID: preferredHouseholdID
-        )
+        let rows = try MealPlanBackup.StoreRows(fetchedFrom: context)
+        let orderedHouseholds = rows.households.sorted {
+            if let preferredHouseholdID {
+                let lhsPreferred = $0.uuid == preferredHouseholdID
+                let rhsPreferred = $1.uuid == preferredHouseholdID
+                if lhsPreferred != rhsPreferred { return lhsPreferred }
+            }
+            return ($0.dateCreated, $0.uuid.uuidString) < ($1.dateCreated, $1.uuid.uuidString)
+        }
+        let settingsRoots: [Household?] = orderedHouseholds.isEmpty ? [nil] : orderedHouseholds.map(Optional.some)
         let directory = folder ?? safetyBackupFolder
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        let token = SHA256.hash(data: Data(operationID.utf8))
-            .map { String(format: "%02x", $0) }
-            .joined()
-        let url = directory.appending(path: "MealPlan-archive-\(token).\(BackupFileType.fileExtension)")
-        try writeAtomicallyAndVerify(backup, to: url)
+        var archiveURLs: [URL] = []
+        for settingsRoot in settingsRoots {
+            let backup = MealPlanBackup.make(
+                from: rows,
+                includePhotos: true,
+                preferredHouseholdID: settingsRoot?.uuid
+            )
+            let rootToken = settingsRoot?.uuid.uuidString ?? "store"
+            let token = SHA256.hash(data: Data("\(operationID)|settings-root:\(rootToken)".utf8))
+                .map { String(format: "%02x", $0) }
+                .joined()
+            let url = directory.appending(path: "MealPlan-archive-\(token).\(BackupFileType.fileExtension)")
+            try writeAtomicallyAndVerify(backup, to: url)
+            archiveURLs.append(url)
+        }
         try synchronizeDirectory(directory)
-        return url
+        guard let firstArchive = archiveURLs.first else { throw HouseholdRecoveryError.validationFailed }
+        return firstArchive
     }
 
     private static func writeAtomicallyAndVerify(_ backup: MealPlanBackup, to url: URL) throws {

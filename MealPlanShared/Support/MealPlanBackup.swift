@@ -86,7 +86,6 @@ struct MealPlanBackup: Codable, Sendable {
         var packageSizeCountryCode: String? = nil
         var unitPresentationOverrideRaw: String? = nil
         var inventoryEnabled: Bool? = nil
-        var unlockedByPurchase: Bool? = nil
         var bringListUuid: String? = nil
         var bringListName: String? = nil
         var bringShadowKeys: [String]? = nil
@@ -628,7 +627,6 @@ extension MealPlanBackup {
                 packageSizeCountryCode: primary?.packageSizeCountryCode,
                 unitPresentationOverrideRaw: primary?.unitPresentationOverrideRaw,
                 inventoryEnabled: primary?.inventoryEnabled,
-                unlockedByPurchase: primary?.unlockedByPurchase,
                 bringListUuid: primary?.bringListUuid,
                 bringListName: primary?.bringListName,
                 bringShadowKeys: primary?.bringShadowKeys,

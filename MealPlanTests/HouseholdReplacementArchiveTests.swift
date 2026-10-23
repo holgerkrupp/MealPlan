@@ -91,8 +91,12 @@ struct HouseholdReplacementArchiveTests {
 
         // Simulate termination after the archive commit but before/after the
         // active-store replacement: rediscovery reads only durable files.
-        let recovered = try #require(HouseholdRecoveryService.safetyBackups(at: archiveDirectory).first)
-        let recoveredAfterRestart = try #require(HouseholdRecoveryService.safetyBackups(at: archiveDirectory).first)
+        let archives = HouseholdRecoveryService.safetyBackups(at: archiveDirectory)
+        #expect(archives.count == 2)
+        let secondRootArchive = try #require(archives.first { $0.backup.household.name == secondHousehold.name })
+        #expect(secondRootArchive.backup.contents.dishes == 2)
+        let recovered = try #require(archives.first { $0.backup.household.name == household.name })
+        let recoveredAfterRestart = try #require(HouseholdRecoveryService.safetyBackups(at: archiveDirectory).first { $0.backup.household.name == household.name })
         #expect(recovered.isDetachedArchive)
         #expect(recovered.detachedHouseholdUUID == recoveredAfterRestart.detachedHouseholdUUID)
         #expect(recovered.detachedHouseholdUUID != household.uuid)
@@ -123,7 +127,7 @@ struct HouseholdReplacementArchiveTests {
         #expect(restoredHousehold.bringListName == "Offline groceries")
         #expect(restoredHousehold.bringShadowKeys == ["bread", "milk"])
         #expect(!restoredHousehold.bringAutoSync)
-        #expect(restoredHousehold.unlockedByPurchase)
+        #expect(!restoredHousehold.unlockedByPurchase)
         #expect(restoredHousehold.cloudKitShareIdentifier == nil)
         #expect(restoredDish.sortedImages.first?.data == Data([0x10, 0x20, 0x30]))
         #expect(restoredEntry.note == "offline edit")
