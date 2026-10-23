@@ -4,21 +4,37 @@ import CollaborationCore
 import SwiftData
 
 @MainActor
+enum MealPlanSharePreparationMode {
+    case invitation
+    case management
+}
+
+@MainActor
 enum MealPlanSharePreparation {
-    /// Existing zone shares are already synchronized by the app's normal
-    /// transport lifecycle. Only a new share needs a full pre-share flush.
+    /// Invitations flush local edits before opening Apple's invite flow.
+    /// Management may skip that flush only after confirming the share exists.
     static func run(
+        mode: MealPlanSharePreparationMode,
         existingShare: @MainActor () async throws -> CKShare?,
         synchronize: @MainActor () async throws -> Void
     ) async throws {
-        guard try await existingShare() == nil else { return }
-        try await synchronize()
+        switch mode {
+        case .invitation:
+            try await synchronize()
+        case .management:
+            guard try await existingShare() == nil else { return }
+            try await synchronize()
+        }
     }
 }
 
 @MainActor
 enum MealPlanCloudSharing {
-    static func service(for household: Household, context: ModelContext) async throws -> CloudKitShareLifecycleService {
+    static func service(
+        for household: Household,
+        context: ModelContext,
+        preparationMode: MealPlanSharePreparationMode = .invitation
+    ) async throws -> CloudKitShareLifecycleService {
         let pool = try await HouseholdRecordSyncService.shared.prepareTransport(household: household, context: context)
         let rootID = household.uuid.uuidString
         let resolver = MealPlanShareRootResolver(context: context)
@@ -32,13 +48,12 @@ enum MealPlanCloudSharing {
         )
         service.onPreparingShare = { [weak service] requestedRootID in
             guard requestedRootID == rootID else { return }
-            // Share preparation also runs when the owner reopens Apple's
-            // invitation UI or when a legacy public-link share is hardened.
-            // Existing shares already have a complete CloudKit zone, so
-            // flushing the full local household again only adds latency. A
-            // first share still needs its records uploaded before the
-            // zone-wide CKShare can be created.
+            // Invitations always flush pending local edits. The management
+            // service skips that work only after confirming the authoritative
+            // share exists; CloudKitCollaborationKit still handles reuse and
+            // legacy public-link hardening after this callback.
             try await MealPlanSharePreparation.run(
+                mode: preparationMode,
                 existingShare: {
                     guard let service else { return nil }
                     return try await service.existingShare(rootID: rootID)
@@ -57,6 +72,10 @@ enum MealPlanCloudSharing {
             try context.save()
         }
         return service
+    }
+
+    static func managementService(for household: Household, context: ModelContext) async throws -> CloudKitShareLifecycleService {
+        try await service(for: household, context: context, preparationMode: .management)
     }
 
     private static var collaborationEnvironment: CollaborationEnvironment {
