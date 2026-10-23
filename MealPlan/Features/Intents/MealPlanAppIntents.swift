@@ -16,14 +16,6 @@ enum MealPlanIntentResolver {
                 userInfo: [NSLocalizedDescriptionKey: String(localized: "You have view-only access to this meal plan.")]
             )
         }
-        let members = try context.fetch(FetchDescriptor<HouseholdMember>())
-        if members.contains(where: { $0.isCurrentUser && $0.role == .guest }) {
-            throw NSError(
-                domain: "MealPlan.AppIntents",
-                code: 6,
-                userInfo: [NSLocalizedDescriptionKey: String(localized: "You have view-only access to this meal plan.")]
-            )
-        }
     }
 
     static func requirePlanningAllowed(on date: Date) async throws {

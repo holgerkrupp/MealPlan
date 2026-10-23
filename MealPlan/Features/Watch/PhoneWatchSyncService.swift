@@ -4,6 +4,12 @@ import SwiftData
 import OSLog
 import WatchConnectivity
 
+enum WatchShoppingCheckAuthorization {
+    static func canApply(_ item: ShoppingListItem) -> Bool {
+        HouseholdMutationAuthorization.canMutate(household: item.household)
+    }
+}
+
 /// The phone's half of the watch link.
 ///
 /// It does three things and nothing else:
@@ -119,21 +125,26 @@ final class PhoneWatchSyncService: NSObject {
     /// Applies ticks made on the watch. A tick is only about `isChecked`, so
     /// it touches nothing else on the line — and it loses to a newer change
     /// made on the phone, which is what `checkStateModifiedAt` is for.
-    private func apply(_ checks: [WatchShoppingCheck]) {
-        guard let context, !checks.isEmpty else { return }
+    private func apply(_ checks: [WatchShoppingCheck]) -> Bool {
+        guard let context, !checks.isEmpty else { return false }
         let ids = Set(checks.map(\.id))
         let descriptor = FetchDescriptor<ShoppingListItem>(
             predicate: #Predicate { ids.contains($0.uuid) }
         )
-        guard let items = try? context.fetch(descriptor), !items.isEmpty else { return }
+        guard let items = try? context.fetch(descriptor), !items.isEmpty else { return false }
 
         let byID = Dictionary(checks.map { ($0.id, $0) }, uniquingKeysWith: { older, newer in
             older.changedAt >= newer.changedAt ? older : newer
         })
 
         var changed = false
+        var rejectedReadOnlyEdit = false
         for item in items {
             guard let check = byID[item.uuid] else { continue }
+            guard WatchShoppingCheckAuthorization.canApply(item) else {
+                rejectedReadOnlyEdit = true
+                continue
+            }
             guard check.changedAt > item.checkStateModifiedAt else { continue }
             guard item.isChecked != check.isChecked else { continue }
             item.isChecked = check.isChecked
@@ -141,19 +152,24 @@ final class PhoneWatchSyncService: NSObject {
             item.modifiedAt = check.changedAt
             changed = true
         }
-        guard changed else { return }
-        try? context.save()
-        SharedStore.reloadWidgets()
+        if changed, (try? context.save()) != nil {
+            // The app's sync observer also notices this local save. The
+            // generation is needed for a watch write received while the app
+            // has no active observer yet, and is safe to coalesce with it.
+            HouseholdStoreGeneration.markDirty()
+            SharedStore.reloadWidgets()
+        }
+        return rejectedReadOnlyEdit
     }
 
     /// The main-actor half of a delegate callback, working from values the
     /// callback already decoded — never the dictionary itself, which is not
     /// `Sendable` and belongs to WatchConnectivity's queue.
     private func handle(checks: [WatchShoppingCheck], isRefreshRequest: Bool) {
-        if !checks.isEmpty { apply(checks) }
+        let rejectedReadOnlyEdit = !checks.isEmpty && apply(checks)
         // A tick already triggers a save, and the save observer a push; only
-        // an explicit request needs one forced.
-        if isRefreshRequest { push(force: true) }
+        // an explicit request or rejected edit needs one forced snapshot.
+        if isRefreshRequest || rejectedReadOnlyEdit { push(force: true) }
     }
 }
 

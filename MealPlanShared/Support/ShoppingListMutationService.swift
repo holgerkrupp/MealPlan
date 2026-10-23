@@ -18,7 +18,10 @@ enum ShoppingListMutationService {
         let now = Date.now
         item.checkStateModifiedAt = now
         item.modifiedAt = now
-        try? context.save()
+        do { try context.save() } catch { return }
+        // This also covers widget extension commits, whose ModelContext save
+        // is invisible to the main app's in-process save observer.
+        HouseholdStoreGeneration.markDirty()
         SharedStore.reloadWidgets()
     }
 
