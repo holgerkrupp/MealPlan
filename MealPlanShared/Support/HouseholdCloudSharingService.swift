@@ -101,30 +101,48 @@ enum HouseholdCloudSharingService {
         HouseholdShareLocator.decode(shareIdentifier)?.isOwner
     }
 
-    /// The local household `accept(_:mergeRecipes:context:)` would replace
-    /// (and its `mergeRecipes` option would salvage recipes from) if asked to
-    /// join `metadata` right now — so the caller can warn before doing
-    /// anything destructive instead of after. `nil` means there's nothing to
-    /// warn about: either this device has no household with real content
-    /// yet, or its household already *is* the one behind this invitation
-    /// (re-opening a link you already accepted just refreshes it).
+    /// The local households `accept(_:mergeRecipes:context:)` would replace
+    /// if asked to join `metadata` right now, so the caller can warn before
+    /// doing anything destructive. An empty result means there is no household
+    /// with user content at risk, or the only populated household is already
+    /// the one behind this invitation (re-opening a link just refreshes it).
     ///
     /// Deliberately does no networking — `metadata.share` is already on
     /// hand — so a household that would be lost is never touched unless the
     /// person actually chooses to continue.
-    static func localHouseholdAtRisk(ofAccepting metadata: CKShare.Metadata, context: ModelContext) -> Household? {
+    static func localHouseholdsAtRisk(ofAccepting metadata: CKShare.Metadata, context: ModelContext) -> [Household] {
         let incomingShareRecordName = metadata.share.recordID.recordName
         let households = (try? context.fetch(FetchDescriptor<Household>())) ?? []
-        return households.first { household in
-            guard !(household.dishes ?? []).isEmpty || !(household.entries ?? []).isEmpty else { return false }
+        return households.filter { household in
+            guard hasRecoverableUserContent(household) else { return false }
             let locator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier)
             return locator?.shareRecordName != incomingShareRecordName
         }
     }
 
+    /// A join replaces every other local root and its relationships cascade
+    /// on deletion. Include every household-owned content collection here so
+    /// data outside recipes and planned meals cannot bypass the confirmation.
+    static func hasRecoverableUserContent(_ household: Household) -> Bool {
+        func containsItems<T>(_ items: [T]?) -> Bool { !(items ?? []).isEmpty }
+        return containsItems(household.dishes)
+            || containsItems(household.ingredients)
+            || containsItems(household.matchRules)
+            || containsItems(household.entries)
+            || containsItems(household.shoppingItems)
+            || containsItems(household.cookedLogs)
+            || containsItems(household.weekTemplates)
+            || containsItems(household.members)
+            || containsItems(household.mealTypes)
+            || containsItems(household.mealRoutines)
+            || containsItems(household.recipeFeeds)
+            || containsItems(household.recipeBookmarks)
+            || containsItems(household.packageSizeOverrides)
+    }
+
     /// Joins the household behind `metadata`. `mergeRecipes` decides what
     /// happens to any other local household this device already has (see
-    /// `localHouseholdAtRisk(ofAccepting:context:)`): `false` drops it along
+    /// `localHouseholdsAtRisk(ofAccepting:context:)`): `false` drops them along
     /// with everything in it, `true` moves its dishes — and the ingredients
     /// they need — into the joined household first, so its recipes survive
     /// even though its plan, shopping list, and history don't.

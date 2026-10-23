@@ -65,6 +65,7 @@ struct RootView: View {
         let metadata: CKShare.Metadata
         let existingHouseholdName: String
         let dishCount: Int
+        let householdCount: Int
     }
 
     var body: some View {
@@ -156,7 +157,9 @@ struct RootView: View {
             Text("The owner removed you or stopped sharing the household. Your recipes are still here, in a new household of your own; the shared plan and shopping list are gone from this device.")
         }
         .confirmationDialog(
-            String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?"),
+            pendingHouseholdJoin?.householdCount == 1
+                ? String(localized: "Replace “\(pendingHouseholdJoin?.existingHouseholdName ?? "")”?")
+                : String(localized: "Replace Local Households?"),
             isPresented: Binding(
                 get: { pendingHouseholdJoin != nil },
                 set: { isPresented in
@@ -184,7 +187,9 @@ struct RootView: View {
                 pendingHouseholdJoin = nil
             }
         } message: { pending in
-            Text(pending.dishCount == 0
+            Text(pending.householdCount > 1
+                ? "Joining will replace \(pending.householdCount) local households. Their plans, shopping lists, history, routines, and preferences will be removed from this device. Merge Recipes keeps their dishes."
+                : pending.dishCount == 0
                 ? "This device already has its own “\(pending.existingHouseholdName)” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device."
                 : pending.dishCount == 1
                     ? "This device already has its own “\(pending.existingHouseholdName)” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way."
@@ -258,11 +263,13 @@ struct RootView: View {
             try? await Task.sleep(for: .milliseconds(150))
         }
         for metadata in HouseholdShareInvitationInbox.shared.drain() {
-            if let atRisk = HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting: metadata, context: context) {
+            let atRisk = HouseholdCloudSharingService.localHouseholdsAtRisk(ofAccepting: metadata, context: context)
+            if let firstAtRisk = atRisk.first {
                 pendingHouseholdJoin = PendingHouseholdJoin(
                     metadata: metadata,
-                    existingHouseholdName: atRisk.name,
-                    dishCount: (atRisk.dishes ?? []).count
+                    existingHouseholdName: firstAtRisk.name,
+                    dishCount: atRisk.reduce(0) { $0 + ($1.dishes ?? []).count },
+                    householdCount: atRisk.count
                 )
             } else {
                 await acceptHouseholdJoin(metadata, mergeRecipes: false)

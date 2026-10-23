@@ -25,6 +25,18 @@ struct HouseholdCloudSharingServiceTests {
         #expect(retryDelivery)
     }
 
+    @Test func preflightTreatsNonRecipeHouseholdDataAsAtRisk() {
+        let household = Household(name: "Local")
+        #expect(!HouseholdCloudSharingService.hasRecoverableUserContent(household))
+
+        household.shoppingItems = [ShoppingListItem(name: "Offline item", isManual: true)]
+        #expect(HouseholdCloudSharingService.hasRecoverableUserContent(household))
+
+        household.shoppingItems = []
+        household.mealRoutines = [MealRoutine()]
+        #expect(HouseholdCloudSharingService.hasRecoverableUserContent(household))
+    }
+
     /// Losing access turns the household into a new one on that device, so a
     /// passing network or server hiccup must never be read as removal.
     @Test func onlyAMissingShareOrZoneMeansAccessWasLost() {
