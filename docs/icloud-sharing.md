@@ -61,27 +61,33 @@ already queued for CloudKit. A server acknowledgement removes a journal entry
 only when it matches the queued record version.
 
 Opening the sharing screen reads the existing share without preparing or
-rewriting it. When a share exists, the invitation control passes that exact
-`CKShare` to CloudKitCollaborationKit's existing-share `CloudKitShareLink`
-initializer. This uses Apple's `.existing(share, ...)` transfer representation
-and avoids doing household synchronization inside the Messages/Mail attachment
-export. When a household has not yet been shared, the owner explicitly starts
-bounded preparation in MealPlan, sees progress and can cancel waiting; after
-preparation the same existing-share representation is used for export. A
-retry reuses a share that may have completed after the owner canceled waiting.
-The owner can always open Manage access and use Copy Link as a fallback.
-Accepted participants keep their access when the package can verify their
-identities; an unresolved legacy participant leaves the share unchanged and
-produces an actionable error.
+rewriting it. When a private-recipient share exists, the invitation control
+passes that exact `CKShare` to CloudKitCollaborationKit's existing-share
+`CloudKitShareLink` initializer. This uses Apple's `.existing(share, ...)`
+transfer representation and avoids doing household synchronization inside the
+Messages/Mail attachment export. A legacy share with anyone-with-the-link
+access is explicitly prepared before export so the package can restore
+verifiable accepted participants and their previous permissions, then set
+public access to none. The host callback checks for the existing share and
+skips the full household sync during this hardening. If participant identity
+cannot be verified, the package leaves the share unchanged and reports an
+actionable error. When a household has not yet been shared, the owner
+explicitly starts bounded preparation in MealPlan, sees progress and can
+cancel waiting; after preparation the same existing-share representation is
+used for export. A retry reuses a share that may have completed after the owner
+canceled waiting. The owner can always open Manage access and use Copy Link as
+a fallback.
 
 The issue #132 source investigation confirmed that the pinned package has both
 transfer paths and that the previous MealPlan UI always selected the deferred
 root-ID path. Its share preparation callback also synchronized household data
 unconditionally, including when an existing share was being resent. The fix
-selects the package's existing-share path when a `CKShare` is present and only
-flushes local records if preparation finds no existing share. Source-level
-evidence does not prove the Messages attachment completes or is accepted by a
-second Apple Account; that remains a signed TestFlight release gate.
+selects the package's existing-share path for private shares, and invokes the
+bounded lifecycle preparation first only for a first share or a legacy public
+share. Preparation skips full household synchronization whenever the share
+already exists. Source-level evidence does not prove the Messages attachment
+completes or is accepted by a second Apple Account; that remains a signed
+TestFlight release gate.
 
 ### Invitation release check for issue #132
 

@@ -121,28 +121,39 @@ struct HouseholdSharingView: View {
 
                 if let existingShare = share {
                     manageSharingButton()
-                    CloudKitShareLink(share: existingShare, container: sharing.cloudKitContainer, title: household.name) {
-                        Label(String(localized: "Invite or share again"), systemImage: "person.crop.circle.badge.plus")
-                            .frame(maxWidth: .infinity)
+                    if MealPlanSharePreparation.requiresPrivateRecipientHardening(existingShare) {
+                        if isPreparingInvitation {
+                            invitationPreparationProgress()
+                        } else {
+                            Button {
+                                beginInvitationPreparation(using: sharing)
+                            } label: {
+                                Label(String(localized: "Secure invitation and continue"), systemImage: "lock.shield")
+                                    .frame(maxWidth: .infinity)
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                        Text(String(localized: "MealPlan will check existing members and permissions before updating this share for invited people only."))
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    } else {
+                        CloudKitShareLink(share: existingShare, container: sharing.cloudKitContainer, title: household.name) {
+                            Label(String(localized: "Invite or share again"), systemImage: "person.crop.circle.badge.plus")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
+                        .simultaneousGesture(TapGesture().onEnded {
+                            Self.logger.info("Existing-share invitation export requested.")
+                        })
                     }
-                    .buttonStyle(.bordered)
-                    .simultaneousGesture(TapGesture().onEnded {
-                        Self.logger.info("Existing-share invitation export requested.")
-                    })
                     Text(String(localized: "If an invitation can’t be sent, open Manage access and choose Copy Link."))
                         .font(.footnote)
                         .foregroundStyle(.secondary)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 } else {
                     if isPreparingInvitation {
-                        VStack(spacing: 10) {
-                            ProgressView(String(localized: "Preparing household invitation…"))
-                            Button(String(localized: "Cancel"), role: .cancel) {
-                                cancelInvitationPreparation()
-                            }
-                            .buttonStyle(.bordered)
-                        }
-                        .frame(maxWidth: .infinity)
+                        invitationPreparationProgress()
                     } else {
                         Button {
                             beginInvitationPreparation(using: sharing)
@@ -278,7 +289,7 @@ struct HouseholdSharingView: View {
                 }
             }
             do {
-                Self.logger.info("Starting bounded first-share preparation.")
+                Self.logger.info("Starting bounded invitation preparation.")
                 let prepared = try await service.prepareShare(
                     rootID: household.uuid.uuidString,
                     waitTimeout: .seconds(45)
@@ -302,6 +313,17 @@ struct HouseholdSharingView: View {
                 }
             }
         }
+    }
+
+    private func invitationPreparationProgress() -> some View {
+        VStack(spacing: 10) {
+            ProgressView(String(localized: "Preparing household invitation…"))
+            Button(String(localized: "Cancel"), role: .cancel) {
+                cancelInvitationPreparation()
+            }
+            .buttonStyle(.bordered)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     private func cancelInvitationPreparation() {

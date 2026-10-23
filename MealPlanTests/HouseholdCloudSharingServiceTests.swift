@@ -40,6 +40,16 @@ struct HouseholdCloudSharingServiceTests {
         #expect(syncCount == 0)
     }
 
+    @Test func legacyPublicShareIsHardenedBeforeDirectInvitationExport() {
+        let share = CKShare(recordZoneID: CKRecordZone.ID(zoneName: "MealPlanHousehold-test", ownerName: CKCurrentUserDefaultName))
+
+        #expect(!MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+        share.publicPermission = .readOnly
+        #expect(MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+        share.publicPermission = .readWrite
+        #expect(MealPlanSharePreparation.requiresPrivateRecipientHardening(share))
+    }
+
     @Test func firstInvitationSynchronizesLocalChangesBeforeCreatingShare() async throws {
         var syncCount = 0
 

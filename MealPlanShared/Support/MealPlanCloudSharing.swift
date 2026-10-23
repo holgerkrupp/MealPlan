@@ -5,6 +5,10 @@ import SwiftData
 
 @MainActor
 enum MealPlanSharePreparation {
+    static func requiresPrivateRecipientHardening(_ share: CKShare) -> Bool {
+        share.publicPermission != .none
+    }
+
     /// Existing shares are handed directly to Apple's native exporter and do
     /// not trigger a household sync. Preparation only flushes local edits when
     /// no authoritative share exists yet.
