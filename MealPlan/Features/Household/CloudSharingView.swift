@@ -72,18 +72,16 @@ struct HouseholdSharingView: View {
         }
         .sheet(item: $managedShare) { item in
             #if os(iOS)
-            if let sharing {
-                NativeCloudSharingController(
-                    share: item.share,
-                    title: household.name,
-                    rootID: household.uuid.uuidString,
-                    sharing: sharing,
-                    onShareChanged: { Task { await refreshShareAndMembers() } },
-                    onStopSharing: { Task { await stopSharingLocally() } },
-                    onFailure: { errorMessage = $0.localizedDescription }
-                )
-                .ignoresSafeArea()
-            }
+            NativeCloudSharingController(
+                share: item.share,
+                title: household.name,
+                rootID: household.uuid.uuidString,
+                sharing: item.sharing,
+                onShareChanged: { Task { await refreshShareAndMembers() } },
+                onStopSharing: { Task { await stopSharingLocally() } },
+                onFailure: { errorMessage = $0.localizedDescription }
+            )
+            .ignoresSafeArea()
             #else
             EmptyView()
             #endif
@@ -116,7 +114,7 @@ struct HouseholdSharingView: View {
                 }
 
                 if share != nil {
-                    manageSharingButton(using: sharing)
+                    manageSharingButton()
                     CloudKitShareLink(
                         rootID: household.uuid.uuidString,
                         title: household.name,
@@ -173,9 +171,9 @@ struct HouseholdSharingView: View {
         }
     }
 
-    private func manageSharingButton(using sharing: CloudKitShareLifecycleService) -> some View {
+    private func manageSharingButton() -> some View {
         Button {
-            Task { await presentManagement(using: sharing) }
+            Task { await presentManagement() }
         } label: {
             if isPreparingManagement {
                 ProgressView()
@@ -189,28 +187,32 @@ struct HouseholdSharingView: View {
         .buttonStyle(.borderedProminent)
     }
 
-    private func presentManagement(using sharing: CloudKitShareLifecycleService) async {
+    private func presentManagement() async {
         guard !isPreparingManagement else { return }
         isPreparingManagement = true
         defer { isPreparingManagement = false }
         do {
-            // Revalidate the authoritative share only when the owner asks to
-            // manage it. This also migrates legacy public-link shares before
-            // Apple's participant manager opens.
-            let prepared = try await sharing.prepareShare(
+            // Use a management-specific service: it skips a full sync only
+            // after confirming the existing share, and still lets the package
+            // harden legacy public-link shares before Apple's manager opens.
+            let management = try await MealPlanCloudSharing.managementService(
+                for: household,
+                context: modelContext
+            )
+            let prepared = try await management.prepareShare(
                 rootID: household.uuid.uuidString,
                 waitTimeout: .seconds(45)
             )
             share = prepared
             errorMessage = nil
             #if os(iOS)
-            managedShare = ManagedShareSheet(share: prepared)
+            managedShare = ManagedShareSheet(share: prepared, sharing: management)
             #else
             let presenter = NativeMacCloudSharingPresenter()
             presenter.onShareSaved = { _ in Task { await refreshShareAndMembers() } }
             presenter.onSharingStopped = { _ in Task { await stopSharingLocally() } }
             presenter.onCompleted = { errorMessage = $0?.localizedDescription }
-            presenter.present(share: prepared, rootID: household.uuid.uuidString, sharing: sharing)
+            presenter.present(share: prepared, rootID: household.uuid.uuidString, sharing: management)
             macSharingPresenter = presenter
             #endif
         } catch {
@@ -271,5 +273,6 @@ struct HouseholdSharingView: View {
 
 private struct ManagedShareSheet: Identifiable {
     let share: CKShare
+    let sharing: CloudKitShareLifecycleService
     var id: String { share.recordID.recordName }
 }

@@ -63,6 +63,7 @@ struct HouseholdRecoveryCandidate: Identifiable, Sendable {
 enum HouseholdRecoveryError: LocalizedError {
     case invalidSelection
     case missingHousehold
+    case requiredAssetUnavailable
     case validationFailed
     case notOwner
     case retentionNotReached
@@ -73,6 +74,8 @@ enum HouseholdRecoveryError: LocalizedError {
             "That iCloud household can no longer be identified. Refresh the list and try again."
         case .missingHousehold:
             "The selected household no longer has its root record in iCloud."
+        case .requiredAssetUnavailable:
+            "A household image could not be downloaded completely, so this device was not changed. Retry the download before replacing local data."
         case .validationFailed:
             "The downloaded household did not pass its safety check, so this device was not changed."
         case .notOwner:
@@ -260,6 +263,7 @@ enum HouseholdCloudBootstrapService {
         in zoneID: CKRecordZone.ID,
         shareRecordName: String?,
         replacing localHousehold: Household?,
+        alsoReplacing additionalHouseholds: [Household] = [],
         mergeRecipes: Bool,
         adoptingLocalContent: Bool = false,
         context: ModelContext,
@@ -278,9 +282,16 @@ enum HouseholdCloudBootstrapService {
             throw HouseholdSharingError.missingRootRecord
         }
 
-        // Stop an engine that may currently be attached to a placeholder zone
-        // before changing the active household underneath it.
-        await HouseholdRecordSyncService.shared.stop()
+        let replacements = ([localHousehold].compactMap { $0 } + additionalHouseholds)
+            .filter { $0.uuid != householdID }
+        if let firstReplacement = replacements.first,
+           replacements.contains(where: HouseholdCloudSharingService.hasRecoverableUserContent) {
+            try HouseholdRecoveryService.archiveBeforeReplacement(
+                context: context,
+                operationID: "owned-household-adoption|\(BuildEnvironment.cloudKit.rawValue)|\(replacements.map { $0.uuid.uuidString }.sorted().joined(separator: ","))|\(householdID.uuidString)",
+                preferredHouseholdID: firstReplacement.uuid
+            )
+        }
 
         let applicable = records.compactMap { record -> (CKRecord, HouseholdRecordIdentity)? in
             guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
@@ -289,6 +300,18 @@ enum HouseholdCloudBootstrapService {
         }.sorted {
             ($0.1.type.applyPriority, $0.1.recordName) < ($1.1.type.applyPriority, $1.1.recordName)
         }
+
+        // Resolve every required image before stopping the active engine or
+        // entering the replacement transaction. The old roots remain intact
+        // if CloudKit did not provide complete asset bytes.
+        let validated = try applicable.map { record, identity in
+            (record, identity, record[HouseholdRecordCodec.payloadKey] as! Data,
+             try Self.readAssetData(record[HouseholdRecordCodec.assetKey] as? CKAsset))
+        }
+
+        // Stop an engine that may currently be attached to a placeholder zone
+        // only after all fetched payloads and assets are ready to apply.
+        await HouseholdRecordSyncService.shared.stop()
 
         let fetchedShareName = records.compactMap { ($0 as? CKShare)?.recordID.recordName }.first
         let locator = HouseholdShareLocator(
@@ -308,10 +331,8 @@ enum HouseholdCloudBootstrapService {
             }
 
             try HouseholdRecordApplier.withBatchLookup(in: context) {
-                for (offset, item) in applicable.enumerated() {
-                    let (record, identity) = item
-                    let data = record[HouseholdRecordCodec.payloadKey] as! Data
-                    let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+                for (offset, item) in validated.enumerated() {
+                    let (record, identity, data, asset) = item
                     try HouseholdRecordApplier.apply(
                         payloadData: data,
                         identity: identity,
@@ -320,19 +341,19 @@ enum HouseholdCloudBootstrapService {
                         household: household,
                         context: context
                     )
-                    progress(.importing(completed: offset + 1, total: applicable.count))
+                    progress(.importing(completed: offset + 1, total: validated.count))
                 }
             }
 
             household.cloudKitShareIdentifier = try HouseholdShareLocator.encode(locator)
 
-            if let localHousehold, localHousehold.uuid != household.uuid {
+            for replacement in replacements where replacement.uuid != household.uuid {
                 if adoptingLocalContent {
-                    adoptContent(of: localHousehold, into: household)
+                    adoptContent(of: replacement, into: household)
                 } else if mergeRecipes {
-                    HouseholdCloudSharingService.mergeDishes(from: localHousehold, into: household)
+                    HouseholdCloudSharingService.mergeDishes(from: replacement, into: household)
                 }
-                context.delete(localHousehold)
+                context.delete(replacement)
             }
             try context.save()
             return household
@@ -455,11 +476,14 @@ enum HouseholdCloudBootstrapService {
             ($0.1.type.applyPriority, $0.1.recordName) < ($1.1.type.applyPriority, $1.1.recordName)
         }
 
+        let validated = try applicable.map { record, identity in
+            (record, identity, record[HouseholdRecordCodec.payloadKey] as! Data,
+             try readAssetData(record[HouseholdRecordCodec.assetKey] as? CKAsset))
+        }
+
         try HouseholdRecordApplier.withBatchLookup(in: context) {
-            for (offset, item) in applicable.enumerated() {
-                let (record, identity) = item
-                let data = record[HouseholdRecordCodec.payloadKey] as! Data
-                let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
+            for (offset, item) in validated.enumerated() {
+                let (record, identity, data, asset) = item
                 try HouseholdRecordApplier.apply(
                     payloadData: data,
                     identity: identity,
@@ -468,7 +492,7 @@ enum HouseholdCloudBootstrapService {
                     household: household,
                     context: context
                 )
-                progress(.importing(completed: offset + 1, total: applicable.count))
+                progress(.importing(completed: offset + 1, total: validated.count))
             }
         }
 
@@ -754,12 +778,18 @@ enum HouseholdCloudBootstrapService {
             ($0.1.type.applyPriority, $0.1.recordName) < ($1.1.type.applyPriority, $1.1.recordName)
         }
 
+        // Validate every declared asset before mutating even the canonical
+        // household. A later broken photo must not leave an earlier subset
+        // of a competing zone imported without a clear failure.
+        let validated = try applicable.map { record, identity in
+            (record, identity, try readAssetData(record[HouseholdRecordCodec.assetKey] as? CKAsset))
+        }
+
         var imported = Set<HouseholdRecordIdentity>()
         HouseholdRecordApplier.withBatchLookup(in: context) {
-            for (offset, item) in applicable.enumerated() {
-                let (record, identity) = item
+            for (offset, item) in validated.enumerated() {
+                let (record, identity, asset) = item
                 let payload = record[HouseholdRecordCodec.payloadKey] as! Data
-                let asset = (record[HouseholdRecordCodec.assetKey] as? CKAsset)?.fileURL.flatMap { try? Data(contentsOf: $0) }
                 do {
                     try HouseholdRecordApplier.apply(
                         payloadData: payload,
@@ -780,6 +810,19 @@ enum HouseholdCloudBootstrapService {
             }
         }
         return imported
+    }
+
+    /// A record that declares an image asset is incomplete if CloudKit did
+    /// not provide readable, non-empty bytes. Fail before a replacement
+    /// transaction can commit and remove the previous household.
+    nonisolated static func readAssetData(_ asset: CKAsset?) throws -> Data? {
+        guard let asset else { return nil }
+        guard let fileURL = asset.fileURL,
+              let data = try? Data(contentsOf: fileURL),
+              !data.isEmpty else {
+            throw HouseholdRecoveryError.requiredAssetUnavailable
+        }
+        return data
     }
 
     /// Counts only records that represent actual user content. Requesting no

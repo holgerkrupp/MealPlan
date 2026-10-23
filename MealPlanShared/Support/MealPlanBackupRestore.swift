@@ -102,6 +102,14 @@ enum MealPlanBackupRestore {
         household.packageSizeCountryCode = backup.household.packageSizeCountryCode ?? Household.defaultPackageSizeCountryCode
         household.unitPresentationOverrideRaw = backup.household.unitPresentationOverrideRaw
         household.inventoryEnabled = backup.household.inventoryEnabled ?? false
+        // Purchase unlock is an Apple Account entitlement, not portable
+        // household data. The active account's PurchaseManager reconciles it.
+        household.unlockedByPurchase = false
+        household.bringListUuid = backup.household.bringListUuid
+        household.bringListName = backup.household.bringListName
+        household.bringShadowKeys = backup.household.bringShadowKeys ?? []
+        household.bringAutoSync = backup.household.bringAutoSync ?? true
+        household.bringLastSyncedAt = backup.household.bringLastSyncedAt
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         // A restored library brings its own staples with it; an older file
@@ -129,6 +137,7 @@ enum MealPlanBackupRestore {
                 role: MemberRole(rawValue: stored.roleRaw) ?? .editor,
                 isCurrentUser: stored.isCurrentUser
             )
+            member.uuid = stored.uuid ?? UUID()
             member.dateAdded = stored.dateAdded
             member.allergies = stored.allergies
             member.mustAvoidIngredients = stored.mustAvoidIngredients
