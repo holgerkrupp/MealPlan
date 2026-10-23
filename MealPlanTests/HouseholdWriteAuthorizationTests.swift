@@ -5,6 +5,7 @@ import Testing
 
 @MainActor
 struct HouseholdWriteAuthorizationTests {
+    #if os(iOS)
     @Test func watchChecksAreRejectedForPersistedViewOnlyShare() throws {
         let household = Household(name: "Family")
         let locator = HouseholdShareLocator(
@@ -20,6 +21,7 @@ struct HouseholdWriteAuthorizationTests {
 
         #expect(!WatchShoppingCheckAuthorization.canApply(item))
     }
+    #endif
 
     @Test func shoppingMutationBoundaryRejectsViewOnlyShare() throws {
         let (container, directory) = try makeTestModelContainer()
