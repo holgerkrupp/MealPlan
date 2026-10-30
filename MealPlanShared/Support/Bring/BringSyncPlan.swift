@@ -108,7 +108,18 @@ struct BringSyncPlan: Equatable, Sendable {
     /// A one-way push: everything on the MealPlan list goes to Bring!, and
     /// nothing on the Bring! list is touched. What the "Send to Bring!" action
     /// does, for people who want the two lists kept apart.
-    static func push(local: [BringSyncItem], remote: [BringSyncItem] = []) -> BringSyncPlan {
+    ///
+    /// Only what both lists now hold goes into the shadow. A line only Bring!
+    /// has was never agreed on, and recording it would make the next two-way
+    /// sync read it as "cleared in MealPlan" and delete it from Bring!. A line
+    /// the previous shadow already knew stays known, so something really
+    /// cleared here before the push is still removed by that sync rather than
+    /// coming back as a new item.
+    static func push(
+        local: [BringSyncItem],
+        remote: [BringSyncItem] = [],
+        shadow: [String] = []
+    ) -> BringSyncPlan {
         let remotes = byKey(remote)
         var plan = BringSyncPlan()
         for (key, item) in byKey(local) {
@@ -118,7 +129,8 @@ struct BringSyncPlan: Equatable, Sendable {
             plan.shadow.append(key)
         }
         plan.addToBring.sort { $0.key < $1.key }
-        plan.shadow = Array(Set(plan.shadow).union(remotes.keys)).sorted()
+        let stillKnown = remotes.keys.filter { knows($0, shadow) }
+        plan.shadow = Array(Set(plan.shadow).union(stillKnown)).sorted()
         return plan
     }
 

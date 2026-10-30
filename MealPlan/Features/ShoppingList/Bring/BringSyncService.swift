@@ -104,8 +104,8 @@ final class BringSyncService {
     /// Bring! holds.
     @discardableResult
     func push(household: Household, context: ModelContext) async throws -> Outcome {
-        try await run(household: household, context: context) { local, remote, _ in
-            BringSyncPlan.push(local: local, remote: remote)
+        try await run(household: household, context: context) { local, remote, shadow in
+            BringSyncPlan.push(local: local, remote: remote, shadow: shadow)
         }
     }
 

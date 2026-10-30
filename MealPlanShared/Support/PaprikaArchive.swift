@@ -30,9 +30,15 @@ enum PaprikaArchive {
     static func recipes(from data: Data) throws -> [ImportedRecipe] {
         let jsonBlobs: [Data]
         if data.starts(with: [0x50, 0x4B, 0x03, 0x04]) {           // "PK\x03\x04"
-            jsonBlobs = try Zip.entries(in: data).compactMap { entry in
-                try? Gzip.decompressIfNeeded(entry.data)
+            var blobs: [Data] = []
+            var totalBytes = 0
+            for entry in try Zip.entries(in: data) {
+                guard let blob = try? Gzip.decompressIfNeeded(entry.data) else { continue }
+                totalBytes += blob.count
+                guard totalBytes <= RawDeflate.maxTotalOutputBytes else { throw RecipeImportError.unreadableFile }
+                blobs.append(blob)
             }
+            jsonBlobs = blobs
         } else if data.starts(with: [0x1F, 0x8B]) {                 // gzip magic
             jsonBlobs = [try Gzip.decompress(data)]
         } else {
@@ -144,18 +150,29 @@ enum PaprikaArchive {
             || lowered.hasPrefix("optional")
     }
 
+    /// A year. Far beyond any recipe, and small enough that summing and
+    /// converting hours can't overflow.
+    private static let maxDurationMinutes = 525_600
+
     /// "15 min", "1 hr 30 min", "1:30", "45" → minutes.
     static func durationMinutes(_ raw: String?) -> Int? {
         guard let raw = raw?.lowercased(), !raw.isEmpty else { return nil }
         if raw.contains(":") {
             let parts = raw.split(separator: ":").compactMap { Int($0) }
-            if parts.count == 2 { return parts[0] * 60 + parts[1] }
+            if parts.count == 2 {
+                guard (0...maxDurationMinutes).contains(parts[0]),
+                      (0...maxDurationMinutes).contains(parts[1]) else { return nil }
+                return parts[0] * 60 + parts[1]
+            }
         }
         var total = 0
         var matched = false
         let scanner = Scanner(string: raw)
         while !scanner.isAtEnd {
             if let value = scanner.scanInt() {
+                // The file is untrusted: an absurd value is no duration, and
+                // multiplying it would trap.
+                guard (0...maxDurationMinutes).contains(value), total <= maxDurationMinutes else { return nil }
                 let unit = scanner.scanCharacters(from: .letters)?.trimmingCharacters(in: .whitespaces) ?? ""
                 if unit.hasPrefix("h") || unit.hasPrefix("std") { total += value * 60; matched = true }
                 else if unit.hasPrefix("m") || unit.hasPrefix("min") { total += value; matched = true }
@@ -179,6 +196,7 @@ enum Zip {
         let count = readU16(bytes, eocd + 10)
         var cdOffset = Int(readU32(bytes, eocd + 16))
         var entries: [Entry] = []
+        var totalBytes = 0
 
         for _ in 0..<count {
             guard cdOffset + 46 <= bytes.count, readU32(bytes, cdOffset) == 0x02014b50 else { break }
@@ -189,6 +207,7 @@ enum Zip {
             let extraLen = readU16(bytes, cdOffset + 30)
             let commentLen = readU16(bytes, cdOffset + 32)
             let localOffset = Int(readU32(bytes, cdOffset + 42))
+            guard cdOffset + 46 + nameLen <= bytes.count else { break }
             let name = String(bytes: bytes[(cdOffset + 46)..<(cdOffset + 46 + nameLen)], encoding: .utf8) ?? "recipe"
 
             // Local file header: 30 bytes + name + extra
@@ -205,6 +224,8 @@ enum Zip {
                     default: payload = Data()
                     }
                     if !payload.isEmpty, !name.hasSuffix("/") {
+                        totalBytes += payload.count
+                        guard totalBytes <= RawDeflate.maxTotalOutputBytes else { throw RecipeImportError.unreadableFile }
                         entries.append(Entry(name: name, data: payload))
                     }
                 }
@@ -258,6 +279,9 @@ enum Gzip {
         if flags & 0x08 != 0 { while index < bytes.count, bytes[index] != 0 { index += 1 }; index += 1 } // FNAME
         if flags & 0x10 != 0 { while index < bytes.count, bytes[index] != 0 { index += 1 }; index += 1 } // FCOMMENT
         if flags & 0x02 != 0 { index += 2 }          // FHCRC
+        // The fields above are sized by the file itself, so the deflate stream
+        // and its 8-byte trailer may not be where the header claims.
+        guard index <= bytes.count - 8 else { throw RecipeImportError.unreadableFile }
 
         let isize = bytes.count >= 4
             ? Int(bytes[bytes.count - 4]) | (Int(bytes[bytes.count - 3]) << 8)
@@ -272,13 +296,19 @@ enum Gzip {
 }
 
 enum RawDeflate {
+    /// One recipe with its photo is a few megabytes; anything near this is a
+    /// zip bomb, not an export.
+    static let maxOutputBytes = 128 * 1024 * 1024
+    static let maxTotalOutputBytes = 512 * 1024 * 1024
+
     /// Inflate a raw DEFLATE stream (no zlib/gzip wrapper). Grows the output
-    /// buffer and retries if the first estimate was too small.
+    /// buffer and retries if the first estimate was too small, up to a limit:
+    /// the expected size comes from the file, and so does the compression ratio.
     static func inflate(_ data: Data, expectedSize: Int) -> Data? {
         guard !data.isEmpty else { return nil }
-        var capacity = max(64 * 1024, expectedSize + 1024)
+        var capacity = min(max(64 * 1024, expectedSize + 1024), maxOutputBytes)
 
-        for _ in 0..<8 {
+        while true {
             let dst = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
             defer { dst.deallocate() }
 
@@ -291,8 +321,8 @@ enum RawDeflate {
             if written < capacity {
                 return Data(bytes: dst, count: written)
             }
-            capacity *= 2 // filled the buffer exactly — probably truncated, retry bigger
+            guard capacity < maxOutputBytes else { return nil }
+            capacity = min(capacity * 2, maxOutputBytes) // filled the buffer exactly — probably truncated, retry bigger
         }
-        return nil
     }
 }

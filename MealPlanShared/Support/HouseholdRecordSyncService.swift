@@ -70,11 +70,15 @@ struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
     var systemFields: [String: Data] = [:]
     var tombstones: [HouseholdSyncTombstone] = []
     var needsFullUpload = false
+    /// Fetched records not yet applied here. CKSyncEngine won't deliver a batch
+    /// twice, so these are written before applying and removed afterwards; the
+    /// next fetch re-reads whatever is left by ID. See `retryFailedFetches`.
+    var fetchRetryRecordNames: Set<String> = []
 
     private enum CodingKeys: String, CodingKey {
         case serverFingerprints, serverGroupFingerprints
         case pendingFingerprints, pendingGroupFingerprints
-        case systemFields, tombstones, needsFullUpload
+        case systemFields, tombstones, needsFullUpload, fetchRetryRecordNames
         // Names used by builds before queued and acknowledged state was split.
         case fingerprints, groupFingerprints
     }
@@ -140,6 +144,7 @@ struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
         }
         systemFields = try values.decodeIfPresent([String: Data].self, forKey: .systemFields) ?? [:]
         tombstones = try values.decodeIfPresent([HouseholdSyncTombstone].self, forKey: .tombstones) ?? []
+        fetchRetryRecordNames = try values.decodeIfPresent(Set<String>.self, forKey: .fetchRetryRecordNames) ?? []
     }
 
     func encode(to encoder: Encoder) throws {
@@ -151,6 +156,7 @@ struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
         try values.encode(systemFields, forKey: .systemFields)
         try values.encode(tombstones, forKey: .tombstones)
         try values.encode(needsFullUpload, forKey: .needsFullUpload)
+        try values.encode(fetchRetryRecordNames, forKey: .fetchRetryRecordNames)
     }
 }
 
@@ -283,6 +289,11 @@ final class HouseholdRecordSyncService {
     /// allowed to finish so cancellation never tears through a save.
     private var admitsForegroundWork = true
     private var appliedRemoteRecordCount = 0
+    private var lastFetchRetryAt: ContinuousClock.Instant?
+    /// Foreground polling fetches every 15 seconds. A record this build can't
+    /// read stays unreadable until an update, so don't re-download it each time.
+    private static let fetchRetryInterval: Duration = .seconds(300)
+    private static let fetchRetryBatchSize = 100
     private var cancelAtPersistenceBoundary = false
     /// Generation observed after the last local scan. A missing value from an
     /// older app is deliberately treated as dirty once, not as clean.
@@ -600,6 +611,7 @@ final class HouseholdRecordSyncService {
         needsLocalScan = true
         didRestoreTombstoneOperations = false
         lastObservedStoreGeneration = nil
+        lastFetchRetryAt = nil
 
         let accountPartition = try await accountPartitionIdentifier()
         if stateStoreAccountPartitionIdentifier != accountPartition {
@@ -970,6 +982,7 @@ final class HouseholdRecordSyncService {
             }
         }
         let duration = startedAt.duration(to: .now)
+        if fetch { await retryFailedFetches() }
         if fetch { logger.info("sync.fetch.end duration=\(duration, privacy: .public)") }
         if maySend { logger.info("sync.send.end duration=\(duration, privacy: .public)") }
     }
@@ -977,6 +990,67 @@ final class HouseholdRecordSyncService {
     // MARK: - Remote change application
 
     private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) async throws {
+        try await applyRemoteChanges(
+            records: changes.modifications.map(\.record),
+            deletions: changes.deletions.map { ($0.recordID, $0.recordType) }
+        )
+    }
+
+    /// Re-reads records that an earlier fetch delivered but this device didn't
+    /// apply: the server's current copy, by ID, one record per transaction so
+    /// that one that still fails can't hold back the others.
+    private func retryFailedFetches() async {
+        guard let locator, !metadata.fetchRetryRecordNames.isEmpty else { return }
+        if let lastFetchRetryAt, lastFetchRetryAt.duration(to: .now) < Self.fetchRetryInterval { return }
+        lastFetchRetryAt = .now
+
+        let names = metadata.fetchRetryRecordNames.sorted().prefix(Self.fetchRetryBatchSize)
+        let ids = names.map { CKRecord.ID(recordName: $0, zoneID: locator.zoneID) }
+        let database = activeScope == .private ? container.privateCloudDatabase : container.sharedCloudDatabase
+        let results: [CKRecord.ID: Result<CKRecord, Error>]
+        do { results = try await database.records(for: ids) }
+        catch {
+            logger.error("fetch.retry.failed domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)")
+            return
+        }
+
+        var records: [CKRecord] = []
+        var deletions: [(CKRecord.ID, CKRecord.RecordType)] = []
+        for (id, result) in results {
+            switch result {
+            case .success(let record):
+                records.append(record)
+            case .failure(let error):
+                guard Self.isRecordGone(error) else { continue }
+                if let identity = identity(fromRecordName: id.recordName) {
+                    deletions.append((id, identity.type.rawValue))
+                } else {
+                    metadata.fetchRetryRecordNames.remove(id.recordName)
+                }
+            }
+        }
+        var failures = 0
+        for record in records.sorted(by: { priority($0) < priority($1) }) {
+            do { try await applyRemoteChanges(records: [record], deletions: []) }
+            catch { failures += 1 }
+        }
+        for deletion in deletions.sorted(by: { deletionPriority(recordType: $0.1) < deletionPriority(recordType: $1.1) }) {
+            do { try await applyRemoteChanges(records: [], deletions: [deletion]) }
+            catch { failures += 1 }
+        }
+        logger.info("fetch.retry.end records=\(records.count + deletions.count, privacy: .public) failures=\(failures, privacy: .public) remaining=\(self.metadata.fetchRetryRecordNames.count, privacy: .public)")
+    }
+
+    /// Whether a by-ID read means the record no longer exists, as opposed to
+    /// the read itself not working right now.
+    nonisolated static func isRecordGone(_ error: Error) -> Bool {
+        (error as? CKError)?.code == .unknownItem
+    }
+
+    private func applyRemoteChanges(
+        records: [CKRecord],
+        deletions fetchedDeletions: [(id: CKRecord.ID, recordType: CKRecord.RecordType)]
+    ) async throws {
         guard let household, let context, let locator else { return }
         // A launch/save scan may still be building its baseline when a push
         // arrives. Let it finish before the incoming records mutate the same
@@ -991,15 +1065,26 @@ final class HouseholdRecordSyncService {
         }
 
         var local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
-        let modifications = changes.modifications
-            .filter { $0.record.recordID.zoneID == locator.zoneID }
-            .sorted { priority($0.record) < priority($1.record) }
-        let deletions = changes.deletions
+        let modifications = records
             .filter { $0.recordID.zoneID == locator.zoneID }
+            .sorted { priority($0) < priority($1) }
+        let deletions = fetchedDeletions
+            .filter { $0.id.zoneID == locator.zoneID }
             .sorted { deletionPriority(recordType: $0.recordType) < deletionPriority(recordType: $1.recordType) }
+
+        // Write-ahead: after this point a crash or a failed apply leaves these
+        // names behind to re-read. A write failure must not stop the apply; the
+        // in-memory marks still cover everything short of a crash.
+        let incomingNames = Set(modifications.map(\.recordID.recordName) + deletions.map(\.id.recordName))
+        if !incomingNames.isSubset(of: metadata.fetchRetryRecordNames) {
+            metadata.fetchRetryRecordNames.formUnion(incomingNames)
+            do { try await persistMetadata() }
+            catch { logger.error("fetch.retry.mark.failed") }
+        }
+        var unreadableNames = Set<String>()
         try Task.checkCancellation()
         guard !cancelAtPersistenceBoundary else { throw CancellationError() }
-        let counts = Dictionary(grouping: modifications) { $0.record.recordType }
+        let counts = Dictionary(grouping: modifications) { $0.recordType }
             .mapValues(\.count)
             .map { "\($0.key)=\($0.value)" }
             .sorted()
@@ -1024,15 +1109,22 @@ final class HouseholdRecordSyncService {
                     in: context,
                     expectedRecordCount: modifications.count + deletions.count
                 ) {
-                    for modification in modifications {
-                        let record = modification.record
+                    for record in modifications {
                         guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
                               let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data else { continue }
 
                         let name = identity.recordName
                         stagedSystemFields[name] = encodeSystemFields(record)
                         if identity.type == .deletionMarker {
-                            guard case .deletionMarker(let marker) = try HouseholdRecordCodec.decode(payloadData) else { continue }
+                            let payload: HouseholdRecordPayload
+                            do { payload = try HouseholdRecordCodec.decode(payloadData) }
+                            catch {
+                                unreadableNames.insert(name)
+                                stagedSystemFields.removeValue(forKey: name)
+                                lastError = error
+                                continue
+                            }
+                            guard case .deletionMarker(let marker) = payload else { continue }
                             let target = HouseholdRecordIdentity(type: marker.deletedType, uuid: marker.deletedUUID)
                             let localTarget = local[target.recordName]
                             let localWins = HouseholdRecordConflictResolver.shouldPreserveLocalForDeletion(
@@ -1050,21 +1142,33 @@ final class HouseholdRecordSyncService {
                             continue
                         }
 
+                        // Reading a record touches nothing, so one that can't
+                        // be read (a newer build's payload, an asset that didn't
+                        // download) is set aside without failing the batch.
                         let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
-                        let serverAssetData = try Self.readAssetData(serverAsset)
-                        let incomingFingerprint = recordFingerprint(payloadData, assetData: serverAssetData)
-                        if let current = local[name],
-                           current.fingerprint == incomingFingerprint,
-                           current.modifiedAt == HouseholdRecordCodec.modifiedAt(of: record) {
-                            serverFingerprints[name] = incomingFingerprint
+                        let incomingFingerprint: String
+                        let resolution: HouseholdRecordResolution
+                        do {
+                            let serverAssetData = try Self.readAssetData(serverAsset)
+                            incomingFingerprint = recordFingerprint(payloadData, assetData: serverAssetData)
+                            if let current = local[name],
+                               current.fingerprint == incomingFingerprint,
+                               current.modifiedAt == HouseholdRecordCodec.modifiedAt(of: record) {
+                                serverFingerprints[name] = incomingFingerprint
+                                continue
+                            }
+                            resolution = try HouseholdRecordConflictResolver.resolve(
+                                local: local[name],
+                                server: record,
+                                serverAssetData: serverAssetData,
+                                serverHasAsset: serverAsset != nil
+                            )
+                        } catch {
+                            unreadableNames.insert(name)
+                            stagedSystemFields.removeValue(forKey: name)
+                            lastError = error
                             continue
                         }
-                        let resolution = try HouseholdRecordConflictResolver.resolve(
-                            local: local[name],
-                            server: record,
-                            serverAssetData: serverAssetData,
-                            serverHasAsset: serverAsset != nil
-                        )
                         try HouseholdRecordApplier.apply(
                             payloadData: resolution.payloadData,
                             identity: identity,
@@ -1081,7 +1185,7 @@ final class HouseholdRecordSyncService {
                     }
 
                     for deletion in deletions {
-                        guard let identity = HouseholdRecordIdentity(recordType: deletion.recordType, recordName: deletion.recordID.recordName) else { continue }
+                        guard let identity = HouseholdRecordIdentity(recordType: deletion.recordType, recordName: deletion.id.recordName) else { continue }
                         let name = identity.recordName
                         if markerLocalWins[name] == true {
                             uploadNames.insert(name)
@@ -1158,6 +1262,7 @@ final class HouseholdRecordSyncService {
         for (name, fields) in stagedSystemFields {
             metadata.systemFields[name] = fields
         }
+        metadata.fetchRetryRecordNames.subtract(incomingNames.subtracting(unreadableNames))
         do {
             if !outgoingChanges.isEmpty {
                 try await syncEnginePool?.enqueue(outgoingChanges, in: activeScope)

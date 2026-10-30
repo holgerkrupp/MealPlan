@@ -7,6 +7,55 @@ import UniformTypeIdentifiers
 struct PaprikaArchiveTests {
 
     /// Wrap raw bytes as a gzip stream (10-byte header + raw DEFLATE + 8-byte trailer).
+    // MARK: - Malformed files fail instead of trapping
+
+    @Test func gzipWithUnterminatedFilenameIsRejected() {
+        let bytes: [UInt8] = [0x1F, 0x8B, 8, 0x08] + [UInt8](repeating: 0, count: 6) + [UInt8](repeating: 0x41, count: 20)
+        #expect(throws: RecipeImportError.self) { try Gzip.decompress(Data(bytes)) }
+    }
+
+    @Test func gzipWithOversizedExtraFieldIsRejected() {
+        let bytes: [UInt8] = [0x1F, 0x8B, 8, 0x04] + [UInt8](repeating: 0, count: 6) + [0xFF, 0xFF] + [UInt8](repeating: 0x41, count: 20)
+        #expect(throws: RecipeImportError.self) { try Gzip.decompress(Data(bytes)) }
+    }
+
+    @Test func zipWithOversizedNameLengthIsRejected() {
+        var bytes = [UInt8](repeating: 0, count: 60)
+        bytes.replaceSubrange(0..<4, with: [0x50, 0x4B, 0x03, 0x04])
+        bytes.replaceSubrange(4..<8, with: [0x50, 0x4B, 0x01, 0x02])
+        bytes[32] = 0xFF
+        bytes[33] = 0xFF
+        var endOfDirectory = [UInt8](repeating: 0, count: 22)
+        endOfDirectory.replaceSubrange(0..<4, with: [0x50, 0x4B, 0x05, 0x06])
+        endOfDirectory[10] = 1
+        endOfDirectory[16] = 4
+        #expect(throws: RecipeImportError.self) { try Zip.entries(in: Data(bytes + endOfDirectory)) }
+    }
+
+    @Test func absurdDurationsAreIgnored() {
+        #expect(PaprikaArchive.durationMinutes("999999999999999999:00") == nil)
+        #expect(PaprikaArchive.durationMinutes("999999999999999999 h") == nil)
+        #expect(PaprikaArchive.durationMinutes("1 hr 30 min") == 90)
+        #expect(PaprikaArchive.durationMinutes("1:30") == 90)
+    }
+
+    @Test func inflateStopsAtTheOutputLimit() {
+        let plain = Data(count: RawDeflate.maxOutputBytes + 1024)
+        let compressed = plain.withUnsafeBytes { source -> Data in
+            let capacity = plain.count / 100
+            let buffer = UnsafeMutablePointer<UInt8>.allocate(capacity: capacity)
+            defer { buffer.deallocate() }
+            let size = compression_encode_buffer(
+                buffer, capacity,
+                source.bindMemory(to: UInt8.self).baseAddress!, plain.count,
+                nil, COMPRESSION_ZLIB
+            )
+            return Data(bytes: buffer, count: size)
+        }
+        #expect(!compressed.isEmpty)
+        #expect(RawDeflate.inflate(compressed, expectedSize: Int(UInt32.max)) == nil)
+    }
+
     private func gzip(_ input: Data) -> Data {
         let src = [UInt8](input)
         let cap = src.count + 1024

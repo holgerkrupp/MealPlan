@@ -94,9 +94,32 @@ struct BringSyncTests {
         #expect(plan.removeFromBring.isEmpty)
         #expect(plan.addLocally.isEmpty)
         #expect(plan.checkOffLocally.isEmpty)
-        // Both sides are now known, so a later two-way sync doesn't read the
-        // pushed items as "deleted in Bring!".
-        #expect(plan.shadow.count == 2)
+        // What was pushed is known, so a later two-way sync doesn't read it as
+        // "deleted in Bring!". What only Bring! has was never agreed on.
+        #expect(plan.shadow == [item("Joghurt").key])
+    }
+
+    @Test func syncAfterPushKeepsWhatOnlyBringHas() {
+        let joghurt = item("Joghurt", "500 g")
+        let bananen = item("Bananen", "3")
+        let pushed = BringSyncPlan.push(local: [joghurt], remote: [bananen])
+
+        let plan = BringSyncPlan.make(
+            local: [joghurt],
+            remote: [joghurt, bananen],
+            shadow: pushed.shadow
+        )
+        #expect(plan.removeFromBring.isEmpty)
+        #expect(plan.addLocally.map(\.name) == ["Bananen"])
+    }
+
+    @Test func pushKeepsAnEarlierRemovalPending() {
+        let bananen = item("Bananen", "3")
+        let pushed = BringSyncPlan.push(local: [], remote: [bananen], shadow: [bananen.key])
+
+        let plan = BringSyncPlan.make(local: [], remote: [bananen], shadow: pushed.shadow)
+        #expect(plan.removeFromBring.map(\.name) == ["Bananen"])
+        #expect(plan.addLocally.isEmpty)
     }
 
     // MARK: - What goes on the wire

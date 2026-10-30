@@ -62,7 +62,8 @@ enum BuildEnvironment {
             return debuggable ? .development : .production
         }
 
-        if let apsEnvironment = entitlements["com.apple.developer.aps-environment"] as? String {
+        // iOS spells the push entitlement `aps-environment`; macOS prefixes it.
+        if let apsEnvironment = (entitlements["aps-environment"] ?? entitlements["com.apple.developer.aps-environment"]) as? String {
             switch apsEnvironment {
             case "development": return .development
             case "production": return .production
