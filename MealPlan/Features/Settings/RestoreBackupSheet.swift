@@ -214,15 +214,30 @@ struct RestoreBackupSheet: View {
             let oldLocators = (try? context.fetch(FetchDescriptor<Household>()))?
                 .compactMap { HouseholdShareLocator.decode($0.cloudKitShareIdentifier) } ?? []
             await HouseholdRecordSyncService.shared.stop()
-            for locator in oldLocators {
-                try await HouseholdRecordSyncService.shared.discardState(for: locator)
+            do {
+                try MealPlanBackupRestore.replaceEverything(
+                    with: backup.backup,
+                    context: context,
+                    householdUUID: isCrossEnvironmentRestore ? UUID() : nil
+                )
+            } catch {
+                // Nothing was replaced, so the old household and its sync state
+                // are still good. Pick syncing back up before reporting it.
+                if let household = appState.currentHousehold {
+                    try? await HouseholdCloudSharingService.synchronize(household, context: context)
+                }
+                throw error
             }
-
-            try MealPlanBackupRestore.replaceEverything(
-                with: backup.backup,
-                context: context,
-                householdUUID: isCrossEnvironmentRestore ? UUID() : nil
-            )
+            // Only now that the old data is gone. If this throws, sync stays
+            // stopped: stale fingerprints would read the restore as deletions.
+            for locator in oldLocators {
+                do {
+                    try await HouseholdRecordSyncService.shared.discardState(for: locator)
+                } catch {
+                    appState.bootstrap(context: context)
+                    throw error
+                }
+            }
             // `currentHousehold` pointed at one of the deleted objects, and the
             // restored plan needs its routines scheduled forward again.
             appState.bootstrap(context: context)

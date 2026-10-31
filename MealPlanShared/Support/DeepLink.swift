@@ -31,7 +31,10 @@ enum DeepLink: Equatable, Sendable {
             guard let date = DeepLink.parseDate(iso) else { return nil }
             self = .date(date)
         case "add-dish", "adddish", "add":
-            self = .addDish(url: q("url").flatMap(URL.init(string:)), name: q("name"))
+            self = .addDish(
+                url: q("url").flatMap(URL.init(string:)).flatMap { ["http", "https"].contains($0.scheme?.lowercased()) ? $0 : nil },
+                name: q("name")
+            )
         case "plan", "plan-meal":
             self = .plan(
                 dishName: q("dish") ?? q("name"),

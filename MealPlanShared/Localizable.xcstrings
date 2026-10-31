@@ -43180,6 +43180,86 @@
           }
         }
       }
+    },
+    "Add this recipe?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept hinzufügen?"
+          }
+        }
+      }
+    },
+    "Couldn’t add the recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht hinzugefügt werden"
+          }
+        }
+      }
+    },
+    "Use This iCloud Account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iCloud-Konto verwenden"
+          }
+        }
+      }
+    },
+    "Syncing is paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisierung pausiert"
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account to carry on, or copy it to this one. A shared household becomes an unshared copy." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder kopiere den Haushalt in dieses Konto. Ein geteilter Haushalt wird dabei zu einer nicht geteilten Kopie."
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder wähle in den Haushaltseinstellungen dieses Konto aus."
+          }
+        }
+      }
+    },
+    "MealPlan can’t open its data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan kann seine Daten nicht öffnen"
+          }
+        }
+      }
+    },
+    "Your data has not been changed. Check for an app update and restart your device. If this keeps happening, contact support with the details below." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Daten wurden nicht verändert. Suche nach einem App-Update und starte dein Gerät neu. Falls das Problem bleibt, wende dich mit den folgenden Angaben an den Support."
+          }
+        }
+      }
     }
   },
   "version" : "1.0"

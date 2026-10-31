@@ -11,6 +11,9 @@ actor BringClient {
 
     private let session: URLSession
     private var account: BringSession?
+    /// An actor gives up its turn at every `await`, so without this each call
+    /// that finds a stale token would sign in on its own.
+    private var signInTask: Task<BringSession, Error>?
 
     init(session: URLSession = .shared) {
         self.session = session
@@ -79,8 +82,12 @@ actor BringClient {
     }
 
     private func signedInAccount() async throws -> BringSession {
+        if let signInTask { return try await signInTask.value }
         guard let credentials = BringCredentialStore.load() else { throw BringError.notConnected }
-        return try await signIn(email: credentials.email, password: credentials.password)
+        let task = Task { try await signIn(email: credentials.email, password: credentials.password) }
+        signInTask = task
+        defer { signInTask = nil }
+        return try await task.value
     }
 
     private func send(_ request: URLRequest) async throws -> (Data, HTTPURLResponse) {

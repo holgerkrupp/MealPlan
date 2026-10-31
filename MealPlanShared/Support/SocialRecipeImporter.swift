@@ -154,7 +154,7 @@ struct SocialRecipeImporter: Sendable {
     }
 
     private func fetchYouTubeTranscript(_ url: URL) async throws -> String? {
-        let (data, _) = try await session.data(for: Self.request(for: url))
+        let (data, _) = try await BoundedDownload.data(for: Self.request(for: url), session: session)
         guard let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let events = root["events"] as? [[String: Any]] else { return nil }
         var text = ""
@@ -267,7 +267,7 @@ struct SocialRecipeImporter: Sendable {
         components.queryItems = [URLQueryItem(name: "url", value: url.absoluteString)]
         guard let requestURL = components.url else { throw RecipeImportError.notReachable }
 
-        let (data, _) = try await session.data(for: Self.request(for: requestURL))
+        let (data, _) = try await BoundedDownload.data(for: Self.request(for: requestURL), session: session)
         let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         var post = SocialPost(canonicalURL: url)
         post.caption = (object["title"] as? String)?.nilIfEmpty
@@ -339,7 +339,7 @@ struct SocialRecipeImporter: Sendable {
     private func fetchHTML(from url: URL, cookie: String? = nil) async throws -> String {
         var request = Self.request(for: url)
         if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await BoundedDownload.data(for: request, session: session)
         if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
             throw RecipeImportError.notReachable
         }

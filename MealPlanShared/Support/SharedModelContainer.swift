@@ -84,6 +84,26 @@ enum SharedStore {
         }
     }
 
+    /// The main app's store, or an empty stand-in plus the reason if it won't
+    /// open, so the app can say so rather than crash at launch every time. The
+    /// file is left exactly as it is: an update may be able to read it.
+    @MainActor
+    static func makeForApp() -> (container: ModelContainer, openFailure: Error?) {
+        LenientSecureUnarchiveTransformer.register()
+        let schema = makeSchema()
+        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
+        do {
+            let container = try ModelContainer(for: schema, configurations: [local])
+            container.mainContext.undoManager = UndoManager()
+            container.mainContext.undoManager?.levelsOfUndo = 20
+            return (container, nil)
+        } catch {
+            logger.fault("Could not open the MealPlan store: \(error, privacy: .public)")
+            return (make(cloudKit: false, inMemory: true), error)
+        }
+    }
+
     /// Open the shared store without CloudKit and without trapping. The
     /// widgets use this: a timeline provider that crashes takes the whole
     /// widget down on every refresh, where an empty view merely looks empty.

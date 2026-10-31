@@ -22,7 +22,9 @@ struct MealPlanRecipeArchiveTests {
         line.dish = dish
         line.ingredient = ingredient
         dish.ingredients = [line]
-        let photo = DishImage(data: Data([1, 2, 3]), isPrimary: true)
+        // A real 1×1 PNG: an archive's images have to decode to be imported.
+        let png = Data(base64Encoded: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==")!
+        let photo = DishImage(data: png, isPrimary: true)
         photo.dish = dish
         dish.images = [photo]
 
@@ -35,7 +37,7 @@ struct MealPlanRecipeArchiveTests {
         #expect(imported.tagNames == ["Vegan", "Short prepwork"])
         #expect(imported.dietaryTags == [.vegan])
         #expect(imported.season == .winter)
-        #expect(imported.imageData == Data([1, 2, 3]))
+        #expect(imported.imageData == png)
         #expect(imported.structuredIngredients?.first?.category == .spices)
         #expect(imported.structuredIngredients?.first?.customAisleName == "Baking shelf")
         #expect(imported.structuredIngredients?.first?.isPantryStaple == true)

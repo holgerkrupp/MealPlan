@@ -133,12 +133,24 @@ final class Dish {
     // MARK: - Typed accessors
 
     var sourceURL: URL? {
-        get { sourceURLString.flatMap(URL.init(string:)) }
+        // These strings arrive in files and from other members. A source is a
+        // web page, so nothing else may become a tappable link.
+        get { sourceURLString.flatMap(URL.init(string:)).flatMap { ["http", "https"].contains($0.scheme?.lowercased()) ? $0 : nil } }
         set { sourceURLString = newValue?.absoluteString }
     }
 
+    private static let blockedAppLinkSchemes: Set<String> = [
+        "", "file", "javascript", "data", "tel", "telprompt", "sms", "mailto", "facetime", "facetime-audio",
+    ]
+
     var deepLinkURL: URL? {
-        get { deepLinkURLString.flatMap(URL.init(string:)) }
+        // Links into other apps are the point here, but not ones that start a
+        // call or a message, or reach for local files.
+        get {
+            deepLinkURLString.flatMap(URL.init(string:)).flatMap {
+                Self.blockedAppLinkSchemes.contains($0.scheme?.lowercased() ?? "") ? nil : $0
+            }
+        }
         set { deepLinkURLString = newValue?.absoluteString }
     }
 

@@ -56,6 +56,27 @@ struct HouseholdSyncTombstone: Codable, Equatable, Sendable {
     var deletedAt: Date
 }
 
+/// Which iCloud account each household syncs with on this device. Per CloudKit
+/// environment, since one person's user record differs between them.
+enum HouseholdAccountOwnership {
+    private static func key(_ householdID: UUID, _ environment: String) -> String {
+        "HouseholdRecordSync.accountOwner.\(environment).\(householdID.uuidString)"
+    }
+
+    /// False when the household already belongs to a different account. The
+    /// first account seen becomes the owner, which covers existing installs.
+    static func claim(householdID: UUID, environment: String, account: String, defaults: UserDefaults) -> Bool {
+        let key = key(householdID, environment)
+        if let owner = defaults.string(forKey: key) { return owner == account }
+        defaults.set(account, forKey: key)
+        return true
+    }
+
+    static func assign(householdID: UUID, environment: String, account: String, defaults: UserDefaults) {
+        defaults.set(account, forKey: key(householdID, environment))
+    }
+}
+
 struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
     /// The last value confirmed by CloudKit. A local scan must always compare
     /// against this baseline, never against the value merely put into the
@@ -111,6 +132,25 @@ struct HouseholdSyncMetadata: Codable, Equatable, Sendable {
             return false
         }
         return pending != nil
+    }
+
+    /// Long enough for any device that is still in use to have come back. The
+    /// marker records stay in CloudKit either way; this only trims the local
+    /// list, which otherwise grows with every deletion for good.
+    static let tombstoneRetention: TimeInterval = 180 * 24 * 60 * 60
+
+    @discardableResult
+    mutating func pruneAcknowledgedTombstones(olderThan cutoff: Date) -> Int {
+        let before = tombstones.count
+        tombstones.removeAll { tombstone in
+            let marker = HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName
+            guard tombstone.deletedAt < cutoff, serverFingerprints[marker] != nil else { return false }
+            serverFingerprints.removeValue(forKey: marker)
+            serverGroupFingerprints.removeValue(forKey: marker)
+            systemFields.removeValue(forKey: marker)
+            return true
+        }
+        return before - tombstones.count
     }
 
     /// The package journal is the durable list of uploads still to send. An
@@ -290,7 +330,10 @@ final class HouseholdRecordSyncService {
     private var admitsForegroundWork = true
     private var appliedRemoteRecordCount = 0
     private var lastFetchRetryAt: ContinuousClock.Instant?
-    /// Foreground polling fetches every 15 seconds. A record this build can't
+    /// Set when activation refused a household that belongs to another iCloud
+    /// account, so Settings can offer the choice.
+    private(set) var accountConflictHouseholdID: UUID?
+    /// Foreground polling fetches every minute. A record this build can't
     /// read stays unreadable until an update, so don't re-download it each time.
     private static let fetchRetryInterval: Duration = .seconds(300)
     private static let fetchRetryBatchSize = 100
@@ -321,6 +364,24 @@ final class HouseholdRecordSyncService {
         if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
         await performCloudOperation(fetch: true, send: !locator.isReadOnly)
         if let lastError { throw lastError }
+    }
+
+    /// The person chose to keep this household under the iCloud account now
+    /// signed in. It starts over there as an unshared copy: the old zone and any
+    /// share stay with the account that owns them.
+    func adoptCurrentAccount(household: Household, context: ModelContext) async throws {
+        let account = try await accountPartitionIdentifier()
+        await stop()
+        household.cloudKitShareIdentifier = nil
+        try context.save()
+        HouseholdAccountOwnership.assign(
+            householdID: household.uuid,
+            environment: BuildEnvironment.cloudKit.rawValue,
+            account: account,
+            defaults: defaults
+        )
+        accountConflictHouseholdID = nil
+        try await synchronize(household: household, context: context)
     }
 
     func prepareTransport(household: Household, context: ModelContext) async throws -> CloudKitSyncEnginePool {
@@ -412,11 +473,15 @@ final class HouseholdRecordSyncService {
         lastObservedStoreGeneration = nil
     }
 
+    /// A safety net for a missed silent push, which is what normally brings
+    /// changes in.
+    private static let foregroundPollInterval: Duration = .seconds(60)
+
     private func startForegroundPolling() {
         guard admitsForegroundWork, foregroundPollTask == nil else { return }
         foregroundPollTask = Task { @MainActor [weak self] in
             while !Task.isCancelled {
-                try? await Task.sleep(for: .seconds(15))
+                try? await Task.sleep(for: Self.foregroundPollInterval)
                 guard !Task.isCancelled else { return }
                 if let service = self, service.admitsForegroundWork, service.locator != nil {
                     _ = await service.fetchChanges(shouldScanLocalChanges: false)
@@ -523,8 +588,11 @@ final class HouseholdRecordSyncService {
             case .sentDatabaseChanges(let changes):
                 if let failure = changes.failedZoneSaves.first { lastError = failure.error }
             case .accountChange:
-                metadata = HouseholdSyncMetadata()
-                try await persistMetadata()
+                // Metadata is stored per account, so the old account's stays
+                // valid for its return. Stop syncing, and let the next activation
+                // decide whether this household may follow to whoever is signed
+                // in now. Not awaited: this is the engine's own callback.
+                Task { await stop() }
             case .fetchedDatabaseChanges, .willFetchChanges, .willFetchRecordZoneChanges,
                  .didFetchRecordZoneChanges, .didFetchChanges, .willSendChanges, .didSendChanges:
                 break
@@ -585,6 +653,20 @@ final class HouseholdRecordSyncService {
         let nextLocator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         if self.household?.uuid == household.uuid, locator == nextLocator, syncEnginePool != nil { return }
 
+        // Every local record is unknown to a new account, so activating would
+        // copy this household into it. That takes an explicit decision.
+        let accountPartition = try await accountPartitionIdentifier()
+        guard HouseholdAccountOwnership.claim(
+            householdID: household.uuid,
+            environment: BuildEnvironment.cloudKit.rawValue,
+            account: accountPartition,
+            defaults: defaults
+        ) else {
+            accountConflictHouseholdID = household.uuid
+            throw HouseholdRecordSyncError.householdBelongsToAnotherAccount
+        }
+        if accountConflictHouseholdID == household.uuid { accountConflictHouseholdID = nil }
+
         try acquireSyncOwnership()
 
         if self.household != nil {
@@ -613,7 +695,6 @@ final class HouseholdRecordSyncService {
         lastObservedStoreGeneration = nil
         lastFetchRetryAt = nil
 
-        let accountPartition = try await accountPartitionIdentifier()
         if stateStoreAccountPartitionIdentifier != accountPartition {
             packageStateStore = MealPlanCloudKitStateStore(
                 containerIdentifier: SharedStore.cloudKitContainerID,
@@ -678,6 +759,10 @@ final class HouseholdRecordSyncService {
         if stalePending > 0 {
             try await persistMetadata()
             logger.info("Reconciled stale pending uploads (count=\(stalePending, privacy: .public)).")
+        }
+        let cutoff = Date.now.addingTimeInterval(-HouseholdSyncMetadata.tombstoneRetention)
+        if metadata.pruneAcknowledgedTombstones(olderThan: cutoff) > 0 {
+            try await persistMetadata()
         }
         HouseholdSyncDiagnostics.record(event: "activated", locator: nextLocator)
         if nextLocator.isOwner {
@@ -807,6 +892,14 @@ final class HouseholdRecordSyncService {
         }
 
         let byName = Self.keyedSnapshots(snapshots)
+        // A household always yields at least its own record, so an empty result
+        // means the snapshot didn't see the store, not that everything was
+        // deleted. Below, every known record missing from it becomes a tombstone.
+        guard !byName.isEmpty else {
+            logger.error("scan.skipped.emptySnapshot")
+            needsLocalScan = true
+            return
+        }
         var cloudChanges: [CloudKitRecordChange] = []
         for item in evaluated {
             let snapshot = item.snapshot
@@ -1740,11 +1833,14 @@ enum HouseholdRecordSyncError: LocalizedError {
     case syncLockUnavailable
     case anotherAppCopyIsSyncing
     case requiredAssetUnavailable
+    case householdBelongsToAnotherAccount
 
     var errorDescription: String? {
         switch self {
         case .anotherAppCopyIsSyncing:
             String(localized: "Another copy of MealPlan is syncing this household. Quit the other copy and reopen MealPlan.")
+        case .householdBelongsToAnotherAccount:
+            String(localized: "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings.")
         case .requiredAssetUnavailable:
             String(localized: "A household image could not be downloaded completely. Your existing household data was kept. Retry the sync before continuing.")
         case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal:
@@ -1773,6 +1869,7 @@ enum HouseholdRecordSyncError: LocalizedError {
         case .appGroupUnavailable: "stage=appGroupUnavailable"
         case .syncLockUnavailable: "stage=syncLockUnavailable"
         case .anotherAppCopyIsSyncing: "stage=anotherAppCopyIsSyncing"
+        case .householdBelongsToAnotherAccount: "stage=householdBelongsToAnotherAccount"
         }
     }
 }

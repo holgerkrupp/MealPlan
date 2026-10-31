@@ -44,6 +44,8 @@ private struct DishLibraryContent: View {
     @State private var newDish: Dish?
     @State private var exportedArchive: ExportedRecipeArchive?
     @State private var exportError: String?
+    @State private var confirmingAddRequest: AppState.PendingAddDish?
+    @State private var addRequestError: String?
     @State private var showingFilePicker = false
     @State private var showingRecipeScanner = false
     @State private var importingFile: ImportableRecipeFile?
@@ -315,7 +317,34 @@ private struct DishLibraryContent: View {
         .task(id: appState.pendingAddDish?.id) {
             guard let request = appState.pendingAddDish else { return }
             appState.pendingAddDish = nil
-            await handleAddRequest(request)
+            // These arrive as links any app or web page can open, so nothing is
+            // fetched or added until the person here says so.
+            guard HouseholdMutationAuthorization.canMutate(household: appState.currentHousehold) else {
+                addRequestError = HouseholdSharingError.readOnlyHousehold.localizedDescription
+                return
+            }
+            confirmingAddRequest = request
+        }
+        .confirmationDialog(
+            String(localized: "Add this recipe?"),
+            isPresented: Binding(get: { confirmingAddRequest != nil }, set: { if !$0 { confirmingAddRequest = nil } }),
+            titleVisibility: .visible,
+            presenting: confirmingAddRequest
+        ) { request in
+            Button(String(localized: "Add")) {
+                Task { await handleAddRequest(request) }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: { request in
+            Text(request.url?.host() ?? request.name ?? "")
+        }
+        .alert(
+            String(localized: "Couldn’t add the recipe"),
+            isPresented: Binding(get: { addRequestError != nil }, set: { if !$0 { addRequestError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(addRequestError ?? "")
         }
         .task(id: appState.requestedDishID) {
             guard let id = appState.requestedDishID else { return }

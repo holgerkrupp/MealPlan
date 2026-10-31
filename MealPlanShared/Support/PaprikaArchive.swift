@@ -85,7 +85,7 @@ enum PaprikaArchive {
         // Paprika's categories are the closest thing it has to tags.
         recipe.tagNames = recipe.categories
         if let b64 = p.photo_data, let raw = Data(base64Encoded: b64, options: .ignoreUnknownCharacters) {
-            recipe.imageData = ImagePreparation.prepared(from: raw)
+            recipe.imageData = ImagePreparation.preparedImage(from: raw)
         }
         if recipe.ingredientLines.isEmpty && recipe.instructions == nil { recipe.needsReview = true }
         return recipe
