@@ -717,91 +717,65 @@ enum HouseholdCloudSharingService {
     }
 
     static func refreshMembers(from share: CKShare, household: Household, context: ModelContext) {
-        let currentID = share.currentUserParticipant?.participantID
-        let accepted = share.participants.filter { $0.acceptanceStatus == .accepted || $0.role == .owner }
-        let acceptedIDs = Set(accepted.map(\.participantID))
         let formatter = PersonNameComponentsFormatter()
-
-        for member in household.members ?? [] where member.cloudKitParticipantID.map({ !acceptedIDs.contains($0) }) == true {
-            if member.isActive || member.isCurrentUser {
-                member.isActive = false
-                member.isCurrentUser = false
-                let now = Date.now
-                member.shareMetadataModifiedAt = now
-                member.modifiedAt = now
+        let currentID = share.currentUserParticipant?.participantID
+        let participants = share.participants
+            .filter { $0.acceptanceStatus == .accepted || $0.role == .owner }
+            .map { participant in
+                let role: MemberRole
+                switch (participant.role, participant.permission) {
+                case (.owner, _): role = .owner
+                case (.administrator, _): role = .coOwner
+                case (_, .readOnly): role = .guest
+                default: role = .editor
+                }
+                return HouseholdMemberRoster.Participant(
+                    id: participant.participantID,
+                    name: participant.userIdentity.nameComponents.map { formatter.string(from: $0) },
+                    role: role,
+                    isCurrentUser: participant.participantID == currentID
+                )
             }
-        }
-        for participant in accepted {
-            let id = participant.participantID
-            let existing = (household.members ?? []).first { $0.cloudKitParticipantID == id }
-            let member = existing ?? {
-                let value = HouseholdMember()
-                value.cloudKitParticipantID = id
-                value.household = household
-                context.insert(value)
-                return value
-            }()
-            let name = participant.userIdentity.nameComponents
-                .map { formatter.string(from: $0) }
-                .flatMap { $0.isEmpty ? nil : $0 }
-                ?? String(localized: "Family member")
-            let role: MemberRole = participant.role == .owner ? .owner : (participant.permission == .readOnly ? .guest : .editor)
-            let isCurrentUser = id == currentID
-            if existing == nil || member.name != name || member.role != role || member.isCurrentUser != isCurrentUser || !member.isActive {
-                member.name = name
-                member.role = role
-                member.isCurrentUser = isCurrentUser
-                member.isActive = true
-                let now = Date.now
-                member.shareMetadataModifiedAt = now
-                member.modifiedAt = now
-            }
-        }
+        reconcileMembers(participants, household: household, context: context)
     }
 
     /// Projects package-owned participant snapshots into MealPlan's local
     /// SwiftData member cache. The package remains the source for share access
     /// and participant status; this is only the app's persisted display model.
     private static func refreshMembers(from participants: [ShareParticipant], household: Household, context: ModelContext) {
-        let accepted = participants.filter { $0.status == .accepted || $0.isOwner }
-        let acceptedIDs = Set(accepted.map(\.id))
+        let accepted = participants
+            .filter { $0.status == .accepted || $0.isOwner }
+            .map { participant in
+                let role: MemberRole
+                if participant.isOwner || participant.role == .owner {
+                    role = .owner
+                } else if participant.permission == .readWrite {
+                    // The package reports CloudKit's administrator role as unknown.
+                    role = participant.role == .unknown ? .coOwner : .editor
+                } else {
+                    role = .guest
+                }
+                return HouseholdMemberRoster.Participant(
+                    id: participant.id,
+                    name: participant.displayName,
+                    role: role,
+                    isCurrentUser: participant.isCurrentUser
+                )
+            }
+        reconcileMembers(accepted, household: household, context: context)
+    }
 
-        for member in household.members ?? [] where member.cloudKitParticipantID.map({ !acceptedIDs.contains($0) }) == true {
-            if member.isActive || member.isCurrentUser {
-                member.isActive = false
-                member.isCurrentUser = false
-                let now = Date.now
-                member.shareMetadataModifiedAt = now
-                member.modifiedAt = now
-            }
-        }
-        for participant in accepted {
-            let existing = (household.members ?? []).first { $0.cloudKitParticipantID == participant.id }
-            let member = existing ?? {
-                let value = HouseholdMember()
-                value.cloudKitParticipantID = participant.id
-                value.household = household
-                context.insert(value)
-                return value
-            }()
-            let name = participant.displayName.flatMap { $0.isEmpty ? nil : $0 }
-                ?? String(localized: "Family member")
-            let role: MemberRole
-            if participant.isOwner || participant.role == .owner {
-                role = .owner
-            } else {
-                role = participant.permission == .readWrite ? .editor : .guest
-            }
-            if existing == nil || member.name != name || member.role != role || member.isCurrentUser != participant.isCurrentUser || !member.isActive {
-                member.name = name
-                member.role = role
-                member.isCurrentUser = participant.isCurrentUser
-                member.isActive = true
-                let now = Date.now
-                member.shareMetadataModifiedAt = now
-                member.modifiedAt = now
-            }
-        }
+    private static func reconcileMembers(_ participants: [HouseholdMemberRoster.Participant], household: Household, context: ModelContext) {
+        HouseholdMemberRoster.reconcile(
+            participants: participants,
+            householdID: household.uuid,
+            members: household.members ?? [],
+            insert: { member in
+                member.household = household
+                context.insert(member)
+            },
+            delete: { context.delete($0) }
+        )
     }
 
     private static func fetchHouseholdRecord(from share: CKShare, zoneID: CKRecordZone.ID, database: CKDatabase) async throws -> CKRecord {

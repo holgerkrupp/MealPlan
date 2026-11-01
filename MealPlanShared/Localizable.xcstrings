@@ -7,6 +7,16 @@
     " " : {
 
     },
+    "Co-Owner" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitbesitzer"
+          }
+        }
+      }
+    },
     "—" : {
 
     },

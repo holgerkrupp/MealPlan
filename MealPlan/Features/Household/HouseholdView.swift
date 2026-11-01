@@ -16,7 +16,7 @@ struct HouseholdSettingsView: View {
 
     /// People who currently have access. Inactive rows remain for attribution.
     private var members: [HouseholdMember] {
-        (appState.currentHousehold?.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
+        HouseholdMemberRoster.activeMembers(appState.currentHousehold?.members ?? [])
     }
 
     private func adoptCurrentAccount() async {
