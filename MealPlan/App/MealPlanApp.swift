@@ -15,6 +15,10 @@ struct MealPlanApp: App {
     }
 
     let container: ModelContainer
+    /// Set when the store wouldn't open. `container` is then an empty stand-in,
+    /// and the real interface must stay away from it: seeding or syncing there
+    /// would read as everything having been deleted.
+    private let storeOpenFailure: Error?
     @State private var appState = AppState()
     @State private var purchaseManager = PurchaseManager.shared
     /// Calendar integration. Creating it touches no calendar data and never
@@ -41,10 +45,12 @@ struct MealPlanApp: App {
         // and starting its sync services there races the transient SwiftData
         // containers owned by persistence tests, and Core Data can terminate
         // those tests with "No eligible connection available".
-        container = SharedStore.make(
-            cloudKit: !Self.isRunningTests,
-            inMemory: Self.isRunningTests
-        )
+        if Self.isRunningTests {
+            container = SharedStore.make(cloudKit: false, inMemory: true)
+            storeOpenFailure = nil
+        } else {
+            (container, storeOpenFailure) = SharedStore.makeForApp()
+        }
         // Before the first view asks a tip whether it may show.
         MealPlanTips.configure()
     }
@@ -55,6 +61,9 @@ struct MealPlanApp: App {
         WindowGroup(id: "main") {
             // The awning comes down over the real interface, which is mounted
             // and doing its launch work underneath the whole time.
+            if let storeOpenFailure {
+                StoreOpenFailureView(failure: storeOpenFailure)
+            } else {
             AppLaunchContainerView {
                 RootView()
                     .environment(appState)
@@ -148,6 +157,7 @@ struct MealPlanApp: App {
                     .onOpenURL { url in
                         appState.handle(openedURL: url, context: container.mainContext)
                     }
+            }
             }
         }
         .modelContainer(container)

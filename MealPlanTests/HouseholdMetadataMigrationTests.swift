@@ -1,4 +1,5 @@
 import Foundation
+import CloudKit
 import Testing
 @testable import MealPlan
 
@@ -261,5 +262,27 @@ struct HouseholdMetadataMigrationTests {
             .appending(path: "MealPlanMetadataMigrationTests-\(UUID().uuidString)", directoryHint: .isDirectory)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         return directory.appending(path: "metadata.json")
+    }
+}
+
+@Suite struct HouseholdFetchRetryTests {
+    @Test func retryNamesSurviveARoundTrip() throws {
+        var metadata = HouseholdSyncMetadata()
+        metadata.fetchRetryRecordNames = ["dish-A", "dish-B"]
+        let data = try JSONEncoder().encode(metadata)
+        #expect(try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data) == metadata)
+    }
+
+    @Test func metadataFromBeforeRetriesDecodesEmpty() throws {
+        let data = Data(#"{"serverFingerprints":{"dish-A":"x"}}"#.utf8)
+        let metadata = try JSONDecoder().decode(HouseholdSyncMetadata.self, from: data)
+        #expect(metadata.fetchRetryRecordNames.isEmpty)
+        #expect(metadata.serverFingerprints["dish-A"] == "x")
+    }
+
+    @Test func onlyAMissingRecordCountsAsGone() {
+        #expect(HouseholdRecordSyncService.isRecordGone(CKError(.unknownItem)))
+        #expect(!HouseholdRecordSyncService.isRecordGone(CKError(.networkFailure)))
+        #expect(!HouseholdRecordSyncService.isRecordGone(CKError(.zoneNotFound)))
     }
 }

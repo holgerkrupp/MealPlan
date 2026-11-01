@@ -11,7 +11,7 @@ final class HouseholdMember {
     var cloudKitParticipantID: String?
     var isActive: Bool = true
     var name: String = ""
-    /// "owner", "editor" or "guest".
+    /// "owner", "coOwner", "editor" or "guest".
     var roleRaw: String = MemberRole.editor.rawValue
     var isCurrentUser: Bool = false
     var dateAdded: Date = Date.now
@@ -54,13 +54,14 @@ final class HouseholdMember {
 }
 
 enum MemberRole: String, CaseIterable, Identifiable, Codable, Sendable {
-    case owner, editor, guest
+    case owner, coOwner, editor, guest
 
     var id: String { rawValue }
 
     var localizedName: String {
         switch self {
         case .owner: String(localized: "Owner")
+        case .coOwner: String(localized: "Co-Owner")
         case .editor: String(localized: "Can edit")
         case .guest: String(localized: "View only")
         }

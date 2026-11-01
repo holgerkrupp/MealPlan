@@ -39,6 +39,7 @@ struct RecipeShareSheet: View {
     @State private var copiedText = false
     #if os(macOS)
     @State private var savingPDF = false
+    @State private var pdfDocument: PlanPDFDocument?
     #endif
 
     init(dish: Dish, servings: Int, translated: Bool) {
@@ -112,7 +113,7 @@ struct RecipeShareSheet: View {
         .frame(minWidth: 460, idealWidth: 500, minHeight: 560)
         .fileExporter(
             isPresented: $savingPDF,
-            document: pdfURL.flatMap { try? Data(contentsOf: $0) }.map(PlanPDFDocument.init(data:)),
+            document: pdfDocument,
             contentType: .pdf,
             defaultFilename: pdfURL?.deletingPathExtension().lastPathComponent
         ) { _ in }
@@ -198,7 +199,8 @@ struct RecipeShareSheet: View {
                 .buttonStyle(.borderless)
                 #if os(macOS)
                 Button(String(localized: "Save PDF…"), systemImage: "square.and.arrow.down") {
-                    savingPDF = true
+                    pdfDocument = (try? Data(contentsOf: pdfURL)).map(PlanPDFDocument.init(data:))
+                    savingPDF = pdfDocument != nil
                 }
                 .labelStyle(.iconOnly)
                 .buttonStyle(.borderless)

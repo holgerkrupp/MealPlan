@@ -219,7 +219,7 @@ struct RecipeSchemaParser: RecipeImporter {
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 20
 
-        let (data, response) = try await session.data(for: request)
+        let (data, response) = try await BoundedDownload.data(for: request, session: session)
         if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
             throw RecipeImportError.notReachable
         }

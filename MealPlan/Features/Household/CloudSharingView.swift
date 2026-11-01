@@ -172,7 +172,7 @@ struct HouseholdSharingView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(String(localized: "People in this household"))
                         .font(.headline)
-                    let people = (household.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
+                    let people = HouseholdMemberRoster.activeMembers(household.members ?? [])
                     if people.isEmpty {
                         Text(String(localized: "Your household is ready for invitations."))
                             .font(.subheadline)
@@ -182,7 +182,9 @@ struct HouseholdSharingView: View {
                             HStack(spacing: 12) {
                                 Image(systemName: member.isCurrentUser ? "person.crop.circle.fill" : "person.crop.circle")
                                     .foregroundStyle(member.isCurrentUser ? Color.accentColor : .secondary)
-                                Text(member.isCurrentUser ? String(localized: "You · \(member.name)") : member.name)
+                                Text(member.isCurrentUser
+                                     ? (HouseholdMemberRoster.isPlaceholderName(member.name) ? String(localized: "You") : String(localized: "You · \(member.name)"))
+                                     : member.name)
                                 Spacer()
                                 Text(member.role.localizedName)
                                     .font(.caption)

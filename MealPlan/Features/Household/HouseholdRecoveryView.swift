@@ -235,7 +235,7 @@ struct HouseholdRecoveryView: View {
                             role: .owner,
                             dishCount: current.dishes?.count ?? 0,
                             entryCount: current.entries?.count ?? 0,
-                            memberCount: current.members?.filter(\.isActive).count ?? 0,
+                            memberCount: HouseholdMemberRoster.activeMembers(current.members ?? []).count,
                             entryStart: current.entries?.map(\.date).min(),
                             entryEnd: current.entries?.map(\.date).max(),
                             dateCreated: current.dateCreated,

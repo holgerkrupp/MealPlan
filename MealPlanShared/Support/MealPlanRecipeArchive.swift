@@ -136,12 +136,14 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             var recipe = ImportedRecipe(name: stored.name, sourceURL: stored.sourceURL.flatMap(URL.init(string:)))
             recipe.deepLinkURL = stored.deepLinkURL.flatMap(URL.init(string:))
             recipe.instructions = stored.instructions
-            recipe.servings = stored.servings
-            recipe.prepTimeMinutes = stored.prepTimeMinutes
-            recipe.cookTimeMinutes = stored.cookTimeMinutes
+            recipe.servings = max(stored.servings, 1)
+            recipe.prepTimeMinutes = stored.prepTimeMinutes.map { max($0, 0) }
+            recipe.cookTimeMinutes = stored.cookTimeMinutes.map { max($0, 0) }
             recipe.categories = stored.collections
             recipe.isFavorite = stored.isFavorite
-            recipe.rating = stored.rating
+            // An archive can come from anyone, so it's held to what the app
+            // itself would have written.
+            recipe.rating = min(max(stored.rating, 0), 5)
             recipe.collectionNames = stored.collections
             recipe.tagNames = stored.tags ?? []
             recipe.variantGroupID = stored.variantGroupID
@@ -158,8 +160,9 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                     fatGrams: stored.statedFatGramsPerServing ?? 0
                 )
             }
-            recipe.imageData = stored.images.first
-            recipe.additionalImageData = Array(stored.images.dropFirst())
+            let images = stored.images.filter { $0.count <= BoundedDownload.maxBytes && ImagePreparation.isImage($0) }
+            recipe.imageData = images.first
+            recipe.additionalImageData = Array(images.dropFirst())
             recipe.ingredientLines = stored.ingredients.map { $0.rawText ?? $0.name }
             recipe.structuredIngredients = stored.ingredients.map { line in
                 ImportedIngredient(

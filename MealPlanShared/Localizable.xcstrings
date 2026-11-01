@@ -7,6 +7,16 @@
     " " : {
 
     },
+    "Co-Owner" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitbesitzer"
+          }
+        }
+      }
+    },
     "—" : {
 
     },
@@ -1930,6 +1940,9 @@
           }
         }
       }
+    },
+    "A household image could not be downloaded completely. Your existing household data was kept. Retry the sync before continuing." : {
+
     },
     "A little going on" : {
       "localizations" : {
@@ -16884,6 +16897,9 @@
         }
       }
     },
+    "iCloud did not finish downloading the shared household. Your existing local household is still available; try accepting the invitation again when the connection is stable." : {
+
+    },
     "iCloud did not return the saved collaboration record." : {
       "localizations" : {
         "da" : {
@@ -18383,6 +18399,9 @@
         }
       }
     },
+    "Joining will replace %lld local households. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps dishes in the joined household." : {
+
+    },
     "Jump to date" : {
       "localizations" : {
         "da" : {
@@ -19268,6 +19287,9 @@
           }
         }
       }
+    },
+    "Local archive · %@" : {
+
     },
     "Local Safety Backups" : {
 
@@ -30646,6 +30668,9 @@
     "Replace existing meals" : {
 
     },
+    "Replace Local Households?" : {
+
+    },
     "Replace what’s already planned" : {
       "localizations" : {
         "da" : {
@@ -36561,6 +36586,16 @@
         }
       }
     },
+    "Target: %@, written %@. Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this archive as a new household with a fresh identity so it cannot write into the old CloudKit zone." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Target: %1$@, written %2$@. Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this archive as a new household with a fresh identity so it cannot write into the old CloudKit zone."
+          }
+        }
+      }
+    },
     "Target: %@, written %@. Only the data on this device will be replaced. MealPlan first writes another safety checkpoint, then restores this ordinary MealPlan backup and its original local iCloud locator." : {
       "localizations" : {
         "en" : {
@@ -37805,20 +37840,20 @@
     "This device" : {
 
     },
-    "This device already has its own “%@” household with %lld dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way." : {
+    "This device already has its own “%@” household with %lld dishes. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps those dishes in the joined household." : {
       "localizations" : {
         "en" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "This device already has its own “%1$@” household with %2$lld dishes. Joining this invitation will replace it — Merge Recipes keeps those dishes in the new household; its plan, shopping list, and history are gone from this device either way."
+            "value" : "This device already has its own “%1$@” household with %2$lld dishes. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps those dishes in the joined household."
           }
         }
       }
     },
-    "This device already has its own “%@” household with 1 dish. Joining this invitation will replace it — Merge Recipes keeps that dish in the new household; its plan, shopping list, and history are gone from this device either way." : {
+    "This device already has its own “%@” household with 1 dish. MealPlan first saves a full local archive, including plans, shopping lists, history, routines, preferences, and photos. You can restore it later from Household Recovery. Merge Recipes also keeps that dish in the joined household." : {
 
     },
-    "This device already has its own “%@” household. Joining this invitation will replace it — its plan, shopping list, and history will be gone from this device." : {
+    "This device already has its own “%@” household. MealPlan first saves a full local archive, including its plan, shopping list, history, routines, preferences, and photos. You can restore it later from Household Recovery." : {
 
     },
     "This device can’t translate recipes on its own — Apple Intelligence isn’t available on it." : {
@@ -43152,6 +43187,86 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A tua semana está pronta em PDF."
+          }
+        }
+      }
+    },
+    "Add this recipe?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept hinzufügen?"
+          }
+        }
+      }
+    },
+    "Couldn’t add the recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht hinzugefügt werden"
+          }
+        }
+      }
+    },
+    "Use This iCloud Account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iCloud-Konto verwenden"
+          }
+        }
+      }
+    },
+    "Syncing is paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisierung pausiert"
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account to carry on, or copy it to this one. A shared household becomes an unshared copy." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder kopiere den Haushalt in dieses Konto. Ein geteilter Haushalt wird dabei zu einer nicht geteilten Kopie."
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder wähle in den Haushaltseinstellungen dieses Konto aus."
+          }
+        }
+      }
+    },
+    "MealPlan can’t open its data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan kann seine Daten nicht öffnen"
+          }
+        }
+      }
+    },
+    "Your data has not been changed. Check for an app update and restart your device. If this keeps happening, contact support with the details below." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Daten wurden nicht verändert. Suche nach einem App-Update und starte dein Gerät neu. Falls das Problem bleibt, wende dich mit den folgenden Angaben an den Support."
           }
         }
       }

@@ -80,14 +80,22 @@ final class BringSyncService {
         BringCredentialStore.clear()
         credentials = nil
         Task { await client.signOut() }
-        household?.bringListUuid = nil
-        household?.bringListName = nil
-        household?.bringShadowKeys = []
-        household?.bringLastSyncedAt = nil
+        // The list belongs to the household, and everyone in a shared one reads
+        // the same fields. Leaving Bring! on this device isn't leaving it for them.
+        guard let household, Self.signOutForgetsList(of: household) else { return }
+        household.bringListUuid = nil
+        household.bringListName = nil
+        household.bringShadowKeys = []
+        household.bringLastSyncedAt = nil
         try? context.save()
     }
 
+    static func signOutForgetsList(of household: Household) -> Bool {
+        HouseholdShareLocator.decode(household.cloudKitShareIdentifier)?.shareRecordName == nil
+    }
+
     func use(_ list: BringList, household: Household, context: ModelContext) {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else { return }
         household.bringListUuid = list.listUuid
         household.bringListName = list.name
         // A different list has a different history; start from a clean one so
@@ -104,8 +112,8 @@ final class BringSyncService {
     /// Bring! holds.
     @discardableResult
     func push(household: Household, context: ModelContext) async throws -> Outcome {
-        try await run(household: household, context: context) { local, remote, _ in
-            BringSyncPlan.push(local: local, remote: remote)
+        try await run(household: household, context: context) { local, remote, shadow in
+            BringSyncPlan.push(local: local, remote: remote, shadow: shadow)
         }
     }
 
@@ -122,7 +130,8 @@ final class BringSyncService {
     /// after a rebuild. Silent about everything, including failure: an
     /// unreachable Bring! must not interrupt someone reading their list.
     func syncQuietly(household: Household, context: ModelContext) async {
-        guard household.bringAutoSync, household.isConnectedToBring, hasAccount else { return }
+        guard household.bringAutoSync, household.isConnectedToBring, hasAccount,
+              HouseholdMutationAuthorization.canMutate(household: household) else { return }
         // Entering the Shopping tab repeatedly should be instant. Explicit
         // sync remains available at all times; automatic refresh is capped so
         // tab changes do not repeatedly fetch, rewrite, and save the list.
@@ -135,6 +144,9 @@ final class BringSyncService {
         context: ModelContext,
         plan makePlan: @Sendable ([BringSyncItem], [BringSyncItem], [String]) -> BringSyncPlan
     ) async throws -> Outcome {
+        guard HouseholdMutationAuthorization.canMutate(household: household) else {
+            throw HouseholdSharingError.readOnlyHousehold
+        }
         guard let listUUID = household.bringListUuid, !listUUID.isEmpty else {
             throw BringError.noListChosen
         }

@@ -10,10 +10,26 @@ struct HouseholdSettingsView: View {
     @State private var isConfirmingLegacyRecovery = false
     @State private var isReconcilingLegacyHouseholds = false
     @State private var legacyRecoveryErrorMessage: String?
+    @State private var hasAccountConflict = false
+    @State private var isAdoptingAccount = false
+    @State private var accountConflictError: String?
 
     /// People who currently have access. Inactive rows remain for attribution.
     private var members: [HouseholdMember] {
-        (appState.currentHousehold?.members ?? []).filter(\.isActive).sorted { $0.dateAdded < $1.dateAdded }
+        HouseholdMemberRoster.activeMembers(appState.currentHousehold?.members ?? [])
+    }
+
+    private func adoptCurrentAccount() async {
+        guard let household = appState.currentHousehold else { return }
+        isAdoptingAccount = true
+        defer { isAdoptingAccount = false }
+        do {
+            try await HouseholdRecordSyncService.shared.adoptCurrentAccount(household: household, context: context)
+            hasAccountConflict = false
+            accountConflictError = nil
+        } catch {
+            accountConflictError = error.localizedDescription
+        }
     }
 
     /// How many things the family counts as always in stock, for the row that
@@ -108,6 +124,21 @@ struct HouseholdSettingsView: View {
                     }
                 }
 
+                if hasAccountConflict {
+                    Section {
+                        Button {
+                            Task { await adoptCurrentAccount() }
+                        } label: {
+                            Label(String(localized: "Use This iCloud Account"), systemImage: "person.icloud")
+                        }
+                        .disabled(isAdoptingAccount)
+                    } header: {
+                        Text("Syncing is paused")
+                    } footer: {
+                        Text(accountConflictError ?? String(localized: "This household syncs with a different iCloud account. Sign back in to that account to carry on, or copy it to this one. A shared household becomes an unshared copy."))
+                    }
+                }
+
                 Section {
                     NavigationLink {
                         HouseholdRecoveryView()
@@ -116,6 +147,10 @@ struct HouseholdSettingsView: View {
                     }
                 } footer: {
                     Text("Choose an exact iCloud household to restore on this device, safely reset this device, or recover an owner household moved to Recently Deleted.")
+                }
+                .task {
+                    hasAccountConflict = HouseholdRecordSyncService.shared.accountConflictHouseholdID == appState.currentHousehold?.uuid
+                        && appState.currentHousehold != nil
                 }
 
                 Section {

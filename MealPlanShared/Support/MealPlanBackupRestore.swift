@@ -40,9 +40,16 @@ enum MealPlanBackupRestore {
         // empty store between the two phases. Household recovery keeps its own
         // preflight backup as a second line of defence, but a normal backup
         // restore deserves the same atomic local replacement.
-        try deleteEverything(in: context)
-        insert(backup, into: context, householdUUID: householdUUID)
-        try context.save()
+        // A save that fails leaves the deletes pending in this long-lived
+        // context, where the next ordinary save would commit them.
+        do {
+            try deleteEverything(in: context)
+            insert(backup, into: context, householdUUID: householdUUID)
+            try context.save()
+        } catch {
+            context.rollback()
+            throw error
+        }
         return backup.contents
     }
 
