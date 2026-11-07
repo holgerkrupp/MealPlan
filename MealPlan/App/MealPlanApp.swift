@@ -282,8 +282,12 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
         fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void
     ) {
         let completion = BackgroundFetchCompletion(completionHandler)
-        let task = UIApplicationBackgroundTask(application: application, completion: completion)
-        HouseholdRecordSyncService.shared.prepareRemoteFetch()
+        let backgroundFetchID = HouseholdRecordSyncService.shared.prepareRemoteFetch()
+        let task = UIApplicationBackgroundTask(
+            application: application,
+            completion: completion,
+            backgroundFetchID: backgroundFetchID
+        )
         guard task.begin() else {
             completion.finish(.failed)
             return
@@ -291,7 +295,10 @@ final class AppDelegate: NSObject, UIApplicationDelegate {
 
         Task { @MainActor in
             defer { task.end() }
-            let outcome = await HouseholdRecordSyncService.shared.fetchChanges(shouldScanLocalChanges: false)
+            let outcome = await HouseholdRecordSyncService.shared.fetchChanges(
+                shouldScanLocalChanges: false,
+                backgroundFetchID: backgroundFetchID
+            )
             switch outcome {
             case .newData:
                 if HouseholdRecordSyncService.shared.hasActiveShare {
@@ -333,19 +340,25 @@ private final class UIApplicationBackgroundTask {
     private let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "background-task")
     private let application: UIApplication
     private let completion: BackgroundFetchCompletion
+    private let backgroundFetchID: UUID
     private var identifier: UIBackgroundTaskIdentifier = .invalid
     private var ended = false
 
-    init(application: UIApplication, completion: BackgroundFetchCompletion) {
+    init(
+        application: UIApplication,
+        completion: BackgroundFetchCompletion,
+        backgroundFetchID: UUID
+    ) {
         self.application = application
         self.completion = completion
+        self.backgroundFetchID = backgroundFetchID
     }
 
     func begin() -> Bool {
         identifier = application.beginBackgroundTask(withName: "MealPlan household sync") { [weak self] in
             Task { @MainActor in
                 guard let self else { return }
-                HouseholdRecordSyncService.shared.requestCancellationAtPersistenceBoundary()
+                HouseholdRecordSyncService.shared.requestCancellationAtPersistenceBoundary(for: self.backgroundFetchID)
                 self.logger.error("backgroundTask.expire")
                 self.completion.finish(.failed)
                 self.end()
