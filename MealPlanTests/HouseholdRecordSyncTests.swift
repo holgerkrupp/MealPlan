@@ -92,8 +92,21 @@ struct HouseholdRecordSyncTests {
         try context.save()
 
         try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
-            try HouseholdRecordApplier.delete(type: .dishIngredient, uuid: line.uuid, context: context)
-            try HouseholdRecordApplier.delete(type: .planEntry, uuid: entry.uuid, context: context)
+            for (type, uuid) in [(HouseholdRecordType.dishIngredient, line.uuid), (.planEntry, entry.uuid)] {
+                let payload = HouseholdRecordPayload.deletionMarker(.init(
+                    deletedType: type,
+                    deletedUUID: uuid,
+                    deletedAt: .now
+                ))
+                try HouseholdRecordApplier.apply(
+                    payloadData: HouseholdRecordCodec.encode(payload),
+                    identity: .init(type: .deletionMarker, uuid: UUID()),
+                    modifiedAt: .now,
+                    assetData: nil,
+                    household: household,
+                    context: context
+                )
+            }
             try context.save()
         }
 
