@@ -66,6 +66,42 @@ struct HouseholdRecordSyncTests {
         #expect(try context.fetch(FetchDescriptor<Dish>()).first?.name == "Soup")
     }
 
+    /// The build-57 crash followed a CloudKit deletion marker through the
+    /// small-batch UUID lookup used by HouseholdRecordApplier.delete. Keep
+    /// that exact lookup on a disk-backed store so SwiftData evaluates its
+    /// concrete predicate against a real SQLite model schema.
+    @Test func diskBackedSmallBatchDeletionUsesConcreteUUIDPredicates() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        let ingredient = Ingredient(name: "Tomato")
+        let line = DishIngredient(rawText: "1 tomato")
+        let entry = MealPlanEntry(date: .now, slot: .dinner, dish: dish)
+        dish.household = household
+        ingredient.household = household
+        line.dish = dish
+        line.ingredient = ingredient
+        entry.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(ingredient)
+        context.insert(line)
+        context.insert(entry)
+        try context.save()
+
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.delete(type: .dishIngredient, uuid: line.uuid, context: context)
+            try HouseholdRecordApplier.delete(type: .planEntry, uuid: entry.uuid, context: context)
+            try context.save()
+        }
+
+        #expect(try context.fetchCount(FetchDescriptor<DishIngredient>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<MealPlanEntry>()) == 0)
+        #expect(try context.fetchCount(FetchDescriptor<Dish>()) == 1)
+    }
+
     @Test func unsavedPhotoStaysInItsOwningContext() {
         let container = SharedStore.make(cloudKit: false, inMemory: true)
         let image = DishImage(data: Data([1, 2, 3]))
