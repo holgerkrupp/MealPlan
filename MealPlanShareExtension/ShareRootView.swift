@@ -318,8 +318,12 @@ struct ShareRootView: View {
         let result = RecipeImportCommitter.importAll(
             recipes, household: household, createdByName: member, context: context
         )
+        guard !result.persistenceFailed else {
+            phase = .failed(result.summary)
+            return
+        }
         if plan, PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked) {
-            for dish in result.dishes {
+            for dish in result.dishesForPlanning {
                 MealPlanner.plan(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context)
             }
         }

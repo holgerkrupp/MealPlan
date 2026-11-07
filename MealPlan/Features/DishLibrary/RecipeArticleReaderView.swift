@@ -309,7 +309,11 @@ struct RecipeArticleReaderView: View {
         )
         // An article already in the library imports nothing, and planning it
         // still has to reach the dish that is there.
-        savedDish = result.dishes.first ?? existingDish(for: recipe)
+        guard !result.persistenceFailed else {
+            errorMessage = result.summary
+            return
+        }
+        savedDish = result.dishesForPlanning.first
         // Deliberately not `appState.importNotice`: that raises an alert owned
         // by RootView, and presenting one dismisses any sheet above it — which
         // took the subscribe sheet's site preview with it. The notice belongs
@@ -326,12 +330,4 @@ struct RecipeArticleReaderView: View {
         planningDish = savedDish
     }
 
-    private func existingDish(for recipe: ImportedRecipe) -> Dish? {
-        let dishes = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
-        if let source = recipe.sourceURL?.absoluteString ?? article.articleURL?.absoluteString,
-           let match = dishes.first(where: { $0.sourceURLString == source }) {
-            return match
-        }
-        return dishes.first { $0.name.localizedCaseInsensitiveCompare(recipe.name) == .orderedSame }
-    }
 }

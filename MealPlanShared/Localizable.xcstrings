@@ -7,16 +7,6 @@
     " " : {
 
     },
-    "Co-Owner" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mitbesitzer"
-          }
-        }
-      }
-    },
     "—" : {
 
     },
@@ -3460,6 +3450,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Adiciona as refeições de que a tua família gosta. Um nome basta para começar — podes acrescentar a receita e a foto depois."
+          }
+        }
+      }
+    },
+    "Add this recipe?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses Rezept hinzufügen?"
           }
         }
       }
@@ -8217,6 +8217,16 @@
     "Closed" : {
 
     },
+    "Co-Owner" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mitbesitzer"
+          }
+        }
+      }
+    },
     "Collapse day" : {
       "localizations" : {
         "da" : {
@@ -9519,6 +9529,16 @@
     },
     "Could not save recipe" : {
 
+    },
+    "Couldn’t add the recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rezept konnte nicht hinzugefügt werden"
+          }
+        }
+      }
     },
     "Couldn’t build the calendar file." : {
 
@@ -17103,6 +17123,9 @@
         }
       }
     },
+    "If an invitation can’t be sent, open Manage access and choose Copy Link." : {
+
+    },
     "Images" : {
 
     },
@@ -18112,6 +18135,9 @@
           }
         }
       }
+    },
+    "Invitation preparation was canceled. You can try again; any share created in the background will be reused." : {
+
     },
     "Invite or share again" : {
       "localizations" : {
@@ -19935,6 +19961,16 @@
         }
       }
     },
+    "MealPlan can’t open its data" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "MealPlan kann seine Daten nicht öffnen"
+          }
+        }
+      }
+    },
     "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support." : {
 
     },
@@ -19947,6 +19983,9 @@
           }
         }
       }
+    },
+    "MealPlan couldn’t prepare the household invitation." : {
+
     },
     "MealPlan couldn’t save the Bring! password to the keychain: %@" : {
       "localizations" : {
@@ -20430,6 +20469,12 @@
           }
         }
       }
+    },
+    "MealPlan will check existing members and permissions before updating this share for invited people only." : {
+
+    },
+    "MealPlan will prepare the household share first. You can then choose Messages, Mail, or another sharing option." : {
+
     },
     "MealPlan will use the already shared household when one exists, then copy recipes, plans, shopping items and other unmatched data from the other household zones. It will not delete any CloudKit zone. If two records have the same identity, this device’s version is kept so you can review it later." : {
 
@@ -28193,6 +28238,12 @@
         }
       }
     },
+    "Preparing household invitation…" : {
+
+    },
+    "Preparing the household share took too long. Check your connection and try again. If the share was created, MealPlan will reuse it." : {
+
+    },
     "Preparing your household…" : {
 
     },
@@ -32888,6 +32939,9 @@
         }
       }
     },
+    "Secure invitation and continue" : {
+
+    },
     "See what is connected, then open only the service you want to change." : {
       "localizations" : {
         "da" : {
@@ -36244,6 +36298,16 @@
         }
       }
     },
+    "Syncing is paused" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Synchronisierung pausiert"
+          }
+        }
+      }
+    },
     "System Default" : {
 
     },
@@ -38087,6 +38151,26 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Esta casa é só de leitura. Pede acesso de edição ao proprietário para fazeres alterações."
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account to carry on, or copy it to this one. A shared household becomes an unshared copy." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder kopiere den Haushalt in dieses Konto. Ein geteilter Haushalt wird dabei zu einer nicht geteilten Kopie."
+          }
+        }
+      }
+    },
+    "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder wähle in den Haushaltseinstellungen dieses Konto aus."
           }
         }
       }
@@ -40615,6 +40699,16 @@
         }
       }
     },
+    "Use This iCloud Account" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieses iCloud-Konto verwenden"
+          }
+        }
+      }
+    },
     "Use this instead" : {
       "localizations" : {
         "da" : {
@@ -42814,6 +42908,16 @@
     "Your change wasn’t saved. Please try again." : {
 
     },
+    "Your data has not been changed. Check for an app update and restart your device. If this keeps happening, contact support with the details below." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Deine Daten wurden nicht verändert. Suche nach einem App-Update und starte dein Gerät neu. Falls das Problem bleibt, wende dich mit den folgenden Angaben an den Support."
+          }
+        }
+      }
+    },
     "Your dishes" : {
       "localizations" : {
         "da" : {
@@ -43187,86 +43291,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "A tua semana está pronta em PDF."
-          }
-        }
-      }
-    },
-    "Add this recipe?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses Rezept hinzufügen?"
-          }
-        }
-      }
-    },
-    "Couldn’t add the recipe" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Rezept konnte nicht hinzugefügt werden"
-          }
-        }
-      }
-    },
-    "Use This iCloud Account" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieses iCloud-Konto verwenden"
-          }
-        }
-      }
-    },
-    "Syncing is paused" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Synchronisierung pausiert"
-          }
-        }
-      }
-    },
-    "This household syncs with a different iCloud account. Sign back in to that account to carry on, or copy it to this one. A shared household becomes an unshared copy." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder kopiere den Haushalt in dieses Konto. Ein geteilter Haushalt wird dabei zu einer nicht geteilten Kopie."
-          }
-        }
-      }
-    },
-    "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Haushalt wird mit einem anderen iCloud-Konto synchronisiert. Melde dich wieder bei diesem Konto an oder wähle in den Haushaltseinstellungen dieses Konto aus."
-          }
-        }
-      }
-    },
-    "MealPlan can’t open its data" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "MealPlan kann seine Daten nicht öffnen"
-          }
-        }
-      }
-    },
-    "Your data has not been changed. Check for an app update and restart your device. If this keeps happening, contact support with the details below." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deine Daten wurden nicht verändert. Suche nach einem App-Update und starte dein Gerät neu. Falls das Problem bleibt, wende dich mit den folgenden Angaben an den Support."
           }
         }
       }

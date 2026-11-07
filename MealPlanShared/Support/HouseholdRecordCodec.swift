@@ -6,27 +6,69 @@ import SwiftData
 protocol HouseholdSyncModel: PersistentModel {
     var uuid: UUID { get set }
     var modifiedAt: Date { get set }
+    /// Written per model because a `#Predicate` built in generic code captures
+    /// `\T.uuid` as a protocol-witness key path. SwiftData on iOS 26 can't match
+    /// that against its schema and traps instead of throwing.
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<Self>
 }
 
-extension Household: HouseholdSyncModel {}
-extension HouseholdMember: HouseholdSyncModel {}
-extension MealType: HouseholdSyncModel {}
-extension Dish: HouseholdSyncModel {}
-extension DishImage: HouseholdSyncModel {}
-extension Ingredient: HouseholdSyncModel {}
-extension IngredientAlias: HouseholdSyncModel {}
-extension IngredientPackageSize: HouseholdSyncModel {}
-extension IngredientMatchRule: HouseholdSyncModel {}
-extension DishIngredient: HouseholdSyncModel {}
-extension MealPlanEntry: HouseholdSyncModel {}
-extension MealRoutine: HouseholdSyncModel {}
-extension CookedLog: HouseholdSyncModel {}
-extension ShoppingListItem: HouseholdSyncModel {}
-extension WeekTemplate: HouseholdSyncModel {}
-extension WeekTemplateEntry: HouseholdSyncModel {}
-extension RecipeFeed: HouseholdSyncModel {}
-extension RecipeFeedItem: HouseholdSyncModel {}
-extension RecipeBookmark: HouseholdSyncModel {}
+extension Household: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<Household> { #Predicate { $0.uuid == uuid } }
+}
+extension HouseholdMember: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<HouseholdMember> { #Predicate { $0.uuid == uuid } }
+}
+extension MealType: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<MealType> { #Predicate { $0.uuid == uuid } }
+}
+extension Dish: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<Dish> { #Predicate { $0.uuid == uuid } }
+}
+extension DishImage: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<DishImage> { #Predicate { $0.uuid == uuid } }
+}
+extension Ingredient: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<Ingredient> { #Predicate { $0.uuid == uuid } }
+}
+extension IngredientAlias: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<IngredientAlias> { #Predicate { $0.uuid == uuid } }
+}
+extension IngredientPackageSize: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<IngredientPackageSize> { #Predicate { $0.uuid == uuid } }
+}
+extension IngredientMatchRule: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<IngredientMatchRule> { #Predicate { $0.uuid == uuid } }
+}
+extension DishIngredient: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<DishIngredient> { #Predicate { $0.uuid == uuid } }
+}
+extension MealPlanEntry: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<MealPlanEntry> { #Predicate { $0.uuid == uuid } }
+}
+extension MealRoutine: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<MealRoutine> { #Predicate { $0.uuid == uuid } }
+}
+extension CookedLog: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<CookedLog> { #Predicate { $0.uuid == uuid } }
+}
+extension ShoppingListItem: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<ShoppingListItem> { #Predicate { $0.uuid == uuid } }
+}
+extension WeekTemplate: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<WeekTemplate> { #Predicate { $0.uuid == uuid } }
+}
+extension WeekTemplateEntry: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<WeekTemplateEntry> { #Predicate { $0.uuid == uuid } }
+}
+extension RecipeFeed: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<RecipeFeed> { #Predicate { $0.uuid == uuid } }
+}
+extension RecipeFeedItem: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<RecipeFeedItem> { #Predicate { $0.uuid == uuid } }
+}
+extension RecipeBookmark: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<RecipeBookmark> { #Predicate { $0.uuid == uuid } }
+}
 
 enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case household = "MPHousehold"

@@ -17,6 +17,8 @@ enum RecipeImportCommitter {
         var persistenceFailed: Bool = false
         /// Dishes created, in the order they were imported.
         var dishes: [Dish] = []
+        /// Imported dishes and existing duplicates, each included once for planning.
+        var dishesForPlanning: [Dish] = []
 
         var isEmpty: Bool { imported == 0 }
 
@@ -149,6 +151,11 @@ enum RecipeImportCommitter {
     ) -> Bool {
         guard item.include else {
             result.skipped += 1
+            if case .duplicate(let reference) = item.outcome,
+               let dish = libraryByID[reference.uuid],
+               !result.dishesForPlanning.contains(where: { $0.uuid == dish.uuid }) {
+                result.dishesForPlanning.append(dish)
+            }
             return false
         }
         let dish = DishBuilder.makeDish(
@@ -161,6 +168,7 @@ enum RecipeImportCommitter {
         )
         result.imported += 1
         result.dishes.append(dish)
+        result.dishesForPlanning.append(dish)
 
         if case .variant(let reference) = item.outcome,
            let sibling = libraryByID[reference.uuid] {

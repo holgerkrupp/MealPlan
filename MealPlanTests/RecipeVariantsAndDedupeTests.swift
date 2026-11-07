@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import MealPlan
 
 @MainActor
@@ -45,6 +46,31 @@ struct RecipeVariantsAndDedupeTests {
         let existing = dish("Gnocchiauflauf", source: "https://www.chefkoch.de/rezepte/33231/Gnocchi.html?portionen=3")
         let incoming = recipe("Gnocchi-Auflauf", source: "https://www.chefkoch.de/rezepte/33231/Gnocchi.html?portionen=6")
         #expect(RecipeDuplicateDetector.duplicate(of: incoming, in: [existing]) === existing)
+    }
+
+    @Test func previouslyImportedRecipeCanBePlanned() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let existing = dish("Original name", source: "https://example.com/recipe?servings=2")
+        context.insert(existing)
+        try context.save()
+
+        let incoming = recipe("Renamed", source: "https://example.com/recipe?servings=4")
+        let result = RecipeImportCommitter.importAll(
+            [incoming, incoming], household: nil, createdByName: nil, context: context
+        )
+        #expect(!result.persistenceFailed)
+        #expect(result.imported == 0)
+        #expect(result.dishesForPlanning.count == 1)
+        #expect(result.dishesForPlanning.first === existing)
+
+        for dish in result.dishesForPlanning {
+            MealPlanner.plan(dish: dish, on: .now, mealKey: "dinner", household: nil, memberName: "", context: context)
+        }
+        let entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
+        #expect(entries.count == 1)
+        #expect(entries.first?.dish?.uuid == existing.uuid)
     }
 
     // MARK: - Variants
