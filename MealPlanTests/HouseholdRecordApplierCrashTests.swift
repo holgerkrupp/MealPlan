@@ -298,4 +298,28 @@ struct HouseholdRecordApplierCrashTests {
         #expect(entry.dish?.uuid == dish.uuid)
         #expect(try context.fetchCount(FetchDescriptor<Dish>()) == 1)
     }
+
+    /// The small CloudKit path previously called `context.delete` before
+    /// removing the same model from its lookup cache. Keep the live instance
+    /// valid until that cache entry has been evicted, and preserve its plan row.
+    @Test func targetedRemoteDishDeleteEvictsLookupBeforeInvalidation() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let (_, dish, entry) = try seed(context)
+
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.delete(type: .dish, uuid: dish.uuid, context: context)
+        }
+        try context.save()
+
+        let reloaded = ModelContext(container)
+        #expect(try reloaded.fetchCount(FetchDescriptor<Dish>()) == 0)
+        let entryID = entry.uuid
+        let savedEntry = try #require(try reloaded.fetch(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.uuid == entryID }
+        )).first)
+        #expect(savedEntry.mealSlotRaw == "dinner")
+        #expect(savedEntry.dish == nil)
+    }
 }

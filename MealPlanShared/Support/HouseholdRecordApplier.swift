@@ -510,8 +510,11 @@ enum HouseholdRecordApplier {
 
     private static func delete<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ context: ModelContext) throws {
         if let model = try find(type, uuid, context) {
-            context.delete(model)
+            // Evict the live instance before SwiftData invalidates it. The
+            // build-57 crash is in BatchLookup.remove, which previously ran
+            // after `context.delete` during small CloudKit batches.
             if batchLookup?.context === context { batchLookup?.remove(type, uuid: uuid) }
+            context.delete(model)
         }
     }
 
