@@ -8,116 +8,194 @@ import SQLite3
 /// code gets a chance to assign a replacement.
 enum StoreUUIDRepair {
 
+    enum Outcome: Equatable {
+        case storeMissing
+        case healthy
+        case repaired(rows: Int)
+        case contended(stage: String, code: Int32)
+        case failed(stage: String, code: Int32)
+
+        var didAcquireWriteTransaction: Bool {
+            if case .repaired = self { return true }
+            return false
+        }
+    }
+
     private struct Column {
         let name: String
         let declaredType: String
     }
 
-    /// Fills NULL UUID columns in the SQLite store with fresh 128-bit values.
-    /// The operation is deliberately schema-driven: SwiftData has used
-    /// `ZUUID` for these stable identity attributes, but table names vary as
-    /// models are added and should not be hard-coded here.
+    /// Uses a read-only preflight on every process launch. Healthy stores never
+    /// take a SQLite write reservation. The short write transaction is entered
+    /// only after the preflight finds NULL UUID values, and the rows are checked
+    /// again after acquiring it to handle another process repairing first.
     @discardableResult
-    static func repairMissingUUIDs(at url: URL, logger: Logger) -> Int {
-        guard FileManager.default.fileExists(atPath: url.path) else { return 0 }
+    static func repairMissingUUIDs(at url: URL, logger: Logger) -> Outcome {
+        let startedAt = ContinuousClock.now
+        guard FileManager.default.fileExists(atPath: url.path) else { return .storeMissing }
 
-        var database: OpaquePointer?
-        let openResult = sqlite3_open_v2(
-            url.path,
-            &database,
-            SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX,
-            nil
-        )
-        guard openResult == SQLITE_OK, let database else {
-            if let database {
-                logger.error("Could not open the store for UUID repair: \(String(cString: sqlite3_errmsg(database)))")
-                sqlite3_close(database)
-            }
-            return 0
+        let readOnly: OpaquePointer
+        switch open(url: url, flags: SQLITE_OPEN_READONLY | SQLITE_OPEN_FULLMUTEX, timeoutMilliseconds: 250) {
+        case .success(let database): readOnly = database
+        case .failure(let failure):
+            log(failure, stage: "preflight.open", startedAt: startedAt, logger: logger)
+            return failure.outcome(stage: "preflight.open")
         }
-        defer { sqlite3_close(database) }
-
-        sqlite3_busy_timeout(database, 10_000)
-        guard execute("BEGIN IMMEDIATE TRANSACTION", on: database) else {
-            logger.error("Could not lock the store for UUID repair: \(String(cString: sqlite3_errmsg(database)))")
-            return 0
-        }
-
-        var repaired = 0
+        let missing: [String: Column]
         do {
-            for table in try tableNames(in: database) {
-                guard let uuidColumn = try columns(in: table, database: database).first(where: {
-                    $0.name.caseInsensitiveCompare("ZUUID") == .orderedSame
-                }) else { continue }
-
-                let tableSQL = quoteIdentifier(table)
-                let columnSQL = quoteIdentifier(uuidColumn.name)
-                let valueSQL = uuidValueExpression(for: uuidColumn.declaredType)
-                let statement = "UPDATE \(tableSQL) SET \(columnSQL) = \(valueSQL) WHERE \(columnSQL) IS NULL"
-                guard execute(statement, on: database) else {
-                    throw RepairError.sqlite(String(cString: sqlite3_errmsg(database)))
-                }
-                repaired += Int(sqlite3_changes(database))
-            }
-            guard execute("COMMIT", on: database) else {
-                throw RepairError.sqlite(String(cString: sqlite3_errmsg(database)))
-            }
+            missing = try missingUUIDColumns(in: readOnly)
         } catch {
-            _ = execute("ROLLBACK", on: database)
-            logger.error("UUID repair failed: \(String(describing: error))")
-            return 0
+            let code = sqlite3_errcode(readOnly)
+            sqlite3_close(readOnly)
+            let failure = SQLiteFailure(code: code, message: String(describing: error))
+            log(failure, stage: "preflight", startedAt: startedAt, logger: logger)
+            return failure.outcome(stage: "preflight")
+        }
+        sqlite3_close(readOnly)
+
+        guard !missing.isEmpty else {
+            let duration = startedAt.duration(to: .now)
+            logger.debug("uuidRepair.preflight.healthy duration=\(duration, privacy: .public)")
+            return .healthy
         }
 
-        if repaired > 0 {
-            logger.warning("Repaired \(repaired) missing persisted UUID values")
+        logger.notice("uuidRepair.start tables=\(missing.count, privacy: .public)")
+        let writable: OpaquePointer
+        switch open(url: url, flags: SQLITE_OPEN_READWRITE | SQLITE_OPEN_FULLMUTEX, timeoutMilliseconds: 500) {
+        case .success(let database): writable = database
+        case .failure(let failure):
+            log(failure, stage: "repair.open", startedAt: startedAt, logger: logger)
+            return failure.outcome(stage: "repair.open")
         }
-        return repaired
+        defer { sqlite3_close(writable) }
+
+        guard execute("BEGIN IMMEDIATE TRANSACTION", on: writable) else {
+            let failure = SQLiteFailure(code: sqlite3_errcode(writable), message: String(cString: sqlite3_errmsg(writable)))
+            log(failure, stage: "repair.begin", startedAt: startedAt, logger: logger)
+            return failure.outcome(stage: "repair.begin")
+        }
+
+        do {
+            // Another process may have completed repair between the read-only
+            // check and BEGIN IMMEDIATE. Re-query under the lock before writes.
+            let currentMissing = try missingUUIDColumns(in: writable)
+            var repaired = 0
+            for (table, column) in currentMissing {
+                let tableSQL = quoteIdentifier(table)
+                let columnSQL = quoteIdentifier(column.name)
+                let valueSQL = uuidValueExpression(for: column.declaredType)
+                let statement = "UPDATE \(tableSQL) SET \(columnSQL) = \(valueSQL) WHERE \(columnSQL) IS NULL"
+                guard execute(statement, on: writable) else {
+                    throw SQLiteFailure(code: sqlite3_errcode(writable), message: String(cString: sqlite3_errmsg(writable)))
+                }
+                repaired += Int(sqlite3_changes(writable))
+            }
+            guard execute("COMMIT", on: writable) else {
+                throw SQLiteFailure(code: sqlite3_errcode(writable), message: String(cString: sqlite3_errmsg(writable)))
+            }
+            let duration = startedAt.duration(to: .now)
+            logger.notice("uuidRepair.committed rows=\(repaired, privacy: .public) duration=\(duration, privacy: .public)")
+            return .repaired(rows: repaired)
+        } catch {
+            _ = execute("ROLLBACK", on: writable)
+            let failure = (error as? SQLiteFailure) ?? SQLiteFailure(
+                code: sqlite3_errcode(writable), message: String(describing: error)
+            )
+            log(failure, stage: "repair.transaction", startedAt: startedAt, logger: logger)
+            return failure.outcome(stage: "repair.transaction")
+        }
     }
 
-    private enum RepairError: Error {
-        case sqlite(String)
+    private struct SQLiteFailure: Error {
+        let code: Int32
+        let message: String
+
+        var isContention: Bool {
+            code == SQLITE_BUSY || code == SQLITE_LOCKED || (code & 0xff) == SQLITE_BUSY || (code & 0xff) == SQLITE_LOCKED
+        }
+
+        func outcome(stage: String) -> Outcome {
+            isContention ? .contended(stage: stage, code: code) : .failed(stage: stage, code: code)
+        }
+    }
+
+    private enum OpenResult {
+        case success(OpaquePointer)
+        case failure(SQLiteFailure)
+    }
+
+    private static func open(url: URL, flags: Int32, timeoutMilliseconds: Int32) -> OpenResult {
+        var database: OpaquePointer?
+        let result = sqlite3_open_v2(url.path, &database, flags, nil)
+        guard result == SQLITE_OK, let database else {
+            let failure = SQLiteFailure(
+                code: result,
+                message: database.map { String(cString: sqlite3_errmsg($0)) } ?? "sqlite3_open_v2 failed"
+            )
+            if let database { sqlite3_close(database) }
+            return .failure(failure)
+        }
+        sqlite3_busy_timeout(database, timeoutMilliseconds)
+        return .success(database)
+    }
+
+    private static func missingUUIDColumns(in database: OpaquePointer) throws -> [String: Column] {
+        let names = try tableNames(in: database)
+        var result: [String: Column] = [:]
+        for table in names {
+            guard let uuidColumn = try columns(in: table, database: database).first(where: {
+                $0.name.caseInsensitiveCompare("ZUUID") == .orderedSame
+            }) else { continue }
+            let sql = "SELECT 1 FROM \(quoteIdentifier(table)) WHERE \(quoteIdentifier(uuidColumn.name)) IS NULL LIMIT 1"
+            let statement = try prepare(sql, on: database)
+            defer { sqlite3_finalize(statement) }
+            let step = sqlite3_step(statement)
+            if step == SQLITE_ROW { result[table] = uuidColumn }
+            else if step != SQLITE_DONE {
+                throw SQLiteFailure(code: step, message: String(cString: sqlite3_errmsg(database)))
+            }
+        }
+        return result
     }
 
     private static func tableNames(in database: OpaquePointer) throws -> [String] {
-        let sql = "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'"
-        let statement = try prepare(sql, on: database)
+        let statement = try prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
+            on: database
+        )
         defer { sqlite3_finalize(statement) }
-
         var names: [String] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
-            if let value = sqlite3_column_text(statement, 0) {
-                names.append(String(cString: value))
+        while true {
+            let step = sqlite3_step(statement)
+            if step == SQLITE_DONE { return names }
+            guard step == SQLITE_ROW else {
+                throw SQLiteFailure(code: step, message: String(cString: sqlite3_errmsg(database)))
             }
+            if let value = sqlite3_column_text(statement, 0) { names.append(String(cString: value)) }
         }
-        guard sqlite3_errcode(database) == SQLITE_OK || sqlite3_errcode(database) == SQLITE_DONE else {
-            throw RepairError.sqlite(String(cString: sqlite3_errmsg(database)))
-        }
-        return names
     }
 
     private static func columns(in table: String, database: OpaquePointer) throws -> [Column] {
-        let sql = "PRAGMA table_info(\(quoteIdentifier(table)))"
-        let statement = try prepare(sql, on: database)
+        let statement = try prepare("PRAGMA table_info(\(quoteIdentifier(table)))", on: database)
         defer { sqlite3_finalize(statement) }
-
         var columns: [Column] = []
-        while sqlite3_step(statement) == SQLITE_ROW {
+        while true {
+            let step = sqlite3_step(statement)
+            if step == SQLITE_DONE { return columns }
+            guard step == SQLITE_ROW else {
+                throw SQLiteFailure(code: step, message: String(cString: sqlite3_errmsg(database)))
+            }
             guard let name = sqlite3_column_text(statement, 1) else { continue }
             let type = sqlite3_column_text(statement, 2).map(String.init(cString:)) ?? ""
             columns.append(Column(name: String(cString: name), declaredType: type))
         }
-        guard sqlite3_errcode(database) == SQLITE_OK || sqlite3_errcode(database) == SQLITE_DONE else {
-            throw RepairError.sqlite(String(cString: sqlite3_errmsg(database)))
-        }
-        return columns
     }
 
     private static func prepare(_ sql: String, on database: OpaquePointer) throws -> OpaquePointer {
         var statement: OpaquePointer?
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK,
-              let statement
-        else {
-            throw RepairError.sqlite(String(cString: sqlite3_errmsg(database)))
+        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK, let statement else {
+            throw SQLiteFailure(code: sqlite3_errcode(database), message: String(cString: sqlite3_errmsg(database)))
         }
         return statement
     }
@@ -125,6 +203,15 @@ enum StoreUUIDRepair {
     @discardableResult
     private static func execute(_ sql: String, on database: OpaquePointer) -> Bool {
         sqlite3_exec(database, sql, nil, nil, nil) == SQLITE_OK
+    }
+
+    private static func log(_ failure: SQLiteFailure, stage: String, startedAt: ContinuousClock.Instant, logger: Logger) {
+        let duration = startedAt.duration(to: .now)
+        if failure.isContention {
+            logger.warning("uuidRepair.contended stage=\(stage, privacy: .public) code=\(failure.code, privacy: .public) duration=\(duration, privacy: .public)")
+        } else {
+            logger.error("uuidRepair.failed stage=\(stage, privacy: .public) code=\(failure.code, privacy: .public) duration=\(duration, privacy: .public) error=\(failure.message, privacy: .public)")
+        }
     }
 
     private static func quoteIdentifier(_ value: String) -> String {
