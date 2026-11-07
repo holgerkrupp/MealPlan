@@ -280,6 +280,28 @@ enum HouseholdRemoteFetchOutcome: Sendable {
     case failed
 }
 
+/// CloudKit payload and asset work is prepared as immutable values before the
+/// SwiftData write transaction begins. The transaction only applies these
+/// decisions and saves them; it never reads CKAsset files or resolves conflicts.
+private enum PreparedRemoteRecord {
+    case deletionMarker(
+        name: String,
+        marker: DeletionMarkerPayload,
+        localWins: Bool,
+        fingerprint: String,
+        systemFields: Data
+    )
+    case unchanged(name: String, fingerprint: String, systemFields: Data)
+    case model(
+        name: String,
+        identity: HouseholdRecordIdentity,
+        resolution: HouseholdRecordResolution,
+        fingerprint: String,
+        systemFields: Data
+    )
+    case ignored(name: String, systemFields: Data)
+}
+
 /// The sole CloudKit transport for the App Group SwiftData store. It scans
 /// stable per-record fingerprints after saves, and lets CKSyncEngine own
 /// subscriptions, change tokens, retries, and partial failures.
@@ -337,7 +359,10 @@ final class HouseholdRecordSyncService {
     /// read stays unreadable until an update, so don't re-download it each time.
     private static let fetchRetryInterval: Duration = .seconds(300)
     private static let fetchRetryBatchSize = 100
-    private var cancelAtPersistenceBoundary = false
+    /// Cancellation is scoped to one finite UIKit fetch window. A second push
+    /// can run after a prior task expires without reviving the expired work.
+    private var expiredBackgroundFetchIDs = Set<UUID>()
+    private var activeBackgroundFetchID: UUID?
     /// Generation observed after the last local scan. A missing value from an
     /// older app is deliberately treated as dirty once, not as clean.
     private var lastObservedStoreGeneration: UInt64?
@@ -394,7 +419,6 @@ final class HouseholdRecordSyncService {
         logger.info("scene.lifecycle foregroundWork=\(admitted, privacy: .public)")
         admitsForegroundWork = admitted
         if admitted {
-            cancelAtPersistenceBoundary = false
             #if os(iOS)
             startForegroundPolling()
             #endif
@@ -412,19 +436,28 @@ final class HouseholdRecordSyncService {
 
     /// Requests an expiring background fetch to stop before its next database
     /// transaction. An entered transaction is allowed to save or roll back.
-    func requestCancellationAtPersistenceBoundary() {
-        cancelAtPersistenceBoundary = true
+    func requestCancellationAtPersistenceBoundary(for backgroundFetchID: UUID) {
+        expiredBackgroundFetchIDs.insert(backgroundFetchID)
     }
 
-    func prepareRemoteFetch() {
-        cancelAtPersistenceBoundary = false
+    @discardableResult
+    func prepareRemoteFetch() -> UUID {
         // A package-owned shared-database fetch runs outside
         // performCloudOperation. Clear its prior result so the caller can use
-        // lastError to distinguish this fetch's delegate apply outcome.
+        // lastError to distinguish this fetch's delegate apply outcome. Each
+        // fetch has its own cancellation token, so a later push cannot resume
+        // work that already exceeded its background window.
         lastError = nil
+        return UUID()
     }
 
-    func fetchChanges(shouldScanLocalChanges: Bool = true) async -> HouseholdRemoteFetchOutcome {
+    func fetchChanges(
+        shouldScanLocalChanges: Bool = true,
+        backgroundFetchID: UUID? = nil
+    ) async -> HouseholdRemoteFetchOutcome {
+        defer {
+            if let backgroundFetchID { expiredBackgroundFetchIDs.remove(backgroundFetchID) }
+        }
         guard let locator else { return .noData }
         if shouldScanLocalChanges { observeExternalStoreGeneration() }
         // A fetch can arrive through launch/bootstrap without the explicit
@@ -435,7 +468,7 @@ final class HouseholdRecordSyncService {
             catch { lastError = error; return .failed }
         }
         let previousAppliedCount = appliedRemoteRecordCount
-        await performCloudOperation(fetch: true, send: false)
+        await performCloudOperation(fetch: true, send: false, backgroundFetchID: backgroundFetchID)
         if lastError != nil { return .failed }
         return appliedRemoteRecordCount == previousAppliedCount ? .noData : .newData
     }
@@ -819,6 +852,23 @@ final class HouseholdRecordSyncService {
         }
     }
 
+    /// Foreground scans are unbounded household work. Stop them between
+    /// persistence units when the scene backgrounds or a finite background
+    /// task expires; an operation already entered by the model actor can save
+    /// and finish before this check runs again.
+    private func ensureForegroundScanCanContinue() throws {
+        try Task.checkCancellation()
+        guard admitsForegroundWork else {
+            needsLocalScan = true
+            throw CancellationError()
+        }
+    }
+
+    private var activeBackgroundFetchIsCancelled: Bool {
+        guard let activeBackgroundFetchID else { return false }
+        return expiredBackgroundFetchIDs.contains(activeBackgroundFetchID)
+    }
+
     private func scanLocalChanges() async throws {
         while admitsForegroundWork, needsLocalScan, !isApplyingRemoteChanges, !isWaitingToApplyRemoteChanges {
             if let localScanTask {
@@ -846,6 +896,7 @@ final class HouseholdRecordSyncService {
 
     private func performLocalScan() async throws {
         guard admitsForegroundWork, let household, let syncEnginePool, let locator, !locator.isReadOnly else { return }
+        try ensureForegroundScanCanContinue()
         let startedGeneration = HouseholdStoreGeneration.value()
         let startedAt = ContinuousClock.now
         logger.info("scan.start")
@@ -855,13 +906,16 @@ final class HouseholdRecordSyncService {
         }
         let previousMetadata = metadata
         let previousTombstoneRestoreState = didRestoreTombstoneOperations
+        let previousPendingSnapshots = pendingSnapshots
         var snapshots = Self.canonicalSnapshots(try await snapshotRecords(for: household.uuid))
+        try ensureForegroundScanCanContinue()
         // Photo hashes are deliberately expensive. Calculate every snapshot's
         // fingerprint once per scan and carry it through both passes.
         let initialSnapshots = snapshots
         var evaluated = await Task.detached(priority: .utility) {
             initialSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
         }.value
+        try ensureForegroundScanCanContinue()
         var changesToTouch: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)] = []
 
         for item in evaluated where metadata.shouldTouch(item.snapshot.identity.recordName, fingerprint: item.fingerprint) {
@@ -877,6 +931,7 @@ final class HouseholdRecordSyncService {
             changesToTouch.append((snapshot.identity, changedGroups))
         }
         if !changesToTouch.isEmpty {
+            try ensureForegroundScanCanContinue()
             let touchTypes = Dictionary(grouping: changesToTouch, by: { $0.identity.type.rawValue })
                 .map { "\($0.key):\($0.value.count)" }.sorted().joined(separator: ",")
             logger.info("scan.touch.types \(touchTypes, privacy: .public)")
@@ -884,11 +939,14 @@ final class HouseholdRecordSyncService {
             // Save them through a private SwiftData executor so SQLite never
             // blocks the scrolling main context.
             try await touchRecords(changesToTouch, householdID: household.uuid)
+            try ensureForegroundScanCanContinue()
             snapshots = Self.canonicalSnapshots(try await snapshotRecords(for: household.uuid))
+            try ensureForegroundScanCanContinue()
             let touchedSnapshots = snapshots
             evaluated = await Task.detached(priority: .utility) {
                 touchedSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
             }.value
+            try ensureForegroundScanCanContinue()
         }
 
         let byName = Self.keyedSnapshots(snapshots)
@@ -901,60 +959,67 @@ final class HouseholdRecordSyncService {
             return
         }
         var cloudChanges: [CloudKitRecordChange] = []
-        for item in evaluated {
-            let snapshot = item.snapshot
-            let name = snapshot.identity.recordName
-            guard metadata.shouldQueue(name, fingerprint: item.fingerprint) else { continue }
-            let id = CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: locator.zoneID)
-            pendingSnapshots[snapshot.identity.recordName] = snapshot
-            metadata.pendingFingerprints[name] = item.fingerprint
-            metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
-            let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
-            cloudChanges.append(.save(try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
-        }
-
-        let liveNames = Set(byName.keys)
-        let existingTombstones = Set(metadata.tombstones.map { "\($0.deletedType.rawValue)-\($0.deletedUUID.uuidString)" })
-        let previouslyKnown = Set(metadata.serverFingerprints.keys)
-            .union(metadata.pendingFingerprints.keys)
-            .subtracting(metadata.tombstones.map { HouseholdRecordIdentity(type: .deletionMarker, uuid: $0.markerUUID).recordName })
-        for deletedName in previouslyKnown.subtracting(liveNames) {
-            guard let identity = identity(fromRecordName: deletedName), identity.type != .deletionMarker else { continue }
-            guard !existingTombstones.contains(identity.recordName) else { continue }
-            let tombstone = HouseholdSyncTombstone(markerUUID: UUID(), deletedType: identity.type, deletedUUID: identity.uuid, deletedAt: .now)
-            metadata.tombstones.append(tombstone)
-            metadata.serverFingerprints.removeValue(forKey: deletedName)
-            metadata.serverGroupFingerprints.removeValue(forKey: deletedName)
-            metadata.pendingFingerprints.removeValue(forKey: deletedName)
-            metadata.pendingGroupFingerprints.removeValue(forKey: deletedName)
-            pendingSnapshots.removeValue(forKey: deletedName)
-            cloudChanges.append(.delete(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)))
-            let markerID = CKRecord.ID(recordName: HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName, zoneID: locator.zoneID)
-            if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
-        }
-
-        // The package journal now survives the crash window before metadata
-        // persistence. Only a legacy marker that has never been acknowledged
-        // needs one-time restoration. Replaying every historical tombstone
-        // queued two unnecessary operations per deletion on every launch.
-        if !didRestoreTombstoneOperations {
-            let alreadyQueued = Set(cloudChanges.map { $0.recordID.recordName })
-            for tombstone in metadata.tombstones {
-                let markerName = HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName
-                guard metadata.serverFingerprints[markerName] == nil else { continue }
-                let deletedName = HouseholdRecordIdentity(type: tombstone.deletedType, uuid: tombstone.deletedUUID).recordName
-                if !alreadyQueued.contains(deletedName) {
-                    cloudChanges.append(.delete(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)))
-                }
-                if !alreadyQueued.contains(markerName) {
-                    let markerID = CKRecord.ID(recordName: markerName, zoneID: locator.zoneID)
-                    if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
-                }
-            }
-            didRestoreTombstoneOperations = true
-        }
-
+        var journalCommitted = false
         do {
+            for item in evaluated {
+                try ensureForegroundScanCanContinue()
+                let snapshot = item.snapshot
+                let name = snapshot.identity.recordName
+                guard metadata.shouldQueue(name, fingerprint: item.fingerprint) else { continue }
+                let id = CKRecord.ID(recordName: snapshot.identity.recordName, zoneID: locator.zoneID)
+                let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
+                let record = try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+                try ensureForegroundScanCanContinue()
+                pendingSnapshots[name] = snapshot
+                metadata.pendingFingerprints[name] = item.fingerprint
+                metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
+                cloudChanges.append(.save(record))
+            }
+
+            let liveNames = Set(byName.keys)
+            let existingTombstones = Set(metadata.tombstones.map { "\($0.deletedType.rawValue)-\($0.deletedUUID.uuidString)" })
+            let previouslyKnown = Set(metadata.serverFingerprints.keys)
+                .union(metadata.pendingFingerprints.keys)
+                .subtracting(metadata.tombstones.map { HouseholdRecordIdentity(type: .deletionMarker, uuid: $0.markerUUID).recordName })
+            for deletedName in previouslyKnown.subtracting(liveNames) {
+                try ensureForegroundScanCanContinue()
+                guard let identity = identity(fromRecordName: deletedName), identity.type != .deletionMarker else { continue }
+                guard !existingTombstones.contains(identity.recordName) else { continue }
+                let tombstone = HouseholdSyncTombstone(markerUUID: UUID(), deletedType: identity.type, deletedUUID: identity.uuid, deletedAt: .now)
+                metadata.tombstones.append(tombstone)
+                metadata.serverFingerprints.removeValue(forKey: deletedName)
+                metadata.serverGroupFingerprints.removeValue(forKey: deletedName)
+                metadata.pendingFingerprints.removeValue(forKey: deletedName)
+                metadata.pendingGroupFingerprints.removeValue(forKey: deletedName)
+                pendingSnapshots.removeValue(forKey: deletedName)
+                cloudChanges.append(.delete(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)))
+                let markerID = CKRecord.ID(recordName: HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName, zoneID: locator.zoneID)
+                if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
+            }
+
+            // The package journal now survives the crash window before metadata
+            // persistence. Only a legacy marker that has never been acknowledged
+            // needs one-time restoration. Replaying every historical tombstone
+            // queued two unnecessary operations per deletion on every launch.
+            if !didRestoreTombstoneOperations {
+                let alreadyQueued = Set(cloudChanges.map { $0.recordID.recordName })
+                for tombstone in metadata.tombstones {
+                    try ensureForegroundScanCanContinue()
+                    let markerName = HouseholdRecordIdentity(type: .deletionMarker, uuid: tombstone.markerUUID).recordName
+                    guard metadata.serverFingerprints[markerName] == nil else { continue }
+                    let deletedName = HouseholdRecordIdentity(type: tombstone.deletedType, uuid: tombstone.deletedUUID).recordName
+                    if !alreadyQueued.contains(deletedName) {
+                        cloudChanges.append(.delete(CKRecord.ID(recordName: deletedName, zoneID: locator.zoneID)))
+                    }
+                    if !alreadyQueued.contains(markerName) {
+                        let markerID = CKRecord.ID(recordName: markerName, zoneID: locator.zoneID)
+                        if let markerRecord = try await record(for: markerID) { cloudChanges.append(.save(markerRecord)) }
+                    }
+                }
+                didRestoreTombstoneOperations = true
+            }
+
+            try ensureForegroundScanCanContinue()
             if !cloudChanges.isEmpty {
                 let counts = Dictionary(grouping: cloudChanges) { change -> String in
                     switch change {
@@ -964,13 +1029,19 @@ final class HouseholdRecordSyncService {
                 }.map { "\($0.key):\($0.value.count)" }.sorted().joined(separator: ",")
                 logger.info("Queued household changes (types=\(counts, privacy: .public)).")
                 try await syncEnginePool.enqueue(cloudChanges, in: activeScope)
+                journalCommitted = true
             }
         } catch {
-            // The package journal did not accept this batch. Keep the old
-            // acknowledged/pending baseline so a later scan retries it.
-            metadata = previousMetadata
-            didRestoreTombstoneOperations = previousTombstoneRestoreState
-            pendingSnapshots.removeAll()
+            // Before the package journal accepts the batch, all staged
+            // fingerprints/tombstones exist only in memory. Restore that
+            // baseline on cancellation or failure; the next foreground scan
+            // rebuilds the same work. Once the journal commits, keep its
+            // matching pending metadata so replay remains idempotent.
+            if !journalCommitted {
+                metadata = previousMetadata
+                didRestoreTombstoneOperations = previousTombstoneRestoreState
+                pendingSnapshots = previousPendingSnapshots
+            }
             needsLocalScan = true
             throw error
         }
@@ -993,7 +1064,11 @@ final class HouseholdRecordSyncService {
     /// Runs each explicit operation behind the previous one. Package engine
     /// calls use the same detached boundary as the old owner so fetch/send
     /// requests cannot overlap delegate callbacks.
-    private func performCloudOperation(fetch: Bool, send: Bool) async {
+    private func performCloudOperation(
+        fetch: Bool,
+        send: Bool,
+        backgroundFetchID: UUID? = nil
+    ) async {
         let previous = cloudOperationTask
         // Reserve our place before the first suspension. Otherwise two push
         // handlers can await the same predecessor and enter CKSyncEngine at
@@ -1001,6 +1076,12 @@ final class HouseholdRecordSyncService {
         let task = Task { @MainActor [weak self] in
             await previous?.value
             guard !Task.isCancelled, let self else { return }
+            if let backgroundFetchID,
+               self.expiredBackgroundFetchIDs.contains(backgroundFetchID) {
+                return
+            }
+            self.activeBackgroundFetchID = backgroundFetchID
+            defer { self.activeBackgroundFetchID = nil }
             await self.runCloudOperation(fetch: fetch, send: send)
         }
         cloudOperationTask = task
@@ -1075,7 +1156,7 @@ final class HouseholdRecordSyncService {
             }
         }
         let duration = startedAt.duration(to: .now)
-        if fetch { await retryFailedFetches() }
+        if fetch, !activeBackgroundFetchIsCancelled { await retryFailedFetches() }
         if fetch { logger.info("sync.fetch.end duration=\(duration, privacy: .public)") }
         if maySend { logger.info("sync.send.end duration=\(duration, privacy: .public)") }
     }
@@ -1176,7 +1257,88 @@ final class HouseholdRecordSyncService {
         }
         var unreadableNames = Set<String>()
         try Task.checkCancellation()
-        guard !cancelAtPersistenceBoundary else { throw CancellationError() }
+        guard !activeBackgroundFetchIsCancelled else { throw CancellationError() }
+        let preparationStartedAt = ContinuousClock.now
+        var preparedModifications: [PreparedRemoteRecord] = []
+        preparedModifications.reserveCapacity(modifications.count)
+        var preparedAssetBytes = 0
+        for record in modifications {
+            try Task.checkCancellation()
+            guard !activeBackgroundFetchIsCancelled else {
+                needsLocalScan = true
+                throw CancellationError()
+            }
+            guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
+                  let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data else { continue }
+
+            let name = identity.recordName
+            let systemFields = encodeSystemFields(record)
+            if identity.type == .deletionMarker {
+                do {
+                    let payload = try HouseholdRecordCodec.decode(payloadData)
+                    guard case .deletionMarker(let marker) = payload else {
+                        preparedModifications.append(.ignored(name: name, systemFields: systemFields))
+                        continue
+                    }
+                    let target = HouseholdRecordIdentity(type: marker.deletedType, uuid: marker.deletedUUID)
+                    let localWins = HouseholdRecordConflictResolver.shouldPreserveLocalForDeletion(
+                        local: local[target.recordName],
+                        deletedAt: marker.deletedAt
+                    )
+                    preparedModifications.append(.deletionMarker(
+                        name: name,
+                        marker: marker,
+                        localWins: localWins,
+                        fingerprint: recordFingerprint(payloadData, assetData: nil),
+                        systemFields: systemFields
+                    ))
+                } catch {
+                    unreadableNames.insert(name)
+                    lastError = error
+                }
+                continue
+            }
+
+            do {
+                let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
+                let serverAssetData = try Self.readAssetData(serverAsset)
+                let incomingFingerprint = recordFingerprint(payloadData, assetData: serverAssetData)
+                if let current = local[name],
+                   current.fingerprint == incomingFingerprint,
+                   current.modifiedAt == HouseholdRecordCodec.modifiedAt(of: record) {
+                    preparedModifications.append(.unchanged(
+                        name: name,
+                        fingerprint: incomingFingerprint,
+                        systemFields: systemFields
+                    ))
+                    continue
+                }
+                let resolution = try HouseholdRecordConflictResolver.resolve(
+                    local: local[name],
+                    server: record,
+                    serverAssetData: serverAssetData,
+                    serverHasAsset: serverAsset != nil
+                )
+                preparedAssetBytes += resolution.assetData?.count ?? 0
+                preparedModifications.append(.model(
+                    name: name,
+                    identity: identity,
+                    resolution: resolution,
+                    fingerprint: incomingFingerprint,
+                    systemFields: systemFields
+                ))
+            } catch {
+                unreadableNames.insert(name)
+                lastError = error
+            }
+        }
+        let preparationDuration = preparationStartedAt.duration(to: .now)
+        logger.info("db.prepare.end records=\(preparedModifications.count, privacy: .public) unreadable=\(unreadableNames.count, privacy: .public) assetBytes=\(preparedAssetBytes, privacy: .public) duration=\(preparationDuration, privacy: .public)")
+        try Task.checkCancellation()
+        guard !activeBackgroundFetchIsCancelled else {
+            needsLocalScan = true
+            throw CancellationError()
+        }
         let counts = Dictionary(grouping: modifications) { $0.recordType }
             .mapValues(\.count)
             .map { "\($0.key)=\($0.value)" }
@@ -1196,34 +1358,17 @@ final class HouseholdRecordSyncService {
 
         do {
             try Task.checkCancellation()
-            guard !cancelAtPersistenceBoundary else { throw CancellationError() }
+            guard !activeBackgroundFetchIsCancelled else { throw CancellationError() }
             try nonUndoableStoreTransaction(in: context) {
                 try HouseholdRecordApplier.withBatchLookup(
                     in: context,
                     expectedRecordCount: modifications.count + deletions.count
                 ) {
-                    for record in modifications {
-                        guard let identity = HouseholdRecordIdentity(recordType: record.recordType, recordName: record.recordID.recordName),
-                              let payloadData = record[HouseholdRecordCodec.payloadKey] as? Data else { continue }
-
-                        let name = identity.recordName
-                        stagedSystemFields[name] = encodeSystemFields(record)
-                        if identity.type == .deletionMarker {
-                            let payload: HouseholdRecordPayload
-                            do { payload = try HouseholdRecordCodec.decode(payloadData) }
-                            catch {
-                                unreadableNames.insert(name)
-                                stagedSystemFields.removeValue(forKey: name)
-                                lastError = error
-                                continue
-                            }
-                            guard case .deletionMarker(let marker) = payload else { continue }
+                    for prepared in preparedModifications {
+                        switch prepared {
+                        case .deletionMarker(let name, let marker, let localWins, let fingerprint, let fields):
+                            stagedSystemFields[name] = fields
                             let target = HouseholdRecordIdentity(type: marker.deletedType, uuid: marker.deletedUUID)
-                            let localTarget = local[target.recordName]
-                            let localWins = HouseholdRecordConflictResolver.shouldPreserveLocalForDeletion(
-                                local: localTarget,
-                                deletedAt: marker.deletedAt
-                            )
                             markerLocalWins[target.recordName] = localWins
                             if localWins {
                                 uploadNames.insert(target.recordName)
@@ -1231,50 +1376,31 @@ final class HouseholdRecordSyncService {
                                 try HouseholdRecordApplier.delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
                                 removedNames.insert(target.recordName)
                             }
-                            serverFingerprints[name] = recordFingerprint(payloadData, assetData: nil)
-                            continue
-                        }
+                            serverFingerprints[name] = fingerprint
 
-                        // Reading a record touches nothing, so one that can't
-                        // be read (a newer build's payload, an asset that didn't
-                        // download) is set aside without failing the batch.
-                        let serverAsset = record[HouseholdRecordCodec.assetKey] as? CKAsset
-                        let incomingFingerprint: String
-                        let resolution: HouseholdRecordResolution
-                        do {
-                            let serverAssetData = try Self.readAssetData(serverAsset)
-                            incomingFingerprint = recordFingerprint(payloadData, assetData: serverAssetData)
-                            if let current = local[name],
-                               current.fingerprint == incomingFingerprint,
-                               current.modifiedAt == HouseholdRecordCodec.modifiedAt(of: record) {
-                                serverFingerprints[name] = incomingFingerprint
-                                continue
-                            }
-                            resolution = try HouseholdRecordConflictResolver.resolve(
-                                local: local[name],
-                                server: record,
-                                serverAssetData: serverAssetData,
-                                serverHasAsset: serverAsset != nil
+                        case .unchanged(let name, let fingerprint, let fields):
+                            stagedSystemFields[name] = fields
+                            serverFingerprints[name] = fingerprint
+
+                        case .model(let name, let identity, let resolution, let fingerprint, let fields):
+                            stagedSystemFields[name] = fields
+                            try HouseholdRecordApplier.apply(
+                                payloadData: resolution.payloadData,
+                                identity: identity,
+                                modifiedAt: resolution.modifiedAt,
+                                assetData: resolution.assetData,
+                                household: household,
+                                context: context
                             )
-                        } catch {
-                            unreadableNames.insert(name)
-                            stagedSystemFields.removeValue(forKey: name)
-                            lastError = error
-                            continue
+                            modifiedNames.insert(name)
+                            if resolution.shouldUpload, !locator.isReadOnly {
+                                uploadNames.insert(name)
+                            }
+                            serverFingerprints[name] = fingerprint
+
+                        case .ignored(let name, let fields):
+                            stagedSystemFields[name] = fields
                         }
-                        try HouseholdRecordApplier.apply(
-                            payloadData: resolution.payloadData,
-                            identity: identity,
-                            modifiedAt: resolution.modifiedAt,
-                            assetData: resolution.assetData,
-                            household: household,
-                            context: context
-                        )
-                        modifiedNames.insert(name)
-                        if resolution.shouldUpload, !locator.isReadOnly {
-                            uploadNames.insert(name)
-                        }
-                        serverFingerprints[name] = incomingFingerprint
                     }
 
                     for deletion in deletions {
