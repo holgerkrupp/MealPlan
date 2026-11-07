@@ -37,7 +37,7 @@ enum MealPlanIntentStore {
     }
 
     static func entity(for entry: MealPlanEntry) -> MealPlanEntryEntity {
-        let meals = Dictionary(uniqueKeysWithValues: mealTypes().map { ($0.key, $0) })
+        let meals = MealType.uniqueByKey(mealTypes())
         return MealPlanEntryEntity(entry: entry, meal: meals[entry.mealKey])
     }
 }
@@ -316,7 +316,7 @@ struct MealPlanEntryEntity: IndexedEntity {
                 predicate: #Predicate { $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
             ))
-            let meals = Dictionary(uniqueKeysWithValues: MealPlanIntentStore.mealTypes().map { ($0.key, $0) })
+            let meals = MealType.uniqueByKey(MealPlanIntentStore.mealTypes())
             return entries.map { MealPlanEntryEntity(entry: $0, meal: meals[$0.mealKey]) }
         }
 
@@ -410,7 +410,7 @@ struct MealPlanEntryEntity: IndexedEntity {
                 predicate: #Predicate { $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
             ))
-            let meals = Dictionary(uniqueKeysWithValues: MealPlanIntentStore.mealTypes().map { ($0.key, $0) })
+            let meals = MealType.uniqueByKey(MealPlanIntentStore.mealTypes())
             return entries.map { MealPlanEntryEntity(entry: $0, meal: meals[$0.mealKey]) }
         }
 
@@ -465,7 +465,7 @@ enum MealPlanSpotlightIndexer {
             let dishes = try context.fetch(FetchDescriptor<Dish>(sortBy: [SortDescriptor(\.name)]))
                 .map(DishEntity.init)
             let mealTypes = try context.fetch(FetchDescriptor<MealType>())
-            let mealsByKey = Dictionary(uniqueKeysWithValues: mealTypes.map { ($0.key, $0) })
+            let mealsByKey = MealType.uniqueByKey(mealTypes)
             let entries = try context.fetch(FetchDescriptor<MealPlanEntry>(
                 predicate: #Predicate { $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
@@ -530,7 +530,7 @@ private actor SpotlightSnapshotActor {
         }
 
         let mealTypes = try modelContext.fetch(FetchDescriptor<MealType>())
-        let mealsByKey = Dictionary(uniqueKeysWithValues: mealTypes.map { ($0.key, $0) })
+        let mealsByKey = MealType.uniqueByKey(mealTypes)
         let entries = try modelContext.fetch(FetchDescriptor<MealPlanEntry>(
             predicate: #Predicate { $0.skipped == false },
             sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]

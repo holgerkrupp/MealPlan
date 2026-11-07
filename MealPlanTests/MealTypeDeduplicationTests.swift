@@ -40,6 +40,21 @@ struct MealTypeDeduplicationTests {
         #expect(MealType.deduplicated([b, a]).keep.map(\.name) == ["Lunch"])
     }
 
+    @Test func spotlightMealLookupHandlesDuplicateKeysAndPreservesPlanReference() {
+        let winner = meal("dinner", "Dinner", order: 2, uuid: low)
+        let duplicate = meal("dinner", "Evening meal", order: 2, uuid: high)
+        let entry = MealPlanEntry(date: .now, mealKey: "dinner")
+
+        let forward = MealType.uniqueByKey([duplicate, winner])
+        let reverse = MealType.uniqueByKey([winner, duplicate])
+
+        #expect(forward.count == 1)
+        #expect(reverse.count == 1)
+        #expect(forward[entry.mealKey] === winner)
+        #expect(reverse[entry.mealKey] === winner)
+        #expect(entry.mealSlotRaw == "dinner")
+    }
+
     @Test func twoRowsSharingAUUIDStillCollapseToOne() {
         let meals = [
             meal("lunch", "Lunch", order: 0, uuid: low),
@@ -50,6 +65,16 @@ struct MealTypeDeduplicationTests {
 
         #expect(keep.count == 1)
         #expect(remove.count == 1)
+    }
+
+    @Test func conflictingRowsWithTheSameUUIDUseAStableTieBreak() {
+        let first = meal("lunch", "Lunch", order: 0, uuid: low)
+        let second = meal("lunch", "Mittag", order: 0, uuid: low)
+        first.modifiedAt = Date(timeIntervalSince1970: 1)
+        second.modifiedAt = Date(timeIntervalSince1970: 1)
+
+        #expect(MealType.deduplicated([first, second]).keep.first?.name == "Lunch")
+        #expect(MealType.deduplicated([second, first]).keep.first?.name == "Lunch")
     }
 
     @Test func distinctKeysAreAllKept() {
