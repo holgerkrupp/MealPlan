@@ -286,7 +286,11 @@ enum HouseholdRecordApplier {
             let model = try find(Dish.self, identity.uuid, context) ?? insert(Dish(), identity.uuid, context)
             apply(value, to: model)
             model.modifiedAt = modifiedAt
-            model.household = household
+            // CloudKit commonly redelivers unchanged Dish rows. Reassigning an
+            // unchanged relationship still mutates SwiftData's inverse array.
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .dishImage(let value):
             guard let dish = try find(Dish.self, value.dishID, context) else { throw HouseholdRecordCodecError.missingRelationship }
@@ -362,10 +366,15 @@ enum HouseholdRecordApplier {
             model.date = value.date
             model.dishName = value.dishName
             model.servings = value.servings
-            model.dish = try findOptional(Dish.self, value.dishUUID, context)
-            model.entry = try findOptional(MealPlanEntry.self, value.entryUUID, context)
+            // Assigning a relationship always rewrites its inverse, and writing
+            // `Household.cookedLogs` has trapped inside SwiftData in the field.
+            // Most fetched logs are unchanged, so leave those untouched.
+            let dish = try findOptional(Dish.self, value.dishUUID, context)
+            if model.dish?.persistentModelID != dish?.persistentModelID { model.dish = dish }
+            let entry = try findOptional(MealPlanEntry.self, value.entryUUID, context)
+            if model.entry?.persistentModelID != entry?.persistentModelID { model.entry = entry }
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID { model.household = household }
 
         case .cookedLogImage(let value):
             guard let log = try find(CookedLog.self, value.cookedLogID, context) else { throw HouseholdRecordCodecError.missingRelationship }

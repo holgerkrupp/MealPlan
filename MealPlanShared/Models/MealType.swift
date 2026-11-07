@@ -85,7 +85,7 @@ extension MealType {
     /// Pure, so it can be tested without a `ModelContext`.
     static func deduplicated(_ meals: [MealType]) -> (keep: [MealType], remove: [MealType]) {
         var winners: [String: MealType] = [:]
-        for meal in meals.sorted(by: { $0.uuid.uuidString < $1.uuid.uuidString }) {
+        for meal in meals.sorted(by: comesBeforeWhenDuplicateKeys) {
             if winners[meal.key] == nil { winners[meal.key] = meal }
         }
         // Object identity, not `uuid`: a record that synced twice can carry the
@@ -94,6 +94,26 @@ extension MealType {
         return (
             keep: winners.values.sorted { ($0.sortOrder, $0.name) < ($1.sortOrder, $1.name) },
             remove: meals.filter { !kept.contains(ObjectIdentifier($0)) }
+        )
+    }
+
+    private static func comesBeforeWhenDuplicateKeys(_ lhs: MealType, _ rhs: MealType) -> Bool {
+        if lhs.uuid != rhs.uuid { return lhs.uuid.uuidString < rhs.uuid.uuidString }
+        if lhs.modifiedAt != rhs.modifiedAt { return lhs.modifiedAt > rhs.modifiedAt }
+        if lhs.sortOrder != rhs.sortOrder { return lhs.sortOrder < rhs.sortOrder }
+        if lhs.name != rhs.name { return lhs.name < rhs.name }
+        return lhs.symbolName < rhs.symbolName
+    }
+
+    /// A duplicate key can briefly exist while CloudKit convergence is still
+    /// pending. Use the same UUID-stable winner as launch reconciliation so
+    /// indexing and App Intents remain deterministic without mutating the
+    /// store during a query.
+    static func uniqueByKey(_ meals: [MealType]) -> [String: MealType] {
+        let survivors = deduplicated(meals).keep
+        return Dictionary(
+            survivors.map { ($0.key, $0) },
+            uniquingKeysWith: { first, _ in first }
         )
     }
 
