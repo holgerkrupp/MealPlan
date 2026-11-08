@@ -194,7 +194,15 @@ struct DishEditorView: View {
             } header: {
                 Text("Tags")
             } footer: {
-                Text(String(localized: "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients."))
+                Text(String(localized: "Use tags for diets, occasions, and anything else you want to find again. A few are suggested from the name and ingredients."))
+            }
+
+            Section {
+                DishTagEditor(dish: dish, vocabulary: collectionVocabulary, kind: .collections)
+            } header: {
+                Text("Collections")
+            } footer: {
+                Text(String(localized: "Collections work like cookbooks: browse one from the library. A dish can be in several."))
             }
 
             Section(String(localized: "Meal type")) {
@@ -211,6 +219,11 @@ struct DishEditorView: View {
     /// instead of letting near-duplicates pile up.
     private var tagVocabulary: [String] {
         DishTag.vocabulary(from: allDishes)
+    }
+
+    /// Every collection the household already uses.
+    private var collectionVocabulary: [String] {
+        DishCollection.usage(fromCollectionLists: allDishes.map(\.collectionNames)).map(\.name)
     }
 
     private var suggestedTags: [String] {
@@ -496,6 +509,7 @@ struct DishEditorView: View {
         } else {
             dish.tagNames = DishTag.merge(dish.tagNames)
         }
+        dish.collectionNames = DishTag.merge(dish.collectionNames)
         if checkDuplicates, let duplicate = RecipeDuplicateDetector.match(
             name: dish.name, sourceURL: dish.sourceURL, in: allDishes, excluding: dish
         ) {

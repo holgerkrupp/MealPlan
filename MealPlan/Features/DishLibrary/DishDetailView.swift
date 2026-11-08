@@ -383,6 +383,10 @@ struct DishDetailView: View {
             if dish.rating > 0 {
                 badge(String(repeating: "★", count: dish.rating), system: "star.fill", tint: .yellow)
             }
+            ForEach(dish.sortedCollectionNames, id: \.self) { name in
+                badge(name, system: "books.vertical", tint: .indigo)
+                    .accessibilityLabel(String(localized: "Collection \(name)"))
+            }
             ForEach(dish.sortedTagNames, id: \.self) { tag in
                 badge(tag, system: "tag", tint: .teal)
             }

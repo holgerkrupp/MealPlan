@@ -1,7 +1,8 @@
 import SwiftUI
 import SwiftData
 
-/// Adds and removes a dish's free-form tags.
+/// Adds and removes a dish's free-form tags — or, with `kind: .collections`,
+/// the collections it belongs to. Both are name lists with the same rules.
 ///
 /// Typing filters the household's existing tags so the same idea doesn't end
 /// up spelled three ways; anything that matches nothing is created on the spot
@@ -14,6 +15,40 @@ struct DishTagEditor: View {
     var vocabulary: [String]
     /// Automatically derived tags, offered while the dish doesn't have them.
     var suggestions: [String] = []
+    var kind: Kind = .tags
+
+    enum Kind {
+        case tags
+        case collections
+
+        var keyPath: ReferenceWritableKeyPath<Dish, [String]> {
+            switch self {
+            case .tags: \.tagNames
+            case .collections: \.collectionNames
+            }
+        }
+
+        var placeholder: String {
+            switch self {
+            case .tags: String(localized: "Add a tag")
+            case .collections: String(localized: "Add to a collection")
+            }
+        }
+
+        func removeLabel(_ name: String) -> String {
+            switch self {
+            case .tags: String(localized: "Remove tag \(name)")
+            case .collections: String(localized: "Remove from collection \(name)")
+            }
+        }
+    }
+
+    private var applied: [String] {
+        get { dish[keyPath: kind.keyPath] }
+        nonmutating set { dish[keyPath: kind.keyPath] = newValue }
+    }
+
+    private func has(_ name: String) -> Bool { DishTag.contains(applied, name) }
 
     @State private var draft = ""
     @FocusState private var fieldIsFocused: Bool
@@ -21,33 +56,33 @@ struct DishTagEditor: View {
     private var trimmedDraft: String { DishTag.clean(draft) }
 
     private var completions: [String] {
-        DishTag.completions(for: draft, in: vocabulary, excluding: dish.tagNames)
+        DishTag.completions(for: draft, in: vocabulary, excluding: applied)
     }
 
     private var openSuggestions: [String] {
-        suggestions.filter { !dish.hasTag($0) }
+        suggestions.filter { !has($0) }
     }
 
     /// Offer to create only what isn't already a tag — and not while the field
     /// is empty.
     private var canCreateDraft: Bool {
         !trimmedDraft.isEmpty
-            && !dish.hasTag(trimmedDraft)
+            && !has(trimmedDraft)
             && DishTag.isNew(trimmedDraft, in: vocabulary)
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            if !dish.tagNames.isEmpty {
+            if !applied.isEmpty {
                 FlowLayout(spacing: 8) {
-                    ForEach(dish.sortedTagNames, id: \.self) { tag in
+                    ForEach(DishTag.sorted(applied), id: \.self) { tag in
                         appliedChip(tag)
                     }
                 }
             }
 
             HStack {
-                TextField(String(localized: "Add a tag"), text: $draft)
+                TextField(kind.placeholder, text: $draft)
                     .focused($fieldIsFocused)
                     .submitLabel(.done)
                     .autocorrectionDisabled()
@@ -56,7 +91,7 @@ struct DishTagEditor: View {
                     #endif
                     .onSubmit { commit(trimmedDraft) }
                 Button(String(localized: "Add")) { commit(trimmedDraft) }
-                    .disabled(trimmedDraft.isEmpty || dish.hasTag(trimmedDraft))
+                    .disabled(trimmedDraft.isEmpty || has(trimmedDraft))
             }
 
             if !completions.isEmpty || canCreateDraft {
@@ -101,14 +136,14 @@ struct DishTagEditor: View {
 
     private func appliedChip(_ tag: String) -> some View {
         Button {
-            dish.removeTag(tag)
+            applied = DishTag.removing(tag, from: applied)
         } label: {
             chipLabel(tag, systemImage: "xmark", trailingIcon: true)
                 .background(Color.accentColor, in: Capsule())
                 .foregroundStyle(.white)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "Remove tag \(tag)"))
+        .accessibilityLabel(kind.removeLabel(tag))
     }
 
     private func chipLabel(
@@ -134,7 +169,8 @@ struct DishTagEditor: View {
         let cleaned = DishTag.clean(tag)
         guard !cleaned.isEmpty else { return }
         // Reuse the household's own spelling so "Vegan" and "vegan" stay one tag.
-        dish.addTag(DishTag.canonical(cleaned, in: vocabulary))
+        let merged = DishTag.merge(applied, adding: [DishTag.canonical(cleaned, in: vocabulary)])
+        if merged != applied { applied = merged }
         draft = ""
         fieldIsFocused = true
     }

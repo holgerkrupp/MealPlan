@@ -35,8 +35,9 @@ final class Dish {
     var isFavorite: Bool = false
     /// Zero means unrated; 1...5 is the cook's personal rating.
     var rating: Int = 0
-    /// Legacy storage for older recipe archives. New records keep this empty;
-    /// collections are represented by free-form tags.
+    /// Named collections ("cookbooks") the dish belongs to, any number of
+    /// them. Stored as the names typed and compared through `DishTag`'s
+    /// normalization; see `DishCollection`.
     var collectionNames: [String] = []
     /// Free-form labels the household invents as it goes ("vegan", "pork",
     /// "short prepwork"). A handful is suggested automatically on import and
