@@ -21,6 +21,7 @@ struct EntryQuickActionsSheet: View {
     @State private var photoItem: PhotosPickerItem?
     @State private var useAsDishImage = true
     @State private var moveSaveFailed = false
+    @State private var newExtraItem = ""
 
     var body: some View {
         NavigationStack {
@@ -74,6 +75,8 @@ struct EntryQuickActionsSheet: View {
                     )
                 }
 
+                extraItemsSection
+
                 Section {
                     if entry.cookedLog == nil {
                         Button {
@@ -124,6 +127,7 @@ struct EntryQuickActionsSheet: View {
             .toolbar {
                 ToolbarItem(placement: .confirmationAction) {
                     Button(String(localized: "Done")) {
+                        addExtraItem()
                         if applyReschedule() { close() }
                     }
                 }
@@ -215,6 +219,34 @@ struct EntryQuickActionsSheet: View {
         return components?.url
     }
 
+    /// Things to buy for this meal that aren't in any recipe — bread with the
+    /// soup, drinks for the guests. They land on the shopping list generated
+    /// for these days, without anyone inventing a dummy recipe for them.
+    private var extraItemsSection: some View {
+        Section {
+            ForEach(Array(entry.extraItems.enumerated()), id: \.offset) { index, item in
+                HStack {
+                    Text(item)
+                    Spacer()
+                    Button {
+                        removeExtraItem(at: index)
+                    } label: {
+                        Image(systemName: "minus.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "Remove \(item)"))
+                }
+            }
+            TextField(String(localized: "Add an item, e.g. 1 baguette"), text: $newExtraItem)
+                .onSubmit(addExtraItem)
+        } header: {
+            Text(String(localized: "Also buy"))
+        } footer: {
+            Text(String(localized: "Added to the shopping list for these days. No recipe needed."))
+        }
+    }
+
     private var reactionPicker: some View {
         Picker(String(localized: "Reaction"), selection: Binding(
             get: { entry.reaction },
@@ -235,6 +267,22 @@ struct EntryQuickActionsSheet: View {
         let saved = MealPlanner.move(entry, to: date, mealKey: mealKey, memberName: appState.currentMemberName, context: context)
         moveSaveFailed = !saved
         return saved
+    }
+
+    private func addExtraItem() {
+        let text = newExtraItem.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        entry.extraItems.append(text)
+        newExtraItem = ""
+        touch()
+    }
+
+    private func removeExtraItem(at index: Int) {
+        var items = entry.extraItems
+        guard items.indices.contains(index) else { return }
+        items.remove(at: index)
+        entry.extraItems = items
+        touch()
     }
 
     private func markCooked() {

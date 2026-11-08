@@ -41,6 +41,13 @@ final class MealPlanEntry {
     /// into meals that were already planned and cooked.
     var routineUUID: UUID?
 
+    /// Simple things to buy for this meal that aren't part of any recipe —
+    /// bread with the soup, drinks for the guests — one per line, each with an
+    /// optional leading amount ("2 Baguettes"). They go onto the shopping list
+    /// generated for the range. Kept as plain text rather than a `[String]`
+    /// attribute so it never needs a transformable column.
+    var extraItemsText: String?
+
     var dish: Dish?
     var household: Household?
 
@@ -106,6 +113,24 @@ final class MealPlanEntry {
     var placeCoordinate: (latitude: Double, longitude: Double)? {
         guard let placeLatitude, let placeLongitude else { return nil }
         return (placeLatitude, placeLongitude)
+    }
+
+    /// `extraItemsText` as a list: trimmed, blank lines dropped.
+    var extraItems: [String] {
+        get { Self.extraItems(from: extraItemsText) }
+        set {
+            let cleaned = newValue
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
+            extraItemsText = cleaned.isEmpty ? nil : cleaned.joined(separator: "\n")
+        }
+    }
+
+    static func extraItems(from text: String?) -> [String] {
+        (text ?? "")
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
     }
 
     var isInPast: Bool {

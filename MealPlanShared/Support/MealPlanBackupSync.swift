@@ -171,6 +171,7 @@ enum MealPlanBackupSync {
             model.placeLatitude = stored.placeLatitude
             model.placeLongitude = stored.placeLongitude
             model.routineUUID = stored.routineUUID
+            model.extraItemsText = stored.extraItemsText
             model.household = household
         }
         deleteMissing(entries, keeping: backup.entries.map(\.uuid), context: context)

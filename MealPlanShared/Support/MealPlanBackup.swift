@@ -276,6 +276,8 @@ struct MealPlanBackup: Codable, Sendable {
         var placeLongitude: Double?
         var routineUUID: UUID?
         var participatingMemberUUIDs: [String] = []
+        /// Ad-hoc shopping items attached to the meal; absent in older files.
+        var extraItemsText: String? = nil
     }
 
     struct PortableRoutine: Codable, Sendable {
@@ -426,7 +428,7 @@ extension MealPlanBackup.PortableEntry {
         case uuid, date, mealKey, dishUUID, servingsOverride, note, sortIndex
         case reactionRaw, skipped, prepReminder, plannedByName, lastEditedByName
         case lastEditedDate, isEatingOut, placeName, placeAddress, placeLatitude
-        case placeLongitude, routineUUID, participatingMemberUUIDs
+        case placeLongitude, routineUUID, participatingMemberUUIDs, extraItemsText
     }
 
     /// Plans saved before household participant selection have no member list.
@@ -454,6 +456,7 @@ extension MealPlanBackup.PortableEntry {
         placeLongitude = try values.decodeIfPresent(Double.self, forKey: .placeLongitude)
         routineUUID = try values.decodeIfPresent(UUID.self, forKey: .routineUUID)
         participatingMemberUUIDs = try values.decodeIfPresent([String].self, forKey: .participatingMemberUUIDs) ?? []
+        extraItemsText = try values.decodeIfPresent(String.self, forKey: .extraItemsText)
     }
 }
 
@@ -792,7 +795,8 @@ extension MealPlanBackup {
                 placeLatitude: entry.placeLatitude,
                 placeLongitude: entry.placeLongitude,
                 routineUUID: entry.routineUUID,
-                participatingMemberUUIDs: entry.participatingMemberUUIDs
+                participatingMemberUUIDs: entry.participatingMemberUUIDs,
+                extraItemsText: entry.extraItemsText
             )
         }
 

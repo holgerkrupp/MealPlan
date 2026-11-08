@@ -104,6 +104,7 @@ struct MealPlanEntryUndoSnapshot {
     let placeLatitude: Double?
     let placeLongitude: Double?
     let routineUUID: UUID?
+    let extraItemsText: String?
     let dishUUID: UUID?
     let householdUUID: UUID?
     let cookedLog: CookedLogSnapshot?
@@ -131,6 +132,7 @@ struct MealPlanEntryUndoSnapshot {
         placeLatitude = entry.placeLatitude
         placeLongitude = entry.placeLongitude
         routineUUID = entry.routineUUID
+        extraItemsText = entry.extraItemsText
         dishUUID = entry.dish?.uuid
         householdUUID = entry.household?.uuid
         cookedLog = entry.cookedLog.map {
@@ -175,6 +177,7 @@ struct MealPlanEntryUndoSnapshot {
         entry.placeLatitude = placeLatitude
         entry.placeLongitude = placeLongitude
         entry.routineUUID = routineUUID
+        entry.extraItemsText = extraItemsText
         entry.household = household
         context.insert(entry)
 

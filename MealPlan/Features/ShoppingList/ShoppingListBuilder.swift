@@ -73,10 +73,18 @@ enum ShoppingListBuilder {
     /// things without an amount ("Salz und Pfeffer") is split into them, and a
     /// name in `stapleKeys` — the household's pantry staples, as
     /// `IngredientMatching.key(for:)` — never reaches the list at all.
+    ///
+    /// A meal's ad-hoc extras (`MealPlanEntry.extraItems`, "Baguette",
+    /// "2 l Apfelschorle") are added as they were typed: not scaled by the
+    /// head-count, and not filtered as staples — somebody asked for them on
+    /// purpose. They merge into a recipe's line for the same ingredient.
+    /// `catalogue` only gives an extra its aisle, since it has no recipe line
+    /// to carry one.
     static func aggregate(
         _ entries: [MealPlanEntry],
         stapleKeys: Set<String> = [],
-        matchRules: [IngredientMatchRule] = []
+        matchRules: [IngredientMatchRule] = [],
+        catalogue: [Ingredient] = []
     ) -> [AggregatedLine] {
         var lines: [AggregatedLine] = []
         /// Bucket index per key, including every alias that resolved to it, so
@@ -84,7 +92,7 @@ enum ShoppingListBuilder {
         var indexByKey: [String: Int] = [:]
         var bucketKeys: [String] = []
 
-        func bucket(for key: String, name: String, item: DishIngredient) -> Int {
+        func bucket(for key: String, name: String, ingredient: Ingredient?) -> Int {
             if let index = indexByKey[key] { return index }
             if let index = bucketKeys.firstIndex(where: { IngredientMatching.keysMatch($0, key, rules: matchRules) }) {
                 indexByKey[key] = index
@@ -93,15 +101,56 @@ enum ShoppingListBuilder {
             lines.append(AggregatedLine(
                 name: name,
                 normalizedName: Ingredient.normalize(name),
-                category: item.ingredient?.category ?? .other,
-                customAisleName: item.ingredient?.customAisleName
+                category: ingredient?.category ?? .other,
+                customAisleName: ingredient?.customAisleName
             ))
             bucketKeys.append(key)
             indexByKey[key] = lines.count - 1
             return lines.count - 1
         }
 
+        /// The meal's hand-typed extras, merged like any recipe line.
+        func addExtras(of entry: MealPlanEntry) {
+            for text in entry.extraItems {
+                let parsed = GermanUnitParser.parse(text)
+                let name = parsed.name.isEmpty ? text : parsed.name
+                let key = IngredientMatching.key(for: name)
+                guard !key.isEmpty else { continue }
+                let known = catalogue.isEmpty ? nil : IngredientMatching.match(name, in: catalogue, rules: matchRules)
+
+                let index = bucket(for: key, name: name, ingredient: known)
+                var line = lines[index]
+                line.name = IngredientMatching.preferredName(line.name, name)
+                line.normalizedName = Ingredient.normalize(line.name)
+                if line.category == .other, let category = known?.category {
+                    line.category = category
+                }
+                if line.customAisleName == nil {
+                    line.customAisleName = known?.customAisleName
+                }
+                if let amount = parsed.quantity {
+                    let wasEmpty = line.quantity == nil
+                    line.add(amount)
+                    line.isApproximate = line.isApproximate || parsed.isApproximate
+                    if wasEmpty || (line.displayUnit == nil && line.quantity?.dimension == amount.dimension) {
+                        line.displayUnit = parsed.displayUnit
+                    }
+                } else {
+                    line.unmeasuredCount += 1
+                }
+                if let note = parsed.note, !note.isEmpty, !line.notes.contains(note) {
+                    line.notes.append(note)
+                }
+                let source = entry.displayTitle
+                if !line.sourceDishNames.contains(source) {
+                    line.sourceDishNames.append(source)
+                }
+                lines[index] = line
+            }
+        }
+
         for entry in entries where !entry.skipped {
+            addExtras(of: entry)
             guard let dish = entry.dish else { continue }
             let base = max(dish.servings, 1)
             let factor = Double(entry.effectiveServings) / Double(base)
@@ -125,7 +174,7 @@ enum ShoppingListBuilder {
                         continue
                     }
 
-                    let index = bucket(for: key, name: name, item: item)
+                    let index = bucket(for: key, name: name, ingredient: item.ingredient)
                     var line = lines[index]
                     line.name = IngredientMatching.preferredName(line.name, name)
                     line.normalizedName = Ingredient.normalize(line.name)
@@ -218,7 +267,12 @@ enum ShoppingListBuilder {
         let predicate = #Predicate<MealPlanEntry> { $0.date >= start && $0.date < end && $0.skipped == false }
         let entries = (try? context.fetch(FetchDescriptor(predicate: predicate))) ?? []
         let staples = Set(household.pantryStaples.map { IngredientMatching.key(for: $0.name) })
-        let aggregated = aggregate(entries, stapleKeys: staples, matchRules: household.matchRules ?? [])
+        let aggregated = aggregate(
+            entries,
+            stapleKeys: staples,
+            matchRules: household.matchRules ?? [],
+            catalogue: household.ingredients ?? []
+        )
             .compactMap { line in
                 guard household.inventoryEnabled,
                       let ingredient = IngredientMatching.match(

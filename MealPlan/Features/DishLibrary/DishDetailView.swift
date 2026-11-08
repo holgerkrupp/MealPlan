@@ -23,6 +23,7 @@ struct DishDetailView: View {
     @State private var showingVariantPicker = false
     @State private var editingVariant: Dish?
     @State private var editingNutritionFor: Ingredient?
+    @State private var substitutingLine: DishIngredient?
     @State private var showingTranslation = false
     @State private var confirmingRefresh = false
     @State private var isRefreshingRecipe = false
@@ -212,6 +213,10 @@ struct DishDetailView: View {
         }
         .sheet(item: $editingNutritionFor) { ingredient in
             NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
+                .dismissesOnOutsideClick()
+        }
+        .sheet(item: $substitutingLine) { line in
+            NavigationStack { IngredientSubstitutionSheet(line: line) }
                 .dismissesOnOutsideClick()
         }
         .detailPresentation(isPresented: $showingTranslation, route: .translateRecipe(dish.uuid)) {
@@ -475,6 +480,14 @@ struct DishDetailView: View {
                         editingNutritionFor = ingredient
                     } label: {
                         Label(String(localized: "Nutrition values…"), systemImage: "chart.bar.doc.horizontal")
+                    }
+                }
+                if IngredientSubstitutionSuggester.isAvailable {
+                    Divider()
+                    Button {
+                        substitutingLine = line
+                    } label: {
+                        Label(String(localized: "Suggest substitutes…"), systemImage: "arrow.triangle.swap")
                     }
                 }
             }

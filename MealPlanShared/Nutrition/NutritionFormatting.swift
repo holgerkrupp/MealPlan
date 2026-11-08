@@ -30,6 +30,11 @@ enum NutritionFormatting {
         return "\(number(value, fractionDigits: digits, locale: locale)) g"
     }
 
+    /// "480 mg" for sodium or cholesterol — whole milligrams.
+    static func milligrams(_ value: Double, locale: Locale = .current) -> String {
+        "\(number(value, fractionDigits: 0, locale: locale)) mg"
+    }
+
     /// The one-line caption under a total: what it was built from and what is
     /// missing. Returns `nil` when there is nothing worth qualifying.
     static func coverageNote(for estimate: NutritionEstimate) -> String? {
