@@ -264,6 +264,7 @@ enum MealPlanBackupRestore {
             entry.placeLongitude = stored.placeLongitude
             entry.routineUUID = stored.routineUUID
             entry.participatingMemberUUIDs = stored.participatingMemberUUIDs
+            entry.extraItemsText = stored.extraItemsText
             entry.household = household
             context.insert(entry)
             entries[stored.uuid] = entry

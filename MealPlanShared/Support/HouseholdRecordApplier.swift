@@ -343,6 +343,7 @@ enum HouseholdRecordApplier {
             model.placeLatitude = value.placeLatitude
             model.placeLongitude = value.placeLongitude
             model.routineUUID = value.routineUUID
+            model.extraItemsText = value.extraItemsText
             model.placementModifiedAt = wrapped.placementModifiedAt
             model.contentModifiedAt = wrapped.contentModifiedAt
             model.modifiedAt = modifiedAt
@@ -645,6 +646,12 @@ enum HouseholdRecordApplier {
         dish.statedProteinGramsPerServing = value.statedProteinGramsPerServing
         dish.statedCarbGramsPerServing = value.statedCarbGramsPerServing
         dish.statedFatGramsPerServing = value.statedFatGramsPerServing
+        dish.statedSaturatedFatGramsPerServing = value.statedSaturatedFatGramsPerServing
+        dish.statedFiberGramsPerServing = value.statedFiberGramsPerServing
+        dish.statedSugarGramsPerServing = value.statedSugarGramsPerServing
+        dish.statedSodiumMilligramsPerServing = value.statedSodiumMilligramsPerServing
+        dish.statedCholesterolMilligramsPerServing = value.statedCholesterolMilligramsPerServing
+        dish.statedNutritionProvenanceRaw = value.statedNutritionProvenanceRaw
         dish.recipeLanguageCode = value.recipeLanguageCode
         dish.translationLanguageCode = value.translationLanguageCode
         dish.translatedName = value.translatedName

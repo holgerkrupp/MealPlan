@@ -5,9 +5,12 @@ import SwiftData
 /// how heavy that makes the dish, and — just as important — how much of the
 /// recipe the figure was actually built from.
 ///
-/// Everything here is hedged on purpose. The heading says "estimated", every
-/// number carries the app's `≈`, and a recipe we can't cover well enough
-/// refuses to show a total at all rather than quietly showing a low one. See
+/// Laid out like a per-serving package label (`NutritionLabel`), but always
+/// saying where the figures come from: the recipe's own values, values typed
+/// by the household, or MealPlan's estimate. Every estimated number carries
+/// the app's `≈` and how many ingredients it was built from, an unknown value
+/// reads "—" rather than 0, and a recipe we can't cover well enough refuses
+/// to show a total at all rather than quietly showing a low one. See
 /// `NutritionEstimate.isTrustworthy`.
 @MainActor
 struct NutritionSummaryView: View {
@@ -20,20 +23,22 @@ struct NutritionSummaryView: View {
     @Environment(\.modelContext) private var context
 
     @State private var editingIngredient: Ingredient?
+    @State private var editingDishValues = false
 
     private var estimate: NutritionEstimate { NutritionEstimator.perServing(for: dish) }
     private var unit: EnergyUnit { appState.energyUnit }
 
     var body: some View {
+        let estimate = estimate
+        let label = NutritionLabel.make(for: dish, estimate: estimate)
         VStack(alignment: .leading, spacing: 8) {
-            header
+            header(label)
 
-            if estimate.isTrustworthy {
-                perServing
-                macros
-                extendedNutrition
+            if let label {
+                perServing(label)
+                factsTable(label)
                 if targetServings != 1 {
-                    Text("For \(targetServings) servings: \(NutritionFormatting.energy(estimate.facts.scaled(by: Double(targetServings)), unit: unit))")
+                    Text("For \(targetServings) servings: \(NutritionFormatting.energy(estimate.facts.scaled(by: Double(targetServings)), unit: unit, approximate: label.source == .estimated))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -41,84 +46,78 @@ struct NutritionSummaryView: View {
                 notEnoughData
             }
 
-            footnotes
+            footnotes(label)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .sheet(item: $editingIngredient) { ingredient in
             NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
                 .dismissesOnOutsideClick()
         }
+        .sheet(isPresented: $editingDishValues) {
+            NavigationStack { DishNutritionEditor(dish: dish) }
+                .dismissesOnOutsideClick()
+        }
     }
 
     // MARK: - Pieces
 
-    private var header: some View {
+    private func header(_ label: NutritionLabel?) -> some View {
         HStack(alignment: .firstTextBaseline) {
             Text(String(localized: "Nutrition")).font(.headline)
-            Text(dish.statedNutritionProvenanceRaw == RecipeNutritionProvenance.imported.rawValue
-                 ? String(localized: "From recipe")
-                 : String(localized: "Estimate"))
+            Text(label?.sourceBadge ?? String(localized: "Estimate"))
                 .font(.caption2.weight(.semibold))
                 .padding(.horizontal, 7)
                 .padding(.vertical, 3)
                 .background(.quaternary, in: Capsule())
                 .foregroundStyle(.secondary)
-                .accessibilityLabel(String(localized: "These values are estimates"))
             Spacer()
         }
     }
 
-    private var perServing: some View {
+    private func perServing(_ label: NutritionLabel) -> some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text(NutritionFormatting.energy(estimate.facts, unit: unit))
-                .font(.title2.weight(.semibold))
-                .monospacedDigit()
+            if let energy = label.rows.first(where: { $0.nutrient == .energy }) {
+                Text(label.valueText(for: energy, unit: unit))
+                    .font(.title2.weight(.semibold))
+                    .monospacedDigit()
+            }
             Text(String(localized: "per serving"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
-            NutritionBandBadge(band: .band(forKcalPerServing: estimate.facts.energyKcal))
+            NutritionBandBadge(band: .band(forKcalPerServing: label.estimate.facts.energyKcal))
         }
     }
 
-    private var macros: some View {
-        HStack(spacing: 18) {
-            macro(String(localized: "Protein"), estimate.facts.proteinGrams)
-            macro(String(localized: "Carbs"), estimate.facts.carbGrams)
-            macro(String(localized: "Fat"), estimate.facts.fatGrams)
-            Spacer(minLength: 0)
-        }
-        .padding(.top, 2)
-    }
-
-    private func macro(_ label: String, _ value: Double) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(label).font(.caption).foregroundStyle(.secondary)
-            Text(NutritionFormatting.grams(value))
-                .font(.subheadline.weight(.medium))
-                .monospacedDigit()
-        }
-    }
-
-    @ViewBuilder
-    private var extendedNutrition: some View {
-        let facts = estimate.facts
-        let values: [(String, String)] = [
-            (String(localized: "Saturated fat"), NutritionFormatting.grams(facts.saturatedFatGrams)),
-            (String(localized: "Fiber"), NutritionFormatting.grams(facts.fiberGrams)),
-            (String(localized: "Sugar"), NutritionFormatting.grams(facts.sugarGrams)),
-            (String(localized: "Sodium"), "\(Int(facts.sodiumMilligrams.rounded())) mg"),
-            (String(localized: "Cholesterol"), "\(Int(facts.cholesterolMilligrams.rounded())) mg")
-        ]
-        if !values.isEmpty && (facts.saturatedFatGrams > 0 || facts.fiberGrams > 0 || facts.sugarGrams > 0 || facts.sodiumMilligrams > 0 || facts.cholesterolMilligrams > 0) {
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 110), alignment: .leading)], alignment: .leading, spacing: 5) {
-                ForEach(values, id: \.0) { label, value in
-                    LabeledContent(label, value: value)
-                        .font(.caption)
+    /// Fat, saturated fat, cholesterol, sodium, carbohydrate, fibre, sugar,
+    /// protein — in the order a package prints them, with the sub-rows
+    /// indented. A value nobody knows reads "—", never 0.
+    private func factsTable(_ label: NutritionLabel) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            Divider()
+            ForEach(label.detailRows) { row in
+                HStack {
+                    Text(row.nutrient.localizedName)
+                        .font(row.nutrient.isSubRow ? .caption : .subheadline)
+                        .foregroundStyle(row.nutrient.isSubRow ? .secondary : .primary)
+                        .padding(.leading, row.nutrient.isSubRow ? 14 : 0)
+                    Spacer()
+                    Text(label.valueText(for: row, unit: unit))
+                        .font(row.nutrient.isSubRow ? .caption : .subheadline.weight(.medium))
+                        .foregroundStyle(row.value == nil ? .tertiary : .primary)
+                        .monospacedDigit()
                 }
+                .padding(.vertical, 4)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(row.nutrient.localizedName)
+                .accessibilityValue(row.value == nil
+                                    ? String(localized: "Unknown")
+                                    : label.valueText(for: row, unit: unit))
+                Divider()
             }
-            .padding(.top, 2)
         }
+        .frame(maxWidth: 420, alignment: .leading)
+        .padding(.top, 2)
     }
 
     /// Shown instead of a total when too much of the recipe is unaccounted
@@ -142,27 +141,54 @@ struct NutritionSummaryView: View {
     }
 
     @ViewBuilder
-    private var footnotes: some View {
+    private func footnotes(_ label: NutritionLabel?) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            if estimate.isTrustworthy, let note = NutritionFormatting.coverageNote(for: estimate) {
-                Text(note).font(.caption).foregroundStyle(.secondary)
-            }
-            if estimate.isTrustworthy, let missing = NutritionFormatting.missingList(for: estimate) {
-                Text(missing).font(.caption).foregroundStyle(.secondary)
-            }
-
-            Text("Worked out from the ingredient list using average reference values. Real portions vary — treat it as a rough guide, not a nutrition label.")
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-
-            if !appState.isGuest, !unknownIngredients.isEmpty {
-                Menu {
-                    ForEach(unknownIngredients) { ingredient in
-                        Button(ingredient.name) { editingIngredient = ingredient }
+            if let label {
+                Text(label.sourceNote).font(.caption).foregroundStyle(.secondary)
+                if label.source == .estimated {
+                    if label.estimate.unmeasuredLines > 0 {
+                        Text("\(label.estimate.unmeasuredLines) ingredients have no amount and were left out.")
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                } label: {
-                    Label(String(localized: "Add missing values"), systemImage: "plus.circle")
-                        .font(.caption)
+                    if let missing = NutritionFormatting.missingList(for: label.estimate) {
+                        Text(missing).font(.caption).foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            Group {
+                if label?.source == .estimated || label == nil {
+                    Text("Worked out from the ingredient list using average reference values. Real portions vary — treat it as a rough guide, not a nutrition label.")
+                } else {
+                    Text("Not a certified nutrition label.")
+                }
+            }
+            .font(.caption2)
+            .foregroundStyle(.tertiary)
+
+            if !appState.isGuest {
+                HStack(spacing: 16) {
+                    if label?.source != .statedByRecipe, label?.source != .enteredByHand, !unknownIngredients.isEmpty {
+                        Menu {
+                            ForEach(unknownIngredients) { ingredient in
+                                Button(ingredient.name) { editingIngredient = ingredient }
+                            }
+                        } label: {
+                            Label(String(localized: "Add missing values"), systemImage: "plus.circle")
+                                .font(.caption)
+                        }
+                        .fixedSize()
+                    }
+                    Button {
+                        editingDishValues = true
+                    } label: {
+                        Label(dish.statedEnergyKcalPerServing == nil
+                              ? String(localized: "Enter values per serving")
+                              : String(localized: "Edit values"),
+                              systemImage: "square.and.pencil")
+                            .font(.caption)
+                    }
+                    .buttonStyle(.borderless)
                 }
                 .padding(.top, 2)
             }

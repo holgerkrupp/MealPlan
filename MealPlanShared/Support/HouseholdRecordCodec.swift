@@ -653,7 +653,7 @@ enum HouseholdRecordCodec {
         return url
     }
 
-    private static func portableDish(_ dish: Dish) -> MealPlanBackup.PortableDish {
+    static func portableDish(_ dish: Dish) -> MealPlanBackup.PortableDish {
         .init(
             uuid: dish.uuid, name: dish.name, recipeText: dish.recipeText, sourceURLString: dish.sourceURLString,
             deepLinkURLString: dish.deepLinkURLString, importedSourceApp: dish.importedSourceApp,
@@ -668,6 +668,12 @@ enum HouseholdRecordCodec {
             statedProteinGramsPerServing: dish.statedProteinGramsPerServing,
             statedCarbGramsPerServing: dish.statedCarbGramsPerServing,
             statedFatGramsPerServing: dish.statedFatGramsPerServing,
+            statedSaturatedFatGramsPerServing: dish.statedSaturatedFatGramsPerServing,
+            statedFiberGramsPerServing: dish.statedFiberGramsPerServing,
+            statedSugarGramsPerServing: dish.statedSugarGramsPerServing,
+            statedSodiumMilligramsPerServing: dish.statedSodiumMilligramsPerServing,
+            statedCholesterolMilligramsPerServing: dish.statedCholesterolMilligramsPerServing,
+            statedNutritionProvenanceRaw: dish.statedNutritionProvenanceRaw,
             recipeLanguageCode: dish.recipeLanguageCode,
             translationLanguageCode: dish.translationLanguageCode,
             translatedName: dish.translatedName, translatedRecipeText: dish.translatedRecipeText,
@@ -675,7 +681,7 @@ enum HouseholdRecordCodec {
         )
     }
 
-    private static func portableEntry(_ entry: MealPlanEntry) -> MealPlanBackup.PortableEntry {
+    static func portableEntry(_ entry: MealPlanEntry) -> MealPlanBackup.PortableEntry {
         .init(
             uuid: entry.uuid, date: entry.date, mealKey: entry.mealSlotRaw, dishUUID: entry.dish?.uuid,
             servingsOverride: entry.servingsOverride, note: entry.note, sortIndex: entry.sortIndex,
@@ -683,7 +689,8 @@ enum HouseholdRecordCodec {
             plannedByName: entry.plannedByName, lastEditedByName: entry.lastEditedByName,
             lastEditedDate: entry.lastEditedDate, isEatingOut: entry.isEatingOut, placeName: entry.placeName,
             placeAddress: entry.placeAddress, placeLatitude: entry.placeLatitude,
-            placeLongitude: entry.placeLongitude, routineUUID: entry.routineUUID
+            placeLongitude: entry.placeLongitude, routineUUID: entry.routineUUID,
+            extraItemsText: entry.extraItemsText
         )
     }
 
