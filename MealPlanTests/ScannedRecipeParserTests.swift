@@ -64,4 +64,64 @@ struct ScannedRecipeParserTests {
         #expect(draft.ingredientLines.isEmpty)
         #expect(draft.instructions == "Brown the beef in a heavy pot.\nAdd stock and simmer for two hours.")
     }
+
+    // MARK: - Pasted text
+
+    @Test func keepsTheIntroAndStripsBullets() {
+        let draft = ScannedRecipeParser.parse("""
+        Lemon Pasta
+        A quick weeknight dinner. Serves 2.
+        Ingredients (serves 2)
+        • 200 g spaghetti
+        - 1 lemon
+        Method
+        1. Boil the pasta.
+        2. Toss with lemon.
+        """)
+        #expect(draft.name == "Lemon Pasta")
+        #expect(draft.ingredientLines == ["200 g spaghetti", "1 lemon"])
+        #expect(draft.instructions == "A quick weeknight dinner. Serves 2.\n1. Boil the pasta.\n2. Toss with lemon.")
+    }
+
+    @Test func methodBeforeIngredientsDoesNotSwallowThem() {
+        let draft = ScannedRecipeParser.parse("""
+        Salad
+        Zubereitung
+        Alles mischen.
+        Zutaten für 2 Personen
+        1 Gurke
+        2 Tomaten
+        """)
+        #expect(draft.ingredientLines == ["1 Gurke", "2 Tomaten"])
+        #expect(draft.instructions == "Alles mischen.")
+    }
+
+    @Test func numberedStepsAreNotMistakenForIngredients() {
+        let draft = ScannedRecipeParser.parse("""
+        Toast
+        • 2 slices bread
+        • butter
+        1. Toast the bread.
+        2. Spread the butter.
+        """)
+        #expect(draft.ingredientLines == ["2 slices bread", "butter"])
+        #expect(draft.instructions == "1. Toast the bread.\n2. Spread the butter.")
+    }
+
+    @Test func sharedTextKeepsEverythingWhenNothingCanBeSplit() {
+        let recipe = ScannedRecipeParser.importedRecipe(fromText: "Grandma's stew\nBrown the beef.\nSimmer for hours.")
+        #expect(recipe.name == "Grandma's stew")
+        #expect(recipe.ingredientLines.isEmpty)
+        #expect(recipe.instructions == "Brown the beef.\nSimmer for hours.")
+        #expect(recipe.needsReview)
+    }
+
+    @Test func preservingOriginalRestoresAnEmptyDraft() {
+        let text = "Some note about a recipe\nwith two lines"
+        let empty = ScannedRecipeDraft(name: "Recipe", ingredientLines: [], instructions: "")
+        #expect(empty.preservingOriginal(text).instructions == text)
+
+        let filled = ScannedRecipeDraft(name: "Recipe", ingredientLines: ["1 egg"], instructions: "")
+        #expect(filled.preservingOriginal(text) == filled)
+    }
 }

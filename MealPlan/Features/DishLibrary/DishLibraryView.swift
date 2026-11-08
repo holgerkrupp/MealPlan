@@ -48,6 +48,7 @@ private struct DishLibraryContent: View {
     @State private var addRequestError: String?
     @State private var showingFilePicker = false
     @State private var showingRecipeScanner = false
+    @State private var showingPasteRecipe = false
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
     @State private var requestedDish: Dish?
@@ -257,6 +258,9 @@ private struct DishLibraryContent: View {
                         Button(String(localized: "Scan a recipe"), systemImage: "camera.viewfinder") {
                             showingRecipeScanner = true
                         }
+                        Button(String(localized: "Paste a recipe"), systemImage: "doc.on.clipboard") {
+                            showingPasteRecipe = true
+                        }
                         Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
                             showingFilePicker = true
                         }
@@ -285,6 +289,12 @@ private struct DishLibraryContent: View {
         }
         .sheet(isPresented: $showingRecipeScanner) {
             ScanRecipeSheet { dish in
+                newDish = dish
+            }
+            .dismissesOnOutsideClick()
+        }
+        .sheet(isPresented: $showingPasteRecipe) {
+            PasteRecipeSheet { dish in
                 newDish = dish
             }
             .dismissesOnOutsideClick()

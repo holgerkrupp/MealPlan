@@ -334,12 +334,11 @@ struct ShareRootView: View {
         phase = .done
     }
 
+    /// Shared text is split into title, ingredients and method by the same
+    /// heuristic the recipe scanner falls back to; whatever it can't place is
+    /// kept as the method, so nothing the user shared is thrown away.
     private func textRecipe(_ text: String) -> ImportedRecipe {
-        let lines = text.components(separatedBy: .newlines).map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-        var recipe = ImportedRecipe(name: lines.first ?? String(localized: "New dish"))
-        recipe.ingredientLines = Array(lines.dropFirst())
-        recipe.needsReview = true
-        return recipe
+        ScannedRecipeParser.importedRecipe(fromText: text)
     }
 
     private func fallbackURLRecipe(_ url: URL) -> ImportedRecipe {

@@ -179,6 +179,12 @@ struct HouseholdSettingsView: View {
                     } label: {
                         Label(String(localized: "Ingredient Cleanup"), systemImage: "wand.and.stars")
                     }
+
+                    NavigationLink {
+                        DuplicateReviewView(householdID: household.uuid)
+                    } label: {
+                        Label(String(localized: "Duplicate Recipes"), systemImage: "square.on.square")
+                    }
                 } footer: {
                     Text("Salt, pepper, oil — what your family always has at home. Staples stay off the shopping list when it's rebuilt, and you can put one on it yourself when you run out.")
                 }

@@ -15,6 +15,8 @@ enum RecipeExtractor {
     enum Source: Sendable {
         case scannedPage
         case socialPost
+        /// Text the cook copied from a website, a message or a note.
+        case pastedText
     }
 
     static func extract(
@@ -61,6 +63,14 @@ enum RecipeExtractor {
             unrelated commentary. Keep the recipe's original language and wording. Never invent \
             an ingredient, quantity, or step that isn't in the text; if a part is missing, leave \
             it empty.
+            """
+        case .pastedText:
+            """
+            You extract a single cooking recipe from text the user copied from a website, \
+            a message, or a note. Ignore anything that isn't part of the recipe, such as \
+            navigation, comments, or advertising. Keep the recipe's original language and \
+            wording. Never invent an ingredient, quantity, or step that isn't in the text; \
+            if a part is missing, leave it empty.
             """
         }
     }
