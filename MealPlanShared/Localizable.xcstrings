@@ -43294,6 +43294,492 @@
           }
         }
       }
+    },
+    "Add an item, e.g. 1 baguette" : {
+
+    },
+    "Also buy" : {
+
+    },
+    "Added to the shopping list for these days. No recipe needed." : {
+
+    },
+    "Collections" : {
+
+    },
+    "New collection" : {
+
+    },
+    "Rename collection" : {
+
+    },
+    "Delete this collection?" : {
+
+    },
+    "No collections yet" : {
+
+    },
+    "Collections gather dishes like a cookbook — “Weeknight”, “Christmas baking”, “From Grandma”. A dish can be in several." : {
+
+    },
+    "All dishes" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Choose dishes" : {
+
+    },
+    "Next, pick the dishes that belong in it." : {
+
+    },
+    "Delete collection" : {
+
+    },
+    "The dishes stay in your library; only the collection is removed." : {
+
+    },
+    "Collection %@" : {
+
+    },
+    "Suggest substitutes…" : {
+
+    },
+    "Use tags for diets, occasions, and anything else you want to find again. A few are suggested from the name and ingredients." : {
+
+    },
+    "Collections work like cookbooks: browse one from the library. A dish can be in several." : {
+
+    },
+    "Total time, shortest first" : {
+
+    },
+    "Total time, longest first" : {
+
+    },
+    "Prep time, shortest first" : {
+
+    },
+    "Prep time, longest first" : {
+
+    },
+    "Cook time, shortest first" : {
+
+    },
+    "Cook time, longest first" : {
+
+    },
+    "Servings, fewest first" : {
+
+    },
+    "Servings, most first" : {
+
+    },
+    "Save search" : {
+
+    },
+    "Collection" : {
+
+    },
+    "Keeps the current search, filters and sort order on this device so you can apply them again with one tap." : {
+
+    },
+    "Save current search…" : {
+
+    },
+    "Edit saved searches…" : {
+
+    },
+    "Saved searches" : {
+
+    },
+    "Rename saved search" : {
+
+    },
+    "No saved searches" : {
+
+    },
+    "Save a search from the filter menu to find it here." : {
+
+    },
+    "New tag" : {
+
+    },
+    "Couldn’t save the change" : {
+
+    },
+    "Select dishes" : {
+
+    },
+    "Paste a recipe" : {
+
+    },
+    "Tagged %lld dishes “%@”" : {
+
+    },
+    "Removed “%@” from %lld dishes" : {
+
+    },
+    "Added %lld dishes to “%@”" : {
+
+    },
+    "Removed %lld dishes from “%@”" : {
+
+    },
+    "Add dishes…" : {
+
+    },
+    "Rename…" : {
+
+    },
+    "Delete collection…" : {
+
+    },
+    "Collection options" : {
+
+    },
+    "Show all dishes" : {
+
+    },
+    "Pick dishes for “%@”" : {
+
+    },
+    "%lld selected" : {
+
+    },
+    "Add to collection" : {
+
+    },
+    "Remove from collection" : {
+
+    },
+    "New collection…" : {
+
+    },
+    "Add tag" : {
+
+    },
+    "Remove tag" : {
+
+    },
+    "New tag…" : {
+
+    },
+    "Add to a collection" : {
+
+    },
+    "Remove from collection %@" : {
+
+    },
+    "Duplicate Recipes" : {
+
+    },
+    "No duplicate recipes" : {
+
+    },
+    "Recipes that share a source or the same name and ingredients would appear here." : {
+
+    },
+    "Nothing is merged or deleted until you choose. Keeping both is remembered on this device." : {
+
+    },
+    "Imported from the same source recipe" : {
+
+    },
+    "Saved from the same web page" : {
+
+    },
+    "Same name and ingredients" : {
+
+    },
+    "Couldn’t delete recipe" : {
+
+    },
+    "Delete Recipe" : {
+
+    },
+    "Its plans couldn’t be moved, so nothing was deleted." : {
+
+    },
+    "Moved to “%@”: %lld planned meals, %lld cooked entries, %lld template slots, %lld routines." : {
+
+    },
+    "%lld photos exist only on this recipe and will be deleted." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld photo exists only on this recipe and will be deleted."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld photos exist only on this recipe and will be deleted."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "%lld ingredients are listed only on this recipe." : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ingredient is listed only on this recipe."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ingredients are listed only on this recipe."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Its method or notes differ from the recipe you keep and will be deleted." : {
+
+    },
+    "Nothing unique is lost." : {
+
+    },
+    "Keep Both" : {
+
+    },
+    "Group as Variants" : {
+
+    },
+    "Delete “%@” (left)" : {
+
+    },
+    "Delete “%@” (right)" : {
+
+    },
+    "Deleting moves its planned meals, cooking history, template slots and routines to the recipe you keep." : {
+
+    },
+    "Template slots" : {
+
+    },
+    "Collaboration Diagnostics" : {
+
+    },
+    "Shows identifiers, scopes, pending counts and errors only; no recipe or member data." : {
+
+    },
+    "Recipe text" : {
+
+    },
+    "Recognize recipe" : {
+
+    },
+    "Paste a recipe copied from a website, a message or a note. It is split into name, ingredients and method on this device. Anything that can't be sorted is kept as the method." : {
+
+    },
+    "Nutrition per serving" : {
+
+    },
+    "Per serving" : {
+
+    },
+    "Energy is required. Anything you leave blank is shown as unknown." : {
+
+    },
+    "MealPlan goes back to estimating this dish from its ingredients." : {
+
+    },
+    "Substitutes" : {
+
+    },
+    "No sensible substitute came up for this ingredient." : {
+
+    },
+    "Suggestions aren’t available right now. Please try again later." : {
+
+    },
+    "Thinking of substitutes…" : {
+
+    },
+    "Instead of %@" : {
+
+    },
+    "Suggested on this device by Apple Intelligence. Check allergies and dietary needs yourself — suggestions can be wrong. Nothing changes in the recipe unless you add it." : {
+
+    },
+    "Add to recipe" : {
+
+    },
+    "Not a certified nutrition label." : {
+
+    },
+    "Enter values per serving" : {
+
+    },
+    "Edit values" : {
+
+    },
+    "Scan a product" : {
+
+    },
+    "Point the camera at a barcode" : {
+
+    },
+    "Product name" : {
+
+    },
+    "Barcode" : {
+
+    },
+    "Scan another" : {
+
+    },
+    "Added “%@” to the shopping list." : {
+
+    },
+    "Added “%@” to the pantry." : {
+
+    },
+    "A new barcode. Name it once — this device remembers the name for the next scan." : {
+
+    },
+    "Or type the name yourself." : {
+
+    },
+    "Add to the pantry" : {
+
+    },
+    "No location" : {
+
+    },
+    "Status" : {
+
+    },
+    "Amount, e.g. 500 g or 3" : {
+
+    },
+    "Used one" : {
+
+    },
+    "Add one" : {
+
+    },
+    "At home" : {
+
+    },
+    "An amount is optional. With one, rebuilding the shopping list buys only what's missing; “Have” without an amount leaves the item off." : {
+
+    },
+    "Location name, e.g. Cellar" : {
+
+    },
+    "Note, e.g. opened jar, top shelf" : {
+
+    },
+    "Staples are always at home and left off the shopping list when it's rebuilt." : {
+
+    },
+    "Stop tracking" : {
+
+    },
+    "Search for an ingredient to start tracking it. Only what you choose to track is listed here — no need for a complete stock-take." : {
+
+    },
+    "Scan barcode" : {
+
+    },
+    "Used up" : {
+
+    },
+    "Add “%@” to the pantry" : {
+
+    },
+    "Start tracking %@" : {
+
+    },
+    "Start tracking" : {
+
+    },
+    "Marks the ingredient as something you have. Rebuilding the shopping list then leaves it off." : {
+
+    },
+    "Past best before (%@)" : {
+
+    },
+    "Use soon (%@)" : {
+
+    },
+    "Best before %@" : {
+
+    },
+    "Add several items" : {
+
+    },
+    "Items, one per line" : {
+
+    },
+    "One item per line, for example “500 g Mehl”. Bullets and checkboxes from a copied list are ignored." : {
+
+    },
+    "Add 1 item" : {
+
+    },
+    "Add %lld items" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld item"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld items"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "Add several items…" : {
+
+    },
+    "Scan barcode…" : {
+
+    },
+    "Carbohydrate" : {
+
+    },
+    "Values stated by the recipe’s source. MealPlan hasn’t checked them." : {
+
+    },
+    "Values entered by someone in your household." : {
+
+    },
+    "Estimated from %lld of %lld ingredients." : {
+
+    },
+    "or: %@" : {
+
+    },
+    "or: %@ (%@)" : {
+
     }
   },
   "version" : "1.0"
