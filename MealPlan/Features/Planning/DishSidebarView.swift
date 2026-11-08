@@ -19,6 +19,7 @@ struct DishSidebarView: View {
     @FocusState private var searchFocused: Bool
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
+    @State private var availableCollections: [String] = []
 
     init(householdID: UUID?) {
         let scopedHouseholdID = householdID ?? UUID()
@@ -56,6 +57,9 @@ struct DishSidebarView: View {
             let usage = DishTag.usage(fromTagLists: allDishes.map(\.tagNames))
             availableTags = DishTag.sorted(usage.map(\.tag))
             popularTags = Array(usage.prefix(12).map(\.tag))
+            availableCollections = DishCollection.usage(
+                fromCollectionLists: allDishes.map(\.collectionNames)
+            ).map(\.name)
         }
         // The sidebar is the dish list while you're on the plan, so it takes
         // over the library's menu items — filtering its own `planDishFilter`,
@@ -110,7 +114,8 @@ struct DishSidebarView: View {
                 Spacer(minLength: 0)
                 DishFilterMenu(
                     filter: filter,
-                    availableTags: availableTags
+                    availableTags: availableTags,
+                    availableCollections: availableCollections
                 )
                     .labelStyle(.iconOnly)
                     .menuIndicator(.hidden)

@@ -55,7 +55,35 @@ private struct DishLibraryContent: View {
     @State private var isSearchPresented = false
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
+    @State private var availableCollections: [DishCollectionSummary] = []
+    /// Bumped after a label edit that may touch dishes outside the first
+    /// page, so the tag and collection lists are derived again.
+    @State private var metadataToken = 0
     @State private var debouncedSearchText = ""
+
+    // Multi-select for bulk tagging and collections.
+    @State private var isSelecting = false
+    @State private var selection: [UUID: Dish] = [:]
+    /// A collection named in the collection browser (or the one being
+    /// browsed) that is waiting for the dishes picked now.
+    @State private var pendingCollection: String?
+    @State private var showingCollections = false
+    @State private var lastLabelEdit: LabelEditUndo?
+    @State private var labelEditError: String?
+    @State private var namingLabel: NewLabelKind?
+    @State private var newLabelName = ""
+    @State private var renamingActiveCollection = false
+    @State private var deletingActiveCollection = false
+
+    private enum NewLabelKind { case tag, collection }
+
+    /// The most recent bulk change, kept just long enough to offer Undo.
+    private struct LabelEditUndo: Identifiable {
+        let id = UUID()
+        var snapshot: DishLabelEdit.Snapshot
+        var dishes: [Dish]
+        var message: String
+    }
 
     private let columns = [GridItem(.adaptive(minimum: 150, maximum: 240), spacing: 16)]
 
@@ -75,7 +103,11 @@ private struct DishLibraryContent: View {
             predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
             sortBy: DishLibrarySort.descriptors(for: sort)
         )
-        descriptor.fetchLimit = DishLibraryView.pageSize
+        // Orders the store can't page correctly (computed or nullable keys)
+        // are sorted in memory over the whole library instead.
+        if sort.isStoreOrderable {
+            descriptor.fetchLimit = DishLibraryView.pageSize
+        }
         _allDishes = Query(descriptor)
         self.pageCount = pageCount
         self.loadMore = loadMore
@@ -84,13 +116,25 @@ private struct DishLibraryContent: View {
     private struct LibraryRevision: Equatable {
         var count: Int
         var latestModification: Date?
+        var token: Int
     }
 
     private var libraryRevision: LibraryRevision {
         LibraryRevision(
             count: allDishes.count,
-            latestModification: allDishes.lazy.map(\.modifiedAt).max()
+            latestModification: allDishes.lazy.map(\.modifiedAt).max(),
+            token: metadataToken
         )
+    }
+
+    /// Handed to the later pages while dishes are being picked.
+    private var pageSelection: Binding<[UUID: Dish]>? {
+        isSelecting ? $selection : nil
+    }
+
+    /// True while the first page came back full, i.e. there may be more.
+    private var firstPageIsFull: Bool {
+        householdID != nil && sort.isStoreOrderable && allDishes.count == DishLibraryView.pageSize
     }
 
     private var visibleFilter: DishFilter {
@@ -118,8 +162,7 @@ private struct DishLibraryContent: View {
             guard seenGroups.insert(groupID).inserted else { continue }
             items.append(.group(
                 DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
-                lead: members[0],
-                count: members.count
+                members: members
             ))
         }
         return items
@@ -129,24 +172,29 @@ private struct DishLibraryContent: View {
     /// for its members.
     private enum LibraryItem: Identifiable {
         case dish(Dish)
-        case group(DishVariantGroupRef, lead: Dish, count: Int)
+        case group(DishVariantGroupRef, members: [Dish])
 
         var id: String {
             switch self {
             case .dish(let dish): "dish-\(dish.uuid)"
-            case .group(let ref, _, _): "group-\(ref.id)"
+            case .group(let ref, _): "group-\(ref.id)"
             }
         }
     }
 
     var body: some View {
+        labelEditingPresentations(library)
+    }
+
+    @ViewBuilder
+    private var library: some View {
         @Bindable var appState = appState
         let filteredDishes = visibleFilter.apply(
             to: allDishes,
             sourceIsAlphabeticallySorted: true
         )
         let items = libraryItems(from: filteredDishes)
-        let canLoadMore = householdID != nil && allDishes.count == DishLibraryView.pageSize
+        let canLoadMore = firstPageIsFull
 
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 0) {
@@ -163,7 +211,11 @@ private struct DishLibraryContent: View {
                 )
                 .padding(.top, 8)
 
-                SeasonalSuggestionsStrip(dishes: allDishes)
+                activeCollectionHeader
+
+                if !isSelecting {
+                    SeasonalSuggestionsStrip(dishes: allDishes)
+                }
 
                 if !appState.isGuest {
                     InlineTip(
@@ -187,6 +239,7 @@ private struct DishLibraryContent: View {
                         filter: visibleFilter,
                         isLastPage: pageIndex == pageCount - 1,
                         acceptsDrops: !appState.isGuest,
+                        selection: pageSelection,
                         hasAnyFilteredResults: $hasAnyFilteredResults,
                         hasMorePages: $hasMorePages,
                         loadMore: loadMore
@@ -203,7 +256,7 @@ private struct DishLibraryContent: View {
         .onChange(of: allDishes.count) { updatePageState(filteredDishes: filteredDishes) }
         .onChange(of: appState.dishFilter) {
             hasAnyFilteredResults = false
-            hasMorePages = allDishes.count == DishLibraryView.pageSize
+            hasMorePages = firstPageIsFull
             updatePageState(filteredDishes: filteredDishes)
         }
         .task(id: allDishes.count) {
@@ -217,7 +270,7 @@ private struct DishLibraryContent: View {
         }
         .onChange(of: debouncedSearchText) {
             hasAnyFilteredResults = false
-            hasMorePages = householdID != nil && allDishes.count == DishLibraryView.pageSize
+            hasMorePages = firstPageIsFull
             updatePageState(filteredDishes: visibleFilter.apply(
                 to: allDishes,
                 sourceIsAlphabeticallySorted: true
@@ -235,41 +288,7 @@ private struct DishLibraryContent: View {
             prompt: String(localized: "Search dishes")
         )
         .focusedSceneValue(\.dishLibraryCommands, libraryCommands)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                DiscoverRecipesButton()
-            }
-            if !appState.isGuest {
-                ToolbarItem(placement: .primaryAction) {
-                    Button(String(localized: "New dish"), systemImage: "plus") {
-                        addDish()
-                    }
-                }
-            }
-            ToolbarItemGroup(placement: .primaryAction) {
-                DishFilterMenu(
-                    filter: $appState.dishFilter,
-                    availableTags: availableTags
-                )
-
-                Menu {
-                    if !appState.isGuest {
-                        Button(String(localized: "Scan a recipe"), systemImage: "camera.viewfinder") {
-                            showingRecipeScanner = true
-                        }
-                        Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
-                            showingFilePicker = true
-                        }
-                    }
-                    Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
-                        exportAllRecipes()
-                    }
-                    .disabled(allDishes.isEmpty)
-                } label: {
-                    Label(String(localized: "More"), systemImage: "ellipsis")
-                }
-            }
-        }
+        .toolbar { libraryToolbar }
         .detailPresentation(item: $newDish, route: { .newRecipe($0.uuid) }) { dish in
             NavigationStack {
                 DishEditorView(dish: dish, isNew: true)
@@ -356,6 +375,386 @@ private struct DishLibraryContent: View {
         }
     }
 
+    @ToolbarContentBuilder
+    private var libraryToolbar: some ToolbarContent {
+        ToolbarItem(placement: .navigation) {
+            DiscoverRecipesButton()
+        }
+        if isSelecting {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(String(localized: "Done")) { endSelecting() }
+            }
+        } else if !appState.isGuest {
+            ToolbarItem(placement: .primaryAction) {
+                Button(String(localized: "New dish"), systemImage: "plus") {
+                    addDish()
+                }
+            }
+        }
+        ToolbarItemGroup(placement: .primaryAction) {
+            Button(String(localized: "Collections"), systemImage: "books.vertical") {
+                showingCollections = true
+            }
+
+            DishFilterMenu(
+                filter: Bindable(appState).dishFilter,
+                availableTags: availableTags,
+                availableCollections: availableCollections.map(\.name)
+            )
+
+            Menu {
+                if !appState.isGuest && !isSelecting {
+                    Button(String(localized: "Select dishes"), systemImage: "checkmark.circle") {
+                        startSelecting()
+                    }
+                }
+                if !appState.isGuest {
+                    Button(String(localized: "Scan a recipe"), systemImage: "camera.viewfinder") {
+                        showingRecipeScanner = true
+                    }
+                    Button(String(localized: "Import recipes"), systemImage: "square.and.arrow.down") {
+                        showingFilePicker = true
+                    }
+                }
+                Button(String(localized: "Export all recipes"), systemImage: "square.and.arrow.up") {
+                    exportAllRecipes()
+                }
+                .disabled(allDishes.isEmpty)
+            } label: {
+                Label(String(localized: "More"), systemImage: "ellipsis")
+            }
+        }
+    }
+
+    /// The Undo banner after a bulk change, and the bar of bulk actions while
+    /// selecting.
+    private var bottomAccessory: some View {
+        VStack(spacing: 0) {
+            if let lastLabelEdit {
+                undoBanner(lastLabelEdit)
+            }
+            if isSelecting {
+                selectionBar
+            }
+        }
+    }
+
+    /// The collection browser and the prompts behind bulk tagging. Kept out
+    /// of `library` so the type checker gets the modifier chain in two parts.
+    private func labelEditingPresentations(_ content: some View) -> some View {
+        content
+        .safeAreaInset(edge: .bottom, spacing: 0) { bottomAccessory }
+        .task(id: lastLabelEdit?.id) {
+            guard lastLabelEdit != nil else { return }
+            try? await Task.sleep(for: .seconds(8))
+            guard !Task.isCancelled else { return }
+            withAnimation { lastLabelEdit = nil }
+        }
+        .sheet(isPresented: $showingCollections) {
+            NavigationStack {
+                DishCollectionsView(
+                    collections: availableCollections,
+                    selected: appState.dishFilter.collection,
+                    canEdit: !appState.isGuest,
+                    onSelect: { appState.dishFilter.collection = $0 },
+                    onCreate: { name in startSelecting(for: name) },
+                    onRename: { renameCollection($0, to: $1) },
+                    onDelete: { deleteCollection($0) }
+                )
+            }
+            .dismissesOnOutsideClick()
+        }
+        .alert(
+            namingLabel == .collection ? String(localized: "New collection") : String(localized: "New tag"),
+            isPresented: Binding(get: { namingLabel != nil }, set: { if !$0 { namingLabel = nil } })
+        ) {
+            TextField(String(localized: "Name"), text: $newLabelName)
+            Button(String(localized: "Add")) {
+                let name = DishTag.clean(newLabelName)
+                if !name.isEmpty {
+                    applyLabelEdit(namingLabel == .collection ? .addToCollection(name) : .addTag(name))
+                }
+                namingLabel = nil
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+        .alert(String(localized: "Rename collection"), isPresented: $renamingActiveCollection) {
+            TextField(String(localized: "Name"), text: $newLabelName)
+            Button(String(localized: "Rename")) {
+                if let current = appState.dishFilter.collection {
+                    renameCollection(current, to: newLabelName)
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        }
+        .confirmationDialog(
+            String(localized: "Delete this collection?"),
+            isPresented: $deletingActiveCollection,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete collection"), role: .destructive) {
+                if let current = appState.dishFilter.collection {
+                    deleteCollection(current)
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The dishes stay in your library; only the collection is removed.")
+        }
+        .alert(
+            String(localized: "Couldn’t save the change"),
+            isPresented: Binding(get: { labelEditError != nil }, set: { if !$0 { labelEditError = nil } })
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(labelEditError ?? "")
+        }
+    }
+
+    // MARK: - Collections and bulk labels
+
+    /// Shown while one collection is being browsed: its name, and what can be
+    /// done to it as a whole.
+    @ViewBuilder
+    private var activeCollectionHeader: some View {
+        if let collection = appState.dishFilter.collection, !isSelecting {
+            HStack(spacing: 12) {
+                Label {
+                    Text(verbatim: collection)
+                } icon: {
+                    Image(systemName: "books.vertical")
+                }
+                .font(.title3.weight(.semibold))
+                .lineLimit(2)
+                Spacer(minLength: 0)
+                if !appState.isGuest {
+                    Menu {
+                        Button(String(localized: "Add dishes…"), systemImage: "plus") {
+                            startSelecting(for: collection)
+                        }
+                        Button(String(localized: "Rename…"), systemImage: "pencil") {
+                            newLabelName = collection
+                            renamingActiveCollection = true
+                        }
+                        Button(String(localized: "Delete collection…"), systemImage: "trash", role: .destructive) {
+                            deletingActiveCollection = true
+                        }
+                    } label: {
+                        Label(String(localized: "Collection options"), systemImage: "ellipsis.circle")
+                            .labelStyle(.iconOnly)
+                    }
+                    .menuIndicator(.hidden)
+                    .fixedSize()
+                }
+                Button {
+                    appState.dishFilter.collection = nil
+                } label: {
+                    Label(String(localized: "Show all dishes"), systemImage: "xmark.circle.fill")
+                        .labelStyle(.iconOnly)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+            }
+            .padding(.horizontal, MacLayout.gutter)
+            .padding(.top, 12)
+        }
+    }
+
+    /// The tags and collections the selected dishes carry, for "Remove…".
+    private var selectedTags: [String] {
+        DishTag.merge(selection.values.flatMap(\.tagNames))
+    }
+
+    private var selectedCollections: [String] {
+        DishTag.merge(selection.values.flatMap(\.collectionNames))
+    }
+
+    private var selectionBar: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 2) {
+                if let pendingCollection {
+                    Text(String(localized: "Pick dishes for “\(pendingCollection)”"))
+                        .font(.subheadline.weight(.semibold))
+                        .lineLimit(1)
+                }
+                Text(String(localized: "\(selection.count) selected"))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            Spacer(minLength: 0)
+
+            if let pendingCollection {
+                Button(String(localized: "Add")) {
+                    applyLabelEdit(.addToCollection(pendingCollection))
+                    let shown = pendingCollection
+                    endSelecting()
+                    appState.dishFilter.collection = shown
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(selection.isEmpty)
+            } else {
+                Menu {
+                    Section(String(localized: "Add to collection")) {
+                        ForEach(availableCollections) { collection in
+                            Button {
+                                applyLabelEdit(.addToCollection(collection.name))
+                            } label: {
+                                Text(verbatim: collection.name)
+                            }
+                        }
+                        Button(String(localized: "New collection…"), systemImage: "plus") {
+                            newLabelName = ""
+                            namingLabel = .collection
+                        }
+                    }
+                    if !selectedCollections.isEmpty {
+                        Section(String(localized: "Remove from collection")) {
+                            ForEach(selectedCollections, id: \.self) { name in
+                                Button(role: .destructive) {
+                                    applyLabelEdit(.removeFromCollection(name))
+                                } label: {
+                                    Text(verbatim: name)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(String(localized: "Collection"), systemImage: "books.vertical")
+                }
+                .disabled(selection.isEmpty)
+
+                Menu {
+                    Section(String(localized: "Add tag")) {
+                        ForEach(availableTags, id: \.self) { tag in
+                            Button {
+                                applyLabelEdit(.addTag(tag))
+                            } label: {
+                                Text(verbatim: tag)
+                            }
+                        }
+                        Button(String(localized: "New tag…"), systemImage: "plus") {
+                            newLabelName = ""
+                            namingLabel = .tag
+                        }
+                    }
+                    if !selectedTags.isEmpty {
+                        Section(String(localized: "Remove tag")) {
+                            ForEach(selectedTags, id: \.self) { tag in
+                                Button(role: .destructive) {
+                                    applyLabelEdit(.removeTag(tag))
+                                } label: {
+                                    Text(verbatim: tag)
+                                }
+                            }
+                        }
+                    }
+                } label: {
+                    Label(String(localized: "Tags"), systemImage: "tag")
+                }
+                .disabled(selection.isEmpty)
+            }
+        }
+        .padding(.horizontal, MacLayout.gutter)
+        .padding(.vertical, 10)
+        .background(.bar)
+    }
+
+    private func undoBanner(_ edit: LabelEditUndo) -> some View {
+        HStack(spacing: 12) {
+            Text(edit.message)
+                .font(.subheadline)
+                .lineLimit(2)
+            Spacer(minLength: 0)
+            Button(String(localized: "Undo")) { undo(edit) }
+                .buttonStyle(.bordered)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .padding(.horizontal, MacLayout.gutter)
+        .padding(.bottom, 8)
+        .transition(.move(edge: .bottom).combined(with: .opacity))
+    }
+
+    /// Enters multi-select. With a collection name, the selection is for
+    /// that collection only, and the whole library is shown to pick from.
+    private func startSelecting(for collection: String? = nil) {
+        selection = [:]
+        pendingCollection = collection
+        if collection != nil { appState.dishFilter.collection = nil }
+        isSelecting = true
+    }
+
+    private func endSelecting() {
+        isSelecting = false
+        selection = [:]
+        pendingCollection = nil
+    }
+
+    private func applyLabelEdit(_ edit: DishLabelEdit) {
+        let dishes = Array(selection.values)
+        guard !dishes.isEmpty else { return }
+        let snapshot = edit.apply(to: dishes)
+        guard !snapshot.labels.isEmpty else { return }
+        guard saveLabelChanges() else { return }
+        let count = snapshot.labels.count
+        let message = switch edit {
+        case .addTag(let tag): String(localized: "Tagged \(count) dishes “\(tag)”")
+        case .removeTag(let tag): String(localized: "Removed “\(tag)” from \(count) dishes")
+        case .addToCollection(let name): String(localized: "Added \(count) dishes to “\(name)”")
+        case .removeFromCollection(let name): String(localized: "Removed \(count) dishes from “\(name)”")
+        }
+        withAnimation {
+            lastLabelEdit = LabelEditUndo(snapshot: snapshot, dishes: dishes, message: message)
+        }
+    }
+
+    private func undo(_ edit: LabelEditUndo) {
+        DishLabelEdit.restore(edit.snapshot, on: edit.dishes.filter { !$0.isDeleted })
+        _ = saveLabelChanges()
+        withAnimation { lastLabelEdit = nil }
+    }
+
+    private func renameCollection(_ name: String, to newName: String) {
+        let changed = DishCollection.rename(name, to: newName, in: householdDishes())
+        guard !changed.isEmpty, saveLabelChanges() else { return }
+        // Follow the rename (or merge) with whatever spelling the dishes now use.
+        let renamed = changed[0].collectionNames.first { DishTag.areSame($0, newName) } ?? DishTag.clean(newName)
+        if appState.dishFilter.isSelected(collection: name) { appState.dishFilter.collection = renamed }
+        if appState.planDishFilter.isSelected(collection: name) { appState.planDishFilter.collection = renamed }
+    }
+
+    private func deleteCollection(_ name: String) {
+        let changed = DishCollection.delete(name, from: householdDishes())
+        if appState.dishFilter.isSelected(collection: name) { appState.dishFilter.collection = nil }
+        if appState.planDishFilter.isSelected(collection: name) { appState.planDishFilter.collection = nil }
+        guard !changed.isEmpty else { return }
+        _ = saveLabelChanges()
+    }
+
+    /// Renaming or deleting a collection reaches past the loaded pages.
+    private func householdDishes() -> [Dish] {
+        guard let householdID else { return [] }
+        return (try? context.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))) ?? []
+    }
+
+    /// Saves a label change and refreshes the tag and collection lists. A
+    /// failed save is reported; the edit stays in the context to be retried
+    /// by the next save rather than silently dropped.
+    private func saveLabelChanges() -> Bool {
+        defer { metadataToken += 1 }
+        do {
+            try context.save()
+            return true
+        } catch {
+            labelEditError = error.localizedDescription
+            return false
+        }
+    }
+
     private func refreshTags() async {
         // Let the tab and its first page become interactive before deriving
         // secondary navigation from the complete library. The full scan uses
@@ -369,10 +768,11 @@ private struct DishLibraryContent: View {
         guard !Task.isCancelled else { return }
         availableTags = metadata.available
         popularTags = metadata.popular
+        availableCollections = metadata.collections
     }
 
     private func updatePageState(filteredDishes: [Dish]) {
-        hasMorePages = householdID != nil && allDishes.count == DishLibraryView.pageSize
+        hasMorePages = firstPageIsFull
         if !filteredDishes.isEmpty { hasAnyFilteredResults = true }
     }
 
@@ -381,17 +781,34 @@ private struct DishLibraryContent: View {
             ForEach(items) { item in
                 switch item {
                 case .dish(let dish):
-                    DishLibraryCell(dish: dish, acceptsDrops: acceptsDrops, householdID: householdID)
+                    if isSelecting {
+                        DishSelectionCell(
+                            dish: dish,
+                            isSelected: DishSelection.isSelected([dish], in: selection),
+                            toggle: { DishSelection.toggle([dish], in: &selection) }
+                        )
+                    } else {
+                        DishLibraryCell(dish: dish, acceptsDrops: acceptsDrops, householdID: householdID)
+                            .equatable()
+                    }
+                case .group(let ref, let members):
+                    if isSelecting {
+                        DishSelectionCell(
+                            dish: members[0],
+                            variantGroupName: ref.name,
+                            isSelected: DishSelection.isSelected(members, in: selection),
+                            toggle: { DishSelection.toggle(members, in: &selection) }
+                        )
+                    } else {
+                        DishLibraryCell(
+                            dish: members[0],
+                            group: ref,
+                            variantCount: members.count,
+                            acceptsDrops: acceptsDrops,
+                            householdID: householdID
+                        )
                         .equatable()
-                case .group(let ref, let lead, let count):
-                    DishLibraryCell(
-                        dish: lead,
-                        group: ref,
-                        variantCount: count,
-                        acceptsDrops: acceptsDrops,
-                        householdID: householdID
-                    )
-                    .equatable()
+                    }
                 }
             }
         }
@@ -516,8 +933,9 @@ private struct DishLibraryContent: View {
 private struct DishLibraryTagMetadata: Sendable {
     var available: [String]
     var popular: [String]
+    var collections: [DishCollectionSummary]
 
-    static let empty = DishLibraryTagMetadata(available: [], popular: [])
+    static let empty = DishLibraryTagMetadata(available: [], popular: [], collections: [])
 }
 
 /// Each scrolling window owns a fixed-size query. Reaching its footer mounts
@@ -532,6 +950,8 @@ private struct DishLibraryResultPage: View {
     private let filter: DishFilter
     private let isLastPage: Bool
     private let acceptsDrops: Bool
+    /// Set while the library is picking dishes for a bulk change.
+    private let selection: Binding<[UUID: Dish]>?
     @Binding private var hasAnyFilteredResults: Bool
     @Binding private var hasMorePages: Bool
     private let loadMore: @MainActor (Int) -> Void
@@ -539,12 +959,12 @@ private struct DishLibraryResultPage: View {
 
     private enum Item: Identifiable {
         case dish(Dish)
-        case group(DishVariantGroupRef, lead: Dish, count: Int)
+        case group(DishVariantGroupRef, members: [Dish])
 
         var id: String {
             switch self {
             case .dish(let dish): "dish-\(dish.uuid)"
-            case .group(let group, _, _): "group-\(group.id)"
+            case .group(let group, _): "group-\(group.id)"
             }
         }
     }
@@ -555,6 +975,7 @@ private struct DishLibraryResultPage: View {
         filter: DishFilter,
         isLastPage: Bool,
         acceptsDrops: Bool,
+        selection: Binding<[UUID: Dish]>?,
         hasAnyFilteredResults: Binding<Bool>,
         hasMorePages: Binding<Bool>,
         loadMore: @escaping @MainActor (Int) -> Void
@@ -564,6 +985,7 @@ private struct DishLibraryResultPage: View {
         self.filter = filter
         self.isLastPage = isLastPage
         self.acceptsDrops = acceptsDrops
+        self.selection = selection
         self._hasAnyFilteredResults = hasAnyFilteredResults
         self._hasMorePages = hasMorePages
         self.loadMore = loadMore
@@ -592,21 +1014,38 @@ private struct DishLibraryResultPage: View {
                     ForEach(items) { item in
                         switch item {
                         case .dish(let dish):
-                            DishLibraryCell(
-                                dish: dish,
-                                acceptsDrops: acceptsDrops,
-                                householdID: householdID
-                            )
-                            .equatable()
-                        case .group(let ref, let lead, let count):
-                            DishLibraryCell(
-                                dish: lead,
-                                group: ref,
-                                variantCount: count,
-                                acceptsDrops: acceptsDrops,
-                                householdID: householdID
-                            )
-                            .equatable()
+                            if let selection {
+                                DishSelectionCell(
+                                    dish: dish,
+                                    isSelected: DishSelection.isSelected([dish], in: selection.wrappedValue),
+                                    toggle: { DishSelection.toggle([dish], in: &selection.wrappedValue) }
+                                )
+                            } else {
+                                DishLibraryCell(
+                                    dish: dish,
+                                    acceptsDrops: acceptsDrops,
+                                    householdID: householdID
+                                )
+                                .equatable()
+                            }
+                        case .group(let ref, let members):
+                            if let selection {
+                                DishSelectionCell(
+                                    dish: members[0],
+                                    variantGroupName: ref.name,
+                                    isSelected: DishSelection.isSelected(members, in: selection.wrappedValue),
+                                    toggle: { DishSelection.toggle(members, in: &selection.wrappedValue) }
+                                )
+                            } else {
+                                DishLibraryCell(
+                                    dish: members[0],
+                                    group: ref,
+                                    variantCount: members.count,
+                                    acceptsDrops: acceptsDrops,
+                                    householdID: householdID
+                                )
+                                .equatable()
+                            }
                         }
                     }
                 }
@@ -643,8 +1082,7 @@ private struct DishLibraryResultPage: View {
             guard seenGroups.insert(groupID).inserted else { continue }
             items.append(.group(
                 DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
-                lead: members[0],
-                count: members.count
+                members: members
             ))
         }
         return items
@@ -663,6 +1101,15 @@ private enum DishLibrarySort {
             [SortDescriptor(\Dish.usageCount, order: .reverse), SortDescriptor(\Dish.uuid)]
         case .leastRecentlyCooked:
             [SortDescriptor(\Dish.lastUsedDate), SortDescriptor(\Dish.uuid)]
+        case .fewestServings:
+            [SortDescriptor(\Dish.servings), SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
+        case .mostServings:
+            [SortDescriptor(\Dish.servings, order: .reverse), SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
+        case .shortestTotalTime, .longestTotalTime, .shortestPrepTime, .longestPrepTime,
+             .shortestCookTime, .longestCookTime:
+            // Not paged (`isStoreOrderable`): the whole library is fetched
+            // and `DishFilter` sorts it in memory.
+            [SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
         }
     }
 }
@@ -678,9 +1125,11 @@ private actor DishLibraryMetadataActor {
 
         let usage = DishTag.usage(fromTagLists: dishes.map(\.tagNames))
         guard !Task.isCancelled else { return .empty }
+        let collections = DishCollection.usage(fromCollectionLists: dishes.map(\.collectionNames))
         return DishLibraryTagMetadata(
             available: DishTag.sorted(usage.map(\.tag)),
-            popular: Array(usage.prefix(12).map(\.tag))
+            popular: Array(usage.prefix(12).map(\.tag)),
+            collections: collections.map { DishCollectionSummary(name: $0.name, count: $0.count) }
         )
     }
 }

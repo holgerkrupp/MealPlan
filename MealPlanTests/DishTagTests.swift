@@ -6,11 +6,10 @@ struct DishLabelConsolidationTests {
     @Test func legacyLabelsBecomeOneDeduplicatedTagVocabulary() {
         let tags = DishLabelConsolidation.tags(
             existing: ["Vegan", "Quick"],
-            collections: ["Weeknight", "vegan"],
             dietaryRawValues: [DietaryTag.vegan.rawValue, DietaryTag.glutenFree.rawValue]
         )
         #expect(tags.contains("Vegan"))
-        #expect(tags.contains("Weeknight"))
+        #expect(tags.contains("Quick"))
         #expect(tags.contains(String(localized: "Gluten-free")))
         #expect(tags.filter { DishTag.areSame($0, "vegan") }.count == 1)
     }
@@ -25,11 +24,12 @@ struct DishLabelConsolidationTests {
         let once = dish.tagNames
         DishLabelConsolidation.apply(to: dish)
 
-        #expect(dish.collectionNames.isEmpty)
+        // Collections are their own feature again and survive the conversion.
+        #expect(dish.collectionNames == ["Winter"])
         #expect(dish.dietaryTagsRaw.isEmpty)
         #expect(dish.tagNames == once)
         #expect(dish.tagNames.filter { DishTag.areSame($0, "vegan") }.count == 1)
-        #expect(dish.tagNames.contains("Winter"))
+        #expect(!dish.tagNames.contains("Winter"))
     }
 
     @Test func starterDishesAreSmallUniqueAndImmediatelyPlannable() {

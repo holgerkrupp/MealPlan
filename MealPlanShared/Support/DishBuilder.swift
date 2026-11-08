@@ -138,9 +138,9 @@ enum DishBuilder {
         dish.rating = min(max(recipe.rating, 0), 5)
         dish.tagNames = DishLabelConsolidation.tags(
             existing: recipe.tagNames,
-            collections: recipe.collectionNames,
             dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
         )
+        dish.collectionNames = DishTag.merge(recipe.collectionNames)
         dish.mealTypeTags = recipe.mealTypeTags
         dish.season = recipe.season
         dish.setStatedNutritionPerServing(recipe.nutritionPerServing)
@@ -297,10 +297,10 @@ enum DishBuilder {
         dish.needsReview = recipe.needsReview
         dish.refreshAutoGlyph()
         dish.tagNames = DishLabelConsolidation.tags(
-            existing: dish.tagNames,
-            collections: recipe.collectionNames + recipe.tagNames,
+            existing: DishTag.merge(dish.tagNames, adding: recipe.tagNames),
             dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
         )
+        dish.collectionNames = DishTag.merge(dish.collectionNames, adding: recipe.collectionNames)
         addSuggestedTags(to: dish, household: dish.household)
         persist(context)
     }
@@ -391,10 +391,10 @@ enum DishBuilder {
         dish.needsReview = recipe.needsReview
         dish.refreshAutoGlyph()
         dish.tagNames = DishLabelConsolidation.tags(
-            existing: dish.tagNames,
-            collections: recipe.collectionNames + recipe.tagNames,
+            existing: DishTag.merge(dish.tagNames, adding: recipe.tagNames),
             dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
         )
+        dish.collectionNames = DishTag.merge(dish.collectionNames, adding: recipe.collectionNames)
         addSuggestedTags(to: dish, household: dish.household)
         persist(context)
     }
@@ -457,6 +457,7 @@ enum DishBuilder {
         copy.needsReview = dish.needsReview
         copy.rating = dish.rating
         copy.tagNames = dish.tagNames
+        copy.collectionNames = dish.collectionNames
         copy.mealTypeTagsRaw = dish.mealTypeTagsRaw
         copy.seasonRaw = dish.seasonRaw
         copy.glyphRaw = dish.glyphRaw
