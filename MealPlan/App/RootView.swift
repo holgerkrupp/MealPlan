@@ -3,7 +3,7 @@ import SwiftData
 import CloudKit
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
-    case plan, dishes, shopping, fridge, settings
+    case plan, dishes, shopping, pantry, fridge, settings
 
     var id: String { rawValue }
 
@@ -12,6 +12,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: String(localized: "Plan")
         case .dishes: String(localized: "Dishes")
         case .shopping: String(localized: "Shopping list")
+        case .pantry: String(localized: "Pantry")
         case .fridge: String(localized: "Fridge")
         case .settings: String(localized: "Settings")
         }
@@ -22,6 +23,7 @@ enum AppSection: String, CaseIterable, Identifiable, Hashable {
         case .plan: "calendar"
         case .dishes: "fork.knife"
         case .shopping: "cart"
+        case .pantry: "cabinet"
         case .fridge: "refrigerator"
         case .settings: "gearshape"
         }
@@ -477,6 +479,9 @@ struct RootView: View {
             Tab(AppSection.shopping.title, systemImage: AppSection.shopping.symbol, value: .shopping) {
                 NavigationStack { ShoppingListView() }
             }
+            Tab(AppSection.pantry.title, systemImage: AppSection.pantry.symbol, value: .pantry) {
+                NavigationStack { PantryView() }
+            }
             if showsFridge {
                 Tab(AppSection.fridge.title, systemImage: AppSection.fridge.symbol, value: .fridge) {
                     NavigationStack { FridgeExperienceView() }
@@ -506,6 +511,7 @@ struct RootView: View {
                 case .plan: PlanView()
                 case .dishes: DishLibraryView()
                 case .shopping: ShoppingListView()
+                case .pantry: PantryView()
                 case .fridge: FridgeExperienceView()
                 case .settings: SettingsView(layout: .stacked)
                 }

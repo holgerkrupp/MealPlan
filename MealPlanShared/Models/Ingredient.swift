@@ -23,6 +23,9 @@ final class Ingredient {
     var inventoryBestBefore: Date?
     var inventoryStorageLocationRaw: String?
     var inventoryCustomStorageLocation: String?
+    /// A free-text pantry note, e.g. "opened jar, top shelf". Optional so
+    /// stores and records written before it existed need no migration.
+    var inventoryNote: String?
     var inventoryUpdatedAt: Date?
     /// Normalized matcher keys the household explicitly decided not to merge
     /// into this ingredient. Keeping the spelling-level decision on the

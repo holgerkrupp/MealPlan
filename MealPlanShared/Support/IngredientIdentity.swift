@@ -307,6 +307,7 @@ enum IngredientMergeService {
         ingredient.inventoryBestBefore = snapshot.inventoryBestBefore
         ingredient.inventoryStorageLocationRaw = snapshot.inventoryStorageLocationRaw
         ingredient.inventoryCustomStorageLocation = snapshot.inventoryCustomStorageLocation
+        ingredient.inventoryNote = snapshot.inventoryNote
         ingredient.nutritionEnergyKcal = snapshot.nutritionEnergyKcal
         ingredient.nutritionProteinGrams = snapshot.nutritionProteinGrams
         ingredient.nutritionCarbGrams = snapshot.nutritionCarbGrams
