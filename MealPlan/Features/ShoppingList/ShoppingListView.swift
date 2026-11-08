@@ -17,6 +17,8 @@ struct ShoppingListView: View {
     @State private var bringMessage: String?
     @State private var showingBringSetup = false
     @State private var showingPantryStaples = false
+    @State private var showingPasteSheet = false
+    @State private var showingBarcodeScanner = false
     @State private var confirmingClearAll = false
     @State private var showingPrint = false
     @State private var customAisleItemID: UUID?
@@ -136,6 +138,18 @@ struct ShoppingListView: View {
                         .onSubmit(addManualItem)
                     Button(String(localized: "Add"), action: addManualItem)
                         .disabled(newItemName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
+                Button {
+                    showingPasteSheet = true
+                } label: {
+                    Label(String(localized: "Add several items…"), systemImage: "list.bullet.clipboard")
+                }
+                if !appState.isGuest, BarcodeScanAvailability.isAvailable {
+                    Button {
+                        showingBarcodeScanner = true
+                    } label: {
+                        Label(String(localized: "Scan barcode…"), systemImage: "barcode.viewfinder")
+                    }
                 }
                 if !stapleSuggestions.isEmpty {
                     Menu {
@@ -261,6 +275,12 @@ struct ShoppingListView: View {
                     }
             }
             .dismissesOnOutsideClick()
+        }
+        .sheet(isPresented: $showingPasteSheet) {
+            ShoppingListPasteSheet { lines in addManualItems(lines) }
+        }
+        .sheet(isPresented: $showingBarcodeScanner) {
+            BarcodeAddSheet(defaultDestination: .shoppingList)
         }
         .confirmationDialog(
             String(localized: "Clear the whole list?"),
@@ -395,16 +415,26 @@ struct ShoppingListView: View {
         regenerate()
     }
 
+    /// A paste of several lines into the add field becomes several items.
     private func addManualItem() {
-        guard let household = appState.currentHousehold else { return }
-        ShoppingListBuilder.addManualItem(
-            named: newItemName,
-            household: household,
-            system: appState.unitSystem,
-            roundsAmounts: appState.roundsDisplayedAmounts,
-            context: context
-        )
+        let lines = ShoppingListPaste.isMultiLine(newItemName)
+            ? ShoppingListPaste.lines(from: newItemName)
+            : [newItemName]
+        addManualItems(lines)
         newItemName = ""
+    }
+
+    private func addManualItems(_ lines: [String]) {
+        guard let household = appState.currentHousehold else { return }
+        for line in lines {
+            ShoppingListBuilder.addManualItem(
+                named: line,
+                household: household,
+                system: appState.unitSystem,
+                roundsAmounts: appState.roundsDisplayedAmounts,
+                context: context
+            )
+        }
     }
 
     /// Put a staple on the list by hand — "we've run out of salt".

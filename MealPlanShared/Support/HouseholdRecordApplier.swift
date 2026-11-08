@@ -227,6 +227,7 @@ enum HouseholdRecordApplier {
             model.inventoryBestBefore = value.inventoryBestBefore
             model.inventoryStorageLocationRaw = value.inventoryStorageLocationRaw
             model.inventoryCustomStorageLocation = value.inventoryCustomStorageLocation
+            model.inventoryNote = value.inventoryNote
             model.inventoryUpdatedAt = value.inventoryUpdatedAt
             model.rejectedMatchKeys = value.rejectedMatchKeys ?? []
             model.pendingMergeSuggestionsData = value.pendingMergeSuggestionsData

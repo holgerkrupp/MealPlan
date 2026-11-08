@@ -137,6 +137,7 @@ struct MealPlanBackup: Codable, Sendable {
         var inventoryBestBefore: Date? = nil
         var inventoryStorageLocationRaw: String? = nil
         var inventoryCustomStorageLocation: String? = nil
+        var inventoryNote: String? = nil
         var inventoryUpdatedAt: Date? = nil
         /// Optional for compatibility with backups written before aliases.
         var aliases: [PortableIngredientAlias]? = nil
@@ -582,6 +583,7 @@ extension MealPlanBackup {
                     inventoryBestBefore: ingredient.inventoryBestBefore,
                     inventoryStorageLocationRaw: ingredient.inventoryStorageLocationRaw,
                     inventoryCustomStorageLocation: ingredient.inventoryCustomStorageLocation,
+                    inventoryNote: ingredient.inventoryNote,
                     inventoryUpdatedAt: ingredient.inventoryUpdatedAt,
                     aliases: aliases.isEmpty ? nil : aliases,
                     rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,

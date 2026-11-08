@@ -204,6 +204,7 @@ enum HouseholdCloudSharingService {
                         && ingredient.inventoryBestBefore == nil
                         && ingredient.inventoryStorageLocationRaw == nil
                         && ingredient.inventoryCustomStorageLocation == nil
+                        && ingredient.inventoryNote == nil
                         && ingredient.inventoryUpdatedAt == nil
                         && ingredient.nutritionEnergyKcal == nil
                         && ingredient.nutritionProteinGrams == nil

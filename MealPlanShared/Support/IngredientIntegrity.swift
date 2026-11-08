@@ -116,6 +116,7 @@ struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
         var inventoryBestBefore: Date?
         var inventoryStorageLocationRaw: String?
         var inventoryCustomStorageLocation: String?
+        var inventoryNote: String?
         var nutritionEnergyKcal: Double?
         var nutritionProteinGrams: Double?
         var nutritionCarbGrams: Double?
@@ -139,6 +140,7 @@ struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
             inventoryBestBefore = ingredient.inventoryBestBefore
             inventoryStorageLocationRaw = ingredient.inventoryStorageLocationRaw
             inventoryCustomStorageLocation = ingredient.inventoryCustomStorageLocation
+            inventoryNote = ingredient.inventoryNote
             nutritionEnergyKcal = ingredient.nutritionEnergyKcal
             nutritionProteinGrams = ingredient.nutritionProteinGrams
             nutritionCarbGrams = ingredient.nutritionCarbGrams

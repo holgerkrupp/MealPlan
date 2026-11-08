@@ -677,6 +677,7 @@ enum HouseholdCloudBootstrapService {
                     match.inventoryBestBefore = ingredient.inventoryBestBefore
                     match.inventoryStorageLocationRaw = ingredient.inventoryStorageLocationRaw
                     match.inventoryCustomStorageLocation = ingredient.inventoryCustomStorageLocation
+                    match.inventoryNote = ingredient.inventoryNote
                     match.inventoryUpdatedAt = ingredient.inventoryUpdatedAt
                     match.rejectedMatchKeys = ingredient.rejectedMatchKeys
                     match.pendingMergeSuggestionsData = ingredient.pendingMergeSuggestionsData

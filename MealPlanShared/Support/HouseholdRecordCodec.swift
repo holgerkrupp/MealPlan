@@ -406,6 +406,7 @@ enum HouseholdRecordCodec {
                 inventoryBestBefore: ingredient.inventoryBestBefore,
                 inventoryStorageLocationRaw: ingredient.inventoryStorageLocationRaw,
                 inventoryCustomStorageLocation: ingredient.inventoryCustomStorageLocation,
+                inventoryNote: ingredient.inventoryNote,
                 inventoryUpdatedAt: ingredient.inventoryUpdatedAt,
                 rejectedMatchKeys: ingredient.rejectedMatchKeys.isEmpty ? nil : ingredient.rejectedMatchKeys,
                 pendingMergeSuggestionsData: ingredient.pendingMergeSuggestionsData

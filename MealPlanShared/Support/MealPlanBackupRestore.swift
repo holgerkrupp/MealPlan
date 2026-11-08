@@ -178,6 +178,7 @@ enum MealPlanBackupRestore {
             ingredient.inventoryBestBefore = stored.inventoryBestBefore
             ingredient.inventoryStorageLocationRaw = stored.inventoryStorageLocationRaw
             ingredient.inventoryCustomStorageLocation = stored.inventoryCustomStorageLocation
+            ingredient.inventoryNote = stored.inventoryNote
             ingredient.inventoryUpdatedAt = stored.inventoryUpdatedAt
             ingredient.rejectedMatchKeys = stored.rejectedMatchKeys ?? []
             ingredient.pendingMergeSuggestionsData = stored.pendingMergeSuggestionsData
