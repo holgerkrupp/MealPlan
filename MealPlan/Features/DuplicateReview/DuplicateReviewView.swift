@@ -167,7 +167,7 @@ struct DuplicatePairView: View {
             Button(String(localized: "Delete “\(second.name)” (right)"), systemImage: "trash", role: .destructive) {
                 pendingRemoval = second
             }
-            Text("Deleting moves its planned meals, cooking history, template slots and routines to the recipe you keep.")
+            Text("Deleting keeps unique photos, ingredient lines, method notes and recipe details, and moves planned meals, cooking history, template slots and routines to the recipe you keep.")
                 .font(.footnote)
                 .foregroundStyle(.secondary)
         }
@@ -200,16 +200,16 @@ struct DuplicatePairView: View {
             lines.append(String(localized: "Moved to “\(kept.name)”: \(preview.plannedMeals) planned meals, \(preview.cookedLogs) cooked entries, \(preview.templateEntries) template slots, \(preview.routines) routines."))
         }
         if preview.uniqueImages > 0 {
-            lines.append(String(localized: "\(preview.uniqueImages) photos exist only on this recipe and will be deleted."))
+            lines.append(String(localized: "\(preview.uniqueImages) unique photos will be kept with the recipe you choose to keep."))
         }
         if preview.uniqueIngredients > 0 {
-            lines.append(String(localized: "\(preview.uniqueIngredients) ingredients are listed only on this recipe."))
+            lines.append(String(localized: "\(preview.uniqueIngredients) unique ingredient lines, including their quantities and notes, will be kept."))
         }
         if preview.hasDifferentRecipeText {
-            lines.append(String(localized: "Its method or notes differ from the recipe you keep and will be deleted."))
+            lines.append(String(localized: "Its method or notes will be added to the recipe you keep."))
         }
         if lines.isEmpty {
-            lines.append(String(localized: "Nothing unique is lost."))
+            lines.append(String(localized: "No unique recipe content needs to be added."))
         }
         return lines.joined(separator: "\n\n")
     }

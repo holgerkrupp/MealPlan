@@ -114,7 +114,7 @@ struct LibraryDuplicateScannerTests {
         #expect(kept.sourceURL?.absoluteString == "https://example.com/soup")
     }
 
-    @Test func previewWarnsAboutUniqueContent() {
+    @Test func previewReportsContentThatWillBePreserved() {
         let kept = dish("Soup", ingredients: ["Leek", "Potato"])
         let removed = dish("Soup", ingredients: ["Leek", "Potato", "Cream"])
         removed.recipeText = "Blend and add cream."
@@ -123,9 +123,48 @@ struct LibraryDuplicateScannerTests {
         #expect(preview.uniqueImages == 1)
         #expect(preview.uniqueIngredients == 1)
         #expect(preview.hasDifferentRecipeText)
-        #expect(preview.losesContent)
+    }
 
-        let identical = DuplicateDishMerge.preview(removing: kept, keeping: kept)
-        #expect(!identical.losesContent)
+    @Test func deletingPreservesUniqueRecipeContentAndMergesMetadata() {
+        let kept = dish("Soup", ingredients: ["Leek"])
+        let removed = dish("Soup", ingredients: ["Leek", "Cream"])
+        let cream = removed.ingredients!.last!
+        cream.canonicalValue = 200
+        cream.dimension = .mass
+        cream.displayUnit = "g"
+        cream.note = "softened"
+        cream.translatedName = "Sahne"
+        removed.recipeText = "Blend until smooth."
+        removed.images = [DishImage(data: Data([1, 2, 3]))]
+        removed.collectionNames = ["Weeknight"]
+        removed.statedEnergyKcalPerServing = 310
+        removed.prepTimeMinutes = 15
+
+        DuplicateDishMerge.moveReferences(from: removed, to: kept)
+
+        #expect(kept.ingredients?.contains(where: { $0 === cream }) == true)
+        #expect(cream.dish === kept)
+        #expect(cream.note == "softened")
+        #expect(cream.canonicalValue == 200)
+        #expect(cream.translatedName == "Sahne")
+        #expect(kept.images?.contains(where: { $0.data == Data([1, 2, 3]) }) == true)
+        #expect(kept.recipeText?.contains("Blend until smooth.") == true)
+        #expect(kept.collectionNames == ["Weeknight"])
+        #expect(kept.statedEnergyKcalPerServing == 310)
+        #expect(kept.prepTimeMinutes == 15)
+    }
+
+    @Test func identicalImagesAndIngredientLinesAreNotDuplicated() {
+        let kept = dish("Soup", ingredients: ["Leek"])
+        let removed = dish("Soup", ingredients: ["Leek"])
+        let existingImage = DishImage(data: Data([8, 9]))
+        kept.images = [existingImage]
+        removed.images = [DishImage(data: Data([8, 9]))]
+        let keptCount = kept.ingredients?.count
+
+        DuplicateDishMerge.moveReferences(from: removed, to: kept)
+
+        #expect(kept.images?.count == 1)
+        #expect(kept.ingredients?.count == keptCount)
     }
 }

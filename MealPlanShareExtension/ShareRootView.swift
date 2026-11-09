@@ -71,23 +71,31 @@ struct ShareRootView: View {
 
     private var form: some View {
         Form {
-            ForEach(Array(recipes.enumerated()), id: \.offset) { _, recipe in
+            ForEach(recipes.indices, id: \.self) { index in
                 Section {
                     HStack(spacing: 12) {
-                        if let data = recipe.imageData, let image = Image(data: data) {
+                        if let data = recipes[index].imageData, let image = Image(data: data) {
                             image.resizable().scaledToFill()
                                 .frame(width: 54, height: 54)
                                 .clipShape(RoundedRectangle(cornerRadius: 10))
                         }
                         VStack(alignment: .leading) {
-                            Text(recipe.name).font(.headline)
-                            Text(String(localized: "\(recipe.ingredientLines.count) ingredients"))
+                            Text(recipes[index].name).font(.headline)
+                            Text(String(localized: "\(recipes[index].ingredientLines.count) ingredients"))
                                 .font(.caption).foregroundStyle(.secondary)
-                            if recipe.needsReview {
+                            if recipes[index].needsReview {
                                 Text(String(localized: "Needs a quick check"))
                                     .font(.caption2).foregroundStyle(.orange)
                             }
                         }
+                    }
+
+                    if case .text = payload {
+                        TextField(String(localized: "Recipe name"), text: $recipes[index].name)
+                        TextField(String(localized: "Ingredients, one per line"), text: ingredientTextBinding(at: index), axis: .vertical)
+                            .lineLimit(4...10)
+                        TextField(String(localized: "Method"), text: instructionTextBinding(at: index), axis: .vertical)
+                            .lineLimit(4...10)
                     }
                 }
             }
@@ -126,6 +134,20 @@ struct ShareRootView: View {
                 }
             }
         }
+    }
+
+    private func ingredientTextBinding(at index: Int) -> Binding<String> {
+        Binding(
+            get: { recipes[index].ingredientLines.joined(separator: "\n") },
+            set: { recipes[index].ingredientLines = $0.components(separatedBy: .newlines) }
+        )
+    }
+
+    private func instructionTextBinding(at index: Int) -> Binding<String> {
+        Binding(
+            get: { recipes[index].instructions ?? "" },
+            set: { recipes[index].instructions = $0.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
+        )
     }
 
     private var siteForm: some View {

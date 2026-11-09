@@ -126,30 +126,29 @@ enum LibraryDuplicateScanner {
 }
 
 /// Folding one dish of a duplicate pair into the other before it is deleted,
-/// so deleting the copy never takes plans, history or unique content with it.
+/// so deleting the copy never takes plans, history or unique recipe content with it.
 enum DuplicateDishMerge {
 
-    /// What deleting `removed` in favour of `kept` would carry over, and what
-    /// only `removed` has that would be lost with it.
+    /// What deleting `removed` in favour of `kept` carries over.
     struct Preview: Equatable {
         var plannedMeals = 0
         var cookedLogs = 0
         var templateEntries = 0
         var routines = 0
-        /// Photos `kept` doesn't have.
+        /// Photos `kept` doesn't have and will receive.
         var uniqueImages = 0
-        /// Ingredients `kept` doesn't list.
+        /// Ingredient lines `kept` doesn't have and will receive.
         var uniqueIngredients = 0
-        /// A method or notes text that differs from `kept`'s.
+        /// A method or notes text that differs from `kept`'s and will be retained.
         var hasDifferentRecipeText = false
 
         var movesAnything: Bool { plannedMeals + cookedLogs + templateEntries + routines > 0 }
-        var losesContent: Bool { uniqueImages > 0 || uniqueIngredients > 0 || hasDifferentRecipeText }
     }
 
     @MainActor
     static func preview(removing removed: Dish, keeping kept: Dish) -> Preview {
         let keptImages = Set((kept.images ?? []).compactMap(\.data))
+        let keptIngredientLines = Set((kept.ingredients ?? []).map(ingredientLineKey))
         let removedText = removed.recipeText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let keptText = kept.recipeText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return Preview(
@@ -161,8 +160,7 @@ enum DuplicateDishMerge {
                 guard let data = image.data else { return false }
                 return !keptImages.contains(data)
             }.count,
-            uniqueIngredients: RecipeDuplicateDetector.signature(of: removed)
-                .subtracting(RecipeDuplicateDetector.signature(of: kept)).count,
+            uniqueIngredients: (removed.ingredients ?? []).filter { !keptIngredientLines.contains(ingredientLineKey($0)) }.count,
             hasDifferentRecipeText: !removedText.isEmpty && removedText != keptText
         )
     }
@@ -180,6 +178,46 @@ enum DuplicateDishMerge {
         for log in removed.cookedLogs ?? [] { log.dish = kept }
         for slot in removed.templateEntries ?? [] { slot.dish = kept }
         for routine in removed.routines ?? [] { routine.dish = kept }
+
+        // Keep recipe content as well as references. Moving the original
+        // SwiftData rows preserves quantity, notes, translations and shared
+        // ingredient identity; only exact duplicate lines/photos are skipped.
+        let keptImages = Set((kept.images ?? []).compactMap(\.data))
+        for image in removed.images ?? [] where image.data == nil || !keptImages.contains(image.data!) {
+            image.dish = kept
+        }
+        let keptIngredientLines = Set((kept.ingredients ?? []).map(ingredientLineKey))
+        for line in removed.ingredients ?? [] where !keptIngredientLines.contains(ingredientLineKey(line)) {
+            line.dish = kept
+        }
+        if let text = removed.recipeText?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            let current = kept.recipeText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            if current.isEmpty {
+                kept.recipeText = text
+            } else if current != text {
+                kept.recipeText = current + "\n\n" + String(localized: "Additional recipe notes from \(removed.name):") + "\n" + text
+            }
+        }
+        kept.collectionNames = DishTag.merge(kept.collectionNames, adding: removed.collectionNames)
+        kept.mealTypeTagsRaw = Array(Set(kept.mealTypeTagsRaw + removed.mealTypeTagsRaw)).sorted()
+        kept.dietaryTagsRaw = Array(Set(kept.dietaryTagsRaw + removed.dietaryTagsRaw)).sorted()
+        if kept.translatedName?.isEmpty ?? true { kept.translatedName = removed.translatedName }
+        if kept.translatedRecipeText?.isEmpty ?? true { kept.translatedRecipeText = removed.translatedRecipeText }
+        if kept.translationLanguageCode?.isEmpty ?? true { kept.translationLanguageCode = removed.translationLanguageCode }
+        if kept.recipeLanguageCode?.isEmpty ?? true { kept.recipeLanguageCode = removed.recipeLanguageCode }
+        if kept.prepTimeMinutes == nil { kept.prepTimeMinutes = removed.prepTimeMinutes }
+        if kept.cookTimeMinutes == nil { kept.cookTimeMinutes = removed.cookTimeMinutes }
+        if kept.servings == 0 { kept.servings = removed.servings }
+        if kept.statedEnergyKcalPerServing == nil { kept.statedEnergyKcalPerServing = removed.statedEnergyKcalPerServing }
+        if kept.statedProteinGramsPerServing == nil { kept.statedProteinGramsPerServing = removed.statedProteinGramsPerServing }
+        if kept.statedCarbGramsPerServing == nil { kept.statedCarbGramsPerServing = removed.statedCarbGramsPerServing }
+        if kept.statedFatGramsPerServing == nil { kept.statedFatGramsPerServing = removed.statedFatGramsPerServing }
+        if kept.statedSaturatedFatGramsPerServing == nil { kept.statedSaturatedFatGramsPerServing = removed.statedSaturatedFatGramsPerServing }
+        if kept.statedFiberGramsPerServing == nil { kept.statedFiberGramsPerServing = removed.statedFiberGramsPerServing }
+        if kept.statedSugarGramsPerServing == nil { kept.statedSugarGramsPerServing = removed.statedSugarGramsPerServing }
+        if kept.statedSodiumMilligramsPerServing == nil { kept.statedSodiumMilligramsPerServing = removed.statedSodiumMilligramsPerServing }
+        if kept.statedCholesterolMilligramsPerServing == nil { kept.statedCholesterolMilligramsPerServing = removed.statedCholesterolMilligramsPerServing }
+        if kept.statedNutritionProvenanceRaw?.isEmpty ?? true { kept.statedNutritionProvenanceRaw = removed.statedNutritionProvenanceRaw }
 
         kept.usageCount += removed.usageCount
         if let used = removed.lastUsedDate, used > (kept.lastUsedDate ?? .distantPast) {
@@ -206,5 +244,18 @@ enum DuplicateDishMerge {
             || !(removed.cookedLogs ?? []).isEmpty
             || !(removed.templateEntries ?? []).isEmpty
             || !(removed.routines ?? []).isEmpty
+    }
+
+    /// A stable key for an ingredient line's user-visible and structured
+    /// content. Lines with different amounts or notes remain distinct.
+    private static func ingredientLineKey(_ line: DishIngredient) -> String {
+        let ingredientName = line.ingredient?.name
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            .lowercased() ?? ""
+        return [ingredientName, line.rawText?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? "", line.canonicalValue.map { String($0) } ?? "",
+         line.canonicalDimensionRaw ?? "", line.displayUnit ?? "", line.note ?? "", line.translatedName ?? "",
+         line.translatedNote ?? ""]
+            .joined(separator: "\u{1f}")
     }
 }
