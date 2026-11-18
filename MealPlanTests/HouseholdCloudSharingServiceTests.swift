@@ -256,7 +256,7 @@ struct HouseholdCloudSharingServiceTests {
         #expect(!HouseholdCloudSharingService.indicatesLostAccess(mixed))
     }
 
-    @Test func backgroundRefreshOnlySilencesTemporaryCloudFailures() {
+    @Test func backgroundRefreshSilencesTemporaryAndNonActionableFailures() {
         let share = CKRecord.ID(recordName: "share")
         let root = CKRecord.ID(recordName: "root")
         let temporary = CKError(.partialFailure, userInfo: [
@@ -272,6 +272,7 @@ struct HouseholdCloudSharingServiceTests {
             ]
         ])
         #expect(HouseholdCloudSharingService.isTemporarySyncFailure(temporary))
+        #expect(HouseholdCloudSharingService.isTemporarySyncFailure(HouseholdRecordSyncError.requiredAssetUnavailable))
         #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(actionable))
         #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(CKError(.notAuthenticated)))
         #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(CKError(.quotaExceeded)))

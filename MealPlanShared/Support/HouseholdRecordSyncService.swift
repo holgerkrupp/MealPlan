@@ -1474,7 +1474,16 @@ final class HouseholdRecordSyncService {
                 ))
             } catch {
                 unreadableNames.insert(name)
-                lastError = error
+                if let syncError = error as? HouseholdRecordSyncError,
+                   case .requiredAssetUnavailable = syncError {
+                    // A CKAsset can be absent, expired, or unreadable in the
+                    // temporary file CloudKit supplies. Keep this record in
+                    // fetchRetryRecordNames and let the next sync retry it;
+                    // this is not something the household member can repair.
+                    logger.warning("db.prepare.asset.unavailable type=\(identity.type.rawValue, privacy: .public) retryable=true")
+                } else {
+                    lastError = error
+                }
             }
         }
         let preparationDuration = preparationStartedAt.duration(to: .now)

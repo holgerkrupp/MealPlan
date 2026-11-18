@@ -625,8 +625,15 @@ enum HouseholdCloudSharingService {
     }
 
     /// Background refreshes should retry ordinary CloudKit interruptions
-    /// without opening an alert over the person's current task.
+    /// without opening an alert over the person's current task. A missing or
+    /// unreadable CKAsset is also record-local: the fetch applier keeps that
+    /// record in its durable retry set, and the user cannot repair CloudKit's
+    /// temporary asset file from this device.
     static func isTemporarySyncFailure(_ error: Error) -> Bool {
+        if let syncError = error as? HouseholdRecordSyncError,
+           case .requiredAssetUnavailable = syncError {
+            return true
+        }
         if let failure = error as? CollaborationFailure {
             return failure == .offline || failure == .cancelled
         }
