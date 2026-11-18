@@ -769,7 +769,13 @@ final class HouseholdRecordSyncService {
     private func activateIfNeeded(household: Household, context: ModelContext) async throws {
         if let lifecycleStopTask { await lifecycleStopTask.task.value }
         let nextLocator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
-        if self.household?.uuid == household.uuid, locator == nextLocator, syncEnginePool != nil { return }
+        // The sync engine owns live SwiftData references as well as a household
+        // ID. Reusing it after a context/model replacement would keep applying
+        // queued events through references from the previous activation.
+        if self.household === household,
+           self.context === context,
+           locator == nextLocator,
+           syncEnginePool != nil { return }
 
         // Every local record is unknown to a new account, so activating would
         // copy this household into it. That takes an explicit decision.
