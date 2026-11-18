@@ -1,6 +1,7 @@
 import SwiftUI
 import ImageIO
 import SwiftData
+import os
 
 #if canImport(UIKit)
 import UIKit
@@ -251,6 +252,8 @@ private actor DishPhotoDecoder {
     static let shared = DishPhotoDecoder()
 
     func image(data: Data, maxPixelSize: CGFloat) -> CGImage? {
+        let interval = DishLibraryPerformanceSignposts.signposter.beginInterval("thumbnail decode")
+        defer { DishLibraryPerformanceSignposts.signposter.endInterval("thumbnail decode", interval) }
         guard !Task.isCancelled else { return nil }
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
         let options: [CFString: Any] = [
@@ -388,6 +391,8 @@ enum DishPhotoLoading {
 @ModelActor
 actor DishPhotoDataActor {
     func primaryImageData(for dishID: PersistentIdentifier, uuid: UUID) -> Data? {
+        let interval = DishLibraryPerformanceSignposts.signposter.beginInterval("thumbnail data lookup")
+        defer { DishLibraryPerformanceSignposts.signposter.endInterval("thumbnail data lookup", interval) }
         let dish: Dish?
         if let registered: Dish = modelContext.registeredModel(for: dishID) {
             dish = registered
@@ -405,6 +410,8 @@ actor DishPhotoDataActor {
     }
 
     func data(for imageID: PersistentIdentifier, uuid: UUID) -> Data? {
+        let interval = DishLibraryPerformanceSignposts.signposter.beginInterval("thumbnail data lookup")
+        defer { DishLibraryPerformanceSignposts.signposter.endInterval("thumbnail data lookup", interval) }
         // `model(for:)` traps when a thumbnail outlives a deleted/replaced
         // image. A drag preview makes that race especially easy to hit because
         // SwiftUI creates and tears down an additional thumbnail while the

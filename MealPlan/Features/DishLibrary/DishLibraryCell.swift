@@ -10,9 +10,9 @@ import SwiftData
 /// branch inside the grid's `ForEach`.
 @MainActor
 struct DishLibraryCell: View, Equatable {
-    /// The dish this cell shows, and — for a group — the one standing in for
-    /// its members.
-    let dish: Dish
+    /// Scalar-only card content. Mutations and navigation re-resolve the dish
+    /// by UUID in the active household's context.
+    let snapshot: DishLibraryCardSnapshot
     /// Set when the cell represents a whole variant group.
     var group: DishVariantGroupRef? = nil
     var variantCount: Int = 0
@@ -31,12 +31,22 @@ struct DishLibraryCell: View, Equatable {
 
     @State private var isTargeted = false
 
+    init(
+        snapshot: DishLibraryCardSnapshot,
+        group: DishVariantGroupRef? = nil,
+        variantCount: Int = 0,
+        acceptsDrops: Bool = true,
+        householdID: UUID?
+    ) {
+        self.snapshot = snapshot
+        self.group = group
+        self.variantCount = variantCount
+        self.acceptsDrops = acceptsDrops
+        self.householdID = householdID
+    }
+
     static func == (lhs: DishLibraryCell, rhs: DishLibraryCell) -> Bool {
-        lhs.dish.persistentModelID == rhs.dish.persistentModelID
-            && lhs.dish.modifiedAt == rhs.dish.modifiedAt
-            && lhs.dish.name == rhs.dish.name
-            && lhs.dish.isFavorite == rhs.dish.isFavorite
-            && lhs.dish.needsReview == rhs.dish.needsReview
+        lhs.snapshot == rhs.snapshot
             && lhs.group == rhs.group
             && lhs.variantCount == rhs.variantCount
             && lhs.acceptsDrops == rhs.acceptsDrops
@@ -66,29 +76,29 @@ struct DishLibraryCell: View, Equatable {
     private var content: some View {
         if let group {
             NavigationLink(value: group) {
-                DishGridCell(dish: dish, variantGroupName: group.name)
+                DishGridCell(snapshot: snapshot, variantGroupName: group.name)
             }
             .buttonStyle(.plain)
         } else {
             #if os(macOS)
-            DishGridCell(dish: dish)
+            DishGridCell(snapshot: snapshot)
                 .onTapGesture {
-                    openWindow(value: DetailWindowRoute.recipe(dish.uuid))
+                    openWindow(value: DetailWindowRoute.recipe(snapshot.id))
                 }
                 .accessibilityAddTraits(.isButton)
                 .accessibilityAction {
-                    openWindow(value: DetailWindowRoute.recipe(dish.uuid))
+                    openWindow(value: DetailWindowRoute.recipe(snapshot.id))
                 }
-                .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+                .draggable(DishReference(dishUUID: snapshot.id, name: snapshot.name))
             #else
-            NavigationLink(value: dish) {
-                DishGridCell(dish: dish)
+            NavigationLink(value: DishLibraryRecipeRoute(householdID: householdID, dishID: snapshot.id)) {
+                DishGridCell(snapshot: snapshot)
             }
             .buttonStyle(.plain)
-            .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+            .draggable(DishReference(dishUUID: snapshot.id, name: snapshot.name))
             // An iPad in Stage Manager can hold the recipe beside the
             // library; on iPhone this modifier adds nothing at all.
-            .openInNewWindowContextMenu(.recipe(dish.uuid))
+            .openInNewWindowContextMenu(.recipe(snapshot.id))
             #endif
         }
     }
@@ -97,27 +107,42 @@ struct DishLibraryCell: View, Equatable {
         if let group {
             return String(localized: "\(group.name), \(variantCount) variants")
         }
-        return dish.name
+        return snapshot.name
     }
 
     /// Adds every dropped recipe to this cell's group, creating the group from
     /// this cell's own dish when there isn't one yet.
     private func joinVariants(_ references: [DishReference]) -> Bool {
-        guard let householdID else { return false }
-        let library = (try? context.fetch(FetchDescriptor<Dish>(
-            predicate: #Predicate { $0.household?.uuid == householdID }
-        ))) ?? []
-        let dropped = references.compactMap { reference in
-            library.first { $0.uuid == reference.dishUUID }
+        guard let householdID,
+              let target = fetchDish(snapshot.id, householdID: householdID)
+        else { return false }
+
+        var affected: [UUID: Dish] = [target.uuid: target]
+        if let targetGroupID = target.variantGroupID {
+            for member in fetchGroup(targetGroupID, householdID: householdID) {
+                affected[member.uuid] = member
+            }
         }
+
+        let dropped = references.compactMap { fetchDish($0.dishUUID, householdID: householdID) }
+        for candidate in dropped where candidate.variantGroupID != target.variantGroupID {
+            affected[candidate.uuid] = candidate
+            if let sourceGroupID = candidate.variantGroupID {
+                for member in fetchGroup(sourceGroupID, householdID: householdID) {
+                    affected[member.uuid] = member
+                }
+            }
+        }
+
+        let library = Array(affected.values)
         var joined = false
         for candidate in dropped {
             // Dropping a recipe on itself, or back onto the group it is
             // already in, is a no-op rather than an error.
-            guard candidate !== dish,
-                  candidate.variantGroupID == nil || candidate.variantGroupID != dish.variantGroupID
+            guard candidate.persistentModelID != target.persistentModelID,
+                  candidate.variantGroupID == nil || candidate.variantGroupID != target.variantGroupID
             else { continue }
-            DishVariants.join(candidate, with: dish, in: library)
+            DishVariants.join(candidate, with: target, in: library)
             joined = true
         }
         guard joined else { return false }
@@ -125,5 +150,53 @@ struct DishLibraryCell: View, Equatable {
         SharedStore.reloadWidgets()
         MealPlanTips.recordVariantsJoined()
         return true
+    }
+
+    private func fetchDish(_ uuid: UUID, householdID: UUID) -> Dish? {
+        var descriptor = FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.uuid == uuid && $0.household?.uuid == householdID }
+        )
+        descriptor.fetchLimit = 1
+        return try? context.fetch(descriptor).first
+    }
+
+    private func fetchGroup(_ groupID: UUID, householdID: UUID) -> [Dish] {
+        (try? context.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.variantGroupID == groupID && $0.household?.uuid == householdID }
+        ))) ?? []
+    }
+}
+
+/// Navigation values carry only stable identity. The destination re-fetches
+/// the model in the same household when it is opened.
+struct DishLibraryRecipeRoute: Hashable {
+    let householdID: UUID?
+    let dishID: UUID
+}
+
+@MainActor
+struct DishLibraryRecipeDestination: View {
+    private let route: DishLibraryRecipeRoute
+    @Query private var dishes: [Dish]
+
+    init(route: DishLibraryRecipeRoute) {
+        self.route = route
+        let householdID = route.householdID ?? UUID()
+        let dishID = route.dishID
+        _dishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.uuid == dishID && $0.household?.uuid == householdID }
+        ))
+    }
+
+    var body: some View {
+        if let dish = dishes.first {
+            DishDetailView(dish: dish)
+        } else {
+            ContentUnavailableView(
+                String(localized: "Recipe unavailable"),
+                systemImage: "fork.knife",
+                description: Text("This recipe may have been removed or moved to another household.")
+            )
+        }
     }
 }

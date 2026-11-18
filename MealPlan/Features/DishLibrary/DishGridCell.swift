@@ -1,31 +1,67 @@
 import SwiftUI
 import SwiftData
 
+/// Scalar-only data used while SwiftUI draws a library card. Constructing the
+/// thumbnail from these values avoids reading a Dish or its lazy relationships
+/// during card layout.
+struct DishLibraryCardSnapshot: Equatable, Identifiable {
+    var id: UUID
+    var persistentID: PersistentIdentifier?
+    var name: String
+    var glyph: DishGlyph?
+    var unsavedImageData: Data?
+    var isFavorite: Bool
+    var needsReview: Bool
+    var modifiedAt: Date
+
+    init(_ dish: Dish) {
+        let persistentID = DishPhotoLoading.persistentID(for: dish)
+        id = dish.uuid
+        self.persistentID = persistentID
+        unsavedImageData = persistentID == nil ? dish.primaryImage?.data : nil
+        name = dish.name
+        glyph = dish.glyph
+        isFavorite = dish.isFavorite
+        needsReview = dish.needsReview
+        modifiedAt = dish.modifiedAt
+    }
+
+    var photoCacheKey: String {
+        "dish-\(id)-\(modifiedAt.timeIntervalSinceReferenceDate)"
+    }
+}
+
 @MainActor
 struct DishGridCell: View {
-    let dish: Dish
+    let snapshot: DishLibraryCardSnapshot
     /// Set when the cell stands in for a whole variant group: this supplies
     /// the group name while the artwork comes from its leading dish.
     var variantGroupName: String? = nil
 
+    init(snapshot: DishLibraryCardSnapshot, variantGroupName: String? = nil) {
+        self.snapshot = snapshot
+        self.variantGroupName = variantGroupName
+    }
+
+    /// Other detail surfaces can still pass a model; the grid cell immediately
+    /// reduces it to the same scalar snapshot used by the library.
+    init(dish: Dish, variantGroupName: String? = nil) {
+        self.init(snapshot: DishLibraryCardSnapshot(dish), variantGroupName: variantGroupName)
+    }
+
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .bottomLeading) {
-                DishThumbnail(
-                    dish: dish,
-                    cornerRadius: cardCornerRadius,
-                    width: proxy.size.width,
-                    height: proxy.size.height
-                )
+                thumbnail(size: proxy.size)
 
                 dishName
                     .padding(10)
 
                 HStack(spacing: 6) {
-                    if dish.needsReview, variantGroupName == nil {
+                    if snapshot.needsReview, variantGroupName == nil {
                         statusIcon("exclamationmark.triangle.fill", tint: .orange)
                     }
-                    if dish.isFavorite, variantGroupName == nil {
+                    if snapshot.isFavorite, variantGroupName == nil {
                         statusIcon("heart.fill", tint: .pink)
                     }
                 }
@@ -48,9 +84,35 @@ struct DishGridCell: View {
     private var statusValue: String {
         guard variantGroupName == nil else { return "" }
         var parts: [String] = []
-        if dish.isFavorite { parts.append(String(localized: "Favourite")) }
-        if dish.needsReview { parts.append(String(localized: "Needs review")) }
+        if snapshot.isFavorite { parts.append(String(localized: "Favourite")) }
+        if snapshot.needsReview { parts.append(String(localized: "Needs review")) }
         return parts.joined(separator: ", ")
+    }
+
+    @ViewBuilder
+    private func thumbnail(size: CGSize) -> some View {
+        let tint = DishGlyph.tint(forName: snapshot.name)
+        if let persistentID = snapshot.persistentID {
+            DishThumbnail(
+                dishID: persistentID,
+                dishUUID: snapshot.id,
+                cacheKey: snapshot.photoCacheKey,
+                glyph: snapshot.glyph,
+                tint: tint,
+                cornerRadius: cardCornerRadius,
+                width: size.width,
+                height: size.height
+            )
+        } else {
+            DishThumbnail(
+                data: snapshot.unsavedImageData,
+                glyph: snapshot.glyph,
+                tint: tint,
+                cornerRadius: cardCornerRadius,
+                width: size.width,
+                height: size.height
+            )
+        }
     }
 
     // .contextMenuPreview is iOS-only, so macOS gets the drag preview alone.
@@ -71,7 +133,7 @@ struct DishGridCell: View {
 
     private var displayName: String {
         if let variantGroupName, !variantGroupName.isEmpty { return variantGroupName }
-        return dish.name.isEmpty ? String(localized: "Untitled dish") : dish.name
+        return snapshot.name.isEmpty ? String(localized: "Untitled dish") : snapshot.name
     }
 
     private var dishName: some View {
@@ -100,7 +162,7 @@ struct DishGridCell: View {
 }
 
 #Preview {
-    DishGridCell(dish: PreviewData.household.dishes?.first ?? Dish(name: "Test"))
+    DishGridCell(snapshot: DishLibraryCardSnapshot(PreviewData.household.dishes?.first ?? Dish(name: "Test")))
         .frame(width: 200)
         .padding()
         .modelContainer(PreviewData.container)

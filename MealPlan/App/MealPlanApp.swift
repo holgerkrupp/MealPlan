@@ -49,7 +49,22 @@ struct MealPlanApp: App {
             container = SharedStore.make(cloudKit: false, inMemory: true)
             storeOpenFailure = nil
         } else {
+            #if canImport(UIKit)
+            let isBackgroundLaunch = UIApplication.shared.applicationState == .background
+            let execution = StartupStoreExecution.begin()
+            let lease = execution.map { execution in
+                StoreOpenExecutionLease(
+                    hasExpired: { execution.hasExpired },
+                    end: { execution.end() }
+                )
+            }
+            (container, storeOpenFailure) = SharedStore.makeForApp(
+                backgroundExecution: lease,
+                isBackgroundLaunch: isBackgroundLaunch
+            )
+            #else
             (container, storeOpenFailure) = SharedStore.makeForApp()
+            #endif
         }
         // Before the first view asks a tip whether it may show.
         MealPlanTips.configure()
@@ -238,6 +253,52 @@ struct MealPlanApp: App {
 }
 
 #if canImport(UIKit)
+/// Finite UIKit background time for a cold background launch or a foreground
+/// launch that transitions away while its shared store is opening.
+@MainActor
+private final class StartupStoreExecution {
+    private let application: UIApplication
+    private let identifier: UIBackgroundTaskIdentifier
+    private let expiration = StartupStoreExpiration()
+
+    private init?(application: UIApplication) {
+        self.application = application
+        let expiration = self.expiration
+        let taskID = application.beginBackgroundTask(withName: "Open MealPlan store") {
+            expiration.markExpired()
+        }
+        guard taskID != .invalid else { return nil }
+        self.identifier = taskID
+    }
+
+    static func begin() -> StartupStoreExecution? {
+        StartupStoreExecution(application: UIApplication.shared)
+    }
+
+    var hasExpired: Bool { expiration.hasExpired }
+
+    func end() {
+        application.endBackgroundTask(identifier)
+    }
+}
+
+private final class StartupStoreExpiration: @unchecked Sendable {
+    private let lock = NSLock()
+    private var expired = false
+
+    var hasExpired: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return expired
+    }
+
+    func markExpired() {
+        lock.lock()
+        expired = true
+        lock.unlock()
+    }
+}
+
 /// Configures app and scene lifecycle hooks used by CloudKit sharing.
 ///
 /// Scene-based iOS versions deliver invitations to `MealPlanSceneDelegate`

@@ -976,6 +976,29 @@
         }
       }
     },
+    "%lld ingredients are listed only on this recipe." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ingredient is listed only on this recipe."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld ingredients are listed only on this recipe."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld ingredients have no amount and were left out." : {
       "localizations" : {
         "da" : {
@@ -1245,6 +1268,29 @@
         }
       }
     },
+    "%lld photos exist only on this recipe and will be deleted." : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld photo exists only on this recipe and will be deleted."
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld photos exist only on this recipe and will be deleted."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "%lld planned meals" : {
       "localizations" : {
         "da" : {
@@ -1367,6 +1413,9 @@
           }
         }
       }
+    },
+    "%lld selected" : {
+
     },
     "%lld sent to Bring!" : {
       "localizations" : {
@@ -1564,6 +1613,12 @@
           }
         }
       }
+    },
+    "%lld unique ingredient lines, including their quantities and notes, will be kept." : {
+
+    },
+    "%lld unique photos will be kept with the recipe you choose to keep." : {
+
     },
     "%lld week templates" : {
       "localizations" : {
@@ -2026,6 +2081,9 @@
         }
       }
     },
+    "A new barcode. Name it once — this device remembers the name for the next scan." : {
+
+    },
     "A new dish, planned for this meal" : {
       "localizations" : {
         "da" : {
@@ -2469,6 +2527,9 @@
         }
       }
     },
+    "Add “%@” to the pantry" : {
+
+    },
     "Add %@ to the shopping list" : {
       "localizations" : {
         "da" : {
@@ -2515,6 +2576,28 @@
         }
       }
     },
+    "Add %lld items" : {
+      "localizations" : {
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld item"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "Add %lld items"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "Add ${name} to MealPlan" : {
       "localizations" : {
         "da" : {
@@ -2554,6 +2637,9 @@
           }
         }
       }
+    },
+    "Add 1 item" : {
+
     },
     "Add a dish" : {
       "localizations" : {
@@ -2911,6 +2997,9 @@
         }
       }
     },
+    "Add an item, e.g. 1 baguette" : {
+
+    },
     "Add another" : {
       "localizations" : {
         "da" : {
@@ -3138,6 +3227,9 @@
     "Add dishes" : {
 
     },
+    "Add dishes…" : {
+
+    },
     "Add ingredient" : {
 
     },
@@ -3353,6 +3445,9 @@
         }
       }
     },
+    "Add one" : {
+
+    },
     "Add package size" : {
 
     },
@@ -3408,10 +3503,22 @@
         }
       }
     },
+    "Add recipe to plan" : {
+
+    },
+    "Add several items" : {
+
+    },
+    "Add several items…" : {
+
+    },
     "Add Shopping Item" : {
 
     },
     "Add size" : {
+
+    },
+    "Add tag" : {
 
     },
     "Add the meals your family likes. A name is enough to start — you can add a recipe and a photo later." : {
@@ -3516,6 +3623,12 @@
         }
       }
     },
+    "Add to a collection" : {
+
+    },
+    "Add to collection" : {
+
+    },
     "Add to MealPlan" : {
       "localizations" : {
         "da" : {
@@ -3561,6 +3674,9 @@
           }
         }
       }
+    },
+    "Add to recipe" : {
+
     },
     "Add to Reminders" : {
       "localizations" : {
@@ -3609,6 +3725,9 @@
       }
     },
     "Add to shopping list" : {
+
+    },
+    "Add to the pantry" : {
 
     },
     "Add to the shopping list" : {
@@ -3743,6 +3862,12 @@
         }
       }
     },
+    "Added “%@” to the pantry." : {
+
+    },
+    "Added “%@” to the shopping list." : {
+
+    },
     "Added “%@” to your recipes, next to your own version of it." : {
 
     },
@@ -3750,6 +3875,9 @@
 
     },
     "Added %@ to the shopping list." : {
+
+    },
+    "Added %lld dishes to “%@”" : {
 
     },
     "Added %lld items to your “MealPlan” list in Reminders." : {
@@ -3793,6 +3921,12 @@
       }
     },
     "Added by hand" : {
+
+    },
+    "Added to the shopping list for these days. No recipe needed." : {
+
+    },
+    "Additional recipe notes from %@:" : {
 
     },
     "Adds a dish by name, or imports one from a recipe link." : {
@@ -4141,6 +4275,9 @@
           }
         }
       }
+    },
+    "All dishes" : {
+
     },
     "All in one" : {
 
@@ -4522,6 +4659,9 @@
         }
       }
     },
+    "Also buy" : {
+
+    },
     "Also plan it" : {
       "localizations" : {
         "da" : {
@@ -4666,7 +4806,13 @@
     "Amount" : {
 
     },
+    "Amount, e.g. 500 g or 3" : {
+
+    },
     "Amounts are for %lld servings." : {
+
+    },
+    "An amount is optional. With one, rebuilding the shopping list buys only what's missing; “Have” without an amount leaves the item off." : {
 
     },
     "An estimate, not a nutrition label." : {
@@ -5075,6 +5221,9 @@
       }
     },
     "At a Glance" : {
+
+    },
+    "At home" : {
 
     },
     "Autumn" : {
@@ -5611,6 +5760,9 @@
         }
       }
     },
+    "Barcode" : {
+
+    },
     "Based on %lld meals with enough nutrition information." : {
 
     },
@@ -5661,6 +5813,9 @@
       }
     },
     "Best before" : {
+
+    },
+    "Best before %@" : {
 
     },
     "Both lists were already the same." : {
@@ -7264,6 +7419,9 @@
     "Canonical display name" : {
 
     },
+    "Carbohydrate" : {
+
+    },
     "Carbs" : {
       "localizations" : {
         "da" : {
@@ -7628,6 +7786,9 @@
           }
         }
       }
+    },
+    "Choose dishes" : {
+
     },
     "Choose photo" : {
       "localizations" : {
@@ -8356,6 +8517,24 @@
         }
       }
     },
+    "Collection" : {
+
+    },
+    "Collection %@" : {
+
+    },
+    "Collection options" : {
+
+    },
+    "Collections" : {
+
+    },
+    "Collections gather dishes like a cookbook — “Weeknight”, “Christmas baking”, “From Grandma”. A dish can be in several." : {
+
+    },
+    "Collections work like cookbooks: browse one from the library. A dish can be in several." : {
+
+    },
     "Coming up" : {
       "localizations" : {
         "da" : {
@@ -8951,6 +9130,12 @@
       }
     },
     "Cook time (minutes)" : {
+
+    },
+    "Cook time, longest first" : {
+
+    },
+    "Cook time, shortest first" : {
 
     },
     "Cook together" : {
@@ -9552,6 +9737,9 @@
     "Couldn’t complete recovery" : {
 
     },
+    "Couldn’t delete recipe" : {
+
+    },
     "Couldn’t export recipe" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -10108,6 +10296,9 @@
           }
         }
       }
+    },
+    "Couldn’t save the change" : {
+
     },
     "Couldn’t scan recipe" : {
       "localizations" : {
@@ -10803,6 +10994,12 @@
         }
       }
     },
+    "Delete “%@” (left)" : {
+
+    },
+    "Delete “%@” (right)" : {
+
+    },
     "Delete “%@” and its %lld planned meal(s)?" : {
       "localizations" : {
         "da" : {
@@ -10888,6 +11085,12 @@
           }
         }
       }
+    },
+    "Delete collection" : {
+
+    },
+    "Delete collection…" : {
+
     },
     "Delete feed" : {
       "extractionState" : "stale",
@@ -11031,6 +11234,12 @@
         }
       }
     },
+    "Delete Recipe" : {
+
+    },
+    "Delete this collection?" : {
+
+    },
     "Deleted “%@”" : {
       "localizations" : {
         "da" : {
@@ -11072,6 +11281,9 @@
       }
     },
     "Deleted the %@ routine." : {
+
+    },
+    "Deleting keeps unique photos, ingredient lines, method notes and recipe details, and moves planned meals, cooking history, template slots and routines to the recipe you keep." : {
 
     },
     "Deselect all" : {
@@ -11950,6 +12162,9 @@
         }
       }
     },
+    "Duplicate Recipes" : {
+
+    },
     "Duration in minutes" : {
 
     },
@@ -12469,6 +12684,12 @@
         }
       }
     },
+    "Edit saved searches…" : {
+
+    },
+    "Edit values" : {
+
+    },
     "Edited" : {
 
     },
@@ -12638,6 +12859,9 @@
         }
       }
     },
+    "Energy is required. Anything you leave blank is shown as unknown." : {
+
+    },
     "Energy is the only value MealPlan needs. Anything you leave blank counts as zero for this ingredient." : {
       "localizations" : {
         "da" : {
@@ -12729,6 +12953,9 @@
           }
         }
       }
+    },
+    "Enter values per serving" : {
+
     },
     "Entered by hand" : {
       "localizations" : {
@@ -12972,6 +13199,9 @@
           }
         }
       }
+    },
+    "Estimated from %lld of %lld ingredients." : {
+
     },
     "Estimates for one person, accurate to about ±20 %. Meals MealPlan can’t work out are left blank." : {
 
@@ -16118,6 +16348,9 @@
         }
       }
     },
+    "Group as Variants" : {
+
+    },
     "Group name" : {
       "localizations" : {
         "da" : {
@@ -17540,6 +17773,9 @@
         }
       }
     },
+    "Imported from the same source recipe" : {
+
+    },
     "Imported recipe" : {
       "localizations" : {
         "da" : {
@@ -18083,6 +18319,9 @@
     "Inside the fridge" : {
 
     },
+    "Instead of %@" : {
+
+    },
     "instructions" : {
 
     },
@@ -18384,6 +18623,15 @@
         }
       }
     },
+    "Items, one per line" : {
+
+    },
+    "Its method or notes will be added to the recipe you keep." : {
+
+    },
+    "Its plans couldn’t be moved, so nothing was deleted." : {
+
+    },
     "Join %@ in MealPlan" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -18520,6 +18768,9 @@
         }
       }
     },
+    "Keep Both" : {
+
+    },
     "Keep both lists in step" : {
       "localizations" : {
         "da" : {
@@ -18653,6 +18904,9 @@
 
     },
     "Keep separate" : {
+
+    },
+    "Keeps the current search, filters and sort order on this device so you can apply them again with one tap." : {
 
     },
     "Kid-friendly" : {
@@ -19268,6 +19522,9 @@
     "Listening for “next”, “back”, “repeat”…" : {
 
     },
+    "Load more recipes" : {
+
+    },
     "Load my Bring! lists" : {
       "localizations" : {
         "da" : {
@@ -19318,6 +19575,9 @@
 
     },
     "Local Safety Backups" : {
+
+    },
+    "Location name, e.g. Cellar" : {
 
     },
     "Looking for calendars…" : {
@@ -19588,6 +19848,9 @@
 
     },
     "Market" : {
+
+    },
+    "Marks the ingredient as something you have. Rebuilding the shopping list then leaves it off." : {
 
     },
     "Mass (g)" : {
@@ -20135,6 +20398,9 @@
 
     },
     "MealPlan Fridge" : {
+
+    },
+    "MealPlan goes back to estimating this dish from its ingredients." : {
 
     },
     "MealPlan hasn’t asked for Calendar access yet." : {
@@ -20972,6 +21238,9 @@
     "Move to Recently Deleted" : {
 
     },
+    "Moved to “%@”: %lld planned meals, %lld cooked entries, %lld template slots, %lld routines." : {
+
+    },
     "Moves recipe and shopping list relationships to the canonical ingredient" : {
 
     },
@@ -21309,6 +21578,12 @@
         }
       }
     },
+    "New collection" : {
+
+    },
+    "New collection…" : {
+
+    },
     "New dish" : {
       "localizations" : {
         "da" : {
@@ -21434,6 +21709,12 @@
           }
         }
       }
+    },
+    "New tag" : {
+
+    },
+    "New tag…" : {
+
     },
     "New uncertain matches will appear here after an import or recipe edit." : {
 
@@ -21653,6 +21934,9 @@
         }
       }
     },
+    "Next, pick the dishes that belong in it." : {
+
+    },
     "No" : {
 
     },
@@ -21704,6 +21988,9 @@
           }
         }
       }
+    },
+    "No collections yet" : {
+
     },
     "No cooking steps added yet." : {
       "localizations" : {
@@ -21843,6 +22130,9 @@
         }
       }
     },
+    "No duplicate recipes" : {
+
+    },
     "No enabled sizes for this ingredient" : {
 
     },
@@ -21893,6 +22183,9 @@
 
     },
     "No likely leftovers were found for that period." : {
+
+    },
+    "No location" : {
 
     },
     "No matching ingredients" : {
@@ -22617,6 +22910,12 @@
         }
       }
     },
+    "No saved searches" : {
+
+    },
+    "No sensible substitute came up for this ingredient." : {
+
+    },
     "No share sheet? Open a dish and use “Find a recipe” to fetch it from a website, or scan a cookbook page or PDF." : {
       "localizations" : {
         "da" : {
@@ -22834,6 +23133,9 @@
           }
         }
       }
+    },
+    "No unique recipe content needs to be added." : {
+
     },
     "No values for %@ and %lld more." : {
       "localizations" : {
@@ -23092,6 +23394,9 @@
           }
         }
       }
+    },
+    "Not a certified nutrition label." : {
+
     },
     "Not a staple" : {
       "localizations" : {
@@ -23510,6 +23815,9 @@
         }
       }
     },
+    "Note, e.g. opened jar, top shelf" : {
+
+    },
     "Nothing in your library fits the tags and filters you picked." : {
       "localizations" : {
         "da" : {
@@ -23652,6 +23960,9 @@
 
     },
     "Nothing is marked low or out." : {
+
+    },
+    "Nothing is merged or deleted until you choose. Keeping both is remembered on this device." : {
 
     },
     "Nothing is planned for this week yet." : {
@@ -24114,6 +24425,9 @@
     "Nutrition over Time" : {
 
     },
+    "Nutrition per serving" : {
+
+    },
     "Nutrition values" : {
       "localizations" : {
         "da" : {
@@ -24527,6 +24841,9 @@
           }
         }
       }
+    },
+    "One item per line, for example “500 g Mehl”. Bullets and checkboxes from a copied list are ignored." : {
+
     },
     "One pot" : {
       "localizations" : {
@@ -25357,6 +25674,15 @@
         }
       }
     },
+    "Or type the name yourself." : {
+
+    },
+    "or: %@" : {
+
+    },
+    "or: %@ (%@)" : {
+
+    },
     "Organization" : {
       "localizations" : {
         "da" : {
@@ -25883,6 +26209,9 @@
         }
       }
     },
+    "Past best before (%@)" : {
+
+    },
     "Pasta" : {
       "localizations" : {
         "da" : {
@@ -25930,6 +26259,12 @@
       }
     },
     "Pasta & rice" : {
+
+    },
+    "Paste a recipe" : {
+
+    },
+    "Paste a recipe copied from a website, a message or a note. It is split into name, ingredients and method on this device. Anything that can't be sorted is kept as the method." : {
 
     },
     "Pause" : {
@@ -26298,6 +26633,9 @@
         }
       }
     },
+    "Per serving" : {
+
+    },
     "Per serving %@ · P %@ · C %@ · F %@" : {
       "localizations" : {
         "en" : {
@@ -26577,6 +26915,9 @@
           }
         }
       }
+    },
+    "Pick dishes for “%@”" : {
+
     },
     "Pick the Bring! list this family’s shopping list belongs to. Everyone in your family who connects their own Bring! account should pick the same one." : {
       "localizations" : {
@@ -27860,6 +28201,9 @@
     "Please try again." : {
 
     },
+    "Point the camera at a barcode" : {
+
+    },
     "Point the camera at a recipe book, or pick screenshots. Text recognition runs on this device. Printed recipes work best; handwriting may need more corrections." : {
       "localizations" : {
         "da" : {
@@ -28194,6 +28538,12 @@
     "Prep time (minutes)" : {
 
     },
+    "Prep time, longest first" : {
+
+    },
+    "Prep time, shortest first" : {
+
+    },
     "Prepare a copy to share…" : {
 
     },
@@ -28444,6 +28794,9 @@
 
     },
     "Private zones and already accepted shared zones are listed separately when they are distinct. The selected zone, UUID, and share are re-adopted exactly as shown." : {
+
+    },
+    "Product name" : {
 
     },
     "Production" : {
@@ -29441,6 +29794,9 @@
     "Recipe sources are unavailable right now. You can still subscribe to a blog or bookmark a site your household likes." : {
 
     },
+    "Recipe text" : {
+
+    },
     "Recipe title" : {
 
     },
@@ -29693,6 +30049,9 @@
         }
       }
     },
+    "Recipes that share a source or the same name and ingredients would appear here." : {
+
+    },
     "Recipes using %@" : {
 
     },
@@ -29741,6 +30100,9 @@
           }
         }
       }
+    },
+    "Recognize recipe" : {
+
     },
     "Recognizing recipe…" : {
       "localizations" : {
@@ -30194,6 +30556,12 @@
         }
       }
     },
+    "Remove from collection" : {
+
+    },
+    "Remove from collection %@" : {
+
+    },
     "Remove from group" : {
       "localizations" : {
         "da" : {
@@ -30296,6 +30664,9 @@
 
     },
     "Remove Shopping Item" : {
+
+    },
+    "Remove tag" : {
 
     },
     "Remove tag %@" : {
@@ -30430,7 +30801,19 @@
         }
       }
     },
+    "Removed “%@” from %lld dishes" : {
+
+    },
     "Removed %@ from the shopping list." : {
+
+    },
+    "Removed %lld dishes from “%@”" : {
+
+    },
+    "Rename" : {
+
+    },
+    "Rename collection" : {
 
     },
     "Rename group" : {
@@ -30479,6 +30862,9 @@
         }
       }
     },
+    "Rename saved search" : {
+
+    },
     "Rename, add, or reorder your meals in Settings." : {
       "localizations" : {
         "da" : {
@@ -30524,6 +30910,9 @@
           }
         }
       }
+    },
+    "Rename…" : {
+
     },
     "Rendering %lld of %lld share images" : {
       "localizations" : {
@@ -31690,6 +32079,9 @@
     "same name" : {
 
     },
+    "Same name and ingredients" : {
+
+    },
     "same normalized words" : {
 
     },
@@ -31784,6 +32176,9 @@
           }
         }
       }
+    },
+    "Save a search from the filter menu to find it here." : {
+
     },
     "Save a week as a template first." : {
       "localizations" : {
@@ -31954,6 +32349,9 @@
         }
       }
     },
+    "Save current search…" : {
+
+    },
     "Save link only" : {
       "localizations" : {
         "da" : {
@@ -32048,6 +32446,9 @@
           }
         }
       }
+    },
+    "Save search" : {
+
     },
     "Save to a folder…" : {
       "localizations" : {
@@ -32215,7 +32616,13 @@
         }
       }
     },
+    "Saved from the same web page" : {
+
+    },
     "Saved in %@ as well. Changing the recipe here removes that translation." : {
+
+    },
+    "Saved searches" : {
 
     },
     "Saved to %@" : {
@@ -32359,6 +32766,9 @@
     "Say “next”, “back”, “repeat” or “start timer”." : {
 
     },
+    "Scan a product" : {
+
+    },
     "Scan a recipe" : {
       "localizations" : {
         "da" : {
@@ -32398,6 +32808,15 @@
           }
         }
       }
+    },
+    "Scan another" : {
+
+    },
+    "Scan barcode" : {
+
+    },
+    "Scan barcode…" : {
+
     },
     "Scan from photo or PDF" : {
       "localizations" : {
@@ -32707,6 +33126,9 @@
       }
     },
     "Search Dishes" : {
+
+    },
+    "Search for an ingredient to start tracking it. Only what you choose to track is listed here — no need for a complete stock-take." : {
 
     },
     "Search ingredients" : {
@@ -33039,6 +33461,9 @@
           }
         }
       }
+    },
+    "Select dishes" : {
+
     },
     "Select ingredients for a focused answer to “What can I make?”" : {
 
@@ -33408,6 +33833,12 @@
           }
         }
       }
+    },
+    "Servings, fewest first" : {
+
+    },
+    "Servings, most first" : {
+
     },
     "Set %@ to %@." : {
       "localizations" : {
@@ -34250,6 +34681,9 @@
 
     },
     "Show all" : {
+
+    },
+    "Show all dishes" : {
 
     },
     "Show amounts in" : {
@@ -35236,6 +35670,9 @@
         }
       }
     },
+    "Staples are always at home and left off the shopping list when it's rebuilt." : {
+
+    },
     "Staples are left off the shopping list when it's rebuilt from the plan. Run out of one? Put it on the list yourself with the cart button." : {
       "localizations" : {
         "da" : {
@@ -35438,6 +35875,12 @@
         }
       }
     },
+    "Start tracking" : {
+
+    },
+    "Start tracking %@" : {
+
+    },
     "Start with a few dishes" : {
       "localizations" : {
         "da" : {
@@ -35579,6 +36022,9 @@
         }
       }
     },
+    "Status" : {
+
+    },
     "Step %lld" : {
       "localizations" : {
         "da" : {
@@ -35695,6 +36141,9 @@
 
     },
     "Stop publishing" : {
+
+    },
+    "Stop tracking" : {
 
     },
     "Stopped publishing. The events MealPlan added were removed." : {
@@ -35890,6 +36339,9 @@
     "Subscriptions updated %@" : {
 
     },
+    "Substitutes" : {
+
+    },
     "Sugar" : {
       "localizations" : {
         "da" : {
@@ -35977,6 +36429,9 @@
       }
     },
     "Suggest Dishes for Leftovers" : {
+
+    },
+    "Suggest substitutes…" : {
 
     },
     "Suggest ways to use likely leftovers" : {
@@ -36068,6 +36523,9 @@
         }
       }
     },
+    "Suggested on this device by Apple Intelligence. Check allergies and dietary needs yourself — suggestions can be wrong. Nothing changes in the recipe unless you add it." : {
+
+    },
     "Suggestions" : {
       "localizations" : {
         "da" : {
@@ -36113,6 +36571,9 @@
           }
         }
       }
+    },
+    "Suggestions aren’t available right now. Please try again later." : {
+
     },
     "Suggests saved recipes using selected ingredients." : {
 
@@ -36362,6 +36823,9 @@
           }
         }
       }
+    },
+    "Tagged %lld dishes “%@”" : {
+
     },
     "Tags" : {
       "localizations" : {
@@ -36718,6 +37182,9 @@
           }
         }
       }
+    },
+    "Template slots" : {
+
     },
     "Tentative" : {
       "localizations" : {
@@ -37209,6 +37676,9 @@
           }
         }
       }
+    },
+    "The dishes stay in your library; only the collection is removed." : {
+
     },
     "The fridge light is coming on" : {
 
@@ -37779,6 +38249,7 @@
 
     },
     "These values are estimates" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -37817,6 +38288,9 @@
           }
         }
       }
+    },
+    "Thinking of substitutes…" : {
+
     },
     "This aisle name will be remembered for the ingredient." : {
       "localizations" : {
@@ -38487,6 +38961,9 @@
           }
         }
       }
+    },
+    "This recipe may have been removed or moved to another household." : {
+
     },
     "This replaces the recipe’s title, ingredients, instructions and timings with the latest information from its saved link. Your photos, tags, ratings and meal plan stay unchanged." : {
 
@@ -39286,6 +39763,12 @@
       }
     },
     "Total" : {
+
+    },
+    "Total time, longest first" : {
+
+    },
+    "Total time, shortest first" : {
 
     },
     "Touch and hold a meal, then drag it onto another card — or onto a day in the week strip to move it further." : {
@@ -40561,6 +41044,9 @@
     "Use soon" : {
 
     },
+    "Use soon (%@)" : {
+
+    },
     "Use standard aisle" : {
       "localizations" : {
         "da" : {
@@ -40601,7 +41087,11 @@
         }
       }
     },
+    "Use tags for diets, occasions, and anything else you want to find again. A few are suggested from the name and ingredients." : {
+
+    },
     "Use tags for diets, occasions, collections, and anything else you want to find again. A few are suggested from the name and ingredients." : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -40872,6 +41362,12 @@
         }
       }
     },
+    "Used one" : {
+
+    },
+    "Used up" : {
+
+    },
     "Uses practical kitchen increments, including whole eggs. Turn off to show exact values." : {
       "localizations" : {
         "da" : {
@@ -41031,6 +41527,12 @@
           }
         }
       }
+    },
+    "Values entered by someone in your household." : {
+
+    },
+    "Values stated by the recipe’s source. MealPlan hasn’t checked them." : {
+
     },
     "Variant of “%@”" : {
       "localizations" : {
@@ -43294,492 +43796,6 @@
           }
         }
       }
-    },
-    "Add an item, e.g. 1 baguette" : {
-
-    },
-    "Also buy" : {
-
-    },
-    "Added to the shopping list for these days. No recipe needed." : {
-
-    },
-    "Collections" : {
-
-    },
-    "New collection" : {
-
-    },
-    "Rename collection" : {
-
-    },
-    "Delete this collection?" : {
-
-    },
-    "No collections yet" : {
-
-    },
-    "Collections gather dishes like a cookbook — “Weeknight”, “Christmas baking”, “From Grandma”. A dish can be in several." : {
-
-    },
-    "All dishes" : {
-
-    },
-    "Rename" : {
-
-    },
-    "Choose dishes" : {
-
-    },
-    "Next, pick the dishes that belong in it." : {
-
-    },
-    "Delete collection" : {
-
-    },
-    "The dishes stay in your library; only the collection is removed." : {
-
-    },
-    "Collection %@" : {
-
-    },
-    "Suggest substitutes…" : {
-
-    },
-    "Use tags for diets, occasions, and anything else you want to find again. A few are suggested from the name and ingredients." : {
-
-    },
-    "Collections work like cookbooks: browse one from the library. A dish can be in several." : {
-
-    },
-    "Total time, shortest first" : {
-
-    },
-    "Total time, longest first" : {
-
-    },
-    "Prep time, shortest first" : {
-
-    },
-    "Prep time, longest first" : {
-
-    },
-    "Cook time, shortest first" : {
-
-    },
-    "Cook time, longest first" : {
-
-    },
-    "Servings, fewest first" : {
-
-    },
-    "Servings, most first" : {
-
-    },
-    "Save search" : {
-
-    },
-    "Collection" : {
-
-    },
-    "Keeps the current search, filters and sort order on this device so you can apply them again with one tap." : {
-
-    },
-    "Save current search…" : {
-
-    },
-    "Edit saved searches…" : {
-
-    },
-    "Saved searches" : {
-
-    },
-    "Rename saved search" : {
-
-    },
-    "No saved searches" : {
-
-    },
-    "Save a search from the filter menu to find it here." : {
-
-    },
-    "New tag" : {
-
-    },
-    "Couldn’t save the change" : {
-
-    },
-    "Select dishes" : {
-
-    },
-    "Paste a recipe" : {
-
-    },
-    "Tagged %lld dishes “%@”" : {
-
-    },
-    "Removed “%@” from %lld dishes" : {
-
-    },
-    "Added %lld dishes to “%@”" : {
-
-    },
-    "Removed %lld dishes from “%@”" : {
-
-    },
-    "Add dishes…" : {
-
-    },
-    "Rename…" : {
-
-    },
-    "Delete collection…" : {
-
-    },
-    "Collection options" : {
-
-    },
-    "Show all dishes" : {
-
-    },
-    "Pick dishes for “%@”" : {
-
-    },
-    "%lld selected" : {
-
-    },
-    "Add to collection" : {
-
-    },
-    "Remove from collection" : {
-
-    },
-    "New collection…" : {
-
-    },
-    "Add tag" : {
-
-    },
-    "Remove tag" : {
-
-    },
-    "New tag…" : {
-
-    },
-    "Add to a collection" : {
-
-    },
-    "Remove from collection %@" : {
-
-    },
-    "Duplicate Recipes" : {
-
-    },
-    "No duplicate recipes" : {
-
-    },
-    "Recipes that share a source or the same name and ingredients would appear here." : {
-
-    },
-    "Nothing is merged or deleted until you choose. Keeping both is remembered on this device." : {
-
-    },
-    "Imported from the same source recipe" : {
-
-    },
-    "Saved from the same web page" : {
-
-    },
-    "Same name and ingredients" : {
-
-    },
-    "Couldn’t delete recipe" : {
-
-    },
-    "Delete Recipe" : {
-
-    },
-    "Its plans couldn’t be moved, so nothing was deleted." : {
-
-    },
-    "Moved to “%@”: %lld planned meals, %lld cooked entries, %lld template slots, %lld routines." : {
-
-    },
-    "%lld photos exist only on this recipe and will be deleted." : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld photo exists only on this recipe and will be deleted."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld photos exist only on this recipe and will be deleted."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "%lld ingredients are listed only on this recipe." : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld ingredient is listed only on this recipe."
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld ingredients are listed only on this recipe."
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Its method or notes differ from the recipe you keep and will be deleted." : {
-
-    },
-    "Nothing unique is lost." : {
-
-    },
-    "Keep Both" : {
-
-    },
-    "Group as Variants" : {
-
-    },
-    "Delete “%@” (left)" : {
-
-    },
-    "Delete “%@” (right)" : {
-
-    },
-    "Deleting moves its planned meals, cooking history, template slots and routines to the recipe you keep." : {
-
-    },
-    "Template slots" : {
-
-    },
-    "Collaboration Diagnostics" : {
-
-    },
-    "Shows identifiers, scopes, pending counts and errors only; no recipe or member data." : {
-
-    },
-    "Recipe text" : {
-
-    },
-    "Recognize recipe" : {
-
-    },
-    "Paste a recipe copied from a website, a message or a note. It is split into name, ingredients and method on this device. Anything that can't be sorted is kept as the method." : {
-
-    },
-    "Nutrition per serving" : {
-
-    },
-    "Per serving" : {
-
-    },
-    "Energy is required. Anything you leave blank is shown as unknown." : {
-
-    },
-    "MealPlan goes back to estimating this dish from its ingredients." : {
-
-    },
-    "Substitutes" : {
-
-    },
-    "No sensible substitute came up for this ingredient." : {
-
-    },
-    "Suggestions aren’t available right now. Please try again later." : {
-
-    },
-    "Thinking of substitutes…" : {
-
-    },
-    "Instead of %@" : {
-
-    },
-    "Suggested on this device by Apple Intelligence. Check allergies and dietary needs yourself — suggestions can be wrong. Nothing changes in the recipe unless you add it." : {
-
-    },
-    "Add to recipe" : {
-
-    },
-    "Not a certified nutrition label." : {
-
-    },
-    "Enter values per serving" : {
-
-    },
-    "Edit values" : {
-
-    },
-    "Scan a product" : {
-
-    },
-    "Point the camera at a barcode" : {
-
-    },
-    "Product name" : {
-
-    },
-    "Barcode" : {
-
-    },
-    "Scan another" : {
-
-    },
-    "Added “%@” to the shopping list." : {
-
-    },
-    "Added “%@” to the pantry." : {
-
-    },
-    "A new barcode. Name it once — this device remembers the name for the next scan." : {
-
-    },
-    "Or type the name yourself." : {
-
-    },
-    "Add to the pantry" : {
-
-    },
-    "No location" : {
-
-    },
-    "Status" : {
-
-    },
-    "Amount, e.g. 500 g or 3" : {
-
-    },
-    "Used one" : {
-
-    },
-    "Add one" : {
-
-    },
-    "At home" : {
-
-    },
-    "An amount is optional. With one, rebuilding the shopping list buys only what's missing; “Have” without an amount leaves the item off." : {
-
-    },
-    "Location name, e.g. Cellar" : {
-
-    },
-    "Note, e.g. opened jar, top shelf" : {
-
-    },
-    "Staples are always at home and left off the shopping list when it's rebuilt." : {
-
-    },
-    "Stop tracking" : {
-
-    },
-    "Search for an ingredient to start tracking it. Only what you choose to track is listed here — no need for a complete stock-take." : {
-
-    },
-    "Scan barcode" : {
-
-    },
-    "Used up" : {
-
-    },
-    "Add “%@” to the pantry" : {
-
-    },
-    "Start tracking %@" : {
-
-    },
-    "Start tracking" : {
-
-    },
-    "Marks the ingredient as something you have. Rebuilding the shopping list then leaves it off." : {
-
-    },
-    "Past best before (%@)" : {
-
-    },
-    "Use soon (%@)" : {
-
-    },
-    "Best before %@" : {
-
-    },
-    "Add several items" : {
-
-    },
-    "Items, one per line" : {
-
-    },
-    "One item per line, for example “500 g Mehl”. Bullets and checkboxes from a copied list are ignored." : {
-
-    },
-    "Add 1 item" : {
-
-    },
-    "Add %lld items" : {
-      "localizations" : {
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld item"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "Add %lld items"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "Add several items…" : {
-
-    },
-    "Scan barcode…" : {
-
-    },
-    "Carbohydrate" : {
-
-    },
-    "Values stated by the recipe’s source. MealPlan hasn’t checked them." : {
-
-    },
-    "Values entered by someone in your household." : {
-
-    },
-    "Estimated from %lld of %lld ingredients." : {
-
-    },
-    "or: %@" : {
-
-    },
-    "or: %@ (%@)" : {
-
     }
   },
   "version" : "1.0"

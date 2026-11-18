@@ -71,7 +71,10 @@ enum SharedStore {
         // materializes rows. Repair legacy NULL UUIDs before opening the store,
         // otherwise backup and restore can crash before their error handling
         // gets a chance to run.
-        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        let repair = StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        guard mayOpenStore(after: repair) else {
+            fatalError("Could not safely prepare the MealPlan store before opening SwiftData: \(repair)")
+        }
 
         // CKSyncEngine is the only CloudKit writer. Keeping SwiftData's
         // private mirror enabled here would create a second conflict path for
@@ -88,10 +91,38 @@ enum SharedStore {
     /// open, so the app can say so rather than crash at launch every time. The
     /// file is left exactly as it is: an update may be able to read it.
     @MainActor
-    static func makeForApp() -> (container: ModelContainer, openFailure: Error?) {
+    static func makeForApp(
+        backgroundExecution: StoreOpenExecutionLease? = nil,
+        isBackgroundLaunch: Bool = false
+    ) -> (container: ModelContainer, openFailure: Error?) {
         LenientSecureUnarchiveTransformer.register()
         let schema = makeSchema()
-        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+
+        // Keep finite UIKit background time across the complete repair +
+        // SwiftData open sequence. The app target owns the platform API; this
+        // shared source is also compiled into extensions that cannot access
+        // UIApplication.shared.
+        if isBackgroundLaunch, backgroundExecution == nil {
+            let failure = StoreStartupDeferredError(
+                repair: .failed(stage: "backgroundTask.begin", code: 0),
+                reason: "MealPlan could not reserve background time to safely open the data store. It has not been changed; try again when the app is active."
+            )
+            return (make(cloudKit: false, inMemory: true), failure)
+        }
+        defer { backgroundExecution?.end() }
+
+        let repair = StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        guard repair == .healthy || repair == .storeMissing || isRepair(repair) else {
+            let failure = StoreStartupDeferredError(repair: repair)
+            logger.error("Store startup deferred after UUID preflight: \(failure.localizedDescription, privacy: .public)")
+            return (make(cloudKit: false, inMemory: true), failure)
+        }
+        if backgroundExecution?.hasExpired() == true {
+            let failure = StoreStartupDeferredError(repair: repair, reason: "Background execution time expired before opening SwiftData.")
+            logger.warning("Store startup deferred because background execution time expired")
+            return (make(cloudKit: false, inMemory: true), failure)
+        }
+
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {
             let container = try ModelContainer(for: schema, configurations: [local])
@@ -104,13 +135,52 @@ enum SharedStore {
         }
     }
 
+    private static func isRepair(_ outcome: StoreUUIDRepair.Outcome) -> Bool {
+        if case .repaired = outcome { return true }
+        return false
+    }
+
+    private static func mayOpenStore(after outcome: StoreUUIDRepair.Outcome) -> Bool {
+        outcome == .healthy || outcome == .storeMissing || isRepair(outcome)
+    }
+
     /// Open the shared store without CloudKit and without trapping. The
     /// widgets use this: a timeline provider that crashes takes the whole
     /// widget down on every refresh, where an empty view merely looks empty.
     static func containerIfAvailable() -> ModelContainer? {
+        #if os(macOS) && !targetEnvironment(macCatalyst)
+        return openWidgetStoreIfAvailable(shouldDefer: { false })
+        #else
+        let attempt = WidgetStoreOpenAttempt()
+        ProcessInfo.processInfo.performExpiringActivity(withReason: "Open MealPlan widget store") { expired in
+            if expired {
+                attempt.expire()
+            } else {
+                attempt.start {
+                    guard !attempt.hasExpired else { return nil }
+                    return openWidgetStoreIfAvailable(shouldDefer: { attempt.hasExpired })
+                }
+            }
+        }
+        return attempt.waitForResult()
+        #endif
+    }
+
+    private static func openWidgetStoreIfAvailable(shouldDefer: () -> Bool) -> ModelContainer? {
         LenientSecureUnarchiveTransformer.register()
         let schema = makeSchema()
-        StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        let repair = StoreUUIDRepair.repairMissingUUIDs(at: storeURL, logger: logger)
+        guard mayOpenStore(after: repair) else {
+            logger.warning("Widget store open deferred after UUID repair result: \(String(describing: repair), privacy: .public)")
+            return nil
+        }
+        // WidgetKit can expire an extension while the synchronous SQLite
+        // preflight is running. Do not cross into SwiftData's non-cancellable
+        // store open after the execution assertion has expired.
+        guard !shouldDefer() else {
+            logger.debug("Widget store open deferred after background activity expired")
+            return nil
+        }
         let local = ModelConfiguration(schema: schema, url: storeURL, cloudKitDatabase: .none)
         do {
             return try ModelContainer(for: schema, configurations: [local])
@@ -145,6 +215,91 @@ enum SharedStore {
             await WidgetRefreshScheduler.schedule()
         }
     }
+}
+
+/// Bridges Foundation's asynchronous app-extension execution assertion to
+/// the synchronous WidgetKit store loader. The operation starts once; if the
+/// assertion expires before it starts, the widget gets a safe empty snapshot.
+private final class WidgetStoreOpenAttempt: @unchecked Sendable {
+    private let lock = NSLock()
+    private let finished = DispatchSemaphore(value: 0)
+    private var started = false
+    private var completed = false
+    private var expired = false
+    private var container: ModelContainer?
+
+    var hasExpired: Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return expired
+    }
+
+    func start(_ operation: @Sendable () -> ModelContainer?) {
+        lock.lock()
+        guard !started, !completed else {
+            lock.unlock()
+            return
+        }
+        started = true
+        lock.unlock()
+
+        let opened = operation()
+
+        lock.lock()
+        if !expired { container = opened }
+        completed = true
+        lock.unlock()
+        finished.signal()
+    }
+
+    func expire() {
+        lock.lock()
+        expired = true
+        let shouldFinish = !started && !completed
+        if shouldFinish { completed = true }
+        lock.unlock()
+        if shouldFinish { finished.signal() }
+    }
+
+    func waitForResult() -> ModelContainer? {
+        finished.wait()
+        lock.lock()
+        defer { lock.unlock() }
+        return container
+    }
+}
+
+/// Explains why the durable store was left unopened. The app can retry the
+/// same non-destructive preflight on its next launch after the competing
+/// process or background execution window has ended.
+private struct StoreStartupDeferredError: LocalizedError {
+    let repair: StoreUUIDRepair.Outcome
+    var reason: String?
+
+    init(repair: StoreUUIDRepair.Outcome, reason: String? = nil) {
+        self.repair = repair
+        self.reason = reason
+    }
+
+    var errorDescription: String? {
+        if let reason { return reason }
+        switch repair {
+        case .contended(let stage, let code):
+            return "The data store is busy during startup (\(stage), SQLite \(code)). It has not been changed; opening can be retried."
+        case .failed(let stage, let code):
+            return "The data store could not complete startup preparation (\(stage), SQLite \(code)). It has not been changed."
+        case .storeMissing, .healthy, .repaired:
+            return "The data store could not complete startup preparation. It has not been changed."
+        }
+    }
+}
+
+/// Platform-neutral handle for finite background execution time held by the
+/// app target around a startup store repair/open attempt.
+@MainActor
+struct StoreOpenExecutionLease {
+    let hasExpired: @MainActor () -> Bool
+    let end: @MainActor () -> Void
 }
 
 @MainActor

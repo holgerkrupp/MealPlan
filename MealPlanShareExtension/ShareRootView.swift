@@ -168,10 +168,14 @@ struct ShareRootView: View {
             }
             if let siteCandidate {
                 Section {
+                    Button(String(localized: "Add recipe to plan"), systemImage: "fork.knife") {
+                        Task { await importSharedRecipeAndPlan() }
+                    }
+                    .buttonStyle(.borderedProminent)
+
                     Button(String(localized: "Subscribe to recipe site"), systemImage: "dot.radiowaves.left.and.right") {
                         Task { await subscribeToSite(siteCandidate) }
                     }
-                    .buttonStyle(.borderedProminent)
                     .disabled(isSubscribing)
                     if let url = sharedURL {
                         Link(String(localized: "Open in MealPlan"), destination: url)
@@ -270,6 +274,12 @@ struct ShareRootView: View {
             recipes = [fallbackURLRecipe(url)]
             phase = .ready
         }
+    }
+
+    @MainActor
+    private func importSharedRecipeAndPlan() async {
+        plan = true
+        await importSharedURL()
     }
 
     @MainActor

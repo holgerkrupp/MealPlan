@@ -302,6 +302,18 @@ private enum PreparedRemoteRecord {
     case ignored(name: String, systemFields: Data)
 }
 
+/// Keeps the engine alive only through its callback owner and associates each
+/// observed object identity with the activation that first delivered an event.
+private final class ObservedSyncEngineGeneration {
+    weak var engine: CKSyncEngine?
+    let generation: UInt64
+
+    init(engine: CKSyncEngine, generation: UInt64) {
+        self.engine = engine
+        self.generation = generation
+    }
+}
+
 /// The sole CloudKit transport for the App Group SwiftData store. It scans
 /// stable per-record fingerprints after saves, and lets CKSyncEngine own
 /// subscriptions, change tokens, retries, and partial failures.
@@ -343,9 +355,18 @@ final class HouseholdRecordSyncService {
     /// rebuild (including every externally stored photo) per record.
     private var pendingSnapshots: [String: LocalHouseholdRecord] = [:]
     private var needsLocalScan = true
+    /// Invalidates teardown work queued by callbacks when a newer activation
+    /// has already taken ownership of this service.
+    private var lifecycleGeneration: UInt64 = 0
+    private var pendingAccountChangeTeardownID: UUID?
+    private var lifecycleStopTask: (id: UUID, task: Task<Void, Never>)?
+    /// Old IDs intentionally survive activation changes so a late callback
+    /// from an already-seen engine cannot be mistaken for the current one.
+    private var syncEngineGenerations: [ObjectIdentifier: ObservedSyncEngineGeneration] = [:]
     private var didRestoreTombstoneOperations = false
     private var isApplyingRemoteChanges = false
     private var isWaitingToApplyRemoteChanges = false
+    private var remoteApplyRequestID: UUID?
     /// The scene lifecycle closes admission for new unbounded scans as soon
     /// as the UI leaves the foreground. Already-entered persistence units are
     /// allowed to finish so cancellation never tears through a save.
@@ -474,6 +495,23 @@ final class HouseholdRecordSyncService {
     }
 
     func stop() async {
+        if let lifecycleStopTask {
+            await lifecycleStopTask.task.value
+            return
+        }
+        lifecycleGeneration &+= 1
+        pendingAccountChangeTeardownID = nil
+        let stopID = UUID()
+        let task = Task { @MainActor [weak self] in
+            guard let self else { return }
+            await self.performStop()
+        }
+        lifecycleStopTask = (stopID, task)
+        await task.value
+        if lifecycleStopTask?.id == stopID { lifecycleStopTask = nil }
+    }
+
+    private func performStop() async {
         scheduledScan?.cancel()
         scheduledScan = nil
         foregroundPollTask?.cancel()
@@ -549,8 +587,10 @@ final class HouseholdRecordSyncService {
 
     func record(
         for id: CKRecord.ID,
-        fallbackSnapshots: [String: LocalHouseholdRecord]? = nil
+        fallbackSnapshots: [String: LocalHouseholdRecord]? = nil,
+        generation: UInt64? = nil
     ) async throws -> CKRecord? {
+        if let generation, generation != lifecycleGeneration { return nil }
         guard id.zoneID == locator?.zoneID else { return nil }
         if let identity = HouseholdRecordIdentity(recordType: HouseholdRecordType.deletionMarker.rawValue, recordName: id.recordName),
            let household {
@@ -577,9 +617,12 @@ final class HouseholdRecordSyncService {
         } else {
             snapshot = try await snapshotsByName()[id.recordName]
         }
+        if let generation, generation != lifecycleGeneration { return nil }
         guard let snapshot else { return nil }
         let systemRecord = metadata.systemFields[id.recordName].flatMap(decodeSystemFields)
-        return try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+        let record = try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+        if let generation, generation != lifecycleGeneration { return nil }
+        return record
     }
 
     private func makeCloudRecord(
@@ -603,6 +646,8 @@ final class HouseholdRecordSyncService {
     }
 
     func handle(_ event: CKSyncEngine.Event, syncEngine: CKSyncEngine) async {
+        let callbackGeneration = generation(for: syncEngine)
+        guard callbackGeneration == lifecycleGeneration else { return }
         do {
             switch event {
             case .stateUpdate:
@@ -610,22 +655,28 @@ final class HouseholdRecordSyncService {
                 // serializations before forwarding events to this delegate.
                 break
             case .fetchedRecordZoneChanges(let changes):
-                try await applyFetchedChanges(changes)
+                try await applyFetchedChanges(changes, generation: callbackGeneration)
+                guard callbackGeneration == lifecycleGeneration else { return }
             case .sentRecordZoneChanges(let changes):
-                try await packageStateStore?.acknowledgeSentChanges(
+                guard let stateStore = packageStateStore else { return }
+                let scope = activeScope
+                try await stateStore.acknowledgeSentChanges(
                     savedRecords: changes.savedRecords,
                     deletedRecordIDs: changes.deletedRecordIDs,
-                    in: activeScope
+                    in: scope
                 )
-                try await handleSentChanges(changes)
+                guard callbackGeneration == lifecycleGeneration else { return }
+                try await handleSentChanges(changes, generation: callbackGeneration)
+                guard callbackGeneration == lifecycleGeneration else { return }
             case .sentDatabaseChanges(let changes):
                 if let failure = changes.failedZoneSaves.first { lastError = failure.error }
             case .accountChange:
                 // Metadata is stored per account, so the old account's stays
                 // valid for its return. Stop syncing, and let the next activation
                 // decide whether this household may follow to whoever is signed
-                // in now. Not awaited: this is the engine's own callback.
-                Task { await stop() }
+                // in now. Do not inherit the engine callback's task-local context:
+                // cancelOperations() from that context can recurse into CKSyncEngine.
+                requestAccountChangeTeardown(generation: callbackGeneration)
             case .fetchedDatabaseChanges, .willFetchChanges, .willFetchRecordZoneChanges,
                  .didFetchRecordZoneChanges, .didFetchChanges, .willSendChanges, .didSendChanges:
                 break
@@ -633,13 +684,30 @@ final class HouseholdRecordSyncService {
                 break
             }
         } catch {
+            guard callbackGeneration == lifecycleGeneration else { return }
             lastError = error
             let failure = error as NSError
             logger.error("CloudKit delegate failed (domain=\(failure.domain, privacy: .public), code=\(failure.code, privacy: .public)).")
         }
     }
 
+    private func generation(for syncEngine: CKSyncEngine) -> UInt64 {
+        let identifier = ObjectIdentifier(syncEngine)
+        if let observed = syncEngineGenerations[identifier], observed.engine === syncEngine {
+            return observed.generation
+        }
+        syncEngineGenerations = syncEngineGenerations.filter { $0.value.engine != nil }
+        let generation = lifecycleGeneration
+        syncEngineGenerations[identifier] = ObservedSyncEngineGeneration(
+            engine: syncEngine,
+            generation: generation
+        )
+        return generation
+    }
+
     func nextBatch(_ sendContext: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
+        let callbackGeneration = generation(for: syncEngine)
+        guard callbackGeneration == lifecycleGeneration else { return nil }
         guard locator?.isReadOnly != true, let zoneID = locator?.zoneID else { return nil }
         let pending = syncEngine.state.pendingRecordZoneChanges.filter { change in
             guard sendContext.options.scope.contains(change) else { return false }
@@ -666,23 +734,40 @@ final class HouseholdRecordSyncService {
                 // A durable journal can outlive the in-memory scan cache.
                 // Rebuild once for this batch, rather than once per record.
                 let all = try await snapshotsByName()
+                guard callbackGeneration == lifecycleGeneration else { return nil }
                 fallbackSnapshots = all.filter { unresolvedNames.contains($0.key) }
             } catch {
-                lastError = error
+                if callbackGeneration == lifecycleGeneration { lastError = error }
                 return nil
             }
         }
-        return await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { id in
+        guard callbackGeneration == lifecycleGeneration else { return nil }
+        let batch = await CKSyncEngine.RecordZoneChangeBatch(pendingChanges: pending) { id in
             try? await HouseholdRecordSyncService.shared.record(
                 for: id,
-                fallbackSnapshots: fallbackSnapshots
+                fallbackSnapshots: fallbackSnapshots,
+                generation: callbackGeneration
             )
         }
+        guard callbackGeneration == lifecycleGeneration else { return nil }
+        return batch
+    }
+
+    func nextFetchChangesOptions(
+        _ fetchContext: CKSyncEngine.FetchChangesContext,
+        syncEngine: CKSyncEngine
+    ) async -> CKSyncEngine.FetchChangesOptions {
+        let callbackGeneration = generation(for: syncEngine)
+        guard callbackGeneration == lifecycleGeneration else {
+            return CKSyncEngine.FetchChangesOptions(scope: .zoneIDs([]))
+        }
+        return fetchContext.options
     }
 
     // MARK: - Activation and local change capture
 
     private func activateIfNeeded(household: Household, context: ModelContext) async throws {
+        if let lifecycleStopTask { await lifecycleStopTask.task.value }
         let nextLocator = HouseholdShareLocator.decode(household.cloudKitShareIdentifier) ?? .solo(householdID: household.uuid)
         if self.household?.uuid == household.uuid, locator == nextLocator, syncEnginePool != nil { return }
 
@@ -698,6 +783,11 @@ final class HouseholdRecordSyncService {
             accountConflictHouseholdID = household.uuid
             throw HouseholdRecordSyncError.householdBelongsToAnotherAccount
         }
+        // A queued account-change teardown is stale only after this activation
+        // has been authorized for the signed-in account. A rejected activation
+        // must leave that teardown intact so the old engine still stops.
+        lifecycleGeneration &+= 1
+        pendingAccountChangeTeardownID = nil
         if accountConflictHouseholdID == household.uuid { accountConflictHouseholdID = nil }
 
         try acquireSyncOwnership()
@@ -815,6 +905,34 @@ final class HouseholdRecordSyncService {
                 self.scheduleScan()
             }
         }
+    }
+
+    private func requestAccountChangeTeardown(generation: UInt64) {
+        guard pendingAccountChangeTeardownID == nil else { return }
+        let requestID = UUID()
+        guard generation == lifecycleGeneration else { return }
+        pendingAccountChangeTeardownID = requestID
+
+        // CKSyncEngine requires serial delegate callbacks. A regular Task
+        // inherits callback task-local values, which makes shutdown's
+        // cancelOperations() appear recursive to the engine. Detaching here
+        // lets this callback return before teardown enters the engine again.
+        Task.detached(priority: .utility) {
+            await HouseholdRecordSyncService.shared.finishAccountChangeTeardown(
+                requestID: requestID,
+                generation: generation
+            )
+        }
+    }
+
+    private func finishAccountChangeTeardown(requestID: UUID, generation: UInt64) async {
+        guard pendingAccountChangeTeardownID == requestID else { return }
+        pendingAccountChangeTeardownID = nil
+        // An activation may have started after the event was delivered but
+        // before this detached task reached the main actor. Never let stale
+        // teardown stop that newer engine.
+        guard lifecycleGeneration == generation else { return }
+        await stop()
     }
 
     /// Detects commits made by the Share Extension or another process using
@@ -1163,11 +1281,17 @@ final class HouseholdRecordSyncService {
 
     // MARK: - Remote change application
 
-    private func applyFetchedChanges(_ changes: CKSyncEngine.Event.FetchedRecordZoneChanges) async throws {
+    private func applyFetchedChanges(
+        _ changes: CKSyncEngine.Event.FetchedRecordZoneChanges,
+        generation: UInt64
+    ) async throws {
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         try await applyRemoteChanges(
             records: changes.modifications.map(\.record),
-            deletions: changes.deletions.map { ($0.recordID, $0.recordType) }
+            deletions: changes.deletions.map { ($0.recordID, $0.recordType) },
+            generation: generation
         )
+        guard generation == lifecycleGeneration else { throw CancellationError() }
     }
 
     /// Re-reads records that an earlier fetch delivered but this device didn't
@@ -1223,22 +1347,36 @@ final class HouseholdRecordSyncService {
 
     private func applyRemoteChanges(
         records: [CKRecord],
-        deletions fetchedDeletions: [(id: CKRecord.ID, recordType: CKRecord.RecordType)]
+        deletions fetchedDeletions: [(id: CKRecord.ID, recordType: CKRecord.RecordType)],
+        generation: UInt64? = nil
     ) async throws {
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
         guard let household, let context, let locator else { return }
         // A launch/save scan may still be building its baseline when a push
         // arrives. Let it finish before the incoming records mutate the same
         // metadata and SwiftData store.
+        let applyRequestID = UUID()
+        remoteApplyRequestID = applyRequestID
         isWaitingToApplyRemoteChanges = true
-        while let localScanTask { try? await localScanTask.value; await Task.yield() }
+        defer {
+            if remoteApplyRequestID == applyRequestID {
+                remoteApplyRequestID = nil
+                isWaitingToApplyRemoteChanges = false
+                isApplyingRemoteChanges = false
+                if needsLocalScan, generation == nil || generation == lifecycleGeneration { scheduleScan() }
+            }
+        }
+        while let localScanTask {
+            try? await localScanTask.value
+            if let generation, generation != lifecycleGeneration { throw CancellationError() }
+            await Task.yield()
+            if let generation, generation != lifecycleGeneration { throw CancellationError() }
+        }
         isWaitingToApplyRemoteChanges = false
         isApplyingRemoteChanges = true
-        defer {
-            isApplyingRemoteChanges = false
-            if needsLocalScan { scheduleScan() }
-        }
 
         var local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
         let modifications = records
             .filter { $0.recordID.zoneID == locator.zoneID }
             .sorted { priority($0) < priority($1) }
@@ -1252,8 +1390,9 @@ final class HouseholdRecordSyncService {
         let incomingNames = Set(modifications.map(\.recordID.recordName) + deletions.map(\.id.recordName))
         if !incomingNames.isSubset(of: metadata.fetchRetryRecordNames) {
             metadata.fetchRetryRecordNames.formUnion(incomingNames)
-            do { try await persistMetadata() }
+            do { try await persistMetadata(expectedGeneration: generation) }
             catch { logger.error("fetch.retry.mark.failed") }
+            if let generation, generation != lifecycleGeneration { throw CancellationError() }
         }
         var unreadableNames = Set<String>()
         try Task.checkCancellation()
@@ -1339,6 +1478,7 @@ final class HouseholdRecordSyncService {
             needsLocalScan = true
             throw CancellationError()
         }
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
         let counts = Dictionary(grouping: modifications) { $0.recordType }
             .mapValues(\.count)
             .map { "\($0.key)=\($0.value)" }
@@ -1360,6 +1500,16 @@ final class HouseholdRecordSyncService {
             try Task.checkCancellation()
             guard !activeBackgroundFetchIsCancelled else { throw CancellationError() }
             try nonUndoableStoreTransaction(in: context) {
+                // Resolve this relationship target from the transaction's own
+                // context immediately before applying records. In particular,
+                // don't let a queued CloudKit callback attach Ingredient or
+                // CookedLog through a Household retained from a prior context
+                // or activation generation.
+                if let generation, generation != lifecycleGeneration { throw CancellationError() }
+                let transactionHousehold = try HouseholdRecordApplier.resolveHousehold(
+                    uuid: household.uuid,
+                    in: context
+                )
                 try HouseholdRecordApplier.withBatchLookup(
                     in: context,
                     expectedRecordCount: modifications.count + deletions.count
@@ -1389,7 +1539,7 @@ final class HouseholdRecordSyncService {
                                 identity: identity,
                                 modifiedAt: resolution.modifiedAt,
                                 assetData: resolution.assetData,
-                                household: household,
+                                household: transactionHousehold,
                                 context: context
                             )
                             modifiedNames.insert(name)
@@ -1441,11 +1591,14 @@ final class HouseholdRecordSyncService {
             throw error
         }
 
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
+
         appliedRemoteRecordCount += modifications.count + deletions.count
         let transactionDuration = transactionStartedAt.duration(to: .now)
         logger.info("db.transaction.end records=\(modifications.count + deletions.count, privacy: .public) duration=\(transactionDuration, privacy: .public)")
 
         local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
         let metadataBeforeQueue = metadata
         for (name, value) in serverFingerprints {
             metadata.serverFingerprints[name] = value
@@ -1475,7 +1628,9 @@ final class HouseholdRecordSyncService {
                 metadata.pendingFingerprints[name] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
                 let systemRecord = metadata.systemFields[name].flatMap(decodeSystemFields)
-                outgoingChanges.append(.save(try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)))
+                let cloudRecord = try await makeCloudRecord(from: snapshot, zoneID: id.zoneID, systemRecord: systemRecord)
+                if let generation, generation != lifecycleGeneration { throw CancellationError() }
+                outgoingChanges.append(.save(cloudRecord))
             }
         }
         for (name, fields) in stagedSystemFields {
@@ -1484,14 +1639,21 @@ final class HouseholdRecordSyncService {
         metadata.fetchRetryRecordNames.subtract(incomingNames.subtracting(unreadableNames))
         do {
             if !outgoingChanges.isEmpty {
-                try await syncEnginePool?.enqueue(outgoingChanges, in: activeScope)
+                if let generation, generation != lifecycleGeneration { throw CancellationError() }
+                let pool = syncEnginePool
+                let scope = activeScope
+                try await pool?.enqueue(outgoingChanges, in: scope)
+                if let generation, generation != lifecycleGeneration { throw CancellationError() }
             }
         } catch {
-            metadata = metadataBeforeQueue
-            needsLocalScan = true
+            if generation == nil || generation == lifecycleGeneration {
+                metadata = metadataBeforeQueue
+                needsLocalScan = true
+            }
             throw error
         }
-        try await persistMetadata()
+        try await persistMetadata(expectedGeneration: generation)
+        if let generation, generation != lifecycleGeneration { throw CancellationError() }
         HouseholdSyncDiagnostics.record(
             event: "fetched",
             locator: locator,
@@ -1500,7 +1662,11 @@ final class HouseholdRecordSyncService {
         NotificationCenter.default.post(name: .mealPlanDataDidChange, object: nil)
     }
 
-    private func handleSentChanges(_ changes: CKSyncEngine.Event.SentRecordZoneChanges) async throws {
+    private func handleSentChanges(
+        _ changes: CKSyncEngine.Event.SentRecordZoneChanges,
+        generation: UInt64
+    ) async throws {
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         var didFail = false
         var needsRescanAfterAcknowledgement = false
         for record in changes.savedRecords {
@@ -1537,7 +1703,8 @@ final class HouseholdRecordSyncService {
             return failure.error.serverRecord
         }
         if !conflicts.isEmpty {
-            try await applyServerConflicts(conflicts)
+            try await applyServerConflicts(conflicts, generation: generation)
+            guard generation == lifecycleGeneration else { throw CancellationError() }
             needsLocalScan = true
             scheduleScan()
         }
@@ -1550,7 +1717,9 @@ final class HouseholdRecordSyncService {
             lastError = failure
             needsLocalScan = true
         }
-        try await persistMetadata()
+        guard generation == lifecycleGeneration else { throw CancellationError() }
+        try await persistMetadata(expectedGeneration: generation)
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         if let locator {
             HouseholdSyncDiagnostics.record(
                 event: didFail ? "sendFailed" : "sent",
@@ -1560,7 +1729,8 @@ final class HouseholdRecordSyncService {
         }
     }
 
-    private func applyServerConflicts(_ servers: [CKRecord]) async throws {
+    private func applyServerConflicts(_ servers: [CKRecord], generation: UInt64) async throws {
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         guard let household, let context else { return }
         let local: [String: LocalHouseholdRecord]
         do { local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid)) }
@@ -1568,6 +1738,7 @@ final class HouseholdRecordSyncService {
             logConflictFailure(error, stage: "localSnapshot")
             throw error
         }
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         var resolved: [(identity: HouseholdRecordIdentity, server: CKRecord, resolution: HouseholdRecordResolution, assetData: Data?)] = []
         for server in servers.sorted(by: { priority($0) < priority($1) }) {
             guard let identity = HouseholdRecordIdentity(recordType: server.recordType, recordName: server.recordID.recordName) else { continue }
@@ -1587,6 +1758,7 @@ final class HouseholdRecordSyncService {
             }
             resolved.append((identity, server, resolution, assetData))
         }
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         do {
             try nonUndoableStoreTransaction(in: context) {
                 try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: resolved.count) {
@@ -1618,6 +1790,7 @@ final class HouseholdRecordSyncService {
             logConflictFailure(error, stage: "updatedSnapshot")
             throw error
         }
+        guard generation == lifecycleGeneration else { throw CancellationError() }
         var outgoing: [CloudKitRecordChange] = []
         for item in resolved {
             let name = item.identity.recordName
@@ -1631,11 +1804,13 @@ final class HouseholdRecordSyncService {
                 metadata.pendingFingerprints[name] = snapshot.fingerprint
                 metadata.pendingGroupFingerprints[name] = snapshot.groupFingerprints
                 do {
-                    outgoing.append(.save(try await makeCloudRecord(
+                    let cloudRecord = try await makeCloudRecord(
                         from: snapshot,
                         zoneID: item.server.recordID.zoneID,
                         systemRecord: item.server
-                    )))
+                    )
+                    guard generation == lifecycleGeneration else { throw CancellationError() }
+                    outgoing.append(.save(cloudRecord))
                 } catch {
                     logConflictFailure(error, stage: "encode", recordType: item.server.recordType)
                     throw error
@@ -1646,12 +1821,19 @@ final class HouseholdRecordSyncService {
             }
         }
         if !outgoing.isEmpty {
-            do { try await syncEnginePool?.enqueue(outgoing, in: activeScope) }
+            guard generation == lifecycleGeneration else { throw CancellationError() }
+            let pool = syncEnginePool
+            let scope = activeScope
+            do { try await pool?.enqueue(outgoing, in: scope) }
             catch {
                 logConflictFailure(error, stage: "enqueue")
                 throw error
             }
+            guard generation == lifecycleGeneration else { throw CancellationError() }
         }
+        guard generation == lifecycleGeneration else { throw CancellationError() }
+        try await persistMetadata(expectedGeneration: generation)
+        guard generation == lifecycleGeneration else { throw CancellationError() }
     }
 
     private func logConflictFailure(_ error: Error, stage: String, recordType: String = "batch") {
@@ -1897,9 +2079,11 @@ final class HouseholdRecordSyncService {
         return directory.appending(path: "metadata-v2-\(digest).json")
     }
 
-    private func persistMetadata() async throws {
+    private func persistMetadata(expectedGeneration: UInt64? = nil) async throws {
+        if let expectedGeneration, expectedGeneration != lifecycleGeneration { throw CancellationError() }
         guard let locator else { throw HouseholdRecordSyncError.stateStoreUnavailable }
         let url = try metadataFileURL(for: locator)
+        let legacyKey = legacyMetadataKey(for: locator)
         let snapshot = metadata
         let startedAt = ContinuousClock.now
         logger.info("state.persist.start")
@@ -1907,7 +2091,8 @@ final class HouseholdRecordSyncService {
         // seconds. Keep that work off the UI actor; the writer actor also
         // preserves write order if callbacks arrive while one write is active.
         let byteCount = try await metadataWriter.write(snapshot, to: url)
-        defaults.removeObject(forKey: legacyMetadataKey(for: locator))
+        if let expectedGeneration, expectedGeneration != lifecycleGeneration { throw CancellationError() }
+        defaults.removeObject(forKey: legacyKey)
         let duration = startedAt.duration(to: .now)
         logger.info("state.persist.end bytes=\(byteCount, privacy: .public) duration=\(duration, privacy: .public) fingerprints=\(snapshot.serverFingerprints.count, privacy: .public) pending=\(snapshot.pendingFingerprints.count, privacy: .public) tombstones=\(snapshot.tombstones.count, privacy: .public)")
     }
@@ -2238,5 +2423,12 @@ private final class HouseholdRecordSyncDelegate: CKSyncEngineDelegate, @unchecke
 
     func nextRecordZoneChangeBatch(_ context: CKSyncEngine.SendChangesContext, syncEngine: CKSyncEngine) async -> CKSyncEngine.RecordZoneChangeBatch? {
         await HouseholdRecordSyncService.shared.nextBatch(context, syncEngine: syncEngine)
+    }
+
+    func nextFetchChangesOptions(
+        _ context: CKSyncEngine.FetchChangesContext,
+        syncEngine: CKSyncEngine
+    ) async -> CKSyncEngine.FetchChangesOptions {
+        await HouseholdRecordSyncService.shared.nextFetchChangesOptions(context, syncEngine: syncEngine)
     }
 }

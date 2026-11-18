@@ -19,6 +19,72 @@ struct HouseholdRecordApplierCrashTests {
         )))
     }
 
+    private func ingredientPayload(name: String) throws -> Data {
+        try HouseholdRecordCodec.encode(HouseholdRecordPayload.ingredient(.init(
+            name: name,
+            normalizedName: Ingredient.normalize(name),
+            categoryRaw: IngredientCategory.other.rawValue,
+            customAisleName: nil,
+            isPantryStaple: false
+        )))
+    }
+
+    private func applyIngredient(
+        _ data: Data,
+        uuid: UUID,
+        household: Household,
+        context: ModelContext,
+        expectedRecordCount: Int
+    ) throws {
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: expectedRecordCount) {
+            try HouseholdRecordApplier.apply(
+                payloadData: data,
+                identity: .init(type: .ingredient, uuid: uuid),
+                modifiedAt: .now,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+        }
+    }
+
+    @Test
+    func ingredientApplyResolvesHouseholdInTransactionContext() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let transactionContext = container.mainContext
+        let storedHousehold = Household(name: "Test")
+        transactionContext.insert(storedHousehold)
+        try transactionContext.save()
+
+        // Simulate a queued callback retaining a household from another
+        // context. Applying through a freshly resolved model keeps both sides
+        // of the SwiftData relationship in the transaction's context.
+        let callbackContext = ModelContext(container)
+        let householdID = storedHousehold.uuid
+        let callbackHousehold = try #require(try callbackContext.fetch(FetchDescriptor<Household>(
+            predicate: #Predicate { $0.uuid == householdID }
+        )).first)
+        let transactionHousehold = try HouseholdRecordApplier.resolveHousehold(
+            uuid: callbackHousehold.uuid,
+            in: transactionContext
+        )
+        #expect(transactionHousehold === storedHousehold)
+        #expect(transactionHousehold.persistentModelID == callbackHousehold.persistentModelID)
+
+        let ingredientID = UUID()
+        try applyIngredient(
+            ingredientPayload(name: "Tomato"),
+            uuid: ingredientID,
+            household: transactionHousehold,
+            context: transactionContext,
+            expectedRecordCount: 1
+        )
+        try transactionContext.save()
+        #expect(storedHousehold.ingredients?.contains { $0.uuid == ingredientID } == true)
+    }
+
     private func apply(
         _ data: Data,
         uuid: UUID,
@@ -49,6 +115,56 @@ struct HouseholdRecordApplierCrashTests {
         context.insert(entry)
         try context.save()
         return (household, dish, entry)
+    }
+
+    /// CloudKit may replay the same Ingredient many times. A no-op household
+    /// relationship assignment rewrites Household.ingredients' inverse even
+    /// when it is already correct; a new row and an actual move still attach.
+    @Test(arguments: [1, 100])
+    func repeatedRemoteIngredientApplySkipsUnchangedHouseholdLink(expectedRecordCount: Int) throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        context.insert(household)
+        try context.save()
+
+        let uuid = UUID()
+        let initial = try ingredientPayload(name: "Tomato")
+        try applyIngredient(initial, uuid: uuid, household: household, context: context, expectedRecordCount: expectedRecordCount)
+        try context.save()
+        #expect(household.ingredients?.count == 1)
+
+        // Refresh through a separate context, as on a relaunch, before replay.
+        let fresh = ModelContext(container)
+        let householdID = household.uuid
+        let reloaded = try #require(try fresh.fetch(FetchDescriptor<Household>(
+            predicate: #Predicate { $0.uuid == householdID }
+        )).first)
+        let updated = try ingredientPayload(name: "Tomatoes")
+        for _ in 0..<3 {
+            try applyIngredient(updated, uuid: uuid, household: reloaded, context: fresh, expectedRecordCount: expectedRecordCount)
+        }
+        try fresh.save()
+        #expect(reloaded.ingredients?.count == 1)
+        #expect(reloaded.ingredients?.first?.name == "Tomatoes")
+        #expect(try fresh.fetchCount(FetchDescriptor<Ingredient>()) == 1)
+
+        let other = Household(name: "Other")
+        fresh.insert(other)
+        try fresh.save()
+        let ingredientID = uuid
+        let moved = try #require(try fresh.fetch(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.uuid == ingredientID }
+        )).first)
+        moved.household = other
+        try fresh.save()
+
+        try applyIngredient(updated, uuid: uuid, household: reloaded, context: fresh, expectedRecordCount: expectedRecordCount)
+        try fresh.save()
+        #expect(moved.household?.uuid == reloaded.uuid)
+        #expect(reloaded.ingredients?.contains { $0.uuid == uuid } == true)
+        #expect(other.ingredients?.contains { $0.uuid == uuid } == false)
     }
 
     @Test(arguments: [1, 100])

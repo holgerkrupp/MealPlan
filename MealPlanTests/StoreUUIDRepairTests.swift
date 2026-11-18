@@ -64,6 +64,18 @@ struct StoreUUIDRepairTests {
         #expect(try uuidCount(in: url, where: "IS NULL") == 0)
     }
 
+    @Test func committedWALRowsSurviveRecoveryAndUUIDRepair() throws {
+        let (url, directory) = try makeStoreWithCommittedWALRow()
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let outcome = StoreUUIDRepair.repairMissingUUIDs(at: url, logger: logger)
+
+        #expect(outcome == .repaired(rows: 1))
+        #expect(try uuidCount(in: url, where: "IS NULL") == 0)
+        #expect(try uuidCount(in: url, where: "IS NOT NULL") == 2)
+        #expect(try payloads(in: url) == ["committed-before-launch", "committed-before-launch"])
+    }
+
     @Test func legacyStoreContentionIsBoundedAndRelaunchRepairsIt() throws {
         let (url, directory) = try makeStore(nullRows: 1)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -100,6 +112,28 @@ struct StoreUUIDRepairTests {
         return (url, directory)
     }
 
+    /// Copies a committed WAL without its shared-memory index, which forces
+    /// SQLite's next opener to rebuild the index and recover the committed row.
+    private func makeStoreWithCommittedWALRow() throws -> (URL, URL) {
+        let directory = FileManager.default.temporaryDirectory.appending(path: "MealPlanUUIDRepair-WAL-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let source = directory.appending(path: "source.sqlite")
+        let url = directory.appending(path: "MealPlan.sqlite")
+        let database = try open(source)
+        #expect(sqlite3_exec(database, "PRAGMA journal_mode=WAL", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "PRAGMA wal_autocheckpoint=0", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "CREATE TABLE ZDish (Z_PK INTEGER PRIMARY KEY, ZUUID BLOB, ZPAYLOAD TEXT)", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "INSERT INTO ZDish (ZUUID, ZPAYLOAD) VALUES (randomblob(16), 'committed-before-launch')", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "PRAGMA wal_checkpoint(TRUNCATE)", nil, nil, nil) == SQLITE_OK)
+        #expect(sqlite3_exec(database, "INSERT INTO ZDish (ZUUID, ZPAYLOAD) VALUES (NULL, 'committed-before-launch')", nil, nil, nil) == SQLITE_OK)
+
+        let sourceWAL = URL(filePath: source.path + "-wal")
+        try FileManager.default.copyItem(at: source, to: url)
+        try FileManager.default.copyItem(at: sourceWAL, to: URL(filePath: url.path + "-wal"))
+        sqlite3_close(database)
+        return (url, directory)
+    }
+
     private func open(_ url: URL) throws -> OpaquePointer {
         var database: OpaquePointer?
         let result = sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_CREATE | SQLITE_OPEN_FULLMUTEX, nil)
@@ -120,6 +154,24 @@ struct StoreUUIDRepairTests {
         defer { sqlite3_finalize(statement) }
         guard sqlite3_step(statement) == SQLITE_ROW else { throw TestError.sqliteOpen(sqlite3_errcode(database)) }
         return Int(sqlite3_column_int(statement, 0))
+    }
+
+    private func payloads(in url: URL) throws -> [String] {
+        let database = try open(url)
+        defer { sqlite3_close(database) }
+        var statement: OpaquePointer?
+        let result = sqlite3_prepare_v2(database, "SELECT ZPAYLOAD FROM ZDish ORDER BY Z_PK", -1, &statement, nil)
+        guard result == SQLITE_OK, let statement else { throw TestError.sqliteOpen(result) }
+        defer { sqlite3_finalize(statement) }
+        var values: [String] = []
+        while true {
+            let step = sqlite3_step(statement)
+            if step == SQLITE_DONE { return values }
+            guard step == SQLITE_ROW, let value = sqlite3_column_text(statement, 0) else {
+                throw TestError.sqliteOpen(sqlite3_errcode(database))
+            }
+            values.append(String(cString: value))
+        }
     }
 
     private enum TestError: Error {

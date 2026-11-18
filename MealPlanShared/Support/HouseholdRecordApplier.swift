@@ -147,6 +147,20 @@ enum HouseholdRecordApplier {
         }
     }
 
+    /// Resolve the active household through the same context that applies
+    /// incoming records. A sync callback can outlive a UI context refresh or
+    /// household activation; relationship setters must receive a model owned
+    /// by the transaction context, never a retained reference from an older
+    /// context generation.
+    static func resolveHousehold(uuid: UUID, in context: ModelContext) throws -> Household {
+        var descriptor = FetchDescriptor<Household>(predicate: #Predicate { $0.uuid == uuid })
+        descriptor.fetchLimit = 1
+        guard let household = try context.fetch(descriptor).first else {
+            throw HouseholdRecordCodecError.missingRelationship
+        }
+        return household
+    }
+
     static func apply(
         payloadData: Data,
         identity: HouseholdRecordIdentity,
@@ -232,7 +246,14 @@ enum HouseholdRecordApplier {
             model.rejectedMatchKeys = value.rejectedMatchKeys ?? []
             model.pendingMergeSuggestionsData = value.pendingMergeSuggestionsData
             model.modifiedAt = modifiedAt
-            model.household = household
+            // CloudKit commonly redelivers an ingredient already attached to
+            // this household. Reassigning the relationship still rewrites
+            // Household.ingredients' inverse and has crashed in SwiftData
+            // when applying fetched records to an existing store. Keep the
+            // link untouched unless this is a real attach or move.
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .ingredientAlias(let value):
             guard let ingredient = try find(Ingredient.self, value.ingredientID, context) else {

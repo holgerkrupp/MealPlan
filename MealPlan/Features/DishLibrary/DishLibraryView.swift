@@ -1,6 +1,14 @@
 import SwiftUI
 import SwiftData
 import UniformTypeIdentifiers
+import os
+
+enum DishLibraryPerformanceSignposts {
+    static let signposter = OSSignposter(
+        subsystem: "de.holgerkrupp.mealplan",
+        category: "dish library"
+    )
+}
 
 @MainActor
 struct DishLibraryView: View {
@@ -190,11 +198,13 @@ private struct DishLibraryContent: View {
     @ViewBuilder
     private var library: some View {
         @Bindable var appState = appState
+        let projection = DishLibraryPerformanceSignposts.signposter.beginInterval("library filter and grouping")
         let filteredDishes = visibleFilter.apply(
             to: allDishes,
             sourceIsAlphabeticallySorted: true
         )
         let items = libraryItems(from: filteredDishes)
+        let _ = DishLibraryPerformanceSignposts.signposter.endInterval("library filter and grouping", projection)
         let canLoadMore = firstPageIsFull
 
         ScrollView {
@@ -230,7 +240,11 @@ private struct DishLibraryContent: View {
                 }
 
                 if canLoadMore && pageCount == 1 {
-                    pageProgress { loadMore(0) }
+                    if filteredDishes.isEmpty {
+                        loadMoreButton { loadMore(0) }
+                    } else {
+                        pageProgress { loadMore(0) }
+                    }
                 }
 
                 ForEach(1..<pageCount, id: \.self) { pageIndex in
@@ -282,6 +296,9 @@ private struct DishLibraryContent: View {
         }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
+        .navigationDestination(for: DishLibraryRecipeRoute.self) { route in
+            DishLibraryRecipeDestination(route: route)
+        }
         .navigationDestination(for: DishVariantGroupRef.self) { DishVariantGroupView(group: $0) }
         .searchable(
             text: $appState.dishFilter.searchText,
@@ -798,7 +815,7 @@ private struct DishLibraryContent: View {
                             toggle: { DishSelection.toggle([dish], in: &selection) }
                         )
                     } else {
-                        DishLibraryCell(dish: dish, acceptsDrops: acceptsDrops, householdID: householdID)
+                        DishLibraryCell(snapshot: DishLibraryCardSnapshot(dish), acceptsDrops: acceptsDrops, householdID: householdID)
                             .equatable()
                     }
                 case .group(let ref, let members):
@@ -811,7 +828,7 @@ private struct DishLibraryContent: View {
                         )
                     } else {
                         DishLibraryCell(
-                            dish: members[0],
+                            snapshot: DishLibraryCardSnapshot(members[0]),
                             group: ref,
                             variantCount: members.count,
                             acceptsDrops: acceptsDrops,
@@ -830,6 +847,18 @@ private struct DishLibraryContent: View {
             .frame(maxWidth: .infinity)
             .padding()
             .onAppear(perform: action)
+    }
+
+    /// When a restrictive filter hides an entire page, an on-appear footer
+    /// would immediately mount the next page and repeat until a match appears
+    /// (or the whole library is scanned) while the tab is otherwise idle.
+    /// Keep the continuation explicit for empty pages; matching pages retain
+    /// the usual scroll-to-load behavior.
+    private func loadMoreButton(action: @escaping () -> Void) -> some View {
+        Button(String(localized: "Load more recipes"), action: action)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .buttonStyle(.plain)
     }
 
     private func handleAddRequest(_ request: AppState.PendingAddDish) async {
@@ -1011,12 +1040,14 @@ private struct DishLibraryResultPage: View {
     }
 
     var body: some View {
+        let projection = DishLibraryPerformanceSignposts.signposter.beginInterval("paged filter and grouping")
         let filtered = filter.apply(
             to: dishes,
             now: .now,
             sourceIsAlphabeticallySorted: filter.sort == .alphabetical
         )
         let items = libraryItems(from: filtered)
+        let _ = DishLibraryPerformanceSignposts.signposter.endInterval("paged filter and grouping", projection)
 
         Group {
             if !items.isEmpty {
@@ -1032,7 +1063,7 @@ private struct DishLibraryResultPage: View {
                                 )
                             } else {
                                 DishLibraryCell(
-                                    dish: dish,
+                                    snapshot: DishLibraryCardSnapshot(dish),
                                     acceptsDrops: acceptsDrops,
                                     householdID: householdID
                                 )
@@ -1048,7 +1079,7 @@ private struct DishLibraryResultPage: View {
                                 )
                             } else {
                                 DishLibraryCell(
-                                    dish: members[0],
+                                    snapshot: DishLibraryCardSnapshot(members[0]),
                                     group: ref,
                                     variantCount: members.count,
                                     acceptsDrops: acceptsDrops,
@@ -1063,10 +1094,14 @@ private struct DishLibraryResultPage: View {
             }
 
             if isLastPage && dishes.count == DishLibraryView.pageSize {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .onAppear { loadMore(pageIndex) }
+                if items.isEmpty {
+                    loadMoreButton { loadMore(pageIndex) }
+                } else {
+                    ProgressView()
+                        .frame(maxWidth: .infinity)
+                        .padding()
+                        .onAppear { loadMore(pageIndex) }
+                }
             }
         }
         .onAppear { updateState(filtered: filtered) }
@@ -1078,6 +1113,13 @@ private struct DishLibraryResultPage: View {
             hasMorePages = householdID != nil && dishes.count == DishLibraryView.pageSize
         }
         if !filtered.isEmpty { hasAnyFilteredResults = true }
+    }
+
+    private func loadMoreButton(action: @escaping () -> Void) -> some View {
+        Button(String(localized: "Load more recipes"), action: action)
+            .frame(maxWidth: .infinity)
+            .padding()
+            .buttonStyle(.plain)
     }
 
     private func libraryItems(from filtered: [Dish]) -> [Item] {
