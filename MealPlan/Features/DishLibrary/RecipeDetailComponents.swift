@@ -40,8 +40,11 @@ struct RecipeBadge: View {
             .font(.caption)
             .padding(.horizontal, 10)
             .padding(.vertical, 5)
-            .background(tint.opacity(0.15), in: Capsule())
-            .foregroundStyle(tint)
+            .foregroundStyle(.primary)
+            .background(.background, in: Capsule())
+            .overlay {
+                Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1)
+            }
     }
 }
 
