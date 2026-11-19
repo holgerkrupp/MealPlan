@@ -118,7 +118,9 @@ struct RecipeDiscoveryView: View {
                         readIDs: seasonalReadIDs,
                         onSeeAll: { seasonalRoute = SeasonalRecipeShelfPolicy.route(for: collection) },
                         onRead: markRead,
-                        onImageResolved: recordSeasonalImage(imageURL:forArticle:)
+                        onImageResolved: { article, imageURL in
+                            recordSeasonalImage(imageURL: imageURL, forArticle: article)
+                        }
                     )
                 }
                 if hasVisibleArticles {
@@ -203,7 +205,9 @@ struct RecipeDiscoveryView: View {
                 articles: route.articles,
                 readIDs: seasonalReadIDs,
                 onRead: markRead,
-                onImageResolved: recordSeasonalImage(imageURL:forArticle:)
+                onImageResolved: { article, imageURL in
+                            recordSeasonalImage(imageURL: imageURL, forArticle: article)
+                        }
             )
         }
     }
