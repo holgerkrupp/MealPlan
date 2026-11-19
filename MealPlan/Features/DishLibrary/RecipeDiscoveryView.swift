@@ -49,6 +49,15 @@ struct RecipeDiscoveryView: View {
         }
     }
 
+    private var discoveryMarketContext: RecipeDiscoveryMarketContext {
+        let household = appState.currentHousehold
+        let identifier = household?.localeIdentifier ?? Locale.current.identifier
+        return RecipeDiscoveryMarketContext(
+            locale: Locale(identifier: identifier),
+            unitSystem: household?.presentationUnitSystem
+        )
+    }
+
     /// True while the view is showing less than everything it has, which is
     /// what the empty state and the toolbar badge key off.
     private var isFiltering: Bool {
@@ -425,15 +434,19 @@ struct RecipeDiscoveryView: View {
         let signpost = RecipePerformanceSignposts.signposter.beginInterval("discovery snapshot")
         defer { RecipePerformanceSignposts.signposter.endInterval("discovery snapshot", signpost) }
         let seeds = makeDiscoverySeeds()
-        let sourceOrder = sourceOptions.map(\.id)
+        let subscribedSourceOrder = feeds.map { "feed:\($0.uuid.uuidString)" }
+        let marketContext = discoveryMarketContext
         let query = discoveryQuery
         let readIDs = RecipeFeedReadState.readIDs()
         let next = await Task.detached(priority: .userInitiated) {
-            RecipeDiscoverySnapshot.build(
+            let sourceOrder = RecipeDiscoveryService.sources(for: marketContext).map { "discovery:\($0.id)" }
+                + subscribedSourceOrder
+            return RecipeDiscoverySnapshot.build(
                 seeds: seeds,
                 sourceOrder: sourceOrder,
                 query: query,
-                readIDs: readIDs
+                readIDs: readIDs,
+                lowAffinitySourceIDs: RecipeDiscoveryService.lowAffinitySourceIDs(for: marketContext)
             )
         }.value
         guard !Task.isCancelled else { return }
