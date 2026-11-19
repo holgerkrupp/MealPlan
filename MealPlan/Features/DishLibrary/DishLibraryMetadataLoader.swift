@@ -13,11 +13,12 @@ struct DishLibraryMetadataRevision: Equatable, Sendable {
 /// Immutable navigation metadata shared by library surfaces. Counts and tag
 /// popularity are derived off the UI context and cached per household/revision.
 struct DishLibraryMetadata: Sendable {
+    var dishCount: Int
     var available: [String]
     var popular: [String]
     var collections: [DishCollectionSummary]
 
-    static let empty = DishLibraryMetadata(available: [], popular: [], collections: [])
+    static let empty = DishLibraryMetadata(dishCount: 0, available: [], popular: [], collections: [])
 }
 
 @ModelActor
@@ -46,11 +47,27 @@ actor DishLibraryMetadataLoader {
         guard !Task.isCancelled else { return .empty }
         let collections = DishCollection.usage(fromCollectionLists: dishes.map(\.collectionNames))
         let metadata = DishLibraryMetadata(
+            dishCount: dishes.count,
             available: DishTag.sorted(usage.map(\.tag)),
             popular: Array(usage.prefix(12).map(\.tag)),
             collections: collections.map { DishCollectionSummary(name: $0.name, count: $0.count) }
         )
         cache[householdID] = CacheEntry(revision: revision, metadata: metadata)
         return metadata
+    }
+}
+
+/// Dishes and the Plan sidebar share one cache per SwiftData container, so
+/// opening both surfaces doesn't repeat the full tag/collection scan.
+@MainActor
+enum DishLibraryMetadataLoaderPool {
+    private static var loaders: [ObjectIdentifier: DishLibraryMetadataLoader] = [:]
+
+    static func loader(for container: ModelContainer) -> DishLibraryMetadataLoader {
+        let key = ObjectIdentifier(container)
+        if let existing = loaders[key] { return existing }
+        let loader = DishLibraryMetadataLoader(modelContainer: container)
+        loaders[key] = loader
+        return loader
     }
 }

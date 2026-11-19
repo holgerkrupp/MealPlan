@@ -7,6 +7,7 @@ import SwiftData
 struct DishSearchSnapshot: Sendable, Identifiable {
     let id: UUID
     let modifiedAt: Date
+    let dateCreated: Date
     let name: String
     let recipeText: String
     let translatedName: String?
@@ -18,6 +19,10 @@ struct DishSearchSnapshot: Sendable, Identifiable {
     let season: String?
     let prepTimeMinutes: Int?
     let cookTimeMinutes: Int?
+    let totalTimeMinutes: Int?
+    let servings: Int
+    let collections: [String]
+    let variantGroupID: UUID?
     let isFavorite: Bool
     let rating: Int
     let lastUsedDate: Date?
@@ -28,6 +33,7 @@ struct DishSearchSnapshot: Sendable, Identifiable {
     init(dish: Dish) {
         id = dish.uuid
         modifiedAt = dish.modifiedAt
+        dateCreated = dish.dateCreated
         name = dish.name
         recipeText = dish.recipeText ?? ""
         translatedName = dish.translatedName
@@ -48,6 +54,10 @@ struct DishSearchSnapshot: Sendable, Identifiable {
         season = dish.season?.rawValue
         prepTimeMinutes = dish.prepTimeMinutes
         cookTimeMinutes = dish.cookTimeMinutes
+        totalTimeMinutes = dish.totalTimeMinutes
+        servings = dish.servings
+        collections = dish.collectionNames
+        variantGroupID = dish.variantGroupID
         isFavorite = dish.isFavorite
         rating = dish.rating
         lastUsedDate = dish.lastUsedDate
@@ -72,6 +82,16 @@ struct DishSearchRequest: Equatable, Sendable {
     var query: String
     var generation: Int
     var candidateIDs: [UUID]?
+
+    var revision: DishSearchSnapshotRevision {
+        DishSearchSnapshotRevision(generation: generation)
+    }
+}
+
+struct DishLibraryQueryRequest: Equatable, Sendable {
+    var householdID: UUID
+    var filter: DishFilter
+    var generation: Int
 
     var revision: DishSearchSnapshotRevision {
         DishSearchSnapshotRevision(generation: generation)
@@ -144,6 +164,7 @@ actor DishSearchSnapshotActor {
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
         let allowed = snapshots.filter { snapshot in
+            guard !snapshot.isBlankDraft else { return false }
             let ingredients = snapshot.ingredientNames.joined(separator: " ")
                 .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
             return hardTerms.allSatisfy { !ingredients.localizedCaseInsensitiveContains($0) }
@@ -172,6 +193,20 @@ actor DishSearchSnapshotActor {
             return ids?.contains(snapshot.id) ?? true
         }
         return DishSearch.rankForFilter(candidates, query: query)
+    }
+
+    /// Applies the same filters and ordering as `DishFilter` using detached
+    /// values. The result is a complete ID order; the UI fetches only one page
+    /// of live models at a time.
+    func filterAndSort(
+        householdID: UUID,
+        revision: DishSearchSnapshotRevision,
+        filter: DishFilter,
+        now: Date = .now
+    ) -> [DishSearchValueResult] {
+        guard let snapshots = snapshots(householdID: householdID, revision: revision),
+              !Task.isCancelled else { return [] }
+        return DishSearch.filterAndSort(snapshots, filter: filter, now: now)
     }
 }
 
@@ -249,6 +284,73 @@ enum DishSearch {
         query: String
     ) -> [ValueResult] {
         rank(dishes.filter { !$0.isBlankDraft }, query: query, limit: dishes.count)
+    }
+
+    static func filterAndSort(
+        _ snapshots: [DishSearchSnapshot],
+        filter: DishFilter,
+        now: Date = .now
+    ) -> [DishSearchValueResult] {
+        let matching = snapshots.filter { snapshot in
+            guard !snapshot.isBlankDraft else { return false }
+            if let mealType = filter.mealType, !snapshot.mealTypes.contains(mealType.rawValue) { return false }
+            if let season = filter.season, snapshot.season != season.rawValue { return false }
+            if let maxMinutes = filter.maxMinutes,
+               snapshot.totalTimeMinutes.map({ $0 <= maxMinutes }) != true { return false }
+            if let days = filter.notCookedWithinDays, let lastUsedDate = snapshot.lastUsedDate,
+               (Calendar.current.dateComponents([.day], from: lastUsedDate, to: now).day ?? 0) < days { return false }
+            if filter.favoritesOnly && !snapshot.isFavorite { return false }
+            if let minimumRating = filter.minimumRating, snapshot.rating < minimumRating { return false }
+            if !filter.tags.isEmpty {
+                let tags = Set(snapshot.tags.map(DishTag.normalize))
+                guard filter.tags.allSatisfy({ tags.contains(DishTag.normalize($0)) }) else { return false }
+            }
+            if let collection = filter.collection,
+               !snapshot.collections.contains(where: { DishTag.areSame($0, collection) }) { return false }
+            return true
+        }
+        let query = filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !query.isEmpty { return rankForFilter(matching, query: query) }
+
+        func nameBefore(_ lhs: DishSearchSnapshot, _ rhs: DishSearchSnapshot) -> Bool {
+            let comparison = lhs.name.localizedCaseInsensitiveCompare(rhs.name)
+            return comparison == .orderedSame ? lhs.id.uuidString < rhs.id.uuidString : comparison == .orderedAscending
+        }
+        func byOptional(_ value: (DishSearchSnapshot) -> Int?, ascending: Bool) -> [DishSearchSnapshot] {
+            matching.sorted { lhs, rhs in
+                switch (value(lhs), value(rhs)) {
+                case let (left?, right?) where left != right: ascending ? left < right : left > right
+                case (_?, nil): true
+                case (nil, _?): false
+                default: nameBefore(lhs, rhs)
+                }
+            }
+        }
+        let sorted: [DishSearchSnapshot]
+        switch filter.sort {
+        case .alphabetical: sorted = matching.sorted(by: nameBefore)
+        case .recentlyAdded:
+            sorted = matching.sorted { $0.dateCreated == $1.dateCreated ? nameBefore($0, $1) : $0.dateCreated > $1.dateCreated }
+        case .mostCooked:
+            sorted = matching.sorted { $0.usageCount == $1.usageCount ? nameBefore($0, $1) : $0.usageCount > $1.usageCount }
+        case .leastRecentlyCooked:
+            sorted = matching.sorted {
+                let left = $0.lastUsedDate ?? .distantPast
+                let right = $1.lastUsedDate ?? .distantPast
+                return left == right ? nameBefore($0, $1) : left < right
+            }
+        case .neverCooked:
+            sorted = matching.filter { $0.usageCount == 0 && $0.lastUsedDate == nil }.sorted(by: nameBefore)
+        case .shortestTotalTime: sorted = byOptional({ $0.totalTimeMinutes }, ascending: true)
+        case .longestTotalTime: sorted = byOptional({ $0.totalTimeMinutes }, ascending: false)
+        case .shortestPrepTime: sorted = byOptional({ $0.prepTimeMinutes }, ascending: true)
+        case .longestPrepTime: sorted = byOptional({ $0.prepTimeMinutes }, ascending: false)
+        case .shortestCookTime: sorted = byOptional({ $0.cookTimeMinutes }, ascending: true)
+        case .longestCookTime: sorted = byOptional({ $0.cookTimeMinutes }, ascending: false)
+        case .fewestServings: sorted = matching.sorted { $0.servings == $1.servings ? nameBefore($0, $1) : $0.servings < $1.servings }
+        case .mostServings: sorted = matching.sorted { $0.servings == $1.servings ? nameBefore($0, $1) : $0.servings > $1.servings }
+        }
+        return sorted.map { DishSearchValueResult(id: $0.id, score: 0, reason: nil) }
     }
 
     /// A page of globally ranked IDs. The caller fetches only this page of

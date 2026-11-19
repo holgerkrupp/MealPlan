@@ -27,7 +27,7 @@ struct DishLibraryView: View {
                 pageCount += 1
             }
         )
-        .id("\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.dishFilter.sort.rawValue)")
+        .id("\(appState.currentHousehold?.uuid.uuidString ?? "none")-\(appState.dishFilter.sort.rawValue)-\(!appState.dishFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)")
         .onChange(of: appState.dishFilter) {
             pageCount = 1
         }
@@ -66,7 +66,6 @@ private struct DishLibraryContent: View {
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
     @State private var availableCollections: [DishCollectionSummary] = []
-    @State private var metadataLoader: DishLibraryMetadataLoader?
     /// Bumped after a label edit that may touch dishes outside the first
     /// page, so the tag and collection lists are derived again.
     @State private var metadataToken = 0
@@ -74,7 +73,7 @@ private struct DishLibraryContent: View {
     @State private var searchSnapshotActor: DishSearchSnapshotActor?
     @State private var searchScores: [UUID: Double] = [:]
     @State private var searchResultIDs: [UUID] = []
-    @State private var rankedSearchRequest: DishSearchRequest?
+    @State private var rankedSearchRequest: DishLibraryQueryRequest?
     @State private var searchGeneration = 0
 
     // Multi-select for bulk tagging and collections.
@@ -119,28 +118,16 @@ private struct DishLibraryContent: View {
             predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
             sortBy: DishLibrarySort.descriptors(for: sort)
         )
-        // Orders the store can't page correctly (computed or nullable keys)
-        // are sorted in memory over the whole library instead.
-        if sort.isStoreOrderable {
-            descriptor.fetchLimit = DishLibraryView.pageSize
-        }
+        // This is always a bounded first page. Non-store filters and sorts
+        // are evaluated from shared background value snapshots below.
+        descriptor.fetchLimit = DishLibraryView.pageSize
         _allDishes = Query(descriptor)
         self.pageCount = pageCount
         self.loadMore = loadMore
     }
 
-    private struct LibraryRevision: Equatable {
-        var count: Int
-        var latestModification: Date?
-        var token: Int
-    }
-
-    private var libraryRevision: LibraryRevision {
-        LibraryRevision(
-            count: allDishes.count,
-            latestModification: allDishes.lazy.map(\.modifiedAt).max(),
-            token: metadataToken
-        )
+    private var libraryRevision: DishLibraryMetadataRevision {
+        DishLibraryMetadataRevision(count: 0, latestModification: nil, token: metadataToken)
     }
 
     /// Handed to the later pages while dishes are being picked.
@@ -150,7 +137,7 @@ private struct DishLibraryContent: View {
 
     /// True while the first page came back full, i.e. there may be more.
     private var firstPageIsFull: Bool {
-        householdID != nil && sort.isStoreOrderable && allDishes.count == DishLibraryView.pageSize
+        householdID != nil && !usesBackgroundQuery && allDishes.count == DishLibraryView.pageSize
     }
 
     private var visibleFilter: DishFilter {
@@ -159,20 +146,23 @@ private struct DishLibraryContent: View {
         return filter
     }
 
-    private var firstPageSearchRequest: DishSearchRequest? {
-        let query = visibleFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, let householdID else { return nil }
-        return DishSearchRequest(
+    private var usesBackgroundQuery: Bool {
+        !visibleFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || visibleFilter.isActive || visibleFilter.sort == .neverCooked || !visibleFilter.sort.isStoreOrderable
+    }
+
+    private var libraryQueryRequest: DishLibraryQueryRequest? {
+        guard usesBackgroundQuery, let householdID else { return nil }
+        return DishLibraryQueryRequest(
             householdID: householdID,
-            query: query,
-            generation: searchGeneration,
-            candidateIDs: nil
+            filter: visibleFilter,
+            generation: searchGeneration
         )
     }
 
     private var searchScoresForFilter: [UUID: Double]? {
         guard !visibleFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
-        return rankedSearchRequest == firstPageSearchRequest ? searchScores : [:]
+        return rankedSearchRequest == libraryQueryRequest ? searchScores : [:]
     }
 
     /// What the grid actually draws. A variant group collapses into one cell
@@ -296,8 +286,8 @@ private struct DishLibraryContent: View {
                     )
                 }
 
-                if firstPageSearchRequest != nil {
-                    if rankedSearchRequest != firstPageSearchRequest {
+                if libraryQueryRequest != nil {
+                    if rankedSearchRequest != libraryQueryRequest {
                         ProgressView()
                             .frame(maxWidth: .infinity, minHeight: 160)
                     } else if searchResultIDs.isEmpty {
@@ -404,14 +394,16 @@ private struct DishLibraryContent: View {
         .task(id: libraryRevision) {
             await refreshTags()
         }
-        .task(id: firstPageSearchRequest) {
-            await refreshFirstPageSearch()
+        .task(id: libraryQueryRequest) {
+            await refreshBackgroundQuery()
         }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
             searchGeneration &+= 1
+            metadataToken &+= 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
             searchGeneration &+= 1
+            metadataToken &+= 1
         }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
@@ -922,20 +914,10 @@ private struct DishLibraryContent: View {
             availableCollections = []
             return
         }
-        let loader: DishLibraryMetadataLoader
-        if let metadataLoader {
-            loader = metadataLoader
-        } else {
-            loader = DishLibraryMetadataLoader(modelContainer: context.container)
-            metadataLoader = loader
-        }
+        let loader = DishLibraryMetadataLoaderPool.loader(for: context.container)
         let metadata = await loader.tagMetadata(
             householdID: householdID,
-            revision: DishLibraryMetadataRevision(
-                count: allDishes.count,
-                latestModification: allDishes.lazy.map(\.modifiedAt).max(),
-                token: metadataToken
-            )
+            revision: libraryRevision
         )
         guard !Task.isCancelled else { return }
         availableTags = metadata.available
@@ -943,8 +925,8 @@ private struct DishLibraryContent: View {
         availableCollections = metadata.collections
     }
 
-    private func refreshFirstPageSearch() async {
-        let request = firstPageSearchRequest
+    private func refreshBackgroundQuery() async {
+        let request = libraryQueryRequest
         guard let request else {
             searchScores = [:]
             searchResultIDs = []
@@ -953,7 +935,7 @@ private struct DishLibraryContent: View {
         }
         searchScores = [:]
         rankedSearchRequest = nil
-        guard !Task.isCancelled, firstPageSearchRequest == request else { return }
+        guard !Task.isCancelled, libraryQueryRequest == request else { return }
         let actor: DishSearchSnapshotActor
         if let searchSnapshotActor {
             actor = searchSnapshotActor
@@ -961,12 +943,12 @@ private struct DishLibraryContent: View {
             actor = DishSearchSnapshotActor(modelContainer: context.container)
             searchSnapshotActor = actor
         }
-        let results = await actor.filterSearch(
+        let results = await actor.filterAndSort(
             householdID: request.householdID,
             revision: request.revision,
-            query: request.query
+            filter: request.filter
         )
-        guard !Task.isCancelled, firstPageSearchRequest == request else { return }
+        guard !Task.isCancelled, libraryQueryRequest == request else { return }
         searchScores = Dictionary(results.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first })
         searchResultIDs = results.map(\.id)
         rankedSearchRequest = request
@@ -1463,7 +1445,7 @@ private enum DishLibraryVariantGrouping {
     }
 }
 
-private enum DishLibrarySort {
+enum DishLibrarySort {
     static func descriptors(for sort: DishFilter.Sort) -> [SortDescriptor<Dish>] {
         switch sort {
         case .alphabetical, .neverCooked:
@@ -1480,8 +1462,8 @@ private enum DishLibrarySort {
             [SortDescriptor(\Dish.servings, order: .reverse), SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
         case .shortestTotalTime, .longestTotalTime, .shortestPrepTime, .longestPrepTime,
              .shortestCookTime, .longestCookTime:
-            // Not paged (`isStoreOrderable`): the whole library is fetched
-            // and `DishFilter` sorts it in memory.
+            // These values are sorted by the background snapshot query; the
+            // page fetch only needs a deterministic fallback order.
             [SortDescriptor(\Dish.name), SortDescriptor(\Dish.uuid)]
         }
     }

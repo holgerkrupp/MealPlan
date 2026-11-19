@@ -3,7 +3,7 @@ import Foundation
 /// How the dish library is sorted and filtered. Kept as plain value state on
 /// `AppState` so the choice survives navigation, and `Codable` so a filter can
 /// be kept as a saved search (`DishFilterPreset`).
-struct DishFilter: Equatable, Codable {
+struct DishFilter: Equatable, Codable, Sendable {
     enum Sort: String, CaseIterable, Identifiable, Codable {
         case alphabetical
         case recentlyAdded

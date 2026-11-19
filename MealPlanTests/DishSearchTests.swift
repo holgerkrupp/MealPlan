@@ -141,6 +141,69 @@ struct DishSearchTests {
         #expect(DishSearch.pageIDs(ranked.map(\.id), pageIndex: 3, pageSize: 2).isEmpty)
     }
 
+    @Test func snapshotFilteringAndComputedSortMatchDishFilter() {
+        let first = Dish(name: "Tomato soup")
+        first.isFavorite = true
+        first.rating = 5
+        first.season = .winter
+        first.mealTypeTags = [.dinner]
+        first.tagNames = ["Vegan", "Quick"]
+        first.collectionNames = ["Weeknight"]
+        first.prepTimeMinutes = 12
+        first.cookTimeMinutes = 18
+        first.servings = 4
+
+        let second = Dish(name: "Tomato pasta")
+        second.isFavorite = true
+        second.rating = 4
+        second.season = .winter
+        second.mealTypeTags = [.dinner]
+        second.tagNames = ["Vegan"]
+        second.collectionNames = ["Weeknight"]
+        second.prepTimeMinutes = 20
+        second.cookTimeMinutes = 25
+        second.servings = 2
+
+        let excluded = Dish(name: "Summer tomato salad")
+        excluded.isFavorite = false
+        excluded.rating = 5
+        excluded.season = .summer
+        excluded.mealTypeTags = [.lunch]
+        excluded.tagNames = ["Vegan"]
+        excluded.collectionNames = ["Weeknight"]
+
+        var filter = DishFilter(sort: .longestTotalTime)
+        filter.favoritesOnly = true
+        filter.minimumRating = 4
+        filter.season = .winter
+        filter.mealType = .dinner
+        filter.tags = ["vegan"]
+        filter.collection = "weeknight"
+
+        let dishes = [first, excluded, second]
+        let expected = filter.apply(to: dishes)
+        let actual = DishSearch.filterAndSort(dishes.map(DishSearchSnapshot.init(dish:)), filter: filter)
+        #expect(actual.map(\.id) == expected.map(\.uuid))
+        #expect(actual.map(\.id) == [second.uuid, first.uuid])
+    }
+
+    @Test func snapshotSortsNullableTimesWithMissingValuesLast() {
+        let longest = Dish(name: "Longest")
+        longest.prepTimeMinutes = 10
+        longest.cookTimeMinutes = 50
+        let shortest = Dish(name: "Shortest")
+        shortest.prepTimeMinutes = 5
+        shortest.cookTimeMinutes = 10
+        let missing = Dish(name: "Missing")
+
+        var filter = DishFilter(sort: .shortestTotalTime)
+        let results = DishSearch.filterAndSort(
+            [longest, missing, shortest].map(DishSearchSnapshot.init(dish:)),
+            filter: filter
+        )
+        #expect(results.map(\.id) == [shortest.uuid, longest.uuid, missing.uuid])
+    }
+
     // MARK: - Deciding whether to create a new dish
 
     @Test func exactMatchIgnoresCaseAccentsAndPadding() {

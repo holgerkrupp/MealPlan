@@ -11,7 +11,8 @@ import SwiftData
 struct DishSidebarView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query private var allDishes: [Dish]
+    private let householdID: UUID?
+    private static let pageSize = 120
 
     @State private var planningDish: Dish?
     @State private var detailDish: Dish?
@@ -20,32 +21,43 @@ struct DishSidebarView: View {
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
     @State private var availableCollections: [String] = []
-    @State private var metadataLoader: DishLibraryMetadataLoader?
+    @State private var totalDishCount = 0
+    @State private var pageCount = 1
+    @State private var metadataToken = 0
     @State private var searchSnapshotActor: DishSearchSnapshotActor?
     @State private var searchScores: [UUID: Double] = [:]
-    @State private var rankedSearchRequest: DishSearchRequest?
+    @State private var searchResultIDs: [UUID] = []
+    @State private var rankedSearchRequest: DishLibraryQueryRequest?
     @State private var searchGeneration = 0
 
     init(householdID: UUID?) {
-        let scopedHouseholdID = householdID ?? UUID()
-        _allDishes = Query(FetchDescriptor<Dish>(
-            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
-            sortBy: [SortDescriptor(\Dish.name)]
-        ))
+        self.householdID = householdID
     }
 
-    private var filteredDishes: [Dish] {
-        let scores: [UUID: Double]?
-        if appState.planDishFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            scores = nil
-        } else {
-            scores = rankedSearchRequest == searchRequest ? searchScores : [:]
-        }
-        return appState.planDishFilter.apply(
-            to: allDishes,
-            sourceIsAlphabeticallySorted: true,
-            searchScores: scores
+    private var usesBackgroundQuery: Bool {
+        let filter = appState.planDishFilter
+        return !filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || filter.isActive || filter.sort != .alphabetical
+    }
+
+    private var libraryRevision: DishLibraryMetadataRevision {
+        DishLibraryMetadataRevision(count: 0, latestModification: nil, token: metadataToken)
+    }
+
+    private var libraryQueryRequest: DishLibraryQueryRequest? {
+        guard usesBackgroundQuery, let householdID else { return nil }
+        return DishLibraryQueryRequest(
+            householdID: householdID,
+            filter: appState.planDishFilter,
+            generation: searchGeneration
         )
+    }
+
+    private var displayedCount: Int {
+        if usesBackgroundQuery {
+            return rankedSearchRequest == libraryQueryRequest ? searchResultIDs.count : 0
+        }
+        return totalDishCount
     }
 
     var body: some View {
@@ -55,7 +67,10 @@ struct DishSidebarView: View {
             header(filter: $appState.planDishFilter)
             Divider()
 
-            if filteredDishes.isEmpty {
+            if usesBackgroundQuery && rankedSearchRequest != libraryQueryRequest {
+                ProgressView()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else if usesBackgroundQuery ? searchResultIDs.isEmpty : totalDishCount == 0 {
                 emptyState
             } else {
                 if !appState.isGuest {
@@ -71,14 +86,17 @@ struct DishSidebarView: View {
         .task(id: libraryRevision) {
             await refreshMetadata()
         }
-        .task(id: searchRequest) {
+        .task(id: libraryQueryRequest) {
             await refreshSearchResults()
         }
+        .onChange(of: libraryQueryRequest) { pageCount = 1 }
         .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
             searchGeneration &+= 1
+            metadataToken &+= 1
         }
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
             searchGeneration &+= 1
+            metadataToken &+= 1
         }
         // The sidebar is the dish list while you're on the plan, so it takes
         // over the library's menu items — filtering its own `planDishFilter`,
@@ -127,7 +145,7 @@ struct DishSidebarView: View {
             HStack(spacing: 8) {
                 Text(AppSection.dishes.title)
                     .font(.headline)
-                Text("\(filteredDishes.count)")
+                Text("\(displayedCount)")
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(.secondary)
                 Spacer(minLength: 0)
@@ -148,36 +166,22 @@ struct DishSidebarView: View {
         .padding(10)
     }
 
-    private var libraryRevision: DishLibraryMetadataRevision {
-        DishLibraryMetadataRevision(count: allDishes.count, latestModification: allDishes.lazy.map(\.modifiedAt).max())
-    }
-
-    private var searchRequest: DishSearchRequest? {
-        let query = appState.planDishFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !query.isEmpty, let householdID = appState.currentHousehold?.uuid else { return nil }
-        return DishSearchRequest(
-            householdID: householdID,
-            query: query,
-            generation: searchGeneration,
-            candidateIDs: nil
-        )
-    }
-
     private func refreshSearchResults() async {
-        let request = searchRequest
+        let request = libraryQueryRequest
         guard let request else {
             searchScores = [:]
+            searchResultIDs = []
             rankedSearchRequest = nil
             return
         }
         searchScores = [:]
+        searchResultIDs = []
         rankedSearchRequest = nil
-        do {
-            try await Task.sleep(for: .milliseconds(180))
-        } catch {
-            return
+        if !request.filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            do { try await Task.sleep(for: .milliseconds(180)) }
+            catch { return }
         }
-        guard !Task.isCancelled, searchRequest == request else { return }
+        guard !Task.isCancelled, libraryQueryRequest == request else { return }
         let actor: DishSearchSnapshotActor
         if let existing = searchSnapshotActor {
             actor = existing
@@ -185,14 +189,14 @@ struct DishSidebarView: View {
             actor = DishSearchSnapshotActor(modelContainer: context.container)
             searchSnapshotActor = actor
         }
-        let results = await actor.filterSearch(
+        let results = await actor.filterAndSort(
             householdID: request.householdID,
             revision: request.revision,
-            query: request.query,
-            candidateIDs: request.candidateIDs
+            filter: request.filter
         )
-        guard !Task.isCancelled, searchRequest == request else { return }
+        guard !Task.isCancelled, libraryQueryRequest == request else { return }
         searchScores = Dictionary(results.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first })
+        searchResultIDs = results.map(\.id)
         rankedSearchRequest = request
     }
 
@@ -204,13 +208,7 @@ struct DishSidebarView: View {
             return
         }
         guard !Task.isCancelled else { return }
-        let loader: DishLibraryMetadataLoader
-        if let metadataLoader {
-            loader = metadataLoader
-        } else {
-            loader = DishLibraryMetadataLoader(modelContainer: context.container)
-            metadataLoader = loader
-        }
+        let loader = DishLibraryMetadataLoaderPool.loader(for: context.container)
         let metadata = await loader.tagMetadata(
             householdID: householdID,
             revision: libraryRevision
@@ -219,6 +217,7 @@ struct DishSidebarView: View {
         availableTags = metadata.available
         popularTags = metadata.popular
         availableCollections = metadata.collections.map(\.name)
+        totalDishCount = metadata.dishCount
     }
 
     private func searchField(text: Binding<String>) -> some View {
@@ -288,36 +287,68 @@ struct DishSidebarView: View {
 
     private var dishList: some View {
         List {
-            ForEach(filteredDishes) { dish in
-                // Deliberately a tappable row rather than a `Button`: on macOS
-                // a button claims the mouse-down, so `.draggable` never sees
-                // the drag begin and the dish can't be pulled onto a meal
-                // card. (The library grid gets away with `.draggable` because
-                // its rows are `NavigationLink`s.) The accessibility traits
-                // below keep the row a button to VoiceOver and the keyboard.
-                row(dish)
-                    .onTapGesture { open(dish) }
-                    .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
-                    .accessibilityElement(children: .combine)
-                    .accessibilityAddTraits(.isButton)
-                    .accessibilityAction { open(dish) }
-                    .contextMenu {
-                        if !appState.isGuest {
-                            Button(String(localized: "Plan meal…"), systemImage: "calendar.badge.plus") {
-                                planningDish = dish
-                            }
-                        }
-                        Button(String(localized: "Show details"), systemImage: "info.circle") {
-                            showDetails(for: dish)
-                        }
-                        OpenInNewWindowButton(route: .recipe(dish.uuid))
-                    }
-                    .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
-                    .listRowBackground(Color.clear)
+            if let request = libraryQueryRequest, rankedSearchRequest == request {
+                let totalPages = (searchResultIDs.count + Self.pageSize - 1) / Self.pageSize
+                let loadedPages = min(pageCount, totalPages)
+                ForEach(0..<loadedPages, id: \.self) { pageIndex in
+                    DishSidebarRows(
+                        householdID: request.householdID,
+                        sort: appState.planDishFilter.sort,
+                        pageIndex: pageIndex,
+                        pageSize: Self.pageSize,
+                        orderedIDs: searchResultIDs,
+                        isLastPage: pageIndex == loadedPages - 1,
+                        loadMore: { loadMore(after: pageIndex) },
+                        rowContent: sidebarListRow
+                    )
+                }
+            } else if let householdID {
+                ForEach(0..<pageCount, id: \.self) { pageIndex in
+                    DishSidebarRows(
+                        householdID: householdID,
+                        sort: .alphabetical,
+                        pageIndex: pageIndex,
+                        pageSize: Self.pageSize,
+                        orderedIDs: nil,
+                        isLastPage: pageIndex == pageCount - 1,
+                        loadMore: { loadMore(after: pageIndex) },
+                        rowContent: sidebarListRow
+                    )
+                }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+    }
+
+    private func loadMore(after pageIndex: Int) {
+        guard pageIndex == pageCount - 1 else { return }
+        pageCount += 1
+    }
+
+    private func sidebarListRow(_ dish: Dish) -> some View {
+        // Deliberately a tappable row rather than a Button: macOS must let
+        // `.draggable` receive the mouse-down. Accessibility retains button
+        // traits and an activation action.
+        row(dish)
+            .onTapGesture { open(dish) }
+            .draggable(DishReference(dishUUID: dish.uuid, name: dish.name))
+            .accessibilityElement(children: .combine)
+            .accessibilityAddTraits(.isButton)
+            .accessibilityAction { open(dish) }
+            .contextMenu {
+                if !appState.isGuest {
+                    Button(String(localized: "Plan meal…"), systemImage: "calendar.badge.plus") {
+                        planningDish = dish
+                    }
+                }
+                Button(String(localized: "Show details"), systemImage: "info.circle") {
+                    showDetails(for: dish)
+                }
+                OpenInNewWindowButton(route: .recipe(dish.uuid))
+            }
+            .listRowInsets(EdgeInsets(top: 4, leading: 10, bottom: 4, trailing: 10))
+            .listRowBackground(Color.clear)
     }
 
     private func showDetails(for dish: Dish) {
@@ -391,6 +422,72 @@ struct DishSidebarView: View {
         }
         .frame(maxWidth: .infinity)
         .padding()
+    }
+}
+
+@MainActor
+private struct DishSidebarRows<RowContent: View>: View {
+    @Query private var dishes: [Dish]
+
+    private let pageIndex: Int
+    private let pageSize: Int
+    private let orderedIDs: [UUID]?
+    private let isLastPage: Bool
+    private let loadMore: () -> Void
+    private let rowContent: (Dish) -> RowContent
+
+    init(
+        householdID: UUID,
+        sort: DishFilter.Sort,
+        pageIndex: Int,
+        pageSize: Int,
+        orderedIDs: [UUID]?,
+        isLastPage: Bool,
+        loadMore: @escaping () -> Void,
+        @ViewBuilder rowContent: @escaping (Dish) -> RowContent
+    ) {
+        self.pageIndex = pageIndex
+        self.pageSize = pageSize
+        self.orderedIDs = orderedIDs
+        self.isLastPage = isLastPage
+        self.loadMore = loadMore
+        self.rowContent = rowContent
+
+        if let orderedIDs {
+            let pageIDs = DishSearch.pageIDs(orderedIDs, pageIndex: pageIndex, pageSize: pageSize)
+            var descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == householdID && pageIDs.contains($0.uuid) },
+                sortBy: DishLibrarySort.descriptors(for: sort)
+            )
+            descriptor.fetchLimit = pageIDs.count
+            _dishes = Query(descriptor)
+        } else {
+            var descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == householdID },
+                sortBy: DishLibrarySort.descriptors(for: sort)
+            )
+            descriptor.fetchLimit = pageSize
+            descriptor.fetchOffset = pageIndex * pageSize
+            _dishes = Query(descriptor)
+        }
+    }
+
+    var body: some View {
+        Section {
+            ForEach(dishes) { dish in rowContent(dish) }
+            if isLastPage && canLoadMore {
+                Button(String(localized: "Load more recipes"), action: loadMore)
+                    .frame(maxWidth: .infinity)
+                    .listRowBackground(Color.clear)
+            }
+        }
+    }
+
+    private var canLoadMore: Bool {
+        if let orderedIDs {
+            return (pageIndex + 1) * pageSize < orderedIDs.count
+        }
+        return dishes.count == pageSize
     }
 }
 
