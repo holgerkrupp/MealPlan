@@ -14,6 +14,7 @@ struct RecipeDiscoveryView: View {
     @State private var browserTarget: BookmarkBrowserTarget?
     @State private var refreshing = false
     @State private var loadingDiscovery = true
+    @State private var loadingSeasonal = false
     @State private var discoveredSources: [RecipeDiscoverySourceResult] = []
     @State private var failedDiscoverySources: [String] = []
     @State private var selectedCategory: RecipeDiscoveryCategory?
@@ -25,6 +26,13 @@ struct RecipeDiscoveryView: View {
     @State private var sourceFilter: String?
     @State private var snapshot = RecipeDiscoverySnapshot.empty
     @State private var imageMetadataRevision = 0
+    @State private var seasonalCollections: [SeasonalRecipeCollection] = []
+    @State private var seasonalReadIDs: Set<String> = []
+    @State private var seasonalRoute: SeasonalRecipeMomentRoute?
+    @State private var seasonalRefreshRevision = 0
+    @State private var completedSeasonalRefreshRevision = 0
+    @State private var completedSeasonalContextKey = ""
+    @State private var nextSeasonalTransition: Date?
 
     private var feeds: [RecipeFeed] {
         allFeeds.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
@@ -58,6 +66,16 @@ struct RecipeDiscoveryView: View {
         )
     }
 
+    private var seasonalContextKey: String {
+        let market = discoveryMarketContext
+        return "\(market.regionCode ?? "*")|\(market.languageCode ?? "*")|\(market.unitSystem.rawValue)"
+    }
+
+    private var seasonalRefreshTaskID: String {
+        let transition = nextSeasonalTransition?.timeIntervalSince1970 ?? 0
+        return "\(seasonalRefreshRevision)|\(seasonalContextKey)|\(transition)"
+    }
+
     /// True while the view is showing less than everything it has, which is
     /// what the empty state and the toolbar badge key off.
     private var isFiltering: Bool {
@@ -82,13 +100,26 @@ struct RecipeDiscoveryView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 40)
-                } else if snapshot.allArticles.isEmpty && bookmarks.isEmpty && subscribedSites.isEmpty {
+                } else if snapshot.allArticles.isEmpty && bookmarks.isEmpty && subscribedSites.isEmpty
+                            && SeasonalRecipeShelfPolicy.overviewCollections(seasonalCollections).isEmpty
+                            && !loadingSeasonal {
                     discoveryEmptyState
                 } else if isFiltering && !hasVisibleArticles {
                     noMatchesEmptyState
                 }
                 if !subscribedSites.isEmpty {
                     subscribedSitesSection
+                }
+                ForEach(SeasonalRecipeShelfPolicy.overviewCollections(seasonalCollections)) { collection in
+                    SeasonalRecipeShelf(
+                        title: collection.moment.localizedTitle,
+                        symbolName: collection.moment.symbolName ?? "leaf",
+                        articles: collection.articles,
+                        readIDs: seasonalReadIDs,
+                        onSeeAll: { seasonalRoute = SeasonalRecipeShelfPolicy.route(for: collection) },
+                        onRead: markRead,
+                        onImageResolved: recordSeasonalImage(imageURL:forArticle:)
+                    )
                 }
                 if hasVisibleArticles {
                     articleSection
@@ -122,7 +153,29 @@ struct RecipeDiscoveryView: View {
         }
         .overlay { if refreshing { ProgressView().controlSize(.large) } }
         .task { await refresh(force: false) }
+        .task(id: seasonalRefreshTaskID) {
+            guard seasonalRefreshRevision > 0 else { return }
+            let contextKey = seasonalContextKey
+            if seasonalRefreshRevision == completedSeasonalRefreshRevision,
+               contextKey == completedSeasonalContextKey,
+               let nextSeasonalTransition,
+               nextSeasonalTransition > .now {
+                do {
+                    try await Task.sleep(for: .seconds(max(1, Int(nextSeasonalTransition.timeIntervalSinceNow))))
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+            }
+            await refreshSeasonal()
+        }
         .task(id: snapshotTaskID) { await rebuildSnapshot() }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            // Sync and other store writers can update feed items without
+            // changing the parent feed's scalar fields.
+            imageMetadataRevision &+= 1
+            seasonalRefreshRevision &+= 1
+        }
         .detailPresentation(isPresented: $showingSubscription, route: .subscribeToSite) {
             FeedSubscriptionSheet()
         }
@@ -142,6 +195,16 @@ struct RecipeDiscoveryView: View {
             RecipeArticleReaderView(article: article, onImageResolved: { url in
                 record(imageURL: url, forArticle: article)
             })
+        }
+        .navigationDestination(item: $seasonalRoute) { route in
+            SeasonalRecipeMomentGrid(
+                title: route.title,
+                symbolName: route.symbolName,
+                articles: route.articles,
+                readIDs: seasonalReadIDs,
+                onRead: markRead,
+                onImageResolved: recordSeasonalImage(imageURL:forArticle:)
+            )
         }
     }
 
@@ -520,7 +583,8 @@ struct RecipeDiscoveryView: View {
 
     private func markRead(_ article: RecipeArticleContent) {
         RecipeFeedReadState.markRead(article.readStateID)
-        snapshot = snapshot.applying(readIDs: RecipeFeedReadState.readIDs())
+        snapshot = snapshot.applying(readID: article.readStateID)
+        seasonalReadIDs.insert(article.readStateID)
     }
 
     /// Writes a picture found on an article's own page back to its stored item,
@@ -537,9 +601,63 @@ struct RecipeDiscoveryView: View {
         try? context.save()
     }
 
+    /// Seasonal cards use the card's in-memory image result and persist feed
+    /// metadata without rebuilding the normal Discover snapshot.
+    private func recordSeasonalImage(imageURL: URL?, forArticle article: RecipeArticleContent) {
+        guard let feed = feeds.first(where: { feed in
+            feed.items?.contains(where: { $0.stableID == article.readStateID }) == true
+        }),
+        let item = feed.items?.first(where: { $0.stableID == article.readStateID }) else { return }
+        if let imageURL { item.imageURLString = imageURL.absoluteString }
+        item.imageLookupAt = .now
+        try? context.save()
+    }
+
+    private func refreshSeasonal() async {
+        let context = discoveryMarketContext
+        let contextKey = seasonalContextKey
+        let refreshRevision = seasonalRefreshRevision
+        let now = Date.now
+        let moments = SeasonalRecipeCalendar.activeMoments(on: now, context: context)
+        let normalSeeds = makeDiscoverySeeds()
+        let readIDs = RecipeFeedReadState.readIDs()
+        loadingSeasonal = true
+        defer {
+            if refreshRevision == seasonalRefreshRevision { loadingSeasonal = false }
+        }
+
+        var collections: [SeasonalRecipeCollection] = []
+        for moment in moments {
+            guard !Task.isCancelled else { return }
+            let targetedLoad = await SeasonalRecipeCollectionLoader.load(moment: moment, context: context)
+            guard !Task.isCancelled else { return }
+            let seeds = SeasonalRecipeCollectionLoader.merging(
+                normalSeeds: normalSeeds,
+                targetedLoad: targetedLoad
+            )
+            let collection = await Task.detached(priority: .utility) {
+                SeasonalRecipeRanking.collection(
+                    for: moment,
+                    seeds: seeds,
+                    context: context,
+                    readIDs: readIDs,
+                    additionalSources: targetedLoad.sources
+                )
+            }.value
+            if !collection.articles.isEmpty { collections.append(collection) }
+        }
+
+        guard !Task.isCancelled else { return }
+        seasonalCollections = collections
+        seasonalReadIDs = readIDs
+        nextSeasonalTransition = SeasonalRecipeCalendar.nextTransition(after: now, context: context)
+        completedSeasonalContextKey = contextKey
+        completedSeasonalRefreshRevision = refreshRevision
+    }
+
     private func refresh(force: Bool) async {
         if force { refreshing = true }
-        async let discoveryLoad = RecipeDiscoveryService.load()
+        async let discoveryLoad = RecipeDiscoveryService.load(context: discoveryMarketContext)
         if !appState.isGuest {
             await RecipeFeedService.refreshAll(context: context, force: force)
         }
@@ -548,6 +666,7 @@ struct RecipeDiscoveryView: View {
         failedDiscoverySources = loaded.failedSourceNames
         loadingDiscovery = false
         refreshing = false
+        seasonalRefreshRevision &+= 1
     }
 
     private func open(_ bookmark: RecipeBookmark) {

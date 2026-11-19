@@ -138,7 +138,29 @@ struct RecipeDiscoverySnapshot: Sendable {
 
     func applying(readIDs: Set<String>) -> Self {
         let updated = allArticles.map { $0.withReadState(readIDs.contains($0.readStateID)) }
-        return Self.make(updated, sourceOrder: sourceOrder, query: query)
+        return Self.make(
+            updated,
+            sourceOrder: sourceOrder,
+            query: query,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
+        )
+    }
+
+    /// Updates the one article a user just opened without rerunning
+    /// classification, filtering, category discovery, or source interleaving.
+    func applying(readID: String) -> Self {
+        func markRead(_ article: RecipeDiscoveryArticle) -> RecipeDiscoveryArticle {
+            article.readStateID == readID && !article.isRead ? article.withReadState(true) : article
+        }
+        return Self(
+            allArticles: allArticles.map(markRead),
+            categoryCandidates: categoryCandidates.map(markRead),
+            availableCategories: availableCategories,
+            visibleArticles: visibleArticles.map(markRead),
+            query: query,
+            sourceOrder: sourceOrder,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
+        )
     }
 
     func applying(imageURL: URL?, to articleID: String) -> Self {
@@ -151,11 +173,13 @@ struct RecipeDiscoverySnapshot: Sendable {
             availableCategories: availableCategories,
             visibleArticles: visibleArticles.map { $0.id == articleID ? $0.withImageURL(imageURL) : $0 },
             query: query,
-            sourceOrder: sourceOrder
+            sourceOrder: sourceOrder,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
         )
     }
 
     private let sourceOrder: [String]
+    private let lowAffinitySourceIDs: Set<String>
 
     private init(
         allArticles: [RecipeDiscoveryArticle],
@@ -163,7 +187,8 @@ struct RecipeDiscoverySnapshot: Sendable {
         availableCategories: [RecipeDiscoveryCategory],
         visibleArticles: [RecipeDiscoveryArticle],
         query: RecipeDiscoveryQuery,
-        sourceOrder: [String] = []
+        sourceOrder: [String] = [],
+        lowAffinitySourceIDs: Set<String> = []
     ) {
         self.allArticles = allArticles
         self.categoryCandidates = categoryCandidates
@@ -171,6 +196,7 @@ struct RecipeDiscoverySnapshot: Sendable {
         self.visibleArticles = visibleArticles
         self.query = query
         self.sourceOrder = sourceOrder
+        self.lowAffinitySourceIDs = lowAffinitySourceIDs
     }
 
     private static func normalize(

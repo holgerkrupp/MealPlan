@@ -154,4 +154,29 @@ struct RecipeDiscoverySnapshotTests {
 
         #expect(snapshot.visibleArticles.count == 20)
     }
+
+    @Test func markingOneArticleReadPreservesTheCurrentQueryAndOrder() {
+        let query = RecipeDiscoveryQuery(
+            search: "soup",
+            scope: .current,
+            sourceID: "feed:one",
+            category: .soups,
+            sort: .mixed
+        )
+        let snapshot = RecipeDiscoverySnapshot.build(
+            seeds: [
+                seed("one", title: "Tomato soup", source: "feed:one", date: 2, subscribed: true),
+                seed("two", title: "Pumpkin soup", source: "feed:one", date: 1, subscribed: true),
+            ],
+            sourceOrder: ["feed:one"],
+            query: query,
+            readIDs: []
+        )
+
+        let updated = snapshot.applying(readID: "one")
+        #expect(updated.query == query)
+        #expect(updated.visibleArticles.map(\.id) == snapshot.visibleArticles.map(\.id))
+        #expect(updated.visibleArticles.first(where: { $0.readStateID == "one" })?.isRead == true)
+        #expect(updated.visibleArticles.first(where: { $0.readStateID == "two" })?.isRead == false)
+    }
 }

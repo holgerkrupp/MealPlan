@@ -33361,6 +33361,66 @@
         }
       }
     },
+    "Seasonal moment: Autumn harvest" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Herbsternte" } }
+      }
+    },
+    "Seasonal moment: Halloween" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Halloween" } }
+      }
+    },
+    "Seasonal moment: Lunar New Year cooking" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochen zum Mondneujahr" } }
+      }
+    },
+    "Seasonal moment: New Year" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neujahr" } }
+      }
+    },
+    "Seasonal moment: Spring and Easter cooking" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Frühlings- und Osterküche" } }
+      }
+    },
+    "Seasonal moment: Summer grilling and picnics" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sommergrillen und Picknick" } }
+      }
+    },
+    "Seasonal moment: Thanksgiving" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Thanksgiving" } }
+      }
+    },
+    "Seasonal moment: Winter holiday baking" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Winterliches Festtagsgebäck" } }
+      }
+    },
+    "Seasonal moment: Winter comfort food" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wärmende Winterküche" } }
+      }
+    },
+    "See all" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle anzeigen" } }
+      }
+    },
+    "See all seasonal recipes" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle saisonalen Rezepte" } }
+      }
+    },
+    "Open seasonal recipe" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Saisonales Rezept öffnen" } }
+      }
+    },
     "Secure invitation and continue" : {
 
     },
