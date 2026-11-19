@@ -412,10 +412,27 @@ struct MealShareSnapshot {
 @MainActor
 struct MealShareGalleryView: View {
     @Environment(AppState.self) private var appState
+    private let initialDate: Date
+
+    init(initialDate: Date = .now) {
+        self.initialDate = initialDate
+    }
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        MealShareGalleryContent(initialDate: initialDate, householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct MealShareGalleryContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
 
-    @Query(sort: \CookedLog.date, order: .reverse) private var cookedLogs: [CookedLog]
-    @Query(sort: \MealPlanEntry.date, order: .forward) private var planEntries: [MealPlanEntry]
+    @Query private var cookedLogs: [CookedLog]
+    @Query private var planEntries: [MealPlanEntry]
+    let householdID: UUID?
 
     @State private var selectedPeriod: MealSharePeriod = .month
     @State private var selectedDate: Date
@@ -429,15 +446,25 @@ struct MealShareGalleryView: View {
     @State private var renderedCount = 0
     @State private var renderDirectory: URL?
 
-    init(initialDate: Date = .now) {
+    init(initialDate: Date, householdID: UUID?) {
+        self.householdID = householdID
         _selectedDate = State(initialValue: initialDate)
+        let scopedHouseholdID = householdID ?? UUID()
+        _cookedLogs = Query(FetchDescriptor<CookedLog>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\CookedLog.date, order: .reverse)]
+        ))
+        _planEntries = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealPlanEntry.date, order: .forward)]
+        ))
     }
 
     private var snapshot: MealShareSnapshot {
         MealShareSnapshot.make(
             logs: cookedLogs,
             entries: planEntries,
-            householdID: appState.currentHousehold?.uuid,
+            householdID: householdID,
             period: selectedPeriod,
             date: selectedDate
         )

@@ -32,8 +32,7 @@ struct MealPlannerStrip: View {
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
 
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
+    @Query private var mealTypes: [MealType]
     /// Every entry from a fortnight ago onward. The floor is fixed at init so
     /// the query identity never changes as the strip grows; a household's plan
     /// is small enough to group in memory.
@@ -47,6 +46,7 @@ struct MealPlannerStrip: View {
         planServings: Int? = nil,
         planNote: String? = nil,
         reschedulingEntry: MealPlanEntry? = nil,
+        householdID: UUID? = nil,
         selectedDate: Binding<Date>,
         selectedMealKey: Binding<String>
     ) {
@@ -57,11 +57,16 @@ struct MealPlannerStrip: View {
         _selectedDate = selectedDate
         _selectedMealKey = selectedMealKey
 
+        let scopedHouseholdID = householdID ?? planningDish?.household?.uuid ?? reschedulingEntry?.household?.uuid ?? UUID()
+        _mealTypes = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
         let floor = Date.now.startOfDay.adding(days: -Self.pastDays)
-        _entries = Query(
-            filter: #Predicate<MealPlanEntry> { $0.date >= floor },
-            sort: \MealPlanEntry.date
-        )
+        _entries = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.date >= floor && $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealPlanEntry.date)]
+        ))
     }
 
     /// The household's meals, and below them the extras row: tapping it plans

@@ -456,8 +456,12 @@ struct RootView: View {
 
     private func hasDishes(waitingUpTo timeout: Duration) async -> Bool {
         let start = ContinuousClock.now
+        guard let householdID = appState.currentHousehold?.uuid else { return false }
         while !Task.isCancelled {
-            if ((try? context.fetchCount(FetchDescriptor<Dish>())) ?? 0) > 0 { return true }
+            let descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == householdID }
+            )
+            if ((try? context.fetchCount(descriptor)) ?? 0) > 0 { return true }
             if ContinuousClock.now - start > timeout { return false }
             try? await Task.sleep(for: .milliseconds(200))
         }

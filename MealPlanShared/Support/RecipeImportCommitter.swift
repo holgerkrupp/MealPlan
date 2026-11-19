@@ -50,6 +50,17 @@ enum RecipeImportCommitter {
         }
     }
 
+    /// The duplicate library is household-local. Never let a recipe saved in
+    /// a recovered or inactive household suppress an import into the current
+    /// household.
+    @MainActor
+    static func existingDishes(in household: Household?, context: ModelContext) -> [Dish] {
+        guard let householdID = household?.uuid else { return [] }
+        return (try? context.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))) ?? []
+    }
+
     /// Imports everything the user left ticked. A recipe planned as a variant
     /// joins the matched dish's group, so a second Burger sits next to the
     /// first instead of replacing or being dropped for it.
@@ -63,7 +74,7 @@ enum RecipeImportCommitter {
     ) -> Result {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { return Result() }
         var result = Result()
-        let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        let library = existingDishes(in: household, context: context)
         var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
         let importSession = DishBuilder.ImportSession(household: household)
         var unsavedCount = 0
@@ -104,7 +115,7 @@ enum RecipeImportCommitter {
     ) async -> Result {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { return Result() }
         var result = Result()
-        let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        let library = existingDishes(in: household, context: context)
         var libraryByID = Dictionary(library.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
         let importSession = DishBuilder.ImportSession(household: household)
         var unsavedCount = 0
@@ -189,7 +200,7 @@ enum RecipeImportCommitter {
         createdByName: String?,
         context: ModelContext
     ) -> Result {
-        let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+        let library = existingDishes(in: household, context: context)
         return commit(
             RecipeImportPlanner.plan(recipes, against: library),
             household: household,

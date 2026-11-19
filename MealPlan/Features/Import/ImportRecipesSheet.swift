@@ -185,7 +185,10 @@ struct ImportRecipesSheet: View {
                 phase = .failed(String(localized: "No recipes in that file."))
                 return
             }
-            let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+            let library = RecipeImportCommitter.existingDishes(
+                in: appState.currentHousehold,
+                context: context
+            )
             plan = RecipeImportPlanner.plan(recipes, against: library)
             phase = .review
         } catch {

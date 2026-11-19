@@ -20,6 +20,11 @@ struct DishSidebarView: View {
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
     @State private var availableCollections: [String] = []
+    @State private var metadataLoader: DishLibraryMetadataLoader?
+    @State private var searchSnapshotActor: DishSearchSnapshotActor?
+    @State private var searchScores: [UUID: Double] = [:]
+    @State private var rankedSearchRequest: DishSearchRequest?
+    @State private var searchGeneration = 0
 
     init(householdID: UUID?) {
         let scopedHouseholdID = householdID ?? UUID()
@@ -30,7 +35,17 @@ struct DishSidebarView: View {
     }
 
     private var filteredDishes: [Dish] {
-        appState.planDishFilter.apply(to: allDishes, sourceIsAlphabeticallySorted: true)
+        let scores: [UUID: Double]?
+        if appState.planDishFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            scores = nil
+        } else {
+            scores = rankedSearchRequest == searchRequest ? searchScores : [:]
+        }
+        return appState.planDishFilter.apply(
+            to: allDishes,
+            sourceIsAlphabeticallySorted: true,
+            searchScores: scores
+        )
     }
 
     var body: some View {
@@ -54,12 +69,16 @@ struct DishSidebarView: View {
         }
         .background(.background.secondary)
         .task(id: libraryRevision) {
-            let usage = DishTag.usage(fromTagLists: allDishes.map(\.tagNames))
-            availableTags = DishTag.sorted(usage.map(\.tag))
-            popularTags = Array(usage.prefix(12).map(\.tag))
-            availableCollections = DishCollection.usage(
-                fromCollectionLists: allDishes.map(\.collectionNames)
-            ).map(\.name)
+            await refreshMetadata()
+        }
+        .task(id: searchRequest) {
+            await refreshSearchResults()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+            searchGeneration &+= 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            searchGeneration &+= 1
         }
         // The sidebar is the dish list while you're on the plan, so it takes
         // over the library's menu items — filtering its own `planDishFilter`,
@@ -129,13 +148,77 @@ struct DishSidebarView: View {
         .padding(10)
     }
 
-    private var libraryRevision: SidebarLibraryRevision {
-        SidebarLibraryRevision(count: allDishes.count, latestModification: allDishes.lazy.map(\.modifiedAt).max())
+    private var libraryRevision: DishLibraryMetadataRevision {
+        DishLibraryMetadataRevision(count: allDishes.count, latestModification: allDishes.lazy.map(\.modifiedAt).max())
     }
 
-    private struct SidebarLibraryRevision: Equatable {
-        var count: Int
-        var latestModification: Date?
+    private var searchRequest: DishSearchRequest? {
+        let query = appState.planDishFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, let householdID = appState.currentHousehold?.uuid else { return nil }
+        return DishSearchRequest(
+            householdID: householdID,
+            query: query,
+            generation: searchGeneration,
+            candidateIDs: nil
+        )
+    }
+
+    private func refreshSearchResults() async {
+        let request = searchRequest
+        guard let request else {
+            searchScores = [:]
+            rankedSearchRequest = nil
+            return
+        }
+        searchScores = [:]
+        rankedSearchRequest = nil
+        do {
+            try await Task.sleep(for: .milliseconds(180))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, searchRequest == request else { return }
+        let actor: DishSearchSnapshotActor
+        if let existing = searchSnapshotActor {
+            actor = existing
+        } else {
+            actor = DishSearchSnapshotActor(modelContainer: context.container)
+            searchSnapshotActor = actor
+        }
+        let results = await actor.filterSearch(
+            householdID: request.householdID,
+            revision: request.revision,
+            query: request.query,
+            candidateIDs: request.candidateIDs
+        )
+        guard !Task.isCancelled, searchRequest == request else { return }
+        searchScores = Dictionary(results.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first })
+        rankedSearchRequest = request
+    }
+
+    private func refreshMetadata() async {
+        guard let householdID = appState.currentHousehold?.uuid else {
+            availableTags = []
+            popularTags = []
+            availableCollections = []
+            return
+        }
+        guard !Task.isCancelled else { return }
+        let loader: DishLibraryMetadataLoader
+        if let metadataLoader {
+            loader = metadataLoader
+        } else {
+            loader = DishLibraryMetadataLoader(modelContainer: context.container)
+            metadataLoader = loader
+        }
+        let metadata = await loader.tagMetadata(
+            householdID: householdID,
+            revision: libraryRevision
+        )
+        guard !Task.isCancelled, appState.currentHousehold?.uuid == householdID else { return }
+        availableTags = metadata.available
+        popularTags = metadata.popular
+        availableCollections = metadata.collections.map(\.name)
     }
 
     private func searchField(text: Binding<String>) -> some View {

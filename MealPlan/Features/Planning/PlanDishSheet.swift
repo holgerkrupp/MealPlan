@@ -11,13 +11,23 @@ struct PlanDishSheet: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
+    @Query private var mealTypes: [MealType]
 
     @State private var date: Date = .now
     @State private var mealKey: String = ""
     @State private var servings: Int = 2
     @State private var note: String = ""
+
+    init(dish: Dish, defaultDate: Date = .now, defaultMealKey: String? = nil) {
+        self.dish = dish
+        self.defaultDate = defaultDate
+        self.defaultMealKey = defaultMealKey
+        let householdID = dish.household?.uuid ?? UUID()
+        _mealTypes = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
 
     var body: some View {
         Form {
@@ -33,6 +43,7 @@ struct PlanDishSheet: View {
                     planningDish: dish,
                     planServings: servings,
                     planNote: note.isEmpty ? nil : note,
+                    householdID: appState.currentHousehold?.uuid,
                     selectedDate: $date,
                     selectedMealKey: $mealKey
                 )

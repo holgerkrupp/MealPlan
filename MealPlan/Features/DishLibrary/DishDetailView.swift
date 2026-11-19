@@ -11,7 +11,7 @@ struct DishDetailView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @State private var targetServings: Int = 0
     @State private var showingEditor = false
@@ -33,6 +33,16 @@ struct DishDetailView: View {
     /// per-visit choice after that — switching to the original is a glance at
     /// the cook's own words, not a change to the recipe.
     @State private var showsTranslation = false
+
+    init(dish: Dish, onClose: (() -> Void)? = nil) {
+        self._dish = Bindable(wrappedValue: dish)
+        self.onClose = onClose
+        let householdID = dish.household?.uuid ?? UUID()
+        self._allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var scaler: ServingScaler {
         ServingScaler(

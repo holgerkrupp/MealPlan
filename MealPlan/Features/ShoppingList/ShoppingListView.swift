@@ -4,12 +4,22 @@ import SwiftData
 @MainActor
 struct ShoppingListView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        ShoppingListContentView(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct ShoppingListContentView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: \ShoppingListItem.sortIndex) private var items: [ShoppingListItem]
-    @Query(
-        filter: #Predicate<Ingredient> { $0.isPantryStaple },
-        sort: \Ingredient.name
-    ) private var pantryIngredients: [Ingredient]
+    @Query private var items: [ShoppingListItem]
+    @Query private var pantryIngredients: [Ingredient]
+
+    let householdID: UUID?
 
     @State private var newItemName = ""
     @State private var exportMessage: String?
@@ -27,6 +37,19 @@ struct ShoppingListView: View {
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
     /// the add field.
     @FocusState private var addItemFocused: Bool
+
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _items = Query(FetchDescriptor<ShoppingListItem>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
+        _pantryIngredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.isPantryStaple && $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+    }
 
     private var range: DayRange {
         appState.shoppingRange.dayRange(
@@ -99,7 +122,7 @@ struct ShoppingListView: View {
                 }
             }
 
-            MissingIngredientWarningView(householdID: appState.currentHousehold?.uuid, range: range)
+            MissingIngredientWarningView(householdID: householdID, range: range)
 
             if items.isEmpty {
                 ContentUnavailableView(

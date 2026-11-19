@@ -353,9 +353,9 @@ struct CachedDishPhoto: View {
             let sourceData: Data?
             let loader = DishPhotoDataActorPool.shared.loader(for: modelContext.container)
             if let dishID, let dishUUID {
-                sourceData = await loader.primaryImageData(for: dishID, uuid: dishUUID)
+                sourceData = await loader.primaryImageData(for: dishID, uuid: dishUUID, cacheKey: cacheKey)
             } else if let imageID, let imageUUID {
-                sourceData = await loader.data(for: imageID, uuid: imageUUID)
+                sourceData = await loader.data(for: imageID, uuid: imageUUID, cacheKey: cacheKey)
             } else {
                 sourceData = rawData
             }
@@ -390,9 +390,26 @@ enum DishPhotoLoading {
 /// main-actor task.
 @ModelActor
 actor DishPhotoDataActor {
-    func primaryImageData(for dishID: PersistentIdentifier, uuid: UUID) -> Data? {
+    /// A small raw-byte cache lets the serial model actor coalesce duplicate
+    /// requests for the same photo without retaining an entire library's
+    /// original images. The rendered cache remains the primary cache.
+    private let sourceDataCache: NSCache<NSString, NSData> = {
+        let cache = NSCache<NSString, NSData>()
+        cache.totalCostLimit = 32 * 1024 * 1024
+        cache.countLimit = 120
+        return cache
+    }()
+
+    func primaryImageData(for dishID: PersistentIdentifier, uuid: UUID, cacheKey revision: String) -> Data? {
         let interval = DishLibraryPerformanceSignposts.signposter.beginInterval("thumbnail data lookup")
         defer { DishLibraryPerformanceSignposts.signposter.endInterval("thumbnail data lookup", interval) }
+        // ModelActor calls are serialized, so scrolling has at most one store
+        // read active per container. Check cancellation before any fetch or
+        // relationship/data access so a stale queued request does no disk work.
+        guard !Task.isCancelled else { return nil }
+        let cacheKey = "dish-\(revision)" as NSString
+        if let cached = sourceDataCache.object(forKey: cacheKey) { return cached as Data }
+
         let dish: Dish?
         if let registered: Dish = modelContext.registeredModel(for: dishID) {
             dish = registered
@@ -406,18 +423,28 @@ actor DishPhotoDataActor {
         }
 
         guard !Task.isCancelled else { return nil }
-        return dish?.primaryImage?.data
+        guard let data = dish?.primaryImage?.data, !Task.isCancelled else { return nil }
+        sourceDataCache.setObject(data as NSData, forKey: cacheKey, cost: data.count)
+        return data
     }
 
-    func data(for imageID: PersistentIdentifier, uuid: UUID) -> Data? {
+    func data(for imageID: PersistentIdentifier, uuid: UUID, cacheKey revision: String) -> Data? {
         let interval = DishLibraryPerformanceSignposts.signposter.beginInterval("thumbnail data lookup")
         defer { DishLibraryPerformanceSignposts.signposter.endInterval("thumbnail data lookup", interval) }
+        guard !Task.isCancelled else { return nil }
+        let cacheKey = "image-\(revision)" as NSString
+        if let cached = sourceDataCache.object(forKey: cacheKey) { return cached as Data }
+
         // `model(for:)` traps when a thumbnail outlives a deleted/replaced
         // image. A drag preview makes that race especially easy to hit because
         // SwiftUI creates and tears down an additional thumbnail while the
         // calendar save is being propagated.
         if let registered: DishImage = modelContext.registeredModel(for: imageID) {
-            return registered.data
+            guard !Task.isCancelled else { return nil }
+            let data = registered.data
+            guard !Task.isCancelled else { return nil }
+            sourceDataCache.setObject(data as NSData, forKey: cacheKey, cost: data.count)
+            return data
         }
 
         // Persistent IDs are the precise identity, while UUID is the safe
@@ -426,9 +453,13 @@ actor DishPhotoDataActor {
         let descriptor = FetchDescriptor<DishImage>(
             predicate: #Predicate<DishImage> { $0.uuid == uuid }
         )
-        return (try? modelContext.fetch(descriptor))?
+        guard !Task.isCancelled else { return nil }
+        guard let data = (try? modelContext.fetch(descriptor))?
             .first(where: { $0.persistentModelID == imageID })?
-            .data
+            .data,
+              !Task.isCancelled else { return nil }
+        sourceDataCache.setObject(data as NSData, forKey: cacheKey, cost: data.count)
+        return data
     }
 }
 

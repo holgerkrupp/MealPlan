@@ -5,9 +5,20 @@ import SwiftData
 @MainActor
 struct TypicalPackageSizesView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        TypicalPackageSizesContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct TypicalPackageSizesContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
-    @Query(sort: \IngredientPackageSize.ingredientName) private var overrides: [IngredientPackageSize]
+    @Query private var ingredients: [Ingredient]
+    @Query private var overrides: [IngredientPackageSize]
 
     @State private var searchText = ""
     @State private var showingAdd = false
@@ -16,6 +27,18 @@ struct TypicalPackageSizesView: View {
     private let supportedRegions = ["DE", "AT", "CH", "UK", "US"]
 
     private var household: Household? { appState.currentHousehold }
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _ingredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+        _overrides = Query(FetchDescriptor<IngredientPackageSize>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\IngredientPackageSize.ingredientName)]
+        ))
+    }
 
     private var visibleIngredients: [Ingredient] {
         let query = Ingredient.normalize(searchText)

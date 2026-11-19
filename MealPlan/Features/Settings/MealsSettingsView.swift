@@ -7,12 +7,30 @@ import SFSymbolSelector
 @MainActor
 struct MealsSettingsView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        MealsSettingsContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct MealsSettingsContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var meals: [MealType]
+    @Query private var meals: [MealType]
 
     @State private var pendingDelete: MealType?
     @State private var newMeal: MealType?
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _meals = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
 
     var body: some View {
         List {
@@ -201,16 +219,18 @@ struct MealTypeEditorView: View {
 enum MealTypeStore {
 
     static func plannedCount(for meal: MealType, context: ModelContext) -> Int {
+        guard let householdID = meal.household?.uuid else { return 0 }
         let key = meal.key
         return (try? context.fetchCount(FetchDescriptor<MealPlanEntry>(
-            predicate: #Predicate { $0.mealSlotRaw == key }
+            predicate: #Predicate { $0.mealSlotRaw == key && $0.household?.uuid == householdID }
         ))) ?? 0
     }
 
     static func delete(_ meal: MealType, context: ModelContext, appState: AppState) {
+        guard let householdID = meal.household?.uuid else { return }
         let key = meal.key
         let orphaned = (try? context.fetch(FetchDescriptor<MealPlanEntry>(
-            predicate: #Predicate { $0.mealSlotRaw == key }
+            predicate: #Predicate { $0.mealSlotRaw == key && $0.household?.uuid == householdID }
         ))) ?? []
         orphaned.forEach(context.delete)
         context.delete(meal)

@@ -11,25 +11,42 @@ import SwiftData
 @MainActor
 struct PantryView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        PantryContentView(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct PantryContentView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
 
-    @Query(sort: \Ingredient.name) private var allIngredients: [Ingredient]
-    @Query(sort: \ShoppingListItem.sortIndex) private var allShoppingItems: [ShoppingListItem]
+    let householdID: UUID?
+
+    @Query private var ingredients: [Ingredient]
+    @Query private var shoppingItems: [ShoppingListItem]
 
     @State private var searchText = ""
     @State private var filter: PantryLocationFilter = .all
     @State private var showingBarcodeScanner = false
 
     private var household: Household? { appState.currentHousehold }
-    private var householdID: UUID? { household?.uuid }
     private var canEdit: Bool { PantryActions.canEdit(household, isGuest: appState.isGuest) }
 
-    private var ingredients: [Ingredient] {
-        allIngredients.filter { $0.household?.uuid == householdID }
-    }
-
-    private var shoppingItems: [ShoppingListItem] {
-        allShoppingItems.filter { $0.household?.uuid == householdID }
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _ingredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+        _shoppingItems = Query(FetchDescriptor<ShoppingListItem>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
     }
 
     private var groups: [PantryInventory.Group] {

@@ -6,6 +6,7 @@ import SwiftData
 struct DishVariantGroupRef: Hashable, Identifiable {
     var id: UUID
     var name: String
+    var householdID: UUID? = nil
 }
 
 /// The members of one variant group — three burgers, two bolognese — each
@@ -20,7 +21,16 @@ struct DishVariantGroupView: View {
     #if os(macOS)
     @Environment(\.openWindow) private var openWindow
     #endif
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
+
+    init(group: DishVariantGroupRef) {
+        self.group = group
+        let householdID = group.householdID ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     @State private var renaming = false
     @State private var draftName = ""

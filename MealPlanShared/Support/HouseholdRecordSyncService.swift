@@ -1888,7 +1888,10 @@ final class HouseholdRecordSyncService {
         }.value
         let duration = startedAt.duration(to: .now)
         let assetBytes = records.reduce(into: 0) { $0 += $1.assetBytesRead }
-        logger.info("snapshot.complete records=\(records.count, privacy: .public) assetBytes=\(assetBytes, privacy: .public) duration=\(duration, privacy: .public)")
+        let imageCount = records.reduce(into: 0) {
+            if $1.identity.type == .dishImage { $0 += 1 }
+        }
+        logger.info("snapshot.complete records=\(records.count, privacy: .public) images=\(imageCount, privacy: .public) assetBytes=\(assetBytes, privacy: .public) duration=\(duration, privacy: .public)")
         return records
     }
 

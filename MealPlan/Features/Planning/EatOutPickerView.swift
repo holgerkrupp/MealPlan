@@ -16,11 +16,29 @@ struct EatOutPickerView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     /// Places the family has eaten at before, so the regulars are one tap away.
-    @Query(sort: \MealPlanEntry.date, order: .reverse) private var pastEntries: [MealPlanEntry]
+    @Query private var pastEntries: [MealPlanEntry]
 
     @State private var model = RestaurantSearchModel()
     @State private var selectedPlaceID: String?
     @State private var mapPosition: MapCameraPosition = .automatic
+
+    init(
+        date: Date,
+        mealKey: String,
+        householdID: UUID?,
+        query: String = "",
+        onPlanned: @escaping () -> Void
+    ) {
+        self.date = date
+        self.mealKey = mealKey
+        self.query = query
+        self.onPlanned = onPlanned
+        let scopedHouseholdID = householdID ?? UUID()
+        _pastEntries = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealPlanEntry.date, order: .reverse)]
+        ))
+    }
 
     /// The search only runs from two characters on; below that the list keeps
     /// showing the places the family has been to.
@@ -387,7 +405,7 @@ enum EatOutPickerLayoutPolicy {
 
 #Preview {
     NavigationStack {
-        EatOutPickerView(date: .now, mealKey: PreviewData.mealType.key, query: "", onPlanned: {})
+        EatOutPickerView(date: .now, mealKey: PreviewData.mealType.key, householdID: PreviewData.household.uuid, query: "", onPlanned: {})
     }
     .environment(AppState.preview)
     .modelContainer(PreviewData.container)

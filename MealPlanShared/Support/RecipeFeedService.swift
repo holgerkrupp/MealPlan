@@ -64,7 +64,11 @@ enum RecipeFeedService {
     @discardableResult
     static func subscribe(to candidate: RecipeSiteCandidate, household: Household?, context: ModelContext) async throws -> RecipeFeed {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { throw HouseholdSharingError.readOnlyHousehold }
-        if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: {
+        let householdID = household?.uuid ?? UUID()
+        let existingFeeds = try context.fetch(FetchDescriptor<RecipeFeed>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))
+        if let existing = existingFeeds.first(where: {
             if let sourceID = candidate.providerID, $0.sourceID == sourceID && $0.contentURL == candidate.contentURL { return true }
             return candidate.feedURL?.absoluteString == $0.feedURLString
         }) {
@@ -102,7 +106,11 @@ enum RecipeFeedService {
     @discardableResult
     static func subscribe(to resolved: ResolvedFeed, household: Household?, context: ModelContext) async throws -> RecipeFeed {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { throw HouseholdSharingError.readOnlyHousehold }
-        if let existing = try context.fetch(FetchDescriptor<RecipeFeed>()).first(where: { $0.feedURLString == resolved.feedURL.absoluteString }) {
+        let householdID = household?.uuid ?? UUID()
+        let existingFeeds = try context.fetch(FetchDescriptor<RecipeFeed>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))
+        if let existing = existingFeeds.first(where: { $0.feedURLString == resolved.feedURL.absoluteString }) {
             return existing
         }
         let feed = RecipeFeed(
@@ -119,8 +127,11 @@ enum RecipeFeedService {
     }
 
     /// Whether this household is already subscribed to the given feed.
-    static func isSubscribed(toFeedAt feedURL: URL, context: ModelContext) -> Bool {
-        let feeds = (try? context.fetch(FetchDescriptor<RecipeFeed>())) ?? []
+    static func isSubscribed(toFeedAt feedURL: URL, household: Household?, context: ModelContext) -> Bool {
+        let householdID = household?.uuid ?? UUID()
+        let feeds = (try? context.fetch(FetchDescriptor<RecipeFeed>(
+            predicate: #Predicate { $0.household?.uuid == householdID }
+        ))) ?? []
         return feeds.contains { $0.feedURLString == feedURL.absoluteString }
     }
 

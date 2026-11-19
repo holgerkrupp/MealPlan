@@ -4,6 +4,17 @@ import SwiftUI
 @MainActor
 struct FeedSubscriptionSheet: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        FeedSubscriptionContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct FeedSubscriptionContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Query private var allFeeds: [RecipeFeed]
@@ -17,6 +28,14 @@ struct FeedSubscriptionSheet: View {
     /// is remembered, because someone who cooks from French blogs will want
     /// them again next time.
     @AppStorage("RecipeSuggestions.region") private var storedRegion = ""
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _allFeeds = Query(FetchDescriptor<RecipeFeed>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\RecipeFeed.dateAdded)]
+        ))
+    }
 
     private var deviceRegion: RecipeSuggestionRegion { RecipeFeedSuggestions.region() }
 
@@ -363,7 +382,11 @@ private struct FeedPreviewView: View {
         do {
             let feed = try await RecipeFeedService.resolveFeed(at: url)
             resolved = feed
-            subscribed = RecipeFeedService.isSubscribed(toFeedAt: feed.feedURL, context: context)
+            subscribed = RecipeFeedService.isSubscribed(
+                toFeedAt: feed.feedURL,
+                household: appState.currentHousehold,
+                context: context
+            )
         } catch {
             errorMessage = error.localizedDescription
         }

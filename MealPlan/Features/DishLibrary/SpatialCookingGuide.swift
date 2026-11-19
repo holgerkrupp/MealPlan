@@ -27,7 +27,7 @@ struct SpatialCookingGuideView: View {
     @Environment(\.openWindow) private var openWindow
     @Environment(\.dismissWindow) private var dismissWindow
     @Environment(\.scenePhase) private var scenePhase
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @AppStorage("CookingMode.speakSteps") private var speakSteps = true
     @AppStorage("CookingMode.voiceControl") private var voiceControlEnabled = false
@@ -36,6 +36,15 @@ struct SpatialCookingGuideView: View {
     @State private var microphonePermissionDenied = false
     @State private var narrator = CookingNarrator()
     @State private var voice = CookingVoiceController()
+
+    init(dish: Dish) {
+        self.dish = dish
+        let householdID = dish.household?.uuid ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var store: CookingSessionStore { appState.cookingSession }
 
@@ -411,7 +420,31 @@ struct SpatialCookingWindow: View {
     let route: SpatialCookingWindowRoute
 
     @Environment(AppState.self) private var appState
-    @Query(sort: \Dish.name) private var dishes: [Dish]
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        SpatialCookingWindowContent(route: route, householdID: householdID)
+            .id(householdID?.uuidString ?? "no-household")
+    }
+}
+
+@MainActor
+private struct SpatialCookingWindowContent: View {
+    let route: SpatialCookingWindowRoute
+    let householdID: UUID?
+
+    @Environment(AppState.self) private var appState
+    @Query private var dishes: [Dish]
+
+    init(route: SpatialCookingWindowRoute, householdID: UUID?) {
+        self.route = route
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _dishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var dish: Dish? {
         guard let id = appState.cookingSession.session?.selectedDishID else { return nil }

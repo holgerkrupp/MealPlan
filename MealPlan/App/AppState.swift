@@ -86,6 +86,7 @@ final class AppState: HouseholdRecoveryAppState {
     /// Day cards the user collapsed on the plan, stored as `dayID` strings so
     /// the state survives the calendar's lazy scrolling and app launches.
     private(set) var collapsedDays: Set<String> = AppState.loadCollapsedDays()
+    private var dishMaintenanceTask: Task<Void, Never>?
 
     private static let collapsedDaysKey = "collapsedDayIDs"
 
@@ -202,14 +203,11 @@ final class AppState: HouseholdRecoveryAppState {
             try? DishLabelConsolidation.migrateIfNeeded(household: household, context: context)
         }
         cloudBootstrapState = .ready
-        // Let the first screen render before scanning dishes for derived glyphs
-        // or abandoned drafts. The sweep remains idempotent and the blank-draft
-        // grace period protects content that is still arriving from sync.
-        Task { @MainActor [weak self] in
-            await Task.yield()
-            guard self != nil else { return }
-            DishGlyphMaintenance.run(context: context)
-            BlankDishMaintenance.run(context: context)
+        // Nonessential dish relationship traversal waits until cloud household
+        // discovery has settled; it is scheduled there for the normal launch.
+        // Restore flows call bootstrap directly after replacing the local data.
+        if !isLookingForCloudHousehold {
+            scheduleDishMaintenance(using: context)
         }
     }
 
@@ -221,23 +219,22 @@ final class AppState: HouseholdRecoveryAppState {
     /// A failed lookup leaves the local data available and retries next launch.
     func bootstrapFromCloud(context: ModelContext, planningThrough latestPlanningDate: Date? = nil) async {
         bootstrap(context: context, planningThrough: latestPlanningDate)
-        guard let local = currentHousehold else {
+        defer {
             isLookingForCloudHousehold = false
+            isDownloadingCloudHousehold = false
+            scheduleDishMaintenance(using: context)
+        }
+        guard let local = currentHousehold else {
             return
         }
         if let locator = HouseholdShareLocator.decode(local.cloudKitShareIdentifier), !locator.isOwner {
             legacyHouseholdRecovery = .noAction
-            isLookingForCloudHousehold = false
             return
         }
         canSyncCurrentHouseholdWhileLooking = LegacyHouseholdReconciliationStore.load(
             canonicalHouseholdID: local.uuid
         ) != nil
         isLookingForCloudHousehold = true
-        defer {
-            isLookingForCloudHousehold = false
-            isDownloadingCloudHousehold = false
-        }
         if canSyncCurrentHouseholdWhileLooking {
             // Fetch the active zone first. Legacy inventory scans every old
             // zone and must not delay a normal per-record plan update.
@@ -312,6 +309,25 @@ final class AppState: HouseholdRecoveryAppState {
             LegacyHouseholdDiagnostics.record(event: "ownedZoneConvergenceFailed", activeHouseholdID: local.uuid, error: error)
         }
         finishCloudDownload()
+    }
+
+    /// Starts the derived-glyph / abandoned-draft sweep only after household
+    /// discovery or restore is done. The worker gets an actor-owned context,
+    /// so relationship faults never run on the UI context.
+    private func scheduleDishMaintenance(using context: ModelContext) {
+        dishMaintenanceTask?.cancel()
+        guard let householdID = currentHousehold?.uuid else { return }
+        let container = context.container
+        dishMaintenanceTask = Task { @MainActor [weak self] in
+            // Let the state changes from bootstrap/restore reach the UI first.
+            await Task.yield()
+            guard !Task.isCancelled,
+                  let self,
+                  !self.isLookingForCloudHousehold,
+                  self.currentHousehold?.uuid == householdID else { return }
+            let worker = DishMaintenanceActor(modelContainer: container)
+            await worker.run(householdID: householdID)
+        }
     }
 
     /// Re-runs the non-destructive legacy-zone inventory used by launch and by
@@ -504,7 +520,10 @@ final class AppState: HouseholdRecoveryAppState {
                 let recipes = try await Task.detached(priority: .userInitiated) {
                     try RecipeImportCommitter.recipes(fromFileAt: url)
                 }.value
-                let library = (try? context.fetch(FetchDescriptor<Dish>())) ?? []
+                let library = RecipeImportCommitter.existingDishes(
+                    in: currentHousehold,
+                    context: context
+                )
                 let plan = RecipeImportPlanner.plan(recipes, against: library)
                 let result = await RecipeImportCommitter.commitResponsively(
                     plan,

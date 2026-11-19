@@ -10,9 +10,18 @@ struct DishVariantPickerView: View {
 
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @State private var searchText = ""
+
+    init(dish: Dish) {
+        self.dish = dish
+        let householdID = dish.household?.uuid ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var candidates: [Dish] {
         let existingGroup = dish.variantGroupID

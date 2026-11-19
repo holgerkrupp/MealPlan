@@ -7,10 +7,21 @@ struct ExportedPDF: Identifiable { let id = UUID(); let url: URL }
 @MainActor
 struct CalendarHomeView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        CalendarHomeContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct CalendarHomeContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(PurchaseManager.self) private var purchaseManager
     @Environment(\.modelContext) private var context
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
+    @Query private var mealTypes: [MealType]
+    let householdID: UUID?
     /// The Monday-based week sitting at the top of the plan. Written by the
     /// scroll view only when it actually changes weeks, so ordinary scrolling
     /// no longer re-runs this body — and with it the week grouping over every
@@ -36,6 +47,15 @@ struct CalendarHomeView: View {
     /// builds a handful of weeks.
     @State private var paginator = CalendarPaginator()
     @State private var entrySnapshots = CalendarEntrySnapshotStore()
+
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _mealTypes = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
 
     var body: some View {
         VStack(spacing: 0) {
@@ -68,6 +88,7 @@ struct CalendarHomeView: View {
 
             LoadedMealPlanEntriesView(
                 range: paginator.queryRange,
+                householdID: householdID,
                 snapshotStore: entrySnapshots
             )
             .equatable()
@@ -259,20 +280,23 @@ struct CalendarHomeView: View {
 @MainActor
 private struct LoadedMealPlanEntriesView: View, Equatable {
     let range: DateInterval
+    let householdID: UUID?
     let snapshotStore: CalendarEntrySnapshotStore
     @Query private var models: [MealPlanEntry]
 
-    init(range: DateInterval, snapshotStore: CalendarEntrySnapshotStore) {
+    init(range: DateInterval, householdID: UUID?, snapshotStore: CalendarEntrySnapshotStore) {
         self.range = range
+        self.householdID = householdID
         self.snapshotStore = snapshotStore
         let start = range.start
         let end = range.end
-        _models = Query(
-            filter: #Predicate<MealPlanEntry> { entry in
-                entry.date >= start && entry.date < end
+        let scopedHouseholdID = householdID ?? UUID()
+        _models = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { entry in
+                entry.date >= start && entry.date < end && entry.household?.uuid == scopedHouseholdID
             },
-            sort: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)]
-        )
+            sortBy: [SortDescriptor(\MealPlanEntry.date), SortDescriptor(\MealPlanEntry.sortIndex)]
+        ))
     }
 
     var body: some View {
@@ -289,6 +313,7 @@ private struct LoadedMealPlanEntriesView: View, Equatable {
     static func == (lhs: Self, rhs: Self) -> Bool {
         lhs.range.start == rhs.range.start
             && lhs.range.end == rhs.range.end
+            && lhs.householdID == rhs.householdID
             && lhs.snapshotStore === rhs.snapshotStore
     }
 

@@ -4,13 +4,25 @@ import SwiftUI
 @MainActor
 struct FridgeExperienceView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        FridgeExperienceContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct FridgeExperienceContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
-    @Query(sort: \Ingredient.name) private var allIngredients: [Ingredient]
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
-    @Query(sort: \MealPlanEntry.date) private var allEntries: [MealPlanEntry]
-    @Query(sort: \ShoppingListItem.sortIndex) private var allShoppingItems: [ShoppingListItem]
+    let householdID: UUID?
+
+    @Query private var ingredients: [Ingredient]
+    @Query private var entries: [MealPlanEntry]
+    @Query private var shoppingItems: [ShoppingListItem]
 
     @AppStorage(FridgeExperienceSettings.enabledKey) private var fridgeEnabled = false
     @AppStorage(FridgeExperienceSettings.simulatedFoldableKey) private var simulatedFoldable = false
@@ -21,26 +33,26 @@ struct FridgeExperienceView: View {
     @State private var showingAllIngredients = false
     @State private var showingSuggestions = false
 
-    private var householdID: UUID? { appState.currentHousehold?.uuid }
     private var isFoldable: Bool { FoldingDeviceStateProvider.current.isFoldable || simulatedFoldable }
     private var isActive: Bool { fridgeEnabled && isFoldable }
 
     private var household: Household? { appState.currentHousehold }
 
-    private var ingredients: [Ingredient] {
-        allIngredients.filter { $0.household?.uuid == householdID }
-    }
-
-    private var dishes: [Dish] {
-        allDishes.filter { $0.household?.uuid == householdID }
-    }
-
-    private var entries: [MealPlanEntry] {
-        allEntries.filter { $0.household?.uuid == householdID }
-    }
-
-    private var shoppingItems: [ShoppingListItem] {
-        allShoppingItems.filter { $0.household?.uuid == householdID && !$0.isChecked }
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _ingredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+        _entries = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealPlanEntry.date)]
+        ))
+        _shoppingItems = Query(FetchDescriptor<ShoppingListItem>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID && $0.isChecked == false },
+            sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
     }
 
     private var visibleIngredients: [Ingredient] {
@@ -62,15 +74,6 @@ struct FridgeExperienceView: View {
 
     private var selectedIngredients: [Ingredient] {
         availableIngredients.filter { selectedIngredientIDs.contains($0.uuid) }
-    }
-
-    private var recipeSuggestions: [FridgeRecipeSuggestion] {
-        FridgeRecipeSuggester.suggestions(
-            dishes: dishes,
-            available: availableIngredients,
-            useSoon: useSoonIngredients,
-            selected: selectedIngredients
-        )
     }
 
     private var nextMeal: MealPlanEntry? {
@@ -273,19 +276,14 @@ struct FridgeExperienceView: View {
 
             ingredientShelf
 
-            Button {
-                showingSuggestions = true
-            } label: {
-                Label(String(localized: "What can I make?"), systemImage: "sparkles")
-                    .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(.borderedProminent)
-            .disabled(recipeSuggestions.isEmpty)
-            .accessibilityHint(String(localized: "Suggests saved recipes using selected ingredients."))
-
-            if showingSuggestions {
-                suggestionsSection
-            }
+            FridgeRecipeSuggestionsView(
+                householdID: householdID,
+                available: availableIngredients,
+                useSoon: useSoonIngredients,
+                selected: selectedIngredients,
+                isPresented: $showingSuggestions
+            )
+            .id(householdID)
         }
     }
 
@@ -360,54 +358,6 @@ struct FridgeExperienceView: View {
             Button(String(localized: "Add to shopping list"), systemImage: "cart.badge.plus") {
                 guard let household else { return }
                 ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
-            }
-        }
-    }
-
-    private var suggestionsSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(String(localized: "You could make"), systemImage: "wand.and.stars")
-                    .font(.headline)
-                Spacer()
-                if !selectedIngredients.isEmpty {
-                    Text("Using " + String(selectedIngredients.count) + " selected")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            ForEach(recipeSuggestions) { suggestion in
-                NavigationLink {
-                    DishDetailView(dish: suggestion.dish)
-                } label: {
-                    VStack(alignment: .leading, spacing: 6) {
-                        HStack {
-                            Text(suggestion.dish.name)
-                                .font(.headline)
-                            Spacer()
-                            Image(systemName: "chevron.right")
-                                .foregroundStyle(.tertiary)
-                        }
-                        Text("Have: " + suggestion.matchedIngredients.joined(separator: ", "))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                        if !suggestion.missingIngredients.isEmpty {
-                            Text("Still need: " + suggestion.missingIngredients.joined(separator: ", "))
-                                .font(.caption)
-                                .foregroundStyle(.orange)
-                        }
-                        if !suggestion.useSoonIngredients.isEmpty {
-                            Label("Uses soon: " + suggestion.useSoonIngredients.joined(separator: ", "), systemImage: "clock")
-                                .font(.caption)
-                                .foregroundStyle(.pink)
-                        }
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(12)
-                    .background(.quaternary, in: .rect(cornerRadius: 14))
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(Text("Recipe suggestion: " + suggestion.dish.name))
             }
         }
     }
@@ -493,6 +443,97 @@ struct FridgeExperienceView: View {
             return "\(ingredient.inventoryMode.localizedName) · \(value)\(unit.isEmpty ? "" : " \(unit)")"
         }
         return ingredient.inventoryMode.localizedName
+    }
+}
+
+@MainActor
+private struct FridgeRecipeSuggestionsView: View {
+    @Query private var dishes: [Dish]
+    let available: [Ingredient]
+    let useSoon: [Ingredient]
+    let selected: [Ingredient]
+    @Binding var isPresented: Bool
+
+    private var suggestions: [FridgeRecipeSuggestion] {
+        FridgeRecipeSuggester.suggestions(
+            dishes: dishes,
+            available: available,
+            useSoon: useSoon,
+            selected: selected
+        )
+    }
+
+    init(
+        householdID: UUID?,
+        available: [Ingredient],
+        useSoon: [Ingredient],
+        selected: [Ingredient],
+        isPresented: Binding<Bool>
+    ) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _dishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+        self.available = available
+        self.useSoon = useSoon
+        self.selected = selected
+        self._isPresented = isPresented
+    }
+
+    var body: some View {
+        Button {
+            isPresented = true
+        } label: {
+            Label(String(localized: "What can I make?"), systemImage: "sparkles")
+                .frame(maxWidth: .infinity)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(suggestions.isEmpty)
+        .accessibilityHint(String(localized: "Suggests saved recipes using selected ingredients."))
+
+        if isPresented {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Label(String(localized: "You could make"), systemImage: "wand.and.stars")
+                        .font(.headline)
+                    Spacer()
+                    if !selected.isEmpty {
+                        Text("Using " + String(selected.count) + " selected")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                ForEach(suggestions) { suggestion in
+                    NavigationLink {
+                        DishDetailView(dish: suggestion.dish)
+                    } label: {
+                        VStack(alignment: .leading, spacing: 6) {
+                            HStack {
+                                Text(suggestion.dish.name).font(.headline)
+                                Spacer()
+                                Image(systemName: "chevron.right").foregroundStyle(.tertiary)
+                            }
+                            Text("Have: " + suggestion.matchedIngredients.joined(separator: ", "))
+                                .font(.caption).foregroundStyle(.secondary)
+                            if !suggestion.missingIngredients.isEmpty {
+                                Text("Still need: " + suggestion.missingIngredients.joined(separator: ", "))
+                                    .font(.caption).foregroundStyle(.orange)
+                            }
+                            if !suggestion.useSoonIngredients.isEmpty {
+                                Label("Uses soon: " + suggestion.useSoonIngredients.joined(separator: ", "), systemImage: "clock")
+                                    .font(.caption).foregroundStyle(.pink)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(.quaternary, in: .rect(cornerRadius: 14))
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(Text("Recipe suggestion: " + suggestion.dish.name))
+                }
+            }
+        }
     }
 }
 

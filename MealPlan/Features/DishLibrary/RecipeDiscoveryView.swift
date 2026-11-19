@@ -5,9 +5,21 @@ import os
 @MainActor
 struct RecipeDiscoveryView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        RecipeDiscoveryContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct RecipeDiscoveryContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: \RecipeFeed.dateAdded) private var allFeeds: [RecipeFeed]
-    @Query(sort: \RecipeBookmark.title) private var allBookmarks: [RecipeBookmark]
+    @Query private var feeds: [RecipeFeed]
+    @Query private var bookmarks: [RecipeBookmark]
+    let householdID: UUID?
 
     @State private var showingSubscription = false
     @State private var showingBookmark = false
@@ -25,7 +37,9 @@ struct RecipeDiscoveryView: View {
     /// nil means built-in and subscribed sources together.
     @State private var sourceFilter: String?
     @State private var snapshot = RecipeDiscoverySnapshot.empty
-    @State private var imageMetadataRevision = 0
+    /// Changes when one of the value-only snapshot inputs changes. Keeping a
+    /// generation avoids rebuilding a task key from every cached article.
+    @State private var snapshotInputRevision = 0
     @State private var seasonalCollections: [SeasonalRecipeCollection] = []
     @State private var seasonalReadIDs: Set<String> = []
     @State private var seasonalRoute: SeasonalRecipeMomentRoute?
@@ -34,12 +48,17 @@ struct RecipeDiscoveryView: View {
     @State private var completedSeasonalContextKey = ""
     @State private var nextSeasonalTransition: Date?
 
-    private var feeds: [RecipeFeed] {
-        allFeeds.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
-    }
-
-    private var bookmarks: [RecipeBookmark] {
-        allBookmarks.filter { $0.household?.uuid == appState.currentHousehold?.uuid }
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _feeds = Query(FetchDescriptor<RecipeFeed>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\RecipeFeed.dateAdded)]
+        ))
+        _bookmarks = Query(FetchDescriptor<RecipeBookmark>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\RecipeBookmark.title)]
+        ))
     }
 
     private var subscribedSites: [SubscribedSite] {
@@ -64,16 +83,6 @@ struct RecipeDiscoveryView: View {
             locale: Locale(identifier: identifier),
             unitSystem: household?.presentationUnitSystem
         )
-    }
-
-    private var seasonalContextKey: String {
-        let market = discoveryMarketContext
-        return "\(market.regionCode ?? "*")|\(market.languageCode ?? "*")|\(market.unitSystem.rawValue)"
-    }
-
-    private var seasonalRefreshTaskID: String {
-        let transition = nextSeasonalTransition?.timeIntervalSince1970 ?? 0
-        return "\(seasonalRefreshRevision)|\(seasonalContextKey)|\(transition)"
     }
 
     /// True while the view is showing less than everything it has, which is
@@ -175,7 +184,7 @@ struct RecipeDiscoveryView: View {
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
             // Sync and other store writers can update feed items without
             // changing the parent feed's scalar fields.
-            imageMetadataRevision &+= 1
+            snapshotInputRevision &+= 1
             seasonalRefreshRevision &+= 1
         }
         .detailPresentation(isPresented: $showingSubscription, route: .subscribeToSite) {
@@ -206,8 +215,8 @@ struct RecipeDiscoveryView: View {
                 readIDs: seasonalReadIDs,
                 onRead: markRead,
                 onImageResolved: { article, imageURL in
-                            recordSeasonalImage(imageURL: imageURL, forArticle: article)
-                        }
+                    recordSeasonalImage(imageURL: imageURL, forArticle: article)
+                }
             )
         }
     }
@@ -476,15 +485,19 @@ struct RecipeDiscoveryView: View {
     }
 
     private var snapshotTaskID: String {
-        // Feed refreshes update lastFetchedAt. That gives discovery a compact
-        // revision without walking every cached article on each body update.
-        let feedRevision = feeds.map {
-            "\($0.uuid.uuidString):\($0.lastFetchedAt?.timeIntervalSinceReferenceDate ?? 0)"
-        }.joined(separator: "|")
-        let publicRevision = discoveredSources.map { result in
-            "\(result.source.id):\(result.articles.map { $0.id }.joined(separator: ","))"
-        }.joined(separator: "|")
-        return "\(search)|\(scope.rawValue)|\(sort.rawValue)|\(sourceFilter ?? "*")|\(selectedCategory?.rawValue ?? "*")|\(feedRevision)|\(publicRevision)|\(imageMetadataRevision)"
+        // This key contains only small UI state and a monotonic generation.
+        // In particular, do not walk feed items or public articles from body.
+        return "\(search)|\(scope.rawValue)|\(sort.rawValue)|\(sourceFilter ?? "*")|\(selectedCategory?.rawValue ?? "*")|\(feeds.count)|\(snapshotInputRevision)"
+    }
+
+    private var seasonalContextKey: String {
+        let market = discoveryMarketContext
+        return "\(market.regionCode ?? "*")|\(market.languageCode ?? "*")|\(market.unitSystem.rawValue)"
+    }
+
+    private var seasonalRefreshTaskID: String {
+        let transition = nextSeasonalTransition?.timeIntervalSince1970 ?? 0
+        return "\(seasonalRefreshRevision)|\(seasonalContextKey)|\(transition)"
     }
 
     private var discoveryQuery: RecipeDiscoveryQuery {
@@ -601,7 +614,7 @@ struct RecipeDiscoveryView: View {
         guard let item = feed.items?.first(where: { $0.stableID == article.readStateID }) else { return }
         if let imageURL { item.imageURLString = imageURL.absoluteString }
         item.imageLookupAt = .now
-        imageMetadataRevision &+= 1
+        snapshotInputRevision &+= 1
         try? context.save()
     }
 
@@ -668,6 +681,9 @@ struct RecipeDiscoveryView: View {
         let loaded = await discoveryLoad
         discoveredSources = loaded.sources
         failedDiscoverySources = loaded.failedSourceNames
+        // Feed refreshes and public discovery can change article content while
+        // keeping the same number of feeds and sources.
+        snapshotInputRevision &+= 1
         loadingDiscovery = false
         refreshing = false
         seasonalRefreshRevision &+= 1

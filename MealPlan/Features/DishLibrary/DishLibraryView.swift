@@ -66,10 +66,15 @@ private struct DishLibraryContent: View {
     @State private var availableTags: [String] = []
     @State private var popularTags: [String] = []
     @State private var availableCollections: [DishCollectionSummary] = []
+    @State private var metadataLoader: DishLibraryMetadataLoader?
     /// Bumped after a label edit that may touch dishes outside the first
     /// page, so the tag and collection lists are derived again.
     @State private var metadataToken = 0
     @State private var debouncedSearchText = ""
+    @State private var searchSnapshotActor: DishSearchSnapshotActor?
+    @State private var searchScores: [UUID: Double] = [:]
+    @State private var rankedSearchRequest: DishSearchRequest?
+    @State private var searchGeneration = 0
 
     // Multi-select for bulk tagging and collections.
     @State private var isSelecting = false
@@ -153,10 +158,48 @@ private struct DishLibraryContent: View {
         return filter
     }
 
+    private var firstPageSearchRequest: DishSearchRequest? {
+        let query = visibleFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !query.isEmpty, let householdID else { return nil }
+        return DishSearchRequest(
+            householdID: householdID,
+            query: query,
+            generation: searchGeneration,
+            candidateIDs: nil
+        )
+    }
+
+    private var searchScoresForFilter: [UUID: Double]? {
+        guard !visibleFilter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return rankedSearchRequest == firstPageSearchRequest ? searchScores : [:]
+    }
+
     /// What the grid actually draws. A variant group collapses into one cell
     /// so five takes on a burger don't push everything else off the screen;
     /// the group's own screen lists them.
-    private func libraryItems(from filteredDishes: [Dish]) -> [LibraryItem] {
+    private func libraryItems(
+        from filteredDishes: [Dish],
+        crossPageGroups: [UUID: DishLibraryVariantGroup]? = nil
+    ) -> [LibraryItem] {
+        if let crossPageGroups {
+            var items: [LibraryItem] = []
+            for dish in filteredDishes {
+                guard let groupID = dish.variantGroupID,
+                      let group = crossPageGroups[groupID],
+                      group.members.count > 1 else {
+                    items.append(.dish(dish))
+                    continue
+                }
+                // Only the page containing the first matching member owns the
+                // group card. Later pages suppress the other member rows.
+                guard group.firstMatchingUUID == dish.uuid else { continue }
+                items.append(.group(
+                    DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName, householdID: householdID),
+                    members: group.members
+                ))
+            }
+            return items
+        }
         guard filteredDishes.contains(where: { $0.variantGroupID != nil }) else {
             return filteredDishes.map(LibraryItem.dish)
         }
@@ -171,7 +214,7 @@ private struct DishLibraryContent: View {
             }
             guard seenGroups.insert(groupID).inserted else { continue }
             items.append(.group(
-                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
+                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName, householdID: householdID),
                 members: members
             ))
         }
@@ -200,11 +243,24 @@ private struct DishLibraryContent: View {
     private var library: some View {
         @Bindable var appState = appState
         let projection = DishLibraryPerformanceSignposts.signposter.beginInterval("library filter and grouping")
+        let now = Date.now
         let filteredDishes = visibleFilter.apply(
             to: allDishes,
-            sourceIsAlphabeticallySorted: true
+            now: now,
+            sourceIsAlphabeticallySorted: true,
+            searchScores: searchScoresForFilter
         )
-        let items = libraryItems(from: filteredDishes)
+        let crossPageGroups = firstPageIsFull
+            ? DishLibraryVariantGrouping.load(
+                filteredDishes: filteredDishes,
+                householdID: householdID,
+                filter: visibleFilter,
+                searchScores: searchScoresForFilter,
+                context: context,
+                now: now
+            )
+            : nil
+        let items = libraryItems(from: filteredDishes, crossPageGroups: crossPageGroups)
         let _ = DishLibraryPerformanceSignposts.signposter.endInterval("library filter and grouping", projection)
         let canLoadMore = firstPageIsFull
 
@@ -226,7 +282,10 @@ private struct DishLibraryContent: View {
                 activeCollectionHeader
 
                 if !isSelecting {
-                    SeasonalSuggestionsStrip(dishes: allDishes)
+                    SeasonalSuggestionsStrip(
+                        householdID: householdID,
+                        dataRevision: metadataToken
+                    )
                 }
 
                 if !appState.isGuest {
@@ -256,6 +315,7 @@ private struct DishLibraryContent: View {
                         isLastPage: pageIndex == pageCount - 1,
                         acceptsDrops: !appState.isGuest,
                         selection: pageSelection,
+                        searchScores: searchScoresForFilter,
                         hasAnyFilteredResults: $hasAnyFilteredResults,
                         hasMorePages: $hasMorePages,
                         loadMore: loadMore
@@ -289,11 +349,35 @@ private struct DishLibraryContent: View {
             hasMorePages = firstPageIsFull
             updatePageState(filteredDishes: visibleFilter.apply(
                 to: allDishes,
-                sourceIsAlphabeticallySorted: true
+                sourceIsAlphabeticallySorted: true,
+                searchScores: searchScoresForFilter
+            ))
+        }
+        .onChange(of: searchScores) {
+            updatePageState(filteredDishes: visibleFilter.apply(
+                to: allDishes,
+                sourceIsAlphabeticallySorted: true,
+                searchScores: searchScoresForFilter
+            ))
+        }
+        .onChange(of: rankedSearchRequest) {
+            updatePageState(filteredDishes: visibleFilter.apply(
+                to: allDishes,
+                sourceIsAlphabeticallySorted: true,
+                searchScores: searchScoresForFilter
             ))
         }
         .task(id: libraryRevision) {
             await refreshTags()
+        }
+        .task(id: firstPageSearchRequest) {
+            await refreshFirstPageSearch()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+            searchGeneration &+= 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            searchGeneration &+= 1
         }
         .navigationTitle(AppSection.dishes.title)
         .navigationDestination(for: Dish.self) { DishDetailView(dish: $0) }
@@ -798,14 +882,58 @@ private struct DishLibraryContent: View {
         // its own SwiftData executor so it cannot stall scrolling or the tab
         // transition on the main actor.
         try? await Task.sleep(for: .milliseconds(150))
-        guard !Task.isCancelled else { return }
-        let metadata = await DishLibraryMetadataActor(
-            modelContainer: context.container
-        ).tagMetadata(householdID: householdID)
+        guard !Task.isCancelled, let householdID else {
+            availableTags = []
+            popularTags = []
+            availableCollections = []
+            return
+        }
+        let loader: DishLibraryMetadataLoader
+        if let metadataLoader {
+            loader = metadataLoader
+        } else {
+            loader = DishLibraryMetadataLoader(modelContainer: context.container)
+            metadataLoader = loader
+        }
+        let metadata = await loader.tagMetadata(
+            householdID: householdID,
+            revision: DishLibraryMetadataRevision(
+                count: allDishes.count,
+                latestModification: allDishes.lazy.map(\.modifiedAt).max(),
+                token: metadataToken
+            )
+        )
         guard !Task.isCancelled else { return }
         availableTags = metadata.available
         popularTags = metadata.popular
         availableCollections = metadata.collections
+    }
+
+    private func refreshFirstPageSearch() async {
+        let request = firstPageSearchRequest
+        guard let request else {
+            searchScores = [:]
+            rankedSearchRequest = nil
+            return
+        }
+        searchScores = [:]
+        rankedSearchRequest = nil
+        guard !Task.isCancelled, firstPageSearchRequest == request else { return }
+        let actor: DishSearchSnapshotActor
+        if let searchSnapshotActor {
+            actor = searchSnapshotActor
+        } else {
+            actor = DishSearchSnapshotActor(modelContainer: context.container)
+            searchSnapshotActor = actor
+        }
+        let results = await actor.filterSearch(
+            householdID: request.householdID,
+            revision: request.revision,
+            query: request.query
+        )
+        guard !Task.isCancelled, firstPageSearchRequest == request else { return }
+        searchScores = Dictionary(results.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first })
+        rankedSearchRequest = request
     }
 
     private func updatePageState(filteredDishes: [Dish]) {
@@ -1004,19 +1132,12 @@ private struct SharedSitePreviewView: View {
     }
 }
 
-private struct DishLibraryTagMetadata: Sendable {
-    var available: [String]
-    var popular: [String]
-    var collections: [DishCollectionSummary]
-
-    static let empty = DishLibraryTagMetadata(available: [], popular: [], collections: [])
-}
-
 /// Each scrolling window owns a fixed-size query. Reaching its footer mounts
 /// the next window, so loading page 20 does not keep 2,400 SwiftData models in
 /// the library view's active query or rerun filtering over all earlier pages.
 @MainActor
 private struct DishLibraryResultPage: View {
+    @Environment(\.modelContext) private var context
     @Query private var dishes: [Dish]
 
     private let householdID: UUID?
@@ -1024,6 +1145,7 @@ private struct DishLibraryResultPage: View {
     private let filter: DishFilter
     private let isLastPage: Bool
     private let acceptsDrops: Bool
+    private let searchScores: [UUID: Double]?
     /// Set while the library is picking dishes for a bulk change.
     private let selection: Binding<[UUID: Dish]>?
     @Binding private var hasAnyFilteredResults: Bool
@@ -1050,6 +1172,7 @@ private struct DishLibraryResultPage: View {
         isLastPage: Bool,
         acceptsDrops: Bool,
         selection: Binding<[UUID: Dish]>?,
+        searchScores: [UUID: Double]?,
         hasAnyFilteredResults: Binding<Bool>,
         hasMorePages: Binding<Bool>,
         loadMore: @escaping @MainActor (Int) -> Void
@@ -1059,6 +1182,7 @@ private struct DishLibraryResultPage: View {
         self.filter = filter
         self.isLastPage = isLastPage
         self.acceptsDrops = acceptsDrops
+        self.searchScores = searchScores
         self.selection = selection
         self._hasAnyFilteredResults = hasAnyFilteredResults
         self._hasMorePages = hasMorePages
@@ -1074,14 +1198,29 @@ private struct DishLibraryResultPage: View {
         _dishes = Query(descriptor)
     }
 
+    private var searchScoresForFilter: [UUID: Double]? {
+        guard !filter.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return searchScores ?? [:]
+    }
+
     var body: some View {
         let projection = DishLibraryPerformanceSignposts.signposter.beginInterval("paged filter and grouping")
+        let now = Date.now
         let filtered = filter.apply(
             to: dishes,
-            now: .now,
-            sourceIsAlphabeticallySorted: filter.sort == .alphabetical
+            now: now,
+            sourceIsAlphabeticallySorted: filter.sort == .alphabetical,
+            searchScores: searchScoresForFilter
         )
-        let items = libraryItems(from: filtered)
+        let crossPageGroups = DishLibraryVariantGrouping.load(
+            filteredDishes: filtered,
+            householdID: householdID,
+            filter: filter,
+            searchScores: searchScoresForFilter,
+            context: context,
+            now: now
+        )
+        let items = libraryItems(from: filtered, crossPageGroups: crossPageGroups)
         let _ = DishLibraryPerformanceSignposts.signposter.endInterval("paged filter and grouping", projection)
 
         Group {
@@ -1141,6 +1280,13 @@ private struct DishLibraryResultPage: View {
         }
         .onAppear { updateState(filtered: filtered) }
         .onChange(of: dishes.count) { updateState(filtered: filtered) }
+        .onChange(of: searchScores) {
+            updateState(filtered: filter.apply(
+                to: dishes,
+                sourceIsAlphabeticallySorted: filter.sort == .alphabetical,
+                searchScores: searchScoresForFilter
+            ))
+        }
     }
 
     private func updateState(filtered: [Dish]) {
@@ -1157,24 +1303,87 @@ private struct DishLibraryResultPage: View {
             .buttonStyle(.plain)
     }
 
-    private func libraryItems(from filtered: [Dish]) -> [Item] {
-        let groups = DishVariants.groups(in: filtered)
-        var seenGroups: Set<UUID> = []
+    private func libraryItems(
+        from filtered: [Dish],
+        crossPageGroups: [UUID: DishLibraryVariantGroup]
+    ) -> [Item] {
         var items: [Item] = []
         for dish in filtered {
-            guard let groupID = dish.variantGroupID, let members = groups[groupID] else {
+            guard let groupID = dish.variantGroupID,
+                  let group = crossPageGroups[groupID],
+                  group.members.count > 1 else {
                 items.append(.dish(dish))
                 continue
             }
-            guard seenGroups.insert(groupID).inserted else { continue }
+            // The first matching member in the store's stable order decides
+            // which page emits the card; later pages omit the group entirely.
+            guard group.firstMatchingUUID == dish.uuid else { continue }
             items.append(.group(
-                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName),
-                members: members
+                DishVariantGroupRef(id: groupID, name: dish.variantGroupDisplayName, householdID: householdID),
+                members: group.members
             ))
         }
         return items
     }
 
+}
+
+private struct DishLibraryVariantGroup {
+    var firstMatchingUUID: UUID
+    var members: [Dish]
+}
+
+/// Resolves only the other members of groups present on the current page.
+/// That keeps group counts and multi-selection correct across page boundaries
+/// without fetching the whole recipe library for each page.
+@MainActor
+private enum DishLibraryVariantGrouping {
+    static func load(
+        filteredDishes: [Dish],
+        householdID: UUID?,
+        filter: DishFilter,
+        searchScores: [UUID: Double]?,
+        context: ModelContext,
+        now: Date
+    ) -> [UUID: DishLibraryVariantGroup] {
+        guard let householdID else { return [:] }
+        let groupIDs = Array(Set(filteredDishes.compactMap(\.variantGroupID)))
+        guard !groupIDs.isEmpty else { return [:] }
+
+        let missingGroupID = UUID()
+        let descriptor = FetchDescriptor<Dish>(
+            predicate: #Predicate {
+                groupIDs.contains($0.variantGroupID ?? missingGroupID)
+                    && $0.household?.uuid == householdID
+            },
+            sortBy: DishLibrarySort.descriptors(for: filter.sort)
+        )
+        guard let orderedMembers = try? context.fetch(descriptor) else { return [:] }
+
+        // Apply the same filters to the complete set of each visible group.
+        // Re-filtering only a single page used to split groups and misstate
+        // their size when their members landed in different offsets.
+        let matchingIDs = Set(filter.apply(
+            to: orderedMembers,
+            now: now,
+            sourceIsAlphabeticallySorted: filter.sort == .alphabetical,
+            searchScores: searchScores
+        ).map(\.uuid))
+        let matchingMembers = orderedMembers.filter { matchingIDs.contains($0.uuid) }
+        let grouped = Dictionary(grouping: matchingMembers.compactMap { dish -> (UUID, Dish)? in
+            guard let groupID = dish.variantGroupID else { return nil }
+            return (groupID, dish)
+        }, by: \.0)
+
+        return grouped.reduce(into: [:]) { result, pair in
+            let membersInStoreOrder = pair.value.map(\.1)
+            guard let first = membersInStoreOrder.first else { return }
+            result[pair.key] = DishLibraryVariantGroup(
+                firstMatchingUUID: first.uuid,
+                members: DishVariants.sorted(membersInStoreOrder)
+            )
+        }
+    }
 }
 
 private enum DishLibrarySort {
@@ -1202,22 +1411,49 @@ private enum DishLibrarySort {
 }
 
 @ModelActor
-private actor DishLibraryMetadataActor {
-    func tagMetadata(householdID: UUID?) -> DishLibraryTagMetadata {
-        guard !Task.isCancelled, let householdID,
+actor DishLibraryMetadataActor {
+    /// Selects and resolves seasonal suggestions away from the UI context.
+    /// Ingredient traversal is limited to the same 120 least-recently-used
+    /// candidates as before, and every row is scoped to the active household.
+    func seasonalSuggestionIDs(
+        householdID: UUID,
+        season: Season
+    ) -> [UUID] {
+        guard !Task.isCancelled,
               let dishes = try? modelContext.fetch(FetchDescriptor<Dish>(
                 predicate: #Predicate { $0.household?.uuid == householdID }
               ))
-        else { return .empty }
+        else { return [] }
 
-        let usage = DishTag.usage(fromTagLists: dishes.map(\.tagNames))
-        guard !Task.isCancelled else { return .empty }
-        let collections = DishCollection.usage(fromCollectionLists: dishes.map(\.collectionNames))
-        return DishLibraryTagMetadata(
-            available: DishTag.sorted(usage.map(\.tag)),
-            popular: Array(usage.prefix(12).map(\.tag)),
-            collections: collections.map { DishCollectionSummary(name: $0.name, count: $0.count) }
-        )
+        func suggestionOrder(_ lhs: Dish, _ rhs: Dish) -> Bool {
+            let left = lhs.lastUsedDate ?? .distantPast
+            let right = rhs.lastUsedDate ?? .distantPast
+            if left != right { return left < right }
+            return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        }
+
+        var selected = dishes
+            .filter { $0.season == season }
+            .sorted(by: suggestionOrder)
+        if selected.count >= 10 {
+            return Array(selected.prefix(10).map(\.uuid))
+        }
+
+        let candidates = dishes
+            .filter { $0.season != season }
+            .sorted(by: suggestionOrder)
+            .prefix(120)
+        for dish in candidates {
+            guard !Task.isCancelled else { return [] }
+            if dish.sortedIngredients.contains(where: { line in
+                guard let name = line.ingredient?.name else { return false }
+                return SeasonalProduce.seasons(forIngredientNamed: name).contains(season)
+            }) {
+                selected.append(dish)
+                if selected.count == 10 { break }
+            }
+        }
+        return Array(selected.sorted(by: suggestionOrder).prefix(10).map(\.uuid))
     }
 }
 

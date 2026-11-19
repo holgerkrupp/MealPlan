@@ -11,7 +11,7 @@ struct DishEditorView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @Environment(\.supportsImagePlayground) private var supportsImagePlayground
 
@@ -30,6 +30,16 @@ struct DishEditorView: View {
     /// describes those words, so changing them drops it — a stale translation
     /// in the kitchen is worse than none.
     @State private var translationBaseline = ""
+
+    init(dish: Dish, isNew: Bool) {
+        self._dish = Bindable(wrappedValue: dish)
+        self.isNew = isNew
+        let householdID = dish.household?.uuid ?? UUID()
+        self._allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     var body: some View {
         Form {

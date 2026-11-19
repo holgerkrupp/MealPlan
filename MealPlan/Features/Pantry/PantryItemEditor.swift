@@ -11,7 +11,7 @@ struct PantryItemEditor: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
-    @Query(sort: \ShoppingListItem.sortIndex) private var allShoppingItems: [ShoppingListItem]
+    @Query private var shoppingItems: [ShoppingListItem]
 
     @State private var amountText = ""
     /// What the amount field last showed from the store, so only a real
@@ -21,13 +21,22 @@ struct PantryItemEditor: View {
     @State private var customLocationText = ""
     @FocusState private var amountFocused: Bool
 
+    init(ingredient: Ingredient) {
+        self.ingredient = ingredient
+        let householdID = ingredient.household?.uuid ?? UUID()
+        _shoppingItems = Query(FetchDescriptor<ShoppingListItem>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
+    }
+
     private var household: Household? { appState.currentHousehold }
     private var canEdit: Bool { PantryActions.canEdit(household, isGuest: appState.isGuest) }
 
     private var isOnShoppingList: Bool {
         PantryActions.isOnShoppingList(
             ingredient,
-            items: allShoppingItems.filter { $0.household?.uuid == household?.uuid }
+            items: shoppingItems
         )
     }
 

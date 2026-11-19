@@ -8,14 +8,40 @@ import SwiftData
 @MainActor
 struct MealRoutinesView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        MealRoutinesContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct MealRoutinesContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
 
-    @Query(sort: \MealRoutine.dateCreated) private var routines: [MealRoutine]
-    @Query(sort: \Dish.name) private var dishes: [Dish]
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var mealTypes: [MealType]
+    @Query private var routines: [MealRoutine]
+    @Query private var dishes: [Dish]
+    @Query private var mealTypes: [MealType]
 
     @State private var editing: MealRoutine?
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _routines = Query(FetchDescriptor<MealRoutine>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealRoutine.dateCreated)]
+        ))
+        _dishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+        _mealTypes = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
 
     var body: some View {
         Form {

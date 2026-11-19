@@ -5,9 +5,27 @@ import SwiftData
 /// rhythm rather than a hardcoded dinner time.
 @MainActor
 struct MealTimingSettingsView: View {
+    @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        MealTimingSettingsContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct MealTimingSettingsContent: View {
     @Environment(CalendarContextStore.self) private var store: CalendarContextStore?
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var meals: [MealType]
+    @Query private var meals: [MealType]
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _meals = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
 
     var body: some View {
         Form {
@@ -76,5 +94,6 @@ struct MealTimingSettingsView: View {
     PreviewCalendarHost {
         NavigationStack { MealTimingSettingsView() }
     }
+    .environment(AppState.preview)
     .modelContainer(PreviewData.container)
 }

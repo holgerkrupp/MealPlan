@@ -13,7 +13,7 @@ struct CookingModeView: View {
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
 
     @AppStorage("CookingMode.textScale") private var textScale = 1.0
     /// Mirrors the two cooking columns so the step controls can sit nearest
@@ -37,6 +37,15 @@ struct CookingModeView: View {
     /// Cooking follows the recipe view: a household that saved a translation
     /// cooks from it, and "Show original" is one tap away in the toolbar.
     @State private var showsTranslation = false
+
+    init(dish: Dish) {
+        self.dish = dish
+        let householdID = dish.household?.uuid ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == householdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
+    }
 
     private var store: CookingSessionStore { appState.cookingSession }
 

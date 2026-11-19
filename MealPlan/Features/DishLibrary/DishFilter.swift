@@ -155,14 +155,18 @@ struct DishFilter: Equatable, Codable {
     func apply(
         to dishes: [Dish],
         now: Date = .now,
-        sourceIsAlphabeticallySorted: Bool = false
+        sourceIsAlphabeticallySorted: Bool = false,
+        searchScores: [UUID: Double]? = nil
     ) -> [Dish] {
         var result = dishes.filter { dish in
             // A dish the editor has open but nobody has typed into yet is not
             // part of the library: on a Mac or iPad that editor is a window of
             // its own, and the empty draft behind it would otherwise sit in
             // the grid as an untitled card while it is being written.
-            if dish.isBlankDraft { return false }
+            // A background search score map only contains non-blank snapshot
+            // results, so typed search avoids faulting ingredient/photo/plan
+            // relationships here. Non-search callers keep the live check.
+            if searchScores == nil, dish.isBlankDraft { return false }
             if let mealType, !dish.mealTypeTags.contains(mealType) { return false }
             if let season, dish.season != season { return false }
             if let maxMinutes {
@@ -185,17 +189,26 @@ struct DishFilter: Equatable, Codable {
 
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
-            let words = query.searchFolded.split(whereSeparator: \.isWhitespace).map(String.init)
-            result = result
-                .map { dish in
-                    let nameScore = dish.name.fuzzyScore(query: query)
-                    let content = dish.searchableText.searchFolded
-                    let deepMatch = words.allSatisfy(content.contains) ? 0.70 : 0
-                    return (dish: dish, score: max(nameScore, deepMatch))
+            if let searchScores {
+                result = result.enumerated().compactMap { indexedDish in
+                    let (index, dish) = indexedDish
+                    return searchScores[dish.uuid].map { (dish: dish, score: $0, index: index) }
                 }
-                .filter { $0.score > 0 }
-                .sorted { $0.score > $1.score }
-                .map(\.dish)
+                    .sorted { $0.score == $1.score ? $0.index < $1.index : $0.score > $1.score }
+                    .map(\.dish)
+            } else {
+                let words = query.searchFolded.split(whereSeparator: \.isWhitespace).map(String.init)
+                result = result
+                    .map { dish in
+                        let nameScore = dish.name.fuzzyScore(query: query)
+                        let content = dish.searchableText.searchFolded
+                        let deepMatch = words.allSatisfy(content.contains) ? 0.70 : 0
+                        return (dish: dish, score: max(nameScore, deepMatch))
+                    }
+                    .filter { $0.score > 0 }
+                    .sorted { $0.score > $1.score }
+                    .map(\.dish)
+            }
         } else {
             // Both library queries already fetch by name. Filtering preserves
             // that order, so sorting thousands of imported recipes again on

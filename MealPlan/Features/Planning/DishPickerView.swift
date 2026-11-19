@@ -49,7 +49,7 @@ struct DishPickerView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @Environment(\.verticalSizeClass) private var verticalSizeClass
-    @Query(sort: \Dish.name) private var allDishes: [Dish]
+    @Query private var allDishes: [Dish]
     @Query private var plannedEntries: [MealPlanEntry]
 
     @State private var tab: Tab = .cook
@@ -57,6 +57,11 @@ struct DishPickerView: View {
     @State private var placeQuery = ""
     @State private var isImporting = false
     @State private var importError: String?
+    @State private var searchSnapshotActor: DishSearchSnapshotActor?
+    @State private var rankedSearchResults: [DishSearch.ValueResult] = []
+    @State private var rankedSearchRequest: SearchRequest?
+    @State private var rankedHasExactMatch: Bool?
+    @State private var searchGeneration = 0
     @FocusState private var isSearchFocused: Bool
 
     private let importer: RecipeImporter = RecipeSchemaParser()
@@ -75,6 +80,13 @@ struct DishPickerView: View {
         self.mealSymbol = mealSymbol
         self.householdID = householdID
         self.onEditNewDish = onEditNewDish
+        // A missing active household must produce no picker results, never a
+        // store-wide view of dishes left by recovery or another household.
+        let scopedHouseholdID = householdID ?? UUID()
+        _allDishes = Query(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Dish.name)]
+        ))
         let start = date.startOfDay
         let end = start.adding(weeks: MealRoutineScheduler.horizonWeeks + 1)
         if let householdID {
@@ -110,7 +122,33 @@ struct DishPickerView: View {
     }
 
     private var results: [DishSearch.Result] {
-        DishSearch.rank(query.isEmpty ? suggestions : preferenceFilteredDishes, query: query)
+        if query.isEmpty {
+            return DishSearch.rank(suggestions, query: "")
+        }
+        guard rankedSearchRequest == searchRequest else { return [] }
+        return rankedSearchResults.compactMap { result in
+            guard let dish = allDishes.first(where: { $0.uuid == result.id }) else { return nil }
+            return DishSearch.Result(dish: dish, score: result.score, reason: result.reason)
+        }
+    }
+
+    private struct SearchRequest: Equatable {
+        var query: String
+        var householdID: UUID?
+        var generation: Int
+    }
+
+    private var searchRequest: SearchRequest {
+        SearchRequest(query: query, householdID: householdID, generation: searchGeneration)
+    }
+
+    private var searchProfile: DishSearchProfile {
+        let profiled = (appState.currentHousehold?.members ?? []).filter { member in
+            member.isActive && (!member.allergies.isEmpty || !member.mustAvoidIngredients.isEmpty || !member.dietaryPatterns.isEmpty || !member.dislikes.isEmpty)
+        }
+        return DishSearchProfile(
+            excludedIngredientTerms: profiled.flatMap { $0.allergies + $0.mustAvoidIngredients }
+        )
     }
 
     /// What the list shows before anything is typed: dishes tagged for this
@@ -146,7 +184,14 @@ struct DishPickerView: View {
     }
 
     private var hasExactMatch: Bool {
-        DishSearch.hasExactMatch(preferenceFilteredDishes, name: query)
+        if rankedSearchRequest == searchRequest, let rankedHasExactMatch {
+            return rankedHasExactMatch
+        }
+        let folded = query.searchFolded
+        // Until the background snapshot result arrives, conservatively avoid
+        // offering a duplicate when a same-name dish exists. This scalar-only
+        // check never traverses ingredient relationships on the main actor.
+        return !folded.isEmpty && allDishes.contains { $0.name.searchFolded == folded }
     }
 
     private var usesCompactLandscapeHeader: Bool {
@@ -160,8 +205,9 @@ struct DishPickerView: View {
             switch tab {
             case .cook: dishList
             case .eatOut: EatOutPickerView(
-                date: date, mealKey: mealKey, query: placeQuery
+                date: date, mealKey: mealKey, householdID: householdID, query: placeQuery
             ) { dismiss() }
+                .id(householdID)
             }
         }
         #if os(macOS)
@@ -171,6 +217,13 @@ struct DishPickerView: View {
         .presentationDragIndicator(.visible)
         #endif
         .task { isSearchFocused = true }
+        .task(id: searchRequest) { await updateSearchResults() }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+            searchGeneration &+= 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            searchGeneration &+= 1
+        }
         .alert(
             String(localized: "Couldn’t import that link"),
             isPresented: Binding(get: { importError != nil }, set: { if !$0 { importError = nil } })
@@ -182,6 +235,43 @@ struct DishPickerView: View {
         } message: {
             Text(importError ?? "")
         }
+    }
+
+    private func updateSearchResults() async {
+        let requestedRequest = searchRequest
+        let requestedQuery = requestedRequest.query
+        rankedSearchResults = []
+        rankedSearchRequest = nil
+        rankedHasExactMatch = nil
+        guard !requestedQuery.isEmpty, let householdID else {
+            return
+        }
+        do {
+            try await Task.sleep(for: .milliseconds(180))
+        } catch {
+            return
+        }
+        guard !Task.isCancelled, query == requestedQuery else { return }
+        let searchActor: DishSearchSnapshotActor
+        if let existing = searchSnapshotActor {
+            searchActor = existing
+        } else {
+            searchActor = DishSearchSnapshotActor(modelContainer: context.container)
+            searchSnapshotActor = searchActor
+        }
+        let response = await searchActor.search(
+            householdID: householdID,
+            revision: DishSearchSnapshotRevision(generation: requestedRequest.generation),
+            query: requestedQuery,
+            profile: searchProfile
+        )
+        guard !Task.isCancelled,
+              searchRequest == requestedRequest,
+              appState.currentHousehold?.uuid == householdID,
+              searchGeneration == requestedRequest.generation else { return }
+        rankedSearchResults = response.results
+        rankedSearchRequest = requestedRequest
+        rankedHasExactMatch = response.hasExactNameMatch
     }
 
     // MARK: - Header

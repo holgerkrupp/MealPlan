@@ -6,20 +6,31 @@ import SwiftData
 @MainActor
 struct SeasonalSuggestionsStrip: View {
     @Environment(AppState.self) private var appState
-    let dishes: [Dish]
+    @Environment(\.modelContext) private var modelContext
+    let householdID: UUID?
+    let dataRevision: Int
 
     @State private var planning: Dish?
     @State private var suggestions: [Dish] = []
+    @State private var cachedSuggestionIDs: (revision: Revision, ids: [UUID])?
+    @State private var notificationRevision = 0
 
     private var season: Season { Season.current() }
 
     private struct Revision: Hashable {
-        var count: Int
-        var latestModification: Date?
+        var householdID: UUID?
+        var season: Season
+        var dataRevision: Int
+        var notificationRevision: Int
     }
 
     private var revision: Revision {
-        Revision(count: dishes.count, latestModification: dishes.lazy.map(\.modifiedAt).max())
+        return Revision(
+            householdID: householdID,
+            season: season,
+            dataRevision: dataRevision,
+            notificationRevision: notificationRevision
+        )
     }
 
     var body: some View {
@@ -67,59 +78,57 @@ struct SeasonalSuggestionsStrip: View {
         .task(id: revision) {
             await refreshSuggestions()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            notificationRevision &+= 1
+        }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: modelContext)) { _ in
+            notificationRevision &+= 1
+        }
     }
 
-    /// Ingredient relationships are SwiftData faults. Scanning every recipe
-    /// while SwiftUI is constructing the tab made Plan → Dishes wait for the
-    /// complete library. Explicit season labels are cheap and immediate; the
-    /// ingredient fallback runs after the first frame, yields regularly, and
-    /// examines a useful bounded set of the least-recently-cooked recipes.
+    /// Candidate selection and ingredient relationship scans run on the
+    /// dedicated SwiftData actor. The view revision stays constant-time.
     private func refreshSuggestions() async {
         try? await Task.sleep(for: .milliseconds(300))
         guard !Task.isCancelled else { return }
 
-        let currentSeason = season
-        var selected = dishes
-            .filter { $0.season == currentSeason }
-            .sorted(by: suggestionOrder)
-        if selected.count >= 10 {
-            suggestions = Array(selected.prefix(10))
+        let requestRevision = revision
+        guard let householdID else {
+            suggestions = []
             return
         }
 
-        let candidates = dishes
-            .filter { $0.season != currentSeason }
-            .sorted(by: suggestionOrder)
-            .prefix(120)
-
-        for (offset, dish) in candidates.enumerated() {
-            if dish.sortedIngredients.contains(where: { line in
-                guard let name = line.ingredient?.name else { return false }
-                return SeasonalProduce.seasons(forIngredientNamed: name).contains(currentSeason)
-            }) {
-                selected.append(dish)
-                if selected.count == 10 { break }
-            }
-
-            if offset.isMultiple(of: 8) {
-                await Task.yield()
-                guard !Task.isCancelled else { return }
-            }
+        let suggestionIDs: [UUID]
+        if let cached = cachedSuggestionIDs, cached.revision == requestRevision {
+            suggestionIDs = cached.ids
+        } else {
+            suggestionIDs = await DishLibraryMetadataActor(
+                modelContainer: modelContext.container
+            ).seasonalSuggestionIDs(
+                householdID: householdID,
+                season: season
+            )
+            guard !Task.isCancelled else { return }
+            cachedSuggestionIDs = (requestRevision, suggestionIDs)
         }
 
-        suggestions = Array(selected.sorted(by: suggestionOrder).prefix(10))
-    }
-
-    private func suggestionOrder(_ lhs: Dish, _ rhs: Dish) -> Bool {
-        let left = lhs.lastUsedDate ?? .distantPast
-        let right = rhs.lastUsedDate ?? .distantPast
-        if left != right { return left < right }
-        return lhs.name.localizedStandardCompare(rhs.name) == .orderedAscending
+        guard !Task.isCancelled, !suggestionIDs.isEmpty else {
+            suggestions = []
+            return
+        }
+        let fetched = (try? modelContext.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate {
+                suggestionIDs.contains($0.uuid) && $0.household?.uuid == householdID
+            }
+        ))) ?? []
+        guard !Task.isCancelled else { return }
+        let dishesByID = Dictionary(uniqueKeysWithValues: fetched.map { ($0.uuid, $0) })
+        suggestions = suggestionIDs.compactMap { dishesByID[$0] }
     }
 }
 
 #Preview {
-    SeasonalSuggestionsStrip(dishes: PreviewData.household.dishes ?? [])
+    SeasonalSuggestionsStrip(householdID: PreviewData.household.uuid, dataRevision: 0)
         .environment(AppState.preview)
         .modelContainer(PreviewData.container)
 }

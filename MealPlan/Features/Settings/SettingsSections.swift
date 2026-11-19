@@ -249,8 +249,6 @@ struct PlanSettingsSection: View {
     var header: String? = String(localized: "Calendar")
 
     @Environment(AppState.self) private var appState
-    @Query(sort: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)])
-    private var configuredMeals: [MealType]
 
     var body: some View {
         if appState.currentHousehold != nil {
@@ -259,7 +257,10 @@ struct PlanSettingsSection: View {
                     NavigationLink {
                         MealsSettingsView()
                     } label: {
-                        LabeledContent(String(localized: "Meals"), value: mealsSummary)
+                        LabeledContent(String(localized: "Meals")) {
+                            PlanSettingsMealSummary(householdID: appState.currentHousehold?.uuid)
+                                .id(appState.currentHousehold?.uuid)
+                        }
                     }
                 }
             } header: {
@@ -270,12 +271,25 @@ struct PlanSettingsSection: View {
         }
     }
 
-    /// Use the same direct store query as the editor. Older SwiftData stores
-    /// can have relationship backing data that fails while decoding
-    /// `Household.mealTypes`; this summary must not traverse that relationship.
-    private var mealsSummary: String {
-        let names = configuredMeals.map(\.name).filter { !$0.isEmpty }
-        return names.isEmpty ? String(localized: "None") : names.joined(separator: ", ")
+}
+
+/// Reads the active household directly instead of traversing the potentially
+/// unreadable `Household.mealTypes` relationship on older stores.
+@MainActor
+private struct PlanSettingsMealSummary: View {
+    @Query private var meals: [MealType]
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _meals = Query(FetchDescriptor<MealType>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\MealType.sortOrder), SortDescriptor(\MealType.name)]
+        ))
+    }
+
+    var body: some View {
+        let names = meals.map(\.name).filter { !$0.isEmpty }
+        Text(names.isEmpty ? String(localized: "None") : names.joined(separator: ", "))
     }
 }
 

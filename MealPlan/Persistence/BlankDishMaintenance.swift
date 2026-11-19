@@ -20,21 +20,6 @@ enum BlankDishMaintenance {
     /// abandoned rather than in progress.
     static let grace: TimeInterval = 10 * 60
 
-    @MainActor
-    @discardableResult
-    static func run(context: ModelContext, now: Date = .now) -> Int {
-        let predicate = #Predicate<Dish> { $0.name.isEmpty }
-        guard let candidates = try? context.fetch(FetchDescriptor<Dish>(predicate: predicate)),
-              !candidates.isEmpty else { return 0 }
-        let doomed = abandoned(in: candidates, now: now)
-        guard !doomed.isEmpty else { return 0 }
-        for dish in doomed {
-            context.delete(dish)
-        }
-        try? context.save()
-        return doomed.count
-    }
-
     /// The selection rule on its own, so it can be tested without a store.
     static func abandoned(in dishes: [Dish], now: Date = .now) -> [Dish] {
         let cutoff = now.addingTimeInterval(-grace)

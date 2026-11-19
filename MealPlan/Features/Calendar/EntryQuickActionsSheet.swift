@@ -53,6 +53,7 @@ struct EntryQuickActionsSheet: View {
                 Section {
                     MealPlannerStrip(
                         reschedulingEntry: entry,
+                        householdID: appState.currentHousehold?.uuid,
                         selectedDate: $date,
                         selectedMealKey: $mealKey
                     )

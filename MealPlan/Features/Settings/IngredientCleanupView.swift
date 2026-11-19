@@ -4,14 +4,33 @@ import SwiftData
 @MainActor
 struct IngredientCleanupView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        IngredientCleanupContent(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct IngredientCleanupContent: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
+    @Query private var ingredients: [Ingredient]
 
     @State private var selectedSuggestion: IngredientCleanupSuggestion?
     @State private var showingBatchConfirmation = false
     @State private var showingBatchError = false
     @State private var batchErrorMessage = ""
     @State private var integrityAudit: IngredientIntegrityAudit?
+
+    init(householdID: UUID?) {
+        let scopedHouseholdID = householdID ?? UUID()
+        _ingredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+    }
 
     private var suggestions: [IngredientCleanupSuggestion] {
         // Reading the query keeps this view invalidated after a merge or a

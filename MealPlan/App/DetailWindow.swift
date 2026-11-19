@@ -229,7 +229,8 @@ struct DetailWindow: View {
             }
 
         case .plannedMeal(let id):
-            PlannedMealWindow(entryID: id, route: route)
+            PlannedMealWindow(entryID: id, householdID: appState.currentHousehold?.uuid, route: route)
+                .id(appState.currentHousehold?.uuid)
 
         case .configureMeals:
             windowStack { MealsSettingsView() }
@@ -317,15 +318,20 @@ private struct DishWindow<Content: View>: View {
 @MainActor
 private struct PlannedMealWindow: View {
     let entryID: UUID
+    let householdID: UUID?
     let route: DetailWindowRoute
 
     @Query private var entries: [MealPlanEntry]
     @Environment(\.dismissWindow) private var dismissWindow
 
-    init(entryID: UUID, route: DetailWindowRoute) {
+    init(entryID: UUID, householdID: UUID?, route: DetailWindowRoute) {
         self.entryID = entryID
+        self.householdID = householdID
         self.route = route
-        _entries = Query(filter: #Predicate<MealPlanEntry> { $0.uuid == entryID })
+        let scopedHouseholdID = householdID ?? UUID()
+        _entries = Query(FetchDescriptor<MealPlanEntry>(
+            predicate: #Predicate { $0.uuid == entryID && $0.household?.uuid == scopedHouseholdID }
+        ))
     }
 
     var body: some View {

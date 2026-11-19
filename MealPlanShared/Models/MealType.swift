@@ -126,11 +126,9 @@ extension MealType {
     ///
     /// De-duplication spans the **whole store**, not just `household`. There is
     /// one household per iCloud account, so a second `Household` record is
-    /// itself a sync duplicate — and its meals show up in the app anyway,
-    /// because every `MealType` query is store-wide. Survivors are re-homed
-    /// onto `household` so `sortedMealTypes` (settings, backup) agrees with
-    /// what the calendar draws, and so a duplicate household being cleaned up
-    /// later can't cascade them away.
+    /// itself a sync duplicate. Survivors are re-homed onto `household` before
+    /// normal UI queries observe that household, and so a duplicate household
+    /// being cleaned up later can't cascade them away.
     @MainActor
     static func ensure(for household: Household, context: ModelContext) {
         // An upgraded store can have unreadable Household.mealTypes backing

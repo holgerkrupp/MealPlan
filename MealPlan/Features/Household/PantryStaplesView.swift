@@ -13,12 +13,37 @@ import SwiftData
 @MainActor
 struct PantryStaplesView: View {
     @Environment(AppState.self) private var appState
+
+    var body: some View {
+        let householdID = appState.currentHousehold?.uuid
+        PantryStaplesContentView(householdID: householdID)
+            .id(householdID)
+    }
+}
+
+@MainActor
+private struct PantryStaplesContentView: View {
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
 
-    @Query(sort: \Ingredient.name) private var ingredients: [Ingredient]
+    @Query private var ingredients: [Ingredient]
     @Query private var shoppingItems: [ShoppingListItem]
+    let householdID: UUID?
 
     @State private var searchText = ""
+
+    init(householdID: UUID?) {
+        self.householdID = householdID
+        let scopedHouseholdID = householdID ?? UUID()
+        _ingredients = Query(FetchDescriptor<Ingredient>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\Ingredient.name)]
+        ))
+        _shoppingItems = Query(FetchDescriptor<ShoppingListItem>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
+    }
 
     private var trimmedSearch: String {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines)
