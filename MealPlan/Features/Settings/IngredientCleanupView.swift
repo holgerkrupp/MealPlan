@@ -19,7 +19,10 @@ private struct IngredientCleanupContent: View {
     @Query private var ingredients: [Ingredient]
 
     @State private var selectedSuggestion: IngredientCleanupSuggestion?
+    @State private var pendingDeletion: IngredientCleanupSuggestion?
+    @State private var pendingBatchSuggestions: [IngredientCleanupSuggestion]?
     @State private var showingBatchConfirmation = false
+    @State private var showingDeleteConfirmation = false
     @State private var showingBatchError = false
     @State private var batchErrorMessage = ""
     @State private var integrityAudit: IngredientIntegrityAudit?
@@ -40,12 +43,26 @@ private struct IngredientCleanupContent: View {
     }
 
     private var batchSuggestions: [IngredientCleanupSuggestion] {
-        IngredientCleanupService.highConfidenceNonConflicting(in: appState.currentHousehold)
+        var seenDuplicateIDs = Set<UUID>()
+        return IngredientCleanupService.highConfidenceNonConflicting(in: appState.currentHousehold)
+            .filter { seenDuplicateIDs.insert($0.duplicate.uuid).inserted }
+    }
+
+    private var batchActionTitle: String {
+        let count = (pendingBatchSuggestions ?? batchSuggestions).count
+        return count == 1
+            ? String(localized: "Merge 1 duplicate")
+            : String(localized: "Merge \(count) duplicates")
+    }
+
+    private var canEditIngredients: Bool {
+        appState.collaboration.canEdit
+            && HouseholdMutationAuthorization.canMutate(household: appState.currentHousehold)
     }
 
     var body: some View {
         let suggestions = suggestions
-        let batchSuggestions = suggestions.filter(\.isHighConfidenceAndNonConflicting)
+        let batchSuggestions = self.batchSuggestions
         List {
             integritySection
 
@@ -64,6 +81,20 @@ private struct IngredientCleanupContent: View {
                             }
                             .buttonStyle(.plain)
                             .accessibilityHint(String(localized: "Opens ingredient cleanup details"))
+                            .swipeActions(edge: .trailing) {
+                                if canEditIngredients {
+                                    Button(String(localized: "Delete"), systemImage: "trash", role: .destructive) {
+                                        requestDelete(suggestion)
+                                    }
+                                }
+                            }
+                            .contextMenu {
+                                if canEditIngredients {
+                                    Button(String(localized: "Delete"), systemImage: "trash", role: .destructive) {
+                                        requestDelete(suggestion)
+                                    }
+                                }
+                            }
                         }
                     } header: {
                         Text(nameKey.capitalized)
@@ -73,9 +104,10 @@ private struct IngredientCleanupContent: View {
         }
         .navigationTitle(String(localized: "Ingredient Cleanup"))
         .toolbar {
-            if !batchSuggestions.isEmpty {
+            if !batchSuggestions.isEmpty && canEditIngredients {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
+                        pendingBatchSuggestions = batchSuggestions
                         showingBatchConfirmation = true
                     } label: {
                         Label(String(localized: "Merge clear matches"), systemImage: "checkmark.seal")
@@ -95,8 +127,8 @@ private struct IngredientCleanupContent: View {
             isPresented: $showingBatchConfirmation,
             titleVisibility: .visible
         ) {
-            Button(String(localized: "Merge (batchSuggestions.count)")) { mergeBatch() }
-            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(batchActionTitle) { mergeBatch() }
+            Button(String(localized: "Cancel"), role: .cancel) { pendingBatchSuggestions = nil }
         } message: {
             Text("Only exact or high-confidence suggestions with matching category, aisle, pantry, nutrition, and stock data will be merged. You can undo the last merge from the Edit menu.")
         }
@@ -104,6 +136,26 @@ private struct IngredientCleanupContent: View {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(batchErrorMessage)
+        }
+        .confirmationDialog(
+            deleteConfirmationTitle,
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            if let pendingDeletion {
+                Button(String(localized: "Review match")) {
+                    selectedSuggestion = pendingDeletion
+                    self.pendingDeletion = nil
+                }
+                Button(String(localized: "Delete and unlink uses"), role: .destructive) {
+                    deleteUnlinked(pendingDeletion)
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) { pendingDeletion = nil }
+        } message: {
+            if let pendingDeletion {
+                Text(deleteImpact(for: pendingDeletion))
+            }
         }
     }
 
@@ -117,7 +169,8 @@ private struct IngredientCleanupContent: View {
                 Label(String(localized: "Check ingredient data"), systemImage: "checkmark.shield")
             }
 
-            if let household = appState.currentHousehold,
+            if canEditIngredients,
+               let household = appState.currentHousehold,
                household.ingredientMergeAuditTrail.contains(where: { $0.revertedAt == nil }) {
                 Button(String(localized: "Reverse last ingredient merge")) {
                     reverseLatestMerge(in: household)
@@ -162,7 +215,7 @@ private struct IngredientCleanupContent: View {
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
-                Text(percentage(suggestion.confidence))
+                Text(suggestion.confidence, format: .percent.precision(.fractionLength(0)))
                     .font(.caption.weight(.semibold))
                     .foregroundStyle(suggestion.isHighConfidenceAndNonConflicting ? .green : .orange)
             }
@@ -173,10 +226,6 @@ private struct IngredientCleanupContent: View {
         }
         .padding(.vertical, 4)
         .contentShape(Rectangle())
-    }
-
-    private func percentage(_ value: Double) -> String {
-        String(localized: "(Int((value * 100).rounded()))% match")
     }
 
     private func repair(_ audit: IngredientIntegrityAudit) {
@@ -201,7 +250,82 @@ private struct IngredientCleanupContent: View {
     }
 
     private func reasonText(for suggestion: IngredientCleanupSuggestion) -> String {
-        suggestion.match.reasons.map(reasonName).joined(separator: ", ")
+        if Ingredient.normalize(suggestion.duplicate.name) == Ingredient.normalize(suggestion.canonical.name) {
+            return String(localized: "same name")
+        }
+        return suggestion.match.reasons.map(reasonName).joined(separator: ", ")
+    }
+
+    private var deleteConfirmationTitle: String {
+        guard let pendingDeletion else { return String(localized: "Delete ingredient?") }
+        return String(localized: "Delete \(pendingDeletion.duplicate.name)?")
+    }
+
+    private func deleteImpact(for suggestion: IngredientCleanupSuggestion) -> String {
+        let recipeLines = (suggestion.duplicate.dishIngredients ?? []).count
+        let shoppingItems = (suggestion.duplicate.shoppingItems ?? []).count
+        let aliases = (suggestion.duplicate.aliases ?? []).count
+        let stock = IngredientStockMerge.hasData(suggestion.duplicate)
+            ? String(localized: "pantry stock")
+            : String(localized: "no pantry stock")
+        return String(localized: "This match has \(recipeLines) recipe lines, \(shoppingItems) shopping items, \(aliases) aliases, and \(stock). Review the match to keep its links. If deleted, recipe wording, amounts, and shopping items stay but become unlinked. Its aliases, pantry data, and catalogue metadata are removed.")
+    }
+
+    private func requestDelete(_ suggestion: IngredientCleanupSuggestion) {
+        guard canEditIngredients,
+              suggestion.duplicate !== suggestion.canonical,
+              let household = suggestion.canonical.household,
+              household === suggestion.duplicate.household,
+              HouseholdMutationAuthorization.canMutate(household: household)
+        else { return }
+
+        // Use the audited merge path when the proposed match has no conflicts,
+        // so recipe and shopping-list links survive the duplicate removal.
+        if IngredientCleanupService.isSafeForAutomaticMerge(suggestion, in: household) {
+            do {
+                try IngredientCleanupService.merge(suggestion, context: context)
+                offerUndo(String(localized: "Ingredient merged"))
+            } catch {
+                batchErrorMessage = error.localizedDescription
+                showingBatchError = true
+            }
+            return
+        }
+
+        pendingDeletion = suggestion
+        showingDeleteConfirmation = true
+    }
+
+    private func deleteUnlinked(_ suggestion: IngredientCleanupSuggestion) {
+        guard canEditIngredients,
+              suggestion.duplicate !== suggestion.canonical,
+              let household = suggestion.canonical.household,
+              household === suggestion.duplicate.household,
+              HouseholdMutationAuthorization.canMutate(household: household)
+        else { return }
+
+        let undo = context.undoManager
+        undo?.beginUndoGrouping()
+        do {
+            try IngredientCleanupService.deleteDuplicateKeepingUnlinkedUses(suggestion, context: context)
+            undo?.endUndoGrouping()
+            offerUndo(String(localized: "Ingredient deleted"))
+        } catch {
+            undo?.endUndoGrouping()
+            undo?.undo()
+            try? context.save()
+            batchErrorMessage = error.localizedDescription
+            showingBatchError = true
+        }
+        pendingDeletion = nil
+    }
+
+    private func offerUndo(_ title: String) {
+        let undo = context.undoManager
+        appState.offerUndo(title) {
+            undo?.undo()
+            try? context.save()
+        }
     }
 
     private func reasonName(_ reason: IngredientMatchReason) -> String {
@@ -218,7 +342,9 @@ private struct IngredientCleanupContent: View {
     }
 
     private func mergeBatch() {
-        let candidates = batchSuggestions
+        guard canEditIngredients else { return }
+        let candidates = pendingBatchSuggestions ?? batchSuggestions
+        pendingBatchSuggestions = nil
         do {
             for suggestion in candidates {
                 try IngredientCleanupService.merge(suggestion, context: context)
@@ -247,6 +373,11 @@ private struct IngredientCleanupDetailView: View {
     @State private var stockChoices = IngredientStockMergeChoices()
     @State private var showingMergeConfirmation = false
     @State private var showingConflictConfirmation = false
+
+    private var canEdit: Bool {
+        appState.collaboration.canEdit
+            && HouseholdMutationAuthorization.canMutate(household: suggestion.canonical.household)
+    }
 
     init(suggestion: IngredientCleanupSuggestion) {
         self.suggestion = suggestion
@@ -327,16 +458,18 @@ private struct IngredientCleanupDetailView: View {
                 } label: {
                     Label(String(localized: "Merge / Same ingredient"), systemImage: "arrow.triangle.merge")
                 }
-                .disabled(!stockChoices.resolves(suggestion.stockConflicts))
+                .disabled(!canEdit || !stockChoices.resolves(suggestion.stockConflicts))
                 .accessibilityHint(String(localized: "Moves recipe and shopping list relationships to the canonical ingredient"))
 
                 Button {
+                    guard canEdit else { return }
                     IngredientCleanupService.keepSeparate(suggestion)
                     try? context.save()
                     dismiss()
                 } label: {
                     Label(String(localized: "Keep separate"), systemImage: "xmark.circle")
                 }
+                .disabled(!canEdit)
                 .accessibilityHint(String(localized: "Remembers that these spellings are different"))
             } footer: {
                 Text("Merging keeps the recipe wording and moves recipe and shopping list relationships to the canonical ingredient. The last merge can be undone from the Edit menu.")
@@ -418,6 +551,7 @@ private struct IngredientCleanupDetailView: View {
     }
 
     private func merge() {
+        guard canEdit else { return }
         do {
             try IngredientCleanupService.merge(suggestion, canonicalName: canonicalName, stockChoices: stockChoices, context: context)
             try context.save()

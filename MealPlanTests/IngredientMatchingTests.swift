@@ -96,6 +96,14 @@ struct IngredientMatchingTests {
         #expect(confirmedAlias.isSafeForAutomaticReuse)
     }
 
+    @Test func exactNameTakesPrecedenceOverBundledVocabularyReason() {
+        let exactButter = Ingredient(name: "Butter")
+        let result = IngredientMatching.result(for: "butter", in: [exactButter])
+
+        #expect(result.candidate === exactButter)
+        #expect(result.reasons == [.exactName])
+    }
+
     @Test func bundledVocabularyMatchesOnlyUnqualifiedCommonNamesAndReportsCollisions() {
         let salt = Ingredient(name: "Salz")
         let translated = IngredientMatching.matchResult(for: "Salt", in: [salt])
@@ -108,9 +116,9 @@ struct IngredientMatchingTests {
 
         let duplicateSalt = Ingredient(name: "Salt")
         let collision = IngredientMatching.matchResult(for: "Salz", in: [salt, duplicateSalt])
-        #expect(collision.candidate == nil)
-        #expect(collision.candidates.count == 2)
-        #expect(collision.reasons.contains(.candidateCollision))
+        #expect(collision.candidate === salt)
+        #expect(collision.candidates.count == 1)
+        #expect(collision.reasons == [.exactName])
 
         let separate = IngredientMatchRule(leftName: "salt", rightName: "salz", kind: .keepSeparate)
         #expect(IngredientMatching.matchResult(for: "Salt", in: [salt], rules: [separate]).candidate == nil)

@@ -7,6 +7,136 @@
     " " : {
 
     },
+    "Delete %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ löschen?"
+          }
+        }
+      }
+    },
+    "Delete and unlink uses" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen und Verwendungen entkoppeln"
+          }
+        }
+      }
+    },
+    "Delete duplicate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikat löschen"
+          }
+        }
+      }
+    },
+    "Delete ingredient?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat löschen?"
+          }
+        }
+      }
+    },
+    "Ingredient deleted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat gelöscht"
+          }
+        }
+      }
+    },
+    "Merge %lld duplicates" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Duplikate zusammenführen"
+          }
+        }
+      }
+    },
+    "Merge 1 duplicate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Duplikat zusammenführen"
+          }
+        }
+      }
+    },
+    "Merge clear matches" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eindeutige Treffer zusammenführen"
+          }
+        }
+      }
+    },
+    "Only exact or high-confidence suggestions with matching category, aisle, pantry, nutrition, and stock data will be merged. You can undo the last merge from the Edit menu." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur exakte oder hochsichere Vorschläge mit übereinstimmender Kategorie, Abteilung, Vorratskennzeichnung, Nährwerten und Vorratsdaten werden zusammengeführt. Die letzte Zusammenführung kannst du im Menü „Bearbeiten“ rückgängig machen."
+          }
+        }
+      }
+    },
+    "Review match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Treffer prüfen"
+          }
+        }
+      }
+    },
+    "This match has %lld recipe lines, %lld shopping items, %lld aliases, and %@. Review the match to keep its links. If deleted, recipe wording, amounts, and shopping items stay but become unlinked. Its aliases, pantry data, and catalogue metadata are removed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Treffer hat %1$lld Rezeptzeilen, %2$lld Einkaufslisteneinträge, %3$lld Aliase und %@. Prüfe den Treffer, um seine Verknüpfungen zu behalten. Beim Löschen bleiben Rezepttexte, Mengen und Einkaufslisteneinträge erhalten, werden aber entkoppelt. Aliase, Vorratsdaten und Katalogmetadaten werden entfernt."
+          }
+        }
+      }
+    },
+    "no pantry stock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kein Vorratsbestand"
+          }
+        }
+      }
+    },
+    "pantry stock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsbestand"
+          }
+        }
+      }
+    },
     "—" : {
 
     },
@@ -18173,7 +18303,14 @@
 
     },
     "Ingredient merged" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat zusammengeführt"
+          }
+        }
+      }
     },
     "ingredients" : {
 
@@ -20930,7 +21067,14 @@
 
     },
     "Merge high-confidence suggestions?" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorschläge mit hoher Übereinstimmung zusammenführen?"
+          }
+        }
+      }
     },
     "Merge ingredients?" : {
 
@@ -32077,7 +32221,14 @@
       }
     },
     "same name" : {
-
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gleicher Name"
+          }
+        }
+      }
     },
     "Same name and ingredients" : {
 

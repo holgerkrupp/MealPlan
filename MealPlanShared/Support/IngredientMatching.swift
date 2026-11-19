@@ -135,23 +135,6 @@ struct IngredientMatcher {
             return collisionResult(query: name, candidates: distinctRuleMatches, confidence: 1, reasons: [.exactAlias, .candidateCollision])
         }
 
-        if let vocabularyID = IngredientVocabulary.identity(for: name) {
-            let candidates = ingredients.filter { ingredient in
-                guard ingredient !== excluded, !isKeptSeparate(from: ingredient) else { return false }
-                return IngredientVocabulary.identity(for: ingredient.name) == vocabularyID
-                    || (ingredient.aliases ?? []).contains { IngredientVocabulary.identity(for: $0.name) == vocabularyID }
-            }
-            if candidates.count == 1 {
-                return IngredientMatchResult(
-                    query: name, candidate: candidates[0], candidates: candidates,
-                    confidence: 1, matchClass: .certain, reasons: [.knownVocabulary]
-                )
-            }
-            if candidates.count > 1 {
-                return collisionResult(query: name, candidates: candidates, confidence: 1, reasons: [.knownVocabulary, .candidateCollision])
-            }
-        }
-
         let exactTerms = (termsByNormalizedName[normalized] ?? [])
             .filter { $0.ingredient !== excluded && !isKeptSeparate(from: $0.ingredient) }
         let exactIngredients = distinctIngredients(exactTerms)
@@ -190,6 +173,26 @@ struct IngredientMatcher {
                 confidence: 1,
                 reasons: [reason, .candidateCollision]
             )
+        }
+
+        // Prefer an identical canonical spelling/alias before consulting the
+        // multilingual vocabulary. Otherwise an exact duplicate such as
+        // Butter → Butter can be mislabeled as a match from another language.
+        if let vocabularyID = IngredientVocabulary.identity(for: name) {
+            let candidates = ingredients.filter { ingredient in
+                guard ingredient !== excluded, !isKeptSeparate(from: ingredient) else { return false }
+                return IngredientVocabulary.identity(for: ingredient.name) == vocabularyID
+                    || (ingredient.aliases ?? []).contains { IngredientVocabulary.identity(for: $0.name) == vocabularyID }
+            }
+            if candidates.count == 1 {
+                return IngredientMatchResult(
+                    query: name, candidate: candidates[0], candidates: candidates,
+                    confidence: 1, matchClass: .certain, reasons: [.knownVocabulary]
+                )
+            }
+            if candidates.count > 1 {
+                return collisionResult(query: name, candidates: candidates, confidence: 1, reasons: [.knownVocabulary, .candidateCollision])
+            }
         }
 
         let wanted = wantedKey

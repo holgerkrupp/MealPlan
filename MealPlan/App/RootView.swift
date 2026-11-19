@@ -1,6 +1,7 @@
 import SwiftUI
 import SwiftData
 import CloudKit
+import OSLog
 
 enum AppSection: String, CaseIterable, Identifiable, Hashable {
     case plan, dishes, shopping, pantry, fridge, settings
@@ -62,6 +63,12 @@ struct RootView: View {
     /// by the `confirmationDialog` below; see
     /// `HouseholdCloudSharingService.localHouseholdAtRisk(ofAccepting:context:)`.
     @State private var pendingHouseholdJoin: PendingHouseholdJoin?
+    @State private var ingredientCleanupTask: Task<Void, Never>?
+
+    private static let ingredientCleanupLogger = Logger(
+        subsystem: "de.holgerkrupp.mealplan",
+        category: "ingredient-cleanup"
+    )
 
     private struct PendingHouseholdJoin {
         let metadata: CKShare.Metadata
@@ -130,8 +137,15 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: .mealPlanCollaborationRefreshRequested)) { _ in
             Task { await synchronizeHousehold() }
         }
+        .onReceive(NotificationCenter.default.publisher(for: ModelContext.didSave, object: context)) { _ in
+            scheduleIngredientCleanup()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanDataDidChange)) { _ in
+            scheduleIngredientCleanup()
+        }
         .task(id: appState.currentHousehold?.uuid) {
             await synchronizeHousehold()
+            scheduleIngredientCleanup()
         }
         .task(id: appState.currentHousehold?.uuid) {
             await reconcileEntitlement()
@@ -412,6 +426,39 @@ struct RootView: View {
             // usable and reserve the alert for failures needing an action.
             if !HouseholdCloudSharingService.isTemporarySyncFailure(error) {
                 sharingErrorMessage = error.localizedDescription
+            }
+        }
+    }
+
+    /// Reconcile only narrowly obvious duplicate catalogue entries after a
+    /// household is ready or a committed model/sync change arrives. The
+    /// cleanup service applies a small per-pass merge limit and rechecks
+    /// writable access before touching synced data.
+    private func scheduleIngredientCleanup() {
+        ingredientCleanupTask?.cancel()
+        guard let household = appState.currentHousehold,
+              HouseholdMutationAuthorization.canMutate(household: household) else { return }
+        let householdID = household.uuid
+        ingredientCleanupTask = Task { @MainActor in
+            do {
+                try await Task.sleep(for: .milliseconds(900))
+            } catch {
+                return
+            }
+            guard !Task.isCancelled,
+                  appState.currentHousehold?.uuid == householdID,
+                  !appState.isLookingForCloudHousehold,
+                  !appState.cloudBootstrapState.isWorking,
+                  let household = appState.currentHousehold,
+                  HouseholdMutationAuthorization.canMutate(household: household) else { return }
+            do {
+                _ = try IngredientCleanupService.reconcileObviousDuplicates(
+                    in: household,
+                    context: context,
+                    limit: 20
+                )
+            } catch {
+                Self.ingredientCleanupLogger.error("Automatic ingredient duplicate reconciliation failed.")
             }
         }
     }

@@ -213,6 +213,58 @@ extension Array where Element == Dish {
 /// older app versions or backups that never queued a suggestion.
 @MainActor
 enum IngredientCleanupService {
+    /// Quietly merges only catalogue duplicates whose names are identical
+    /// after the app's conservative normalization, or differ by one trailing
+    /// source marker (`*`). This deliberately does not use the fuzzy or
+    /// multilingual matcher: uncertain equivalences remain visible for review.
+    ///
+    /// Each merge is saved by `IngredientMergeService`, so a failure or
+    /// cancellation can be retried safely on the next maintenance pass.
+    @discardableResult
+    static func reconcileObviousDuplicates(
+        in household: Household?,
+        context: ModelContext,
+        limit: Int = 20
+    ) throws -> Int {
+        guard let household, limit > 0 else { return 0 }
+        let ingredients = (household.ingredients ?? []).sorted { $0.uuid.uuidString < $1.uuid.uuidString }
+        let groups = Dictionary(grouping: ingredients) { automaticDuplicateKey(for: $0.name) }
+            .filter { !$0.key.isEmpty && $0.value.count > 1 }
+
+        var mergedCount = 0
+        for key in groups.keys.sorted() {
+            guard mergedCount < limit else { break }
+            let group = groups[key] ?? []
+            guard !containsExplicitSeparation(in: group, household: household) else { continue }
+            // Prefer the unmarked spelling; UUID breaks ties identically on
+            // every device, including exact-name groups with equal timestamps.
+            let ordered = group.sorted { lhs, rhs in
+                let lhsMarked = hasApprovedTrailingMarker(lhs.name)
+                let rhsMarked = hasApprovedTrailingMarker(rhs.name)
+                if lhsMarked != rhsMarked { return !lhsMarked }
+                return lhs.uuid.uuidString < rhs.uuid.uuidString
+            }
+            guard let canonical = ordered.first else { continue }
+
+            for duplicate in ordered.dropFirst() {
+                guard mergedCount < limit else { break }
+                guard (household.ingredients ?? []).contains(where: { $0 === duplicate }),
+                      canAutomaticallyMerge(duplicate, into: canonical, household: household)
+                else { continue }
+
+                let match = IngredientMatching.result(for: duplicate.name, in: [canonical])
+                let suggestion = IngredientCleanupSuggestion(
+                    canonical: canonical,
+                    duplicate: duplicate,
+                    match: match
+                )
+                try merge(suggestion, context: context)
+                mergedCount += 1
+            }
+        }
+        return mergedCount
+    }
+
     static func suggestions(in household: Household?) -> [IngredientCleanupSuggestion] {
         guard let household else { return [] }
         let ingredients = household.ingredients ?? []
@@ -232,9 +284,20 @@ enum IngredientCleanupService {
                 pairs[pairKey(chosen.0, chosen.1)] = chosen
             }
 
-            let result = matcher.result(for: source.name, excluding: source)
-            let candidates = result.candidate.map { [$0] } ?? result.candidates
             let equivalentIdentity = IngredientVocabulary.identity(for: source.name)
+            let vocabularyCandidates = equivalentIdentity.map { identity in
+                ingredients.filter {
+                    $0 !== source
+                        && IngredientVocabulary.identity(for: $0.name) == identity
+                        && !isRejected(source: source, candidate: $0)
+                }
+            } ?? []
+            let result = matcher.result(for: source.name, excluding: source)
+            // Group known translations together with exact same-name copies
+            // even though the shared matcher now reports the exact name first.
+            let candidates = vocabularyCandidates.isEmpty
+                ? (result.candidate.map { [$0] } ?? result.candidates)
+                : vocabularyCandidates
             let isKnownIdentityGroup = equivalentIdentity != nil
                 && candidates.allSatisfy { IngredientVocabulary.identity(for: $0.name) == equivalentIdentity }
             let isSameNameGroup = candidates.allSatisfy {
@@ -277,6 +340,39 @@ enum IngredientCleanupService {
 
     static func highConfidenceNonConflicting(in household: Household?) -> [IngredientCleanupSuggestion] {
         suggestions(in: household).filter(\.isHighConfidenceAndNonConflicting)
+    }
+
+    /// Whether a proposed row deletion can preserve its links through an
+    /// unattended audited merge. This deliberately excludes fuzzy and
+    /// multilingual matches, even when they would qualify for manual review.
+    static func isSafeForAutomaticMerge(
+        _ suggestion: IngredientCleanupSuggestion,
+        in household: Household
+    ) -> Bool {
+        automaticDuplicateKey(for: suggestion.canonical.name)
+                == automaticDuplicateKey(for: suggestion.duplicate.name)
+            && canAutomaticallyMerge(suggestion.duplicate, into: suggestion.canonical, household: household)
+    }
+
+    /// Deletes only the proposed duplicate. Recipe lines and shopping items
+    /// remain intact with their existing text and amounts; they become
+    /// unlinked only after the user has confirmed the impact in the UI.
+    static func deleteDuplicateKeepingUnlinkedUses(
+        _ suggestion: IngredientCleanupSuggestion,
+        context: ModelContext
+    ) throws {
+        let duplicate = suggestion.duplicate
+        let canonical = suggestion.canonical
+        guard duplicate !== canonical else { throw IngredientMergeError.sameIngredient }
+        guard let household = canonical.household,
+              household === duplicate.household,
+              (household.ingredients ?? []).contains(where: { $0 === duplicate })
+        else { throw IngredientMergeError.differentHouseholds }
+
+        for line in duplicate.dishIngredients ?? [] { line.ingredient = nil }
+        for item in duplicate.shoppingItems ?? [] { item.ingredient = nil }
+        context.delete(duplicate)
+        try context.save()
     }
 
     static func keepSeparate(_ suggestion: IngredientCleanupSuggestion) {
@@ -322,6 +418,77 @@ enum IngredientCleanupService {
         let rhsUsage = (rhs.dishIngredients ?? []).count + (rhs.shoppingItems ?? []).count
         if lhsUsage != rhsUsage { return lhsUsage > rhsUsage }
         return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
+    }
+
+    private static func automaticDuplicateKey(for name: String) -> String {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return "" }
+        if hasApprovedTrailingMarker(trimmed) {
+            return Ingredient.normalize(String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines))
+        }
+        return Ingredient.normalize(trimmed)
+    }
+
+    private static func hasApprovedTrailingMarker(_ name: String) -> Bool {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasSuffix("*") else { return false }
+        let base = String(trimmed.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        return !base.isEmpty && !base.hasSuffix("*")
+    }
+
+    private static func canAutomaticallyMerge(
+        _ duplicate: Ingredient,
+        into canonical: Ingredient,
+        household: Household
+    ) -> Bool {
+        guard duplicate !== canonical,
+              duplicate.household === household,
+              canonical.household === household,
+              !duplicate.rejectsMatch(for: canonical.name),
+              !canonical.rejectsMatch(for: duplicate.name)
+        else { return false }
+
+        let firstKey = IngredientMatching.key(for: canonical.name)
+        let secondKey = IngredientMatching.key(for: duplicate.name)
+        guard !(household.matchRules ?? []).contains(where: {
+            $0.kind == .keepSeparate && $0.applies(to: firstKey, and: secondKey)
+        }) else { return false }
+
+        // Preserve curated catalogue distinctions for human review.
+        guard canonical.category == duplicate.category,
+              normalizedAisle(canonical) == normalizedAisle(duplicate),
+              canonical.isPantryStaple == duplicate.isPantryStaple,
+              canonical.nutritionFacts == duplicate.nutritionFacts,
+              canonical.nutritionReference == duplicate.nutritionReference,
+              canonical.nutritionSourceRaw == duplicate.nutritionSourceRaw
+        else { return false }
+
+        // Any inventory state deserves explicit review. Even one populated
+        // row may represent an independently tracked purchase or expiry, and
+        // the cleanup pass must never choose how that stock is consolidated.
+        return !IngredientStockMerge.hasData(canonical) && !IngredientStockMerge.hasData(duplicate)
+    }
+
+    private static func containsExplicitSeparation(in ingredients: [Ingredient], household: Household) -> Bool {
+        for (index, first) in ingredients.enumerated() {
+            for second in ingredients.dropFirst(index + 1) {
+                let firstKey = IngredientMatching.key(for: first.name)
+                let secondKey = IngredientMatching.key(for: second.name)
+                if first.rejectsMatch(for: second.name) || second.rejectsMatch(for: first.name) {
+                    return true
+                }
+                if (household.matchRules ?? []).contains(where: {
+                    $0.kind == .keepSeparate && $0.applies(to: firstKey, and: secondKey)
+                }) {
+                    return true
+                }
+            }
+        }
+        return false
+    }
+
+    private static func normalizedAisle(_ ingredient: Ingredient) -> String {
+        ingredient.customAisleName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() ?? ""
     }
 
     private static func distinctIngredients(_ ingredients: [Ingredient]) -> [Ingredient] {
