@@ -52,6 +52,8 @@ enum PantryInventory {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return true }
         return ingredient.name.localizedCaseInsensitiveContains(query)
+            || IngredientVocabulary.areEquivalent(query, ingredient.name)
+            || (ingredient.aliases ?? []).contains { $0.name.localizedCaseInsensitiveContains(query) }
             || (ingredient.inventoryNote ?? "").localizedCaseInsensitiveContains(query)
     }
 
@@ -95,7 +97,7 @@ enum PantryInventory {
         let query = search.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return [] }
         return ingredients
-            .filter { !isTracked($0) && $0.name.localizedCaseInsensitiveContains(query) }
+            .filter { !isTracked($0) && matches($0, search: query) }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
     }
 

@@ -228,4 +228,96 @@ struct IngredientIdentityTests {
         #expect(line.ingredient === restored)
         #expect(household.ingredientMergeAuditTrail[0].revertedAt != nil)
     }
+
+    @Test func mergeTransfersOnlyStockAndReverseRestoresBothInventoryRecords() throws {
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let canonical = Ingredient(name: "Salz")
+        let duplicate = Ingredient(name: "Salt")
+        duplicate.isPantryStaple = true
+        duplicate.markInventory(.have, quantity: .grams(300), bestBefore: Calendar.current.date(byAdding: .day, value: 5, to: .now))
+        duplicate.storageLocation = .pantry
+        duplicate.inventoryNote = "Opened"
+        let dish = Dish(name: "Soup")
+        let line = DishIngredient(canonicalValue: 500, dimension: .mass, rawText: "500 g Salt")
+        line.dish = dish
+        line.ingredient = duplicate
+        household.ingredients = [canonical, duplicate]
+        household.dishes = [dish]
+        canonical.household = household
+        duplicate.household = household
+        dish.household = household
+        context.insert(household)
+        context.insert(canonical)
+        context.insert(duplicate)
+        context.insert(dish)
+        context.insert(line)
+        try context.save()
+
+        try IngredientMergeService.merge(duplicate: duplicate, into: canonical, context: context)
+        #expect(canonical.inventoryMode == .have)
+        #expect(canonical.inventoryQuantity == .grams(300))
+        #expect(canonical.storageLocation == .pantry)
+        #expect(canonical.inventoryNote == "Opened")
+        #expect(canonical.isPantryStaple)
+        #expect(line.ingredient === canonical)
+
+        let planned = AggregatedLine(name: "Salt", normalizedName: "salt", category: .spices, quantity: .grams(500))
+        #expect(ShoppingListBuilder.subtractingInventory(planned, ingredient: canonical)?.quantity == .grams(200))
+
+        let restored = try IngredientMergeService.reverseLatestMerge(in: household, context: context)
+        #expect(restored.name == "Salt")
+        #expect(restored.inventoryMode == .have)
+        #expect(restored.inventoryQuantity == .grams(300))
+        #expect(restored.storageLocation == .pantry)
+        #expect(restored.inventoryNote == "Opened")
+        #expect(canonical.inventoryMode == .none)
+        #expect(!canonical.isPantryStaple)
+        #expect(line.ingredient === restored)
+    }
+
+    @Test func stockConflictsRequireChoicesAndNeverSumAmounts() throws {
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let canonical = Ingredient(name: "Salz")
+        canonical.markInventory(.have, quantity: .grams(300))
+        canonical.storageLocation = .pantry
+        canonical.inventoryNote = "Unopened"
+        let duplicate = Ingredient(name: "Salt")
+        duplicate.markInventory(.low, quantity: .grams(500))
+        duplicate.storageLocation = .freezer
+        duplicate.inventoryNote = "Opened"
+        household.ingredients = [canonical, duplicate]
+        canonical.household = household
+        duplicate.household = household
+        context.insert(household)
+        context.insert(canonical)
+        context.insert(duplicate)
+        try context.save()
+
+        do {
+            try IngredientMergeService.merge(duplicate: duplicate, into: canonical, context: context)
+            Issue.record("A stock-conflicting merge should require explicit choices")
+        } catch let error as IngredientMergeError {
+            #expect(error == .stockConflictsUnresolved)
+        }
+        #expect(canonical.inventoryQuantity == .grams(300))
+        #expect(household.ingredients?.count == 2)
+
+        var choices = IngredientStockMergeChoices()
+        choices[.status] = .duplicate
+        choices[.amount] = .canonical
+        choices[.location] = .duplicate
+        choices[.note] = .canonical
+        try IngredientMergeService.merge(duplicate: duplicate, into: canonical, stockChoices: choices, context: context)
+        #expect(canonical.inventoryMode == .low)
+        #expect(canonical.inventoryQuantity == .grams(300))
+        #expect(canonical.storageLocation == .freezer)
+        #expect(canonical.inventoryNote == "Unopened")
+        #expect(household.ingredients?.count == 1)
+    }
 }

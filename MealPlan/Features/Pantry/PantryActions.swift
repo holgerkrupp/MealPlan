@@ -49,10 +49,28 @@ enum PantryActions {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, HouseholdMutationAuthorization.canMutate(household: household) else { return nil }
         let ingredient: Ingredient
-        if let existing = IngredientMatching.match(
-            trimmed, in: household.ingredients ?? [], rules: household.matchRules ?? []
-        ) {
+        let match = IngredientMatching.matchResult(
+            for: trimmed,
+            in: household.ingredients ?? [],
+            rules: household.matchRules ?? []
+        )
+        if match.reasons.contains(.candidateCollision),
+           match.reasons.contains(where: { $0 == .exactName || $0 == .exactAlias || $0 == .knownVocabulary }) {
+            // A known collision is not a new ingredient. Let the person
+            // reconcile the existing rows before another copy can be added.
+            return nil
+        }
+        if let existing = match.candidate, match.isSafeForSilentReuse {
             ingredient = existing
+            if match.reasons.contains(.knownVocabulary) {
+                IngredientIdentity.addAlias(
+                    named: trimmed,
+                    to: existing,
+                    source: .userConfirmed,
+                    confidence: 1,
+                    context: context
+                )
+            }
         } else {
             ingredient = Ingredient(name: trimmed)
             ingredient.household = household

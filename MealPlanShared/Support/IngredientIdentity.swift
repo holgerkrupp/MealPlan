@@ -138,6 +138,7 @@ enum IngredientMergeError: Error, Equatable {
     case sameIngredient
     case differentHouseholds
     case noReversibleMerge
+    case stockConflictsUnresolved
 }
 
 /// Re-points every dependent row before removing a duplicate catalogue entry.
@@ -147,16 +148,27 @@ enum IngredientMergeService {
         duplicate: Ingredient,
         into canonical: Ingredient,
         canonicalName: String? = nil,
+        stockChoices: IngredientStockMergeChoices? = nil,
         context: ModelContext
     ) throws {
         guard duplicate !== canonical else { throw IngredientMergeError.sameIngredient }
         guard let household = canonical.household, household === duplicate.household else {
             throw IngredientMergeError.differentHouseholds
         }
+        let canonicalInventoryBefore = IngredientMergeAuditRecord.InventoryState(canonical)
+        let canonicalInventoryAfter = try IngredientStockMerge.mergedState(
+            canonical: canonical,
+            duplicate: duplicate,
+            choices: stockChoices
+        )
         var audit: IngredientMergeAuditRecord? = IngredientMergeAuditRecord(
                 id: UUID(), createdAt: .now, canonicalUUID: canonical.uuid,
                 canonicalNameBefore: canonical.name, canonicalNormalizedNameBefore: canonical.normalizedName,
                 duplicate: .init(duplicate),
+                canonicalInventoryBefore: canonicalInventoryBefore,
+                canonicalInventoryAfter: canonicalInventoryAfter,
+                canonicalPantryStapleBefore: canonical.isPantryStaple,
+                canonicalPantryStapleAfter: canonical.isPantryStaple || duplicate.isPantryStaple,
                 dishIngredientUUIDs: (duplicate.dishIngredients ?? []).map(\.uuid),
                 shoppingItemUUIDs: (duplicate.shoppingItems ?? []).map(\.uuid),
                 aliasesAddedToCanonical: [], revertedAt: nil
@@ -166,6 +178,11 @@ enum IngredientMergeService {
         let undoManager = context.undoManager
         undoManager?.beginUndoGrouping()
         defer { undoManager?.endUndoGrouping() }
+
+        canonicalInventoryAfter.restore(to: canonical)
+        // A staple flag on either duplicate row represented the household's
+        // intent; merging must not reintroduce it to a generated list.
+        canonical.isPantryStaple = canonical.isPantryStaple || duplicate.isPantryStaple
 
         let requestedName = canonicalName?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         if !requestedName.isEmpty, Ingredient.normalize(requestedName) != canonical.normalizedName {
@@ -275,6 +292,16 @@ enum IngredientMergeService {
         for alias in canonical.aliases ?? [] where audit.aliasesAddedToCanonical.contains(alias.uuid) {
             context.delete(alias)
         }
+        if let before = audit.canonicalInventoryBefore,
+           let after = audit.canonicalInventoryAfter,
+           IngredientMergeAuditRecord.InventoryState(canonical) == after {
+            before.restore(to: canonical)
+        }
+        if let stapleBefore = audit.canonicalPantryStapleBefore,
+           let stapleAfter = audit.canonicalPantryStapleAfter,
+           canonical.isPantryStaple == stapleAfter {
+            canonical.isPantryStaple = stapleBefore
+        }
         // Do not overwrite a later rename made after the merge.
         if canonical.name != audit.canonicalNameBefore,
            canonical.normalizedName != audit.canonicalNormalizedNameBefore {
@@ -305,6 +332,7 @@ enum IngredientMergeService {
         ingredient.inventoryCanonicalValue = snapshot.inventoryCanonicalValue
         ingredient.inventoryDimensionRaw = snapshot.inventoryDimensionRaw
         ingredient.inventoryBestBefore = snapshot.inventoryBestBefore
+        ingredient.inventoryUpdatedAt = snapshot.inventoryUpdatedAt
         ingredient.inventoryStorageLocationRaw = snapshot.inventoryStorageLocationRaw
         ingredient.inventoryCustomStorageLocation = snapshot.inventoryCustomStorageLocation
         ingredient.inventoryNote = snapshot.inventoryNote

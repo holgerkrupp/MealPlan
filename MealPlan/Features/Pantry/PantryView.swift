@@ -59,9 +59,23 @@ private struct PantryContentView: View {
 
     /// The search text, when no ingredient in the catalogue is called that.
     private var newIngredientName: String? {
-        guard !trimmedSearch.isEmpty,
-              IngredientMatching.match(trimmedSearch, in: ingredients) == nil else { return nil }
+        guard !trimmedSearch.isEmpty else { return nil }
+        let result = IngredientMatching.matchResult(
+            for: trimmedSearch,
+            in: ingredients,
+            rules: household?.matchRules ?? []
+        )
+        guard result.candidates.isEmpty else { return nil }
         return trimmedSearch
+    }
+
+    private var hasReviewableSearchMatch: Bool {
+        guard !trimmedSearch.isEmpty else { return false }
+        return !IngredientMatching.matchResult(
+            for: trimmedSearch,
+            in: ingredients,
+            rules: household?.matchRules ?? []
+        ).candidates.isEmpty
     }
 
     private var filterLocation: InventoryStorageLocation? {
@@ -102,6 +116,13 @@ private struct PantryContentView: View {
         .searchable(text: $searchText, prompt: String(localized: "Search or add an ingredient"))
         .navigationTitle(AppSection.pantry.title)
         .toolbar {
+            ToolbarItem(placement: .secondaryAction) {
+                NavigationLink {
+                    IngredientCleanupView()
+                } label: {
+                    Label(String(localized: "Review duplicates"), systemImage: "arrow.triangle.merge")
+                }
+            }
             if canEdit, BarcodeScanAvailability.isAvailable {
                 ToolbarItem(placement: .primaryAction) {
                     Button {
@@ -201,6 +222,12 @@ private struct PantryContentView: View {
                         startTracking(named: newIngredientName)
                     } label: {
                         Label(String(localized: "Add “\(newIngredientName)” to the pantry"), systemImage: "plus.circle")
+                    }
+                } else if hasReviewableSearchMatch {
+                    NavigationLink {
+                        IngredientCleanupView()
+                    } label: {
+                        Label(String(localized: "Review matching ingredients"), systemImage: "arrow.triangle.merge")
                     }
                 }
                 ForEach(untracked.prefix(20)) { ingredient in

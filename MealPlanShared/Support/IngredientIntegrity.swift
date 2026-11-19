@@ -96,6 +96,39 @@ enum IngredientIntegrityDiagnostics {
 /// only the affected ingredient and relationship IDs; recipes themselves are
 /// never copied or deleted by a merge.
 struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
+    struct InventoryState: Codable, Sendable, Equatable {
+        var modeRaw: String
+        var quantityValue: Double?
+        var dimensionRaw: String?
+        var bestBefore: Date?
+        var storageLocationRaw: String?
+        var customStorageLocation: String?
+        var note: String?
+        var updatedAt: Date?
+
+        init(_ ingredient: Ingredient) {
+            modeRaw = ingredient.inventoryModeRaw
+            quantityValue = ingredient.inventoryCanonicalValue
+            dimensionRaw = ingredient.inventoryDimensionRaw
+            bestBefore = ingredient.inventoryBestBefore
+            storageLocationRaw = ingredient.inventoryStorageLocationRaw
+            customStorageLocation = ingredient.inventoryCustomStorageLocation
+            note = ingredient.inventoryNote
+            updatedAt = ingredient.inventoryUpdatedAt
+        }
+
+        func restore(to ingredient: Ingredient) {
+            ingredient.inventoryModeRaw = modeRaw
+            ingredient.inventoryCanonicalValue = quantityValue
+            ingredient.inventoryDimensionRaw = dimensionRaw
+            ingredient.inventoryBestBefore = bestBefore
+            ingredient.inventoryStorageLocationRaw = storageLocationRaw
+            ingredient.inventoryCustomStorageLocation = customStorageLocation
+            ingredient.inventoryNote = note
+            ingredient.inventoryUpdatedAt = updatedAt
+        }
+    }
+
     struct Alias: Codable, Sendable, Equatable {
         var uuid: UUID
         var name: String
@@ -114,6 +147,7 @@ struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
         var inventoryCanonicalValue: Double?
         var inventoryDimensionRaw: String?
         var inventoryBestBefore: Date?
+        var inventoryUpdatedAt: Date?
         var inventoryStorageLocationRaw: String?
         var inventoryCustomStorageLocation: String?
         var inventoryNote: String?
@@ -138,6 +172,7 @@ struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
             inventoryCanonicalValue = ingredient.inventoryCanonicalValue
             inventoryDimensionRaw = ingredient.inventoryDimensionRaw
             inventoryBestBefore = ingredient.inventoryBestBefore
+            inventoryUpdatedAt = ingredient.inventoryUpdatedAt
             inventoryStorageLocationRaw = ingredient.inventoryStorageLocationRaw
             inventoryCustomStorageLocation = ingredient.inventoryCustomStorageLocation
             inventoryNote = ingredient.inventoryNote
@@ -161,6 +196,12 @@ struct IngredientMergeAuditRecord: Codable, Sendable, Equatable, Identifiable {
     var canonicalNameBefore: String
     var canonicalNormalizedNameBefore: String
     var duplicate: IngredientSnapshot
+    /// Stock before and after a merge, used to reverse only when the canonical
+    /// row still carries the merged values.
+    var canonicalInventoryBefore: InventoryState?
+    var canonicalInventoryAfter: InventoryState?
+    var canonicalPantryStapleBefore: Bool?
+    var canonicalPantryStapleAfter: Bool?
     var dishIngredientUUIDs: [UUID]
     var shoppingItemUUIDs: [UUID]
     var aliasesAddedToCanonical: [UUID]

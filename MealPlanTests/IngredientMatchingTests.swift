@@ -96,15 +96,35 @@ struct IngredientMatchingTests {
         #expect(confirmedAlias.isSafeForAutomaticReuse)
     }
 
+    @Test func bundledVocabularyMatchesOnlyUnqualifiedCommonNamesAndReportsCollisions() {
+        let salt = Ingredient(name: "Salz")
+        let translated = IngredientMatching.matchResult(for: "Salt", in: [salt])
+        #expect(translated.candidate === salt)
+        #expect(translated.reasons == [.knownVocabulary])
+        #expect(translated.isSafeForSilentReuse)
+
+        let tableSalt = Ingredient(name: "Table salt")
+        #expect(IngredientMatching.matchResult(for: "Salt", in: [tableSalt]).candidate == nil)
+
+        let duplicateSalt = Ingredient(name: "Salt")
+        let collision = IngredientMatching.matchResult(for: "Salz", in: [salt, duplicateSalt])
+        #expect(collision.candidate == nil)
+        #expect(collision.candidates.count == 2)
+        #expect(collision.reasons.contains(.candidateCollision))
+
+        let separate = IngredientMatchRule(leftName: "salt", rightName: "salz", kind: .keepSeparate)
+        #expect(IngredientMatching.matchResult(for: "Salt", in: [salt], rules: [separate]).candidate == nil)
+    }
+
     @Test func normalizedAndInflectedNamesNeedConfirmationBeforePersistentReuse() {
         let flour = Ingredient(name: "Flour")
         let german = Ingredient(name: "Mehl")
         let english = IngredientMatching.result(for: "Bio Mehl nach Geschmack", in: [german])
         #expect(english.candidate === german)
-        #expect(english.matchClass == .highConfidence)
-        #expect(english.reasons == [.normalizedKey])
-        #expect(!english.isSafeForSilentReuse)
-        #expect(IngredientMatching.match("Bio Mehl nach Geschmack", in: [german]) == nil)
+        #expect(english.matchClass == .certain)
+        #expect(english.reasons == [.knownVocabulary])
+        #expect(english.isSafeForSilentReuse)
+        #expect(IngredientMatching.match("Bio Mehl nach Geschmack", in: [german]) === german)
 
         let plural = IngredientMatching.result(for: "eggs", in: [flour, Ingredient(name: "egg")])
         #expect(plural.candidate?.name == "egg")

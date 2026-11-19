@@ -19,7 +19,10 @@ enum DishBuilder {
 
         init(household: Household?) {
             tagVocabulary = DishTag.vocabulary(from: household?.dishes ?? [])
-            ingredientMatcher = IngredientMatcher(ingredients: household?.ingredients ?? [])
+            ingredientMatcher = IngredientMatcher(
+                ingredients: household?.ingredients ?? [],
+                rules: household?.matchRules ?? []
+            )
         }
 
         fileprivate func ingredient(

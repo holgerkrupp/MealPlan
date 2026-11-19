@@ -40,6 +40,7 @@ struct BarcodeAddSheet: View {
     @State private var code: String?
     @State private var name = ""
     @State private var addedMessage: String?
+    @State private var isAddError = false
     @FocusState private var nameFocused: Bool
 
     private let memory = BarcodeProductMemory()
@@ -117,8 +118,8 @@ struct BarcodeAddSheet: View {
 
             if let addedMessage {
                 Section {
-                    Label(addedMessage, systemImage: "checkmark.circle.fill")
-                        .foregroundStyle(.green)
+                    Label(addedMessage, systemImage: isAddError ? "exclamationmark.triangle" : "checkmark.circle.fill")
+                        .foregroundStyle(isAddError ? .orange : .green)
                 }
             }
         }
@@ -136,6 +137,8 @@ struct BarcodeAddSheet: View {
     private func add(to destination: Destination) {
         guard let household = appState.currentHousehold, !trimmedName.isEmpty else { return }
         let productName = trimmedName
+        addedMessage = nil
+        isAddError = false
         switch destination {
         case .shoppingList:
             guard ShoppingListBuilder.addManualItem(
@@ -152,7 +155,11 @@ struct BarcodeAddSheet: View {
                 location: location,
                 household: household,
                 context: context
-            ) != nil else { return }
+            ) != nil else {
+                addedMessage = String(localized: "Matching ingredients need review before another pantry entry can be added. Open Pantry and choose Review duplicates.")
+                isAddError = true
+                return
+            }
             addedMessage = String(localized: "Added “\(productName)” to the pantry.")
         }
         if let code { memory.remember(productName, for: code) }

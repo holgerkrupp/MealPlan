@@ -9,6 +9,7 @@ enum IngredientMatchReason: String, CaseIterable, Codable, Sendable {
     case spellingDistance
     case tokenOverlap
     case candidateCollision
+    case knownVocabulary
 }
 
 /// How much trust an automatic caller can put in a candidate.
@@ -73,12 +74,16 @@ struct IngredientMatcher {
 
     private var termsByLength: [Int: [Term]] = [:]
     private var termsByNormalizedName: [String: [Term]] = [:]
+    private var ingredients: [Ingredient] = []
+    private let rules: [IngredientMatchRule]
 
-    init(ingredients: [Ingredient] = []) {
+    init(ingredients: [Ingredient] = [], rules: [IngredientMatchRule] = []) {
+        self.rules = rules
         for ingredient in ingredients { add(ingredient) }
     }
 
     mutating func add(_ ingredient: Ingredient) {
+        if !ingredients.contains(where: { $0 === ingredient }) { ingredients.append(ingredient) }
         add(Term(
             ingredient: ingredient,
             normalizedName: ingredient.normalizedName,
@@ -106,8 +111,49 @@ struct IngredientMatcher {
             )
         }
 
+        let wantedKey = IngredientMatching.key(for: name)
+        let keepSeparate = rules.filter { $0.kind == .keepSeparate }
+        func isKeptSeparate(from ingredient: Ingredient) -> Bool {
+            ingredient.rejectsMatch(for: name)
+                || keepSeparate.contains { $0.applies(to: wantedKey, and: IngredientMatching.key(for: ingredient.name)) }
+        }
+
+        let ruleMatches = rules.filter { $0.kind == .alias }.compactMap { rule in
+            ingredients.first { ingredient in
+                ingredient !== excluded
+                    && !isKeptSeparate(from: ingredient)
+                    && rule.applies(to: wantedKey, and: IngredientMatching.key(for: ingredient.name))
+            }
+        }
+        let distinctRuleMatches = distinctIngredients(ruleMatches.map {
+            Term(ingredient: $0, normalizedName: $0.normalizedName, key: IngredientMatching.key(for: $0.name), isCanonical: true, aliasSource: nil)
+        })
+        if !distinctRuleMatches.isEmpty {
+            if distinctRuleMatches.count == 1 {
+                return IngredientMatchResult(query: name, candidate: distinctRuleMatches[0], candidates: distinctRuleMatches, confidence: 1, matchClass: .certain, reasons: [.exactAlias])
+            }
+            return collisionResult(query: name, candidates: distinctRuleMatches, confidence: 1, reasons: [.exactAlias, .candidateCollision])
+        }
+
+        if let vocabularyID = IngredientVocabulary.identity(for: name) {
+            let candidates = ingredients.filter { ingredient in
+                guard ingredient !== excluded, !isKeptSeparate(from: ingredient) else { return false }
+                return IngredientVocabulary.identity(for: ingredient.name) == vocabularyID
+                    || (ingredient.aliases ?? []).contains { IngredientVocabulary.identity(for: $0.name) == vocabularyID }
+            }
+            if candidates.count == 1 {
+                return IngredientMatchResult(
+                    query: name, candidate: candidates[0], candidates: candidates,
+                    confidence: 1, matchClass: .certain, reasons: [.knownVocabulary]
+                )
+            }
+            if candidates.count > 1 {
+                return collisionResult(query: name, candidates: candidates, confidence: 1, reasons: [.knownVocabulary, .candidateCollision])
+            }
+        }
+
         let exactTerms = (termsByNormalizedName[normalized] ?? [])
-            .filter { $0.ingredient !== excluded && !$0.ingredient.rejectsMatch(for: name) }
+            .filter { $0.ingredient !== excluded && !isKeptSeparate(from: $0.ingredient) }
         let exactIngredients = distinctIngredients(exactTerms)
         if !exactIngredients.isEmpty {
             let canonical = exactTerms.filter(\.isCanonical)
@@ -146,10 +192,10 @@ struct IngredientMatcher {
             )
         }
 
-        let wanted = IngredientMatching.key(for: name)
+        let wanted = wantedKey
         let plausibleTerms = (max(0, wanted.count - 2)...(wanted.count + 2))
             .flatMap { termsByLength[$0] ?? [] }
-            .filter { $0.ingredient !== excluded && !$0.ingredient.rejectsMatch(for: name) }
+            .filter { $0.ingredient !== excluded && !isKeptSeparate(from: $0.ingredient) }
         var bestByIngredient: [ObjectIdentifier: ScoredCandidate] = [:]
 
         for term in plausibleTerms {
@@ -354,31 +400,22 @@ enum IngredientMatching {
     /// manual additions. Explainable matching remains available through the
     /// matcher APIs above; this helper only returns a safe candidate.
     static func match(_ name: String, in ingredients: [Ingredient], rules: [IngredientMatchRule]) -> Ingredient? {
-        let normalized = Ingredient.normalize(name)
-        guard !normalized.isEmpty else { return nil }
-        let wanted = key(for: name)
-        // An explicit household alias is the one exception to the normal
-        // safety threshold. It is still ambiguous when it names more than one
-        // catalogue row, and a keep-separate decision always takes priority.
-        let explicit = ingredients.filter { ingredient in
-            !ingredient.rejectsMatch(for: name)
-                && rules.contains { $0.kind == .alias && $0.applies(to: wanted, and: key(for: ingredient.name)) }
-                && !rules.contains { $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: ingredient.name)) }
-        }
-        if explicit.count == 1 { return explicit[0] }
-        if explicit.count > 1 { return nil }
-        let result = IngredientMatcher(ingredients: ingredients).result(for: name)
-        guard let candidate = result.candidate, result.isSafeForSilentReuse else { return nil }
-        guard !rules.contains(where: {
-            $0.kind == .keepSeparate && $0.applies(to: wanted, and: key(for: candidate.name))
-        }) else { return nil }
-        return candidate
+        let result = IngredientMatcher(ingredients: ingredients, rules: rules).result(for: name)
+        return result.isSafeForSilentReuse ? result.candidate : nil
     }
 
     /// Explain every candidate decision without coupling matching to SwiftUI
     /// or a model context. For repeated lookups, keep an `IngredientMatcher`.
     static func matchResult(for name: String, in ingredients: [Ingredient]) -> IngredientMatchResult {
         IngredientMatcher(ingredients: ingredients).result(for: name)
+    }
+
+    static func matchResult(
+        for name: String,
+        in ingredients: [Ingredient],
+        rules: [IngredientMatchRule]
+    ) -> IngredientMatchResult {
+        IngredientMatcher(ingredients: ingredients, rules: rules).result(for: name)
     }
 
     /// Short form for callers that prefer the noun used by the API goal.
@@ -495,5 +532,36 @@ enum IngredientMatching {
             swap(&previous, &current)
         }
         return previous[b.count]
+    }
+}
+
+/// A deliberately small offline map for clear, common translations. The
+/// identity keys are independent of the active UI language; aliases are still
+/// saved on the household ingredient when a recipe is imported or a pantry
+/// add is confirmed.
+enum IngredientVocabulary {
+    private static let namesByIdentity: [String: [String]] = [
+        "salt": ["salt", "salz"],
+        "sugar": ["sugar", "zucker"],
+        "flour": ["flour", "mehl"],
+        "water": ["water", "wasser"],
+        "butter": ["butter"],
+        "cinnamon": ["cinnamon", "zimt"],
+        "garlic": ["garlic", "knoblauch"],
+    ]
+
+    private static let identityByName: [String: String] = namesByIdentity.reduce(into: [:]) { result, pair in
+        for name in pair.value { result[IngredientMatching.key(for: name)] = pair.key }
+    }
+
+    static func identity(for name: String) -> String? {
+        let key = IngredientMatching.key(for: name)
+        guard !key.isEmpty else { return nil }
+        return identityByName[key]
+    }
+
+    static func areEquivalent(_ lhs: String, _ rhs: String) -> Bool {
+        guard let left = identity(for: lhs), let right = identity(for: rhs) else { return false }
+        return left == right
     }
 }

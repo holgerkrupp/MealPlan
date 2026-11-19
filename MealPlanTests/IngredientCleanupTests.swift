@@ -92,4 +92,36 @@ struct IngredientCleanupTests {
         #expect((canonical.aliases ?? []).contains { $0.normalizedName == "joghurt" })
         #expect(try context.fetch(FetchDescriptor<Ingredient>()).count == 1)
     }
+
+    @Test func bilingualDuplicateGroupUsesOneCanonicalAndBatchLeavesOneRow() throws {
+        let (container, storeDirectory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: storeDirectory) }
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let salt = Ingredient(name: "Salt")
+        salt.modifiedAt = Date(timeIntervalSince1970: 1)
+        let duplicates = (0..<3).map { index -> Ingredient in
+            let ingredient = Ingredient(name: "Salz")
+            ingredient.modifiedAt = Date(timeIntervalSince1970: TimeInterval(index + 2))
+            return ingredient
+        }
+        household.ingredients = [salt] + duplicates
+        for ingredient in household.ingredients ?? [] {
+            ingredient.household = household
+            context.insert(ingredient)
+        }
+        context.insert(household)
+        try context.save()
+
+        let suggestions = IngredientCleanupService.suggestions(in: household)
+        #expect(suggestions.count == 3)
+        #expect(suggestions.allSatisfy { $0.canonical === salt })
+        #expect(IngredientCleanupService.highConfidenceNonConflicting(in: household).count == 3)
+
+        for suggestion in IngredientCleanupService.highConfidenceNonConflicting(in: household) {
+            try IngredientCleanupService.merge(suggestion, context: context)
+        }
+        #expect(try context.fetch(FetchDescriptor<Ingredient>()).count == 1)
+        #expect((salt.aliases ?? []).contains { $0.normalizedName == "salz" })
+    }
 }

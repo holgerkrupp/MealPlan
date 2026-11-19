@@ -50,7 +50,10 @@ private struct PantryStaplesContentView: View {
     }
 
     private func matches(_ ingredient: Ingredient) -> Bool {
-        trimmedSearch.isEmpty || ingredient.name.localizedCaseInsensitiveContains(trimmedSearch)
+        trimmedSearch.isEmpty
+            || ingredient.name.localizedCaseInsensitiveContains(trimmedSearch)
+            || IngredientVocabulary.areEquivalent(trimmedSearch, ingredient.name)
+            || (ingredient.aliases ?? []).contains { $0.name.localizedCaseInsensitiveContains(trimmedSearch) }
     }
 
     private var staples: [Ingredient] {
@@ -69,7 +72,12 @@ private struct PantryStaplesContentView: View {
     private var newStapleName: String? {
         let name = trimmedSearch
         guard !name.isEmpty else { return nil }
-        guard IngredientMatching.match(name, in: ingredients) == nil else { return nil }
+        let match = IngredientMatching.matchResult(
+            for: name,
+            in: ingredients,
+            rules: appState.currentHousehold?.matchRules ?? []
+        )
+        guard match.candidates.isEmpty else { return nil }
         return name
     }
 

@@ -56,18 +56,18 @@ private struct IngredientCleanupContent: View {
                     description: Text("New uncertain matches will appear here after an import or recipe edit.")
                 )
             } else {
-                Section {
-                    ForEach(suggestions) { suggestion in
-                        Button { selectedSuggestion = suggestion } label: {
-                            suggestionRow(suggestion)
+                ForEach(Dictionary(grouping: suggestions, by: { IngredientMatching.key(for: $0.duplicate.name) }).keys.sorted(), id: \.self) { nameKey in
+                    Section {
+                        ForEach(Dictionary(grouping: suggestions, by: { IngredientMatching.key(for: $0.duplicate.name) })[nameKey] ?? []) { suggestion in
+                            Button { selectedSuggestion = suggestion } label: {
+                                suggestionRow(suggestion)
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityHint(String(localized: "Opens ingredient cleanup details"))
                         }
-                        .buttonStyle(.plain)
-                        .accessibilityHint(String(localized: "Opens ingredient cleanup details"))
+                    } header: {
+                        Text(nameKey.capitalized)
                     }
-                } header: {
-                    Text(String(localized: "Possible duplicates"))
-                } footer: {
-                    Text("Review the evidence before changing your catalogue. Keeping items separate is remembered for this spelling pair.")
                 }
             }
         }
@@ -78,9 +78,9 @@ private struct IngredientCleanupContent: View {
                     Button {
                         showingBatchConfirmation = true
                     } label: {
-                        Label(String(localized: "Merge high-confidence"), systemImage: "checkmark.seal")
+                        Label(String(localized: "Merge clear matches"), systemImage: "checkmark.seal")
                     }
-                    .accessibilityHint(String(localized: "Merges only high-confidence suggestions without metadata conflicts"))
+                    .accessibilityHint(String(localized: "Merges exact and high-confidence suggestions without metadata conflicts"))
                 }
             }
         }
@@ -98,7 +98,7 @@ private struct IngredientCleanupContent: View {
             Button(String(localized: "Merge (batchSuggestions.count)")) { mergeBatch() }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
-            Text("Only suggestions with high matcher confidence and matching category, aisle, pantry, and nutrition data will be merged. You can undo the last merge from the Edit menu.")
+            Text("Only exact or high-confidence suggestions with matching category, aisle, pantry, nutrition, and stock data will be merged. You can undo the last merge from the Edit menu.")
         }
         .alert(String(localized: "Couldn’t finish cleanup"), isPresented: $showingBatchError) {
             Button(String(localized: "OK"), role: .cancel) {}
@@ -213,6 +213,7 @@ private struct IngredientCleanupContent: View {
         case .spellingDistance: String(localized: "close spelling")
         case .tokenOverlap: String(localized: "same words in a different order")
         case .candidateCollision: String(localized: "more than one possible match")
+        case .knownVocabulary: String(localized: "same known ingredient in another language")
         }
     }
 
@@ -243,6 +244,7 @@ private struct IngredientCleanupDetailView: View {
 
     let suggestion: IngredientCleanupSuggestion
     @State private var canonicalName: String
+    @State private var stockChoices = IngredientStockMergeChoices()
     @State private var showingMergeConfirmation = false
     @State private var showingConflictConfirmation = false
 
@@ -283,6 +285,39 @@ private struct IngredientCleanupDetailView: View {
             }
 
             Section {
+                stockValueRow(IngredientStockConflictField.status, canonical: suggestion.canonical.inventoryMode.localizedName, duplicate: suggestion.duplicate.inventoryMode.localizedName)
+                stockValueRow(IngredientStockConflictField.amount,
+                              canonical: PantryRowLabel.amountText(for: suggestion.canonical, system: appState.unitSystem) ?? String(localized: "Not set"),
+                              duplicate: PantryRowLabel.amountText(for: suggestion.duplicate, system: appState.unitSystem) ?? String(localized: "Not set"))
+                stockValueRow(IngredientStockConflictField.bestBefore,
+                              canonical: dateText(suggestion.canonical.inventoryBestBefore),
+                              duplicate: dateText(suggestion.duplicate.inventoryBestBefore))
+                stockValueRow(IngredientStockConflictField.location,
+                              canonical: locationText(suggestion.canonical),
+                              duplicate: locationText(suggestion.duplicate))
+                stockValueRow(IngredientStockConflictField.note,
+                              canonical: suggestion.canonical.trimmedInventoryNote ?? String(localized: "Not set"),
+                              duplicate: suggestion.duplicate.trimmedInventoryNote ?? String(localized: "Not set"))
+
+                if !suggestion.stockConflicts.isEmpty {
+                    Text("Choose which row’s value to keep for each difference. Amounts are never added together; choose Keep separate to preserve both records.")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                    ForEach(suggestion.stockConflicts) { field in
+                        Picker(field.localizedName, selection: stockChoiceBinding(for: field)) {
+                            Text("Choose value").tag(nil as IngredientStockSource?)
+                            Text(suggestion.canonical.name).tag(IngredientStockSource?.some(.canonical))
+                            Text(suggestion.duplicate.name).tag(IngredientStockSource?.some(.duplicate))
+                        }
+                    }
+                }
+            } header: {
+                Text(String(localized: "Pantry stock"))
+            } footer: {
+                Text("Values present on only one row are retained automatically.")
+            }
+
+            Section {
                 Button {
                     if suggestion.hasMetadataConflict {
                         showingConflictConfirmation = true
@@ -292,6 +327,7 @@ private struct IngredientCleanupDetailView: View {
                 } label: {
                     Label(String(localized: "Merge / Same ingredient"), systemImage: "arrow.triangle.merge")
                 }
+                .disabled(!stockChoices.resolves(suggestion.stockConflicts))
                 .accessibilityHint(String(localized: "Moves recipe and shopping list relationships to the canonical ingredient"))
 
                 Button {
@@ -320,10 +356,10 @@ private struct IngredientCleanupDetailView: View {
             Text("Recipes and shopping list items using “\(suggestion.duplicate.name)” will use “\(canonicalName)” from now on. The alternate spelling is saved as an alias.")
         }
         .confirmationDialog(String(localized: "Merge despite catalogue differences?"), isPresented: $showingConflictConfirmation, titleVisibility: .visible) {
-            Button(String(localized: "Merge and keep canonical details")) { merge() }
+            Button(String(localized: "Merge with reviewed values")) { merge() }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
-            Text("The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Review the differences above before continuing.")
+            Text("The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Stock conflicts use the values you selected above. Review the differences before continuing.")
         }
     }
 
@@ -377,12 +413,13 @@ private struct IngredientCleanupDetailView: View {
         case .spellingDistance: String(localized: "close spelling")
         case .tokenOverlap: String(localized: "same words in a different order")
         case .candidateCollision: String(localized: "more than one possible match")
+        case .knownVocabulary: String(localized: "same known ingredient in another language")
         }
     }
 
     private func merge() {
         do {
-            try IngredientCleanupService.merge(suggestion, canonicalName: canonicalName, context: context)
+            try IngredientCleanupService.merge(suggestion, canonicalName: canonicalName, stockChoices: stockChoices, context: context)
             try context.save()
             let undo = context.undoManager
             appState.offerUndo(String(localized: "Ingredient merged")) {
@@ -394,5 +431,32 @@ private struct IngredientCleanupDetailView: View {
             // A failed save leaves both catalogue rows intact. The dialog is
             // intentionally left open so the user can try again or cancel.
         }
+    }
+
+    private func stockChoiceBinding(for field: IngredientStockConflictField) -> Binding<IngredientStockSource?> {
+        Binding(get: { stockChoices[field] }, set: { stockChoices[field] = $0 })
+    }
+
+    private func stockValueRow(_ field: IngredientStockConflictField, canonical: String, duplicate: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(field.localizedName).font(.subheadline.weight(.medium))
+            HStack {
+                Text(suggestion.canonical.name).foregroundStyle(.secondary)
+                Text(canonical)
+                Spacer(minLength: 8)
+                Text(duplicate)
+                Text(suggestion.duplicate.name).foregroundStyle(.secondary)
+            }
+            .font(.caption)
+        }
+    }
+
+    private func dateText(_ date: Date?) -> String {
+        date?.formatted(date: .abbreviated, time: .omitted) ?? String(localized: "Not set")
+    }
+
+    private func locationText(_ ingredient: Ingredient) -> String {
+        if let custom = ingredient.trimmedCustomStorageLocation, !custom.isEmpty { return custom }
+        return ingredient.storageLocation?.localizedName ?? String(localized: "Not set")
     }
 }

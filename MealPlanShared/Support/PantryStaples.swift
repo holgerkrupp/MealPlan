@@ -52,15 +52,20 @@ enum PantryStaples {
     /// which have to be created.
     ///
     /// Pure, so it can be tested without a `ModelContext`.
-    static func plan(_ seeds: [Seed] = PantryStaples.defaultSeeds, existing: [Ingredient]) -> SeedPlan {
+    static func plan(
+        _ seeds: [Seed] = PantryStaples.defaultSeeds,
+        existing: [Ingredient],
+        rules: [IngredientMatchRule] = []
+    ) -> SeedPlan {
         var result = SeedPlan()
         var claimed: Set<String> = []
         for seed in seeds {
             let normalized = Ingredient.normalize(seed.name)
             guard !normalized.isEmpty, claimed.insert(normalized).inserted else { continue }
-            if let known = IngredientMatching.match(seed.name, in: existing) {
+            let match = IngredientMatching.matchResult(for: seed.name, in: existing, rules: rules)
+            if let known = match.candidate, match.isSafeForSilentReuse {
                 result.mark.append(known)
-            } else {
+            } else if match.candidates.isEmpty {
                 result.create.append(seed)
             }
         }
@@ -77,7 +82,7 @@ enum PantryStaples {
         guard !household.didSeedPantryStaples else { return }
         household.didSeedPantryStaples = true
 
-        let steps = plan(existing: household.ingredients ?? [])
+        let steps = plan(existing: household.ingredients ?? [], rules: household.matchRules ?? [])
         for ingredient in steps.mark {
             ingredient.isPantryStaple = true
         }
@@ -101,10 +106,25 @@ enum PantryStaples {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
-        if let existing = match(trimmed, in: household.ingredients ?? []) {
+        let result = IngredientMatching.matchResult(
+            for: trimmed,
+            in: household.ingredients ?? [],
+            rules: household.matchRules ?? []
+        )
+        if let existing = result.candidate, result.isSafeForSilentReuse {
             existing.isPantryStaple = true
+            if result.reasons.contains(.knownVocabulary) {
+                IngredientIdentity.addAlias(
+                    named: trimmed,
+                    to: existing,
+                    source: .userConfirmed,
+                    confidence: 1,
+                    context: context
+                )
+            }
             return existing
         }
+        guard result.candidates.isEmpty else { return nil }
         return insert(Seed(name: trimmed, category: category), into: household, context: context)
     }
 

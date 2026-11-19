@@ -53,6 +53,25 @@ struct PantryStaplesTests {
         #expect(!salt.isPantryStaple)
     }
 
+    @Test func sourceIndependentSeedingRecognizesGermanStaplesAndSkipsAmbiguity() {
+        let salt = ingredient("Salz")
+        let single = PantryStaples.plan(
+            [PantryStaples.Seed(name: "Salt", category: .spices)],
+            existing: [salt]
+        )
+        #expect(single.mark.count == 1)
+        #expect(single.mark.first === salt)
+        #expect(single.create.isEmpty)
+
+        let duplicate = ingredient("Salz")
+        let collision = PantryStaples.plan(
+            [PantryStaples.Seed(name: "Salt", category: .spices)],
+            existing: [salt, duplicate]
+        )
+        #expect(collision.mark.isEmpty)
+        #expect(collision.create.isEmpty)
+    }
+
     @Test func matchesRegardlessOfCaseAccentsAndSpacing() {
         let seeds = [PantryStaples.Seed(name: "Crème fraîche", category: .dairy)]
         let existing = ingredient("creme fraiche")
