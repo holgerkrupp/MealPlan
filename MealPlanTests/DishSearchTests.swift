@@ -110,6 +110,37 @@ struct DishSearchTests {
         #expect(DishSearch.rank(dishes, query: "soup", limit: 4).count == 4)
     }
 
+    @Test func libraryAndPickerShareValueRankingAndReasons() {
+        let tomatoSoup = Dish(name: "Tomato soup")
+        let soupWithTomatoes = dish(named: "Weeknight bowl", ingredients: ["Tomatoes"])
+        soupWithTomatoes.tagNames = ["Quick"]
+        let snapshots = [soupWithTomatoes, tomatoSoup].map(DishSearchSnapshot.init(dish:))
+
+        let library = DishSearch.rankForFilter(snapshots, query: "tomato")
+        let picker = DishSearch.rank(snapshots, query: "tomato", limit: snapshots.count)
+        #expect(library.map(\.id) == picker.map(\.id))
+        #expect(library.map(\.score) == picker.map(\.score))
+        #expect(library.map(\.reason) == picker.map(\.reason))
+    }
+
+    @Test func rankedSearchPagesKeepGlobalRelevanceOrder() {
+        let dishes = [
+            dish(named: "Bowl with tomatoes", ingredients: ["Tomatoes"]),
+            dish(named: "Tomato soup", ingredients: ["Onion"]),
+            dish(named: "Salad", ingredients: ["Tomatoes"]),
+            dish(named: "Tomato pasta", ingredients: ["Basil"]),
+            dish(named: "Stew", ingredients: ["Tomato"]),
+        ]
+        let ranked = DishSearch.rankForFilter(dishes.map(DishSearchSnapshot.init(dish:)), query: "tomato")
+        let firstPage = DishSearch.pageIDs(ranked.map(\.id), pageIndex: 0, pageSize: 2)
+        let secondPage = DishSearch.pageIDs(ranked.map(\.id), pageIndex: 1, pageSize: 2)
+        let finalPage = DishSearch.pageIDs(ranked.map(\.id), pageIndex: 2, pageSize: 2)
+
+        #expect(firstPage + secondPage + finalPage == ranked.map(\.id))
+        #expect(firstPage == Array(ranked.prefix(2).map(\.id)))
+        #expect(DishSearch.pageIDs(ranked.map(\.id), pageIndex: 3, pageSize: 2).isEmpty)
+    }
+
     // MARK: - Deciding whether to create a new dish
 
     @Test func exactMatchIgnoresCaseAccentsAndPadding() {

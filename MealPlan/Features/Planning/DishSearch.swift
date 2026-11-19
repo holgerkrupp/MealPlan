@@ -242,37 +242,22 @@ enum DishSearch {
         return ranked.prefix(limit).map { $0.result }
     }
 
-    /// Broad library/sidebar semantics: fuzzy dish names plus an all-words
-    /// match across recipe text, translations, ingredients and tags.
-    static func filterScore(_ dish: DishSearchSnapshot, query: String) -> Double {
-        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return 1 }
-        let nameScore = max(
-            dish.name.fuzzyScore(query: trimmed),
-            dish.translatedName?.fuzzyScore(query: trimmed) ?? 0
-        )
-        let words = trimmed.searchFolded.split(whereSeparator: \.isWhitespace)
-        let searchable = dish.searchableText.searchFolded
-        let deepMatch = !words.isEmpty && words.allSatisfy { searchable.contains($0) } ? 0.70 : 0
-        return max(nameScore, deepMatch)
-    }
-
+    /// The score used by all search surfaces. Results are computed from the
+    /// same value snapshots and retain the picker’s explanatory reason.
     static func rankForFilter(
         _ dishes: [DishSearchSnapshot],
         query: String
     ) -> [ValueResult] {
-        dishes.compactMap { dish -> (DishSearchValueResult, String)? in
-            guard !Task.isCancelled, !dish.isBlankDraft else { return nil }
-            let score = filterScore(dish, query: query)
-            guard score > 0 else { return nil }
-            return (ValueResult(id: dish.id, score: score, reason: nil), dish.name)
-        }
-        .sorted {
-            $0.0.score == $1.0.score
-                ? $0.1.localizedCaseInsensitiveCompare($1.1) == .orderedAscending
-                : $0.0.score > $1.0.score
-        }
-        .map(\.0)
+        rank(dishes.filter { !$0.isBlankDraft }, query: query, limit: dishes.count)
+    }
+
+    /// A page of globally ranked IDs. The caller fetches only this page of
+    /// live SwiftData models, then restores this order after the fetch.
+    static func pageIDs(_ ids: [UUID], pageIndex: Int, pageSize: Int) -> [UUID] {
+        guard pageIndex >= 0, pageSize > 0 else { return [] }
+        let start = pageIndex * pageSize
+        guard start < ids.count else { return [] }
+        return Array(ids[start..<min(start + pageSize, ids.count)])
     }
 
     /// True when a dish already carries exactly this name, i.e. there is

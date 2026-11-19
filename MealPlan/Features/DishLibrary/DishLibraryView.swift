@@ -73,6 +73,7 @@ private struct DishLibraryContent: View {
     @State private var debouncedSearchText = ""
     @State private var searchSnapshotActor: DishSearchSnapshotActor?
     @State private var searchScores: [UUID: Double] = [:]
+    @State private var searchResultIDs: [UUID] = []
     @State private var rankedSearchRequest: DishSearchRequest?
     @State private var searchGeneration = 0
 
@@ -295,36 +296,69 @@ private struct DishLibraryContent: View {
                     )
                 }
 
-                if !filteredDishes.isEmpty {
-                    grid(items, acceptsDrops: !appState.isGuest)
-                }
-
-                if canLoadMore && pageCount == 1 {
-                    if filteredDishes.isEmpty {
-                        loadMoreButton { loadMore(0) }
+                if firstPageSearchRequest != nil {
+                    if rankedSearchRequest != firstPageSearchRequest {
+                        ProgressView()
+                            .frame(maxWidth: .infinity, minHeight: 160)
+                    } else if searchResultIDs.isEmpty {
+                        emptyState
+                            .frame(maxWidth: .infinity, minHeight: 320)
                     } else {
-                        pageProgress { loadMore(0) }
+                        let totalPages = (searchResultIDs.count + DishLibraryView.pageSize - 1) / DishLibraryView.pageSize
+                        let loadedPages = min(pageCount, totalPages)
+                        ForEach(0..<loadedPages, id: \.self) { pageIndex in
+                            DishLibraryResultPage(
+                                householdID: householdID,
+                                pageIndex: pageIndex,
+                                filter: visibleFilter,
+                                isLastPage: pageIndex == loadedPages - 1,
+                                acceptsDrops: !appState.isGuest,
+                                selection: pageSelection,
+                                searchScores: searchScoresForFilter,
+                                orderedSearchIDs: searchResultIDs,
+                                hasAnyFilteredResults: $hasAnyFilteredResults,
+                                hasMorePages: $hasMorePages,
+                                loadMore: loadMore
+                            )
+                        }
+                        if !hasAnyFilteredResults && !hasMorePages {
+                            emptyState
+                                .frame(maxWidth: .infinity, minHeight: 320)
+                        }
                     }
-                }
+                } else {
+                    if !filteredDishes.isEmpty {
+                        grid(items, acceptsDrops: !appState.isGuest)
+                    }
 
-                ForEach(1..<pageCount, id: \.self) { pageIndex in
-                    DishLibraryResultPage(
-                        householdID: householdID,
-                        pageIndex: pageIndex,
-                        filter: visibleFilter,
-                        isLastPage: pageIndex == pageCount - 1,
-                        acceptsDrops: !appState.isGuest,
-                        selection: pageSelection,
-                        searchScores: searchScoresForFilter,
-                        hasAnyFilteredResults: $hasAnyFilteredResults,
-                        hasMorePages: $hasMorePages,
-                        loadMore: loadMore
-                    )
-                }
+                    if canLoadMore && pageCount == 1 {
+                        if filteredDishes.isEmpty {
+                            loadMoreButton { loadMore(0) }
+                        } else {
+                            pageProgress { loadMore(0) }
+                        }
+                    }
 
-                if filteredDishes.isEmpty && !hasAnyFilteredResults && !hasMorePages {
-                    emptyState
-                        .frame(maxWidth: .infinity, minHeight: 320)
+                    ForEach(1..<pageCount, id: \.self) { pageIndex in
+                        DishLibraryResultPage(
+                            householdID: householdID,
+                            pageIndex: pageIndex,
+                            filter: visibleFilter,
+                            isLastPage: pageIndex == pageCount - 1,
+                            acceptsDrops: !appState.isGuest,
+                            selection: pageSelection,
+                            searchScores: searchScoresForFilter,
+                            orderedSearchIDs: nil,
+                            hasAnyFilteredResults: $hasAnyFilteredResults,
+                            hasMorePages: $hasMorePages,
+                            loadMore: loadMore
+                        )
+                    }
+
+                    if filteredDishes.isEmpty && !hasAnyFilteredResults && !hasMorePages {
+                        emptyState
+                            .frame(maxWidth: .infinity, minHeight: 320)
+                    }
                 }
             }
         }
@@ -913,6 +947,7 @@ private struct DishLibraryContent: View {
         let request = firstPageSearchRequest
         guard let request else {
             searchScores = [:]
+            searchResultIDs = []
             rankedSearchRequest = nil
             return
         }
@@ -933,6 +968,7 @@ private struct DishLibraryContent: View {
         )
         guard !Task.isCancelled, firstPageSearchRequest == request else { return }
         searchScores = Dictionary(results.map { ($0.id, $0.score) }, uniquingKeysWith: { first, _ in first })
+        searchResultIDs = results.map(\.id)
         rankedSearchRequest = request
     }
 
@@ -1148,6 +1184,7 @@ private struct DishLibraryResultPage: View {
     private let isLastPage: Bool
     private let acceptsDrops: Bool
     private let searchScores: [UUID: Double]?
+    private let orderedSearchIDs: [UUID]?
     /// Set while the library is picking dishes for a bulk change.
     private let selection: Binding<[UUID: Dish]>?
     @Binding private var hasAnyFilteredResults: Bool
@@ -1175,6 +1212,7 @@ private struct DishLibraryResultPage: View {
         acceptsDrops: Bool,
         selection: Binding<[UUID: Dish]>?,
         searchScores: [UUID: Double]?,
+        orderedSearchIDs: [UUID]?,
         hasAnyFilteredResults: Binding<Bool>,
         hasMorePages: Binding<Bool>,
         loadMore: @escaping @MainActor (Int) -> Void
@@ -1185,18 +1223,35 @@ private struct DishLibraryResultPage: View {
         self.isLastPage = isLastPage
         self.acceptsDrops = acceptsDrops
         self.searchScores = searchScores
+        self.orderedSearchIDs = orderedSearchIDs
         self.selection = selection
         self._hasAnyFilteredResults = hasAnyFilteredResults
         self._hasMorePages = hasMorePages
         self.loadMore = loadMore
 
         let scopedHouseholdID = householdID ?? UUID()
-        var descriptor = FetchDescriptor<Dish>(
-            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
-            sortBy: DishLibrarySort.descriptors(for: filter.sort)
-        )
-        descriptor.fetchLimit = DishLibraryView.pageSize
-        descriptor.fetchOffset = pageIndex * DishLibraryView.pageSize
+        var descriptor: FetchDescriptor<Dish>
+        if let orderedSearchIDs {
+            let pageIDs = DishSearch.pageIDs(
+                orderedSearchIDs,
+                pageIndex: pageIndex,
+                pageSize: DishLibraryView.pageSize
+            )
+            descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate { dish in
+                    dish.household?.uuid == scopedHouseholdID && pageIDs.contains(dish.uuid)
+                },
+                sortBy: DishLibrarySort.descriptors(for: filter.sort)
+            )
+            descriptor.fetchLimit = pageIDs.count
+        } else {
+            descriptor = FetchDescriptor<Dish>(
+                predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+                sortBy: DishLibrarySort.descriptors(for: filter.sort)
+            )
+            descriptor.fetchLimit = DishLibraryView.pageSize
+            descriptor.fetchOffset = pageIndex * DishLibraryView.pageSize
+        }
         _dishes = Query(descriptor)
     }
 
@@ -1205,11 +1260,21 @@ private struct DishLibraryResultPage: View {
         return searchScores ?? [:]
     }
 
+    private var pageDishes: [Dish] {
+        guard let orderedSearchIDs else { return dishes }
+        let byID = Dictionary(dishes.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })
+        return DishSearch.pageIDs(
+            orderedSearchIDs,
+            pageIndex: pageIndex,
+            pageSize: DishLibraryView.pageSize
+        ).compactMap { byID[$0] }
+    }
+
     var body: some View {
         let projection = DishLibraryPerformanceSignposts.signposter.beginInterval("paged filter and grouping")
         let now = Date.now
         let filtered = filter.apply(
-            to: dishes,
+            to: pageDishes,
             now: now,
             sourceIsAlphabeticallySorted: filter.sort == .alphabetical,
             searchScores: searchScoresForFilter
@@ -1269,7 +1334,13 @@ private struct DishLibraryResultPage: View {
                 .padding(MacLayout.gutter)
             }
 
-            if isLastPage && dishes.count == DishLibraryView.pageSize {
+            let hasNextSearchPage = orderedSearchIDs.map {
+                (pageIndex + 1) * DishLibraryView.pageSize < $0.count
+            }
+            let canLoadMore = orderedSearchIDs == nil
+                ? dishes.count == DishLibraryView.pageSize
+                : hasNextSearchPage == true
+            if isLastPage && canLoadMore {
                 if items.isEmpty {
                     loadMoreButton { loadMore(pageIndex) }
                 } else {
@@ -1293,7 +1364,11 @@ private struct DishLibraryResultPage: View {
 
     private func updateState(filtered: [Dish]) {
         if isLastPage {
-            hasMorePages = householdID != nil && dishes.count == DishLibraryView.pageSize
+            if let orderedSearchIDs {
+                hasMorePages = (pageIndex + 1) * DishLibraryView.pageSize < orderedSearchIDs.count
+            } else {
+                hasMorePages = householdID != nil && dishes.count == DishLibraryView.pageSize
+            }
         }
         if !filtered.isEmpty { hasAnyFilteredResults = true }
     }
