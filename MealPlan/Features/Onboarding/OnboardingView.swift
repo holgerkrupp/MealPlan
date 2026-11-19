@@ -325,8 +325,10 @@ private struct OnboardingPageView: View {
                 }
 
                 VStack(alignment: .leading, spacing: 14) {
-                    ForEach(Array(page.bullets.enumerated()), id: \.offset) { _, bullet in
-                        OnboardingBulletRow(text: bullet, tint: page.tint)
+                    let bullets = page.bullets
+                    let tint = page.tint
+                    ForEach(bullets, id: \.self) { bullet in
+                        OnboardingBulletRow(text: bullet, tint: tint)
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
