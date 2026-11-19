@@ -183,7 +183,7 @@ enum Season: String, CaseIterable, Identifiable, Codable, Sendable {
 
 // MARK: - Unit system
 
-enum UnitSystem: String, CaseIterable, Identifiable, Codable, Sendable {
+enum UnitSystem: String, CaseIterable, Identifiable, Codable, Equatable, Sendable {
     case metric, imperial
 
     var id: String { rawValue }

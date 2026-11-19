@@ -115,14 +115,25 @@ struct RecipeDiscoverySnapshot: Sendable {
         seeds: [RecipeDiscoveryArticleSeed],
         sourceOrder: [String],
         query: RecipeDiscoveryQuery,
-        readIDs: Set<String>
+        readIDs: Set<String>,
+        lowAffinitySourceIDs: Set<String> = []
     ) -> Self {
         let normalized = normalize(seeds: seeds, readIDs: readIDs)
-        return make(normalized, sourceOrder: sourceOrder, query: query)
+        return make(
+            normalized,
+            sourceOrder: sourceOrder,
+            query: query,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
+        )
     }
 
     func applying(query: RecipeDiscoveryQuery) -> Self {
-        Self.make(allArticles, sourceOrder: sourceOrder, query: query)
+        Self.make(
+            allArticles,
+            sourceOrder: sourceOrder,
+            query: query,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
+        )
     }
 
     func applying(readIDs: Set<String>) -> Self {
@@ -204,7 +215,8 @@ struct RecipeDiscoverySnapshot: Sendable {
     private static func make(
         _ allArticles: [RecipeDiscoveryArticle],
         sourceOrder: [String],
-        query: RecipeDiscoveryQuery
+        query: RecipeDiscoveryQuery,
+        lowAffinitySourceIDs: Set<String>
     ) -> Self {
         let candidates = allArticles.filter { article in
             (query.sourceID == nil || article.sourceID == query.sourceID)
@@ -242,7 +254,21 @@ struct RecipeDiscoverySnapshot: Sendable {
                     RecipeArticleFilter.areInOrder(candidate(lhs), candidate(rhs), sort: .newest)
                 }
             }
-            visible = Array(RecipeArticleFilter.interleave(groupsInOrder).prefix(query.isFiltering ? 80 : 40))
+            let mixed = RecipeArticleFilter.interleave(groupsInOrder)
+            if !query.isFiltering, !lowAffinitySourceIDs.isEmpty {
+                // Keep some foreign-market variety, but prevent a growing
+                // catalog of low-affinity regional sources from crowding out
+                // local and international recipes in the default 40 cards.
+                var foreignCount = 0
+                visible = Array(mixed.lazy.filter { article in
+                    guard lowAffinitySourceIDs.contains(article.sourceID) else { return true }
+                    guard foreignCount < 10 else { return false }
+                    foreignCount += 1
+                    return true
+                }.prefix(40))
+            } else {
+                visible = Array(mixed.prefix(query.isFiltering ? 80 : 40))
+            }
         } else {
             visible = Array(matching.sorted {
                 RecipeArticleFilter.areInOrder(candidate($0), candidate($1), sort: query.sort)
@@ -255,7 +281,8 @@ struct RecipeDiscoverySnapshot: Sendable {
             availableCategories: available,
             visibleArticles: visible,
             query: query,
-            sourceOrder: sourceOrder
+            sourceOrder: sourceOrder,
+            lowAffinitySourceIDs: lowAffinitySourceIDs
         )
     }
 

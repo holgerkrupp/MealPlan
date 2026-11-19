@@ -11,20 +11,64 @@ struct RecipeDiscoverySource: Identifiable, Hashable, Sendable {
         case provider
     }
 
+    enum MarketScope: Hashable, Sendable {
+        case regional
+        case international
+    }
+
     let id: String
     let name: String
     let siteURL: URL
     let contentURL: URL
     let format: Format
     let detail: String
+    let marketScope: MarketScope
+    let preferredRegionCodes: Set<String>
+    let languageCodes: Set<String>
 
-    init(id: String, name: String, siteURL: URL, contentURL: URL, format: Format, detail: String = "") {
+    init(
+        id: String,
+        name: String,
+        siteURL: URL,
+        contentURL: URL,
+        format: Format,
+        detail: String = "",
+        marketScope: MarketScope = .regional,
+        preferredRegionCodes: Set<String> = [],
+        languageCodes: Set<String> = []
+    ) {
         self.id = id
         self.name = name
         self.siteURL = siteURL
         self.contentURL = contentURL
         self.format = format
         self.detail = detail
+        self.marketScope = marketScope
+        self.preferredRegionCodes = Set(preferredRegionCodes.map { $0.uppercased() })
+        self.languageCodes = Set(languageCodes.map { $0.lowercased() })
+    }
+}
+
+/// Locale-derived preferences for ordering built-in recipe sources. Region is
+/// kept separate from language and measurement policy: a German market remains
+/// the first choice on an English-language device.
+struct RecipeDiscoveryMarketContext: Sendable, Equatable {
+    let regionCode: String?
+    let languageCode: String?
+    let unitSystem: UnitSystem
+
+    init(locale: Locale = .current, unitSystem: UnitSystem? = nil) {
+        self.init(
+            regionCode: locale.region?.identifier,
+            languageCode: locale.language.languageCode?.identifier,
+            unitSystem: unitSystem ?? UnitConversion.system(for: locale)
+        )
+    }
+
+    init(regionCode: String?, languageCode: String?, unitSystem: UnitSystem) {
+        self.regionCode = regionCode?.uppercased()
+        self.languageCode = languageCode?.lowercased()
+        self.unitSystem = unitSystem
     }
 }
 
@@ -39,9 +83,8 @@ struct RecipeDiscoveryLoad: Sendable {
 }
 
 enum RecipeDiscoveryService {
-    /// These are deliberately global rather than locale-specific. Discover is
-    /// meant to cross-pollinate a household's usual sources, while the optional
-    /// subscription suggestions remain tailored to its region.
+    /// All built-in sources remain available in every market. Metadata changes
+    /// only their fetch/display priority; it never hides an explicit source.
     static let sources: [RecipeDiscoverySource] = [
         RecipeDiscoverySource(
             id: "themealdb",
@@ -49,7 +92,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.themealdb.com")!,
             contentURL: URL(string: "https://www.themealdb.com")!,
             format: .mealDBHTML,
-            detail: "A public international recipe index."
+            detail: "A public international recipe index.",
+            marketScope: .international
         ),
         RecipeDiscoverySource(
             id: "openstove",
@@ -57,7 +101,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://openstove.org")!,
             contentURL: URL(string: "https://openstove.org/recipes")!,
             format: .openStoveHTML,
-            detail: "Open recipes with public card metadata."
+            detail: "Open recipes with public card metadata.",
+            marketScope: .international
         ),
         RecipeDiscoverySource(
             id: "public-domain-recipes",
@@ -65,7 +110,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://publicdomainrecipes.com")!,
             contentURL: URL(string: "https://publicdomainrecipes.com")!,
             format: .publicDomainHTML,
-            detail: "A public-domain recipe collection."
+            detail: "A public-domain recipe collection.",
+            marketScope: .international
         ),
         RecipeDiscoverySource(
             id: "chefkoch",
@@ -73,7 +119,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.chefkoch.de")!,
             contentURL: URL(string: "https://www.chefkoch.de/rezept-des-tages/")!,
             format: .provider,
-            detail: "Deutschsprachige Rezepte, Rezept des Tages und öffentliche Entdeckungsseiten."
+            detail: "Deutschsprachige Rezepte, Rezept des Tages und öffentliche Entdeckungsseiten.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "lecker",
@@ -81,7 +128,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.lecker.de")!,
             contentURL: URL(string: "https://www.lecker.de")!,
             format: .feed,
-            detail: "Rezepte, Backideen und Kücheninspiration."
+            detail: "Rezepte, Backideen und Kücheninspiration.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "kuechengotter",
@@ -89,7 +137,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.kuechengoetter.de")!,
             contentURL: URL(string: "https://www.kuechengoetter.de")!,
             format: .feed,
-            detail: "Erprobte Rezepte aus der Redaktion."
+            detail: "Erprobte Rezepte aus der Redaktion.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "emmi-kocht-einfach",
@@ -97,7 +146,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://emmikochteinfach.de")!,
             contentURL: URL(string: "https://emmikochteinfach.de")!,
             format: .feed,
-            detail: "Alltagstaugliche Familienküche."
+            detail: "Alltagstaugliche Familienküche.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "einfach-backen",
@@ -105,7 +155,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.einfachbacken.de")!,
             contentURL: URL(string: "https://www.einfachbacken.de")!,
             format: .feed,
-            detail: "Backrezepte und verständliche Schritt-für-Schritt-Anleitungen."
+            detail: "Backrezepte und verständliche Schritt-für-Schritt-Anleitungen.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "einfach-kochen",
@@ -113,7 +164,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.einfachkochen.de")!,
             contentURL: URL(string: "https://www.einfachkochen.de")!,
             format: .feed,
-            detail: "Einfache Rezepte für jeden Tag."
+            detail: "Einfache Rezepte für jeden Tag.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "familienkost",
@@ -121,7 +173,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.familienkost.de")!,
             contentURL: URL(string: "https://www.familienkost.de")!,
             format: .feed,
-            detail: "Familienrezepte für Kinder und Erwachsene."
+            detail: "Familienrezepte für Kinder und Erwachsene.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "essen-und-trinken",
@@ -129,7 +182,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.essen-und-trinken.de")!,
             contentURL: URL(string: "https://www.essen-und-trinken.de")!,
             format: .feed,
-            detail: "Rezepte und Küchenwissen aus dem Magazin."
+            detail: "Rezepte und Küchenwissen aus dem Magazin.",
+            preferredRegionCodes: ["DE", "AT", "CH", "LI"], languageCodes: ["de"]
         ),
         RecipeDiscoverySource(
             id: "bbc-good-food",
@@ -137,7 +191,8 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.bbcgoodfood.com")!,
             contentURL: URL(string: "https://www.bbcgoodfood.com")!,
             format: .feed,
-            detail: "Public recipe collections from BBC Good Food."
+            detail: "Public recipe collections from BBC Good Food.",
+            preferredRegionCodes: ["GB", "IE", "AU", "NZ"], languageCodes: ["en"]
         ),
         RecipeDiscoverySource(
             id: "serious-eats",
@@ -145,23 +200,60 @@ enum RecipeDiscoveryService {
             siteURL: URL(string: "https://www.seriouseats.com")!,
             contentURL: URL(string: "https://www.seriouseats.com")!,
             format: .feed,
-            detail: "Recipe testing, technique and food science."
+            detail: "Recipe testing, technique and food science.",
+            preferredRegionCodes: ["US"], languageCodes: ["en"]
         ),
     ]
 
+    static func marketPriority(of source: RecipeDiscoverySource, for context: RecipeDiscoveryMarketContext) -> Int {
+        guard source.marketScope == .regional else { return 1 }
+
+        let sourceMarkets = sources.filter { $0.marketScope == .regional }
+        let regionHasMatch = context.regionCode.map { region in
+            sourceMarkets.contains { $0.preferredRegionCodes.contains(region) }
+        } ?? false
+
+        if regionHasMatch, let regionCode = context.regionCode,
+           source.preferredRegionCodes.contains(regionCode) {
+            return 0
+        }
+        if !regionHasMatch, let languageCode = context.languageCode,
+           source.languageCodes.contains(languageCode) {
+            return 0
+        }
+        return 2
+    }
+
+    static func sources(for context: RecipeDiscoveryMarketContext) -> [RecipeDiscoverySource] {
+        sources.enumerated().sorted { lhs, rhs in
+            let leftPriority = marketPriority(of: lhs.element, for: context)
+            let rightPriority = marketPriority(of: rhs.element, for: context)
+            return leftPriority == rightPriority ? lhs.offset < rhs.offset : leftPriority < rightPriority
+        }.map(\.element)
+    }
+
+    static func lowAffinitySourceIDs(for context: RecipeDiscoveryMarketContext) -> Set<String> {
+        Set(sources.filter { marketPriority(of: $0, for: context) == 2 }.map { "discovery:\($0.id)" })
+    }
+
     static func load() async -> RecipeDiscoveryLoad {
+        await load(context: RecipeDiscoveryMarketContext())
+    }
+
+    static func load(context: RecipeDiscoveryMarketContext) async -> RecipeDiscoveryLoad {
+        let orderedSources = sources(for: context)
         enum Outcome: Sendable {
             case success(Int, RecipeDiscoverySourceResult)
             case failure(Int, String)
         }
 
         var outcomes: [Outcome] = []
-        for start in stride(from: 0, to: sources.count, by: 4) {
-            let end = min(start + 4, sources.count)
+        for start in stride(from: 0, to: orderedSources.count, by: 4) {
+            let end = min(start + 4, orderedSources.count)
             let batch = await withTaskGroup(of: Outcome.self) { group in
                 for index in start..<end {
                     group.addTask {
-                        let source = sources[index]
+                        let source = orderedSources[index]
                         do { return .success(index, try await fetch(source)) }
                         catch { return .failure(index, source.name) }
                     }

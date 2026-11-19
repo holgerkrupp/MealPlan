@@ -95,4 +95,63 @@ struct RecipeDiscoverySnapshotTests {
         #expect(all.visibleArticles.count == 40)
         #expect(filtered.visibleArticles.count == 80)
     }
+
+    @Test func defaultMixedFeedCapsLowAffinitySourcesAtTenOfForty() {
+        let local = (0..<40).map { seed("local-\($0)", source: "discovery:local", date: Double($0)) }
+        let international = (0..<40).map { seed("global-\($0)", source: "discovery:global", date: Double($0)) }
+        let foreignIDs = (0..<20).map { "discovery:foreign-\($0)" }
+        let foreignIDSet = Set(foreignIDs)
+        let foreign = foreignIDs.enumerated().map { index, sourceID in
+            seed("foreign-\(index)", source: sourceID, date: Double(index))
+        }
+        let snapshot = RecipeDiscoverySnapshot.build(
+            seeds: local + international + foreign,
+            sourceOrder: ["discovery:local", "discovery:global"] + foreignIDs,
+            query: .init(sort: .mixed),
+            readIDs: [],
+            lowAffinitySourceIDs: foreignIDSet
+        )
+
+        #expect(snapshot.visibleArticles.count == 40)
+        #expect(snapshot.visibleArticles.filter { foreignIDSet.contains($0.sourceID) }.count == 10)
+    }
+
+    @Test func subscribedSourcesAreNotCountedAgainstForeignSourceCap() {
+        let local = [seed("local", source: "discovery:local", date: 1)]
+        let international = [seed("global", source: "discovery:global", date: 1)]
+        let foreignIDs = (0..<20).map { "discovery:foreign-\($0)" }
+        let foreignIDSet = Set(foreignIDs)
+        let foreign = foreignIDs.enumerated().map { index, sourceID in
+            seed("foreign-\(index)", source: sourceID, date: Double(index))
+        }
+        let subscriptions = (0..<15).map {
+            seed("feed-\($0)", source: "feed:\($0)", date: Double($0), subscribed: true)
+        }
+        let snapshot = RecipeDiscoverySnapshot.build(
+            seeds: local + international + foreign + subscriptions,
+            sourceOrder: ["discovery:local", "discovery:global"] + foreignIDs + (0..<15).map { "feed:\($0)" },
+            query: .init(sort: .mixed),
+            readIDs: [],
+            lowAffinitySourceIDs: foreignIDSet
+        )
+
+        #expect(snapshot.visibleArticles.filter { $0.sourceID.hasPrefix("feed:") }.count == 15)
+        #expect(snapshot.visibleArticles.filter { foreignIDSet.contains($0.sourceID) }.count <= 10)
+    }
+
+    @Test func explicitlySelectedForeignSourceBypassesMarketCap() {
+        let selectedSource = "discovery:foreign"
+        let selected = (0..<20).map {
+            seed("foreign-\($0)", source: selectedSource, date: Double($0))
+        }
+        let snapshot = RecipeDiscoverySnapshot.build(
+            seeds: selected,
+            sourceOrder: [selectedSource],
+            query: .init(sourceID: selectedSource, sort: .mixed),
+            readIDs: [],
+            lowAffinitySourceIDs: [selectedSource]
+        )
+
+        #expect(snapshot.visibleArticles.count == 20)
+    }
 }
