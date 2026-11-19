@@ -213,6 +213,7 @@ struct MealCard: View {
     @Environment(\.modelContext) private var context
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.colorSchemeContrast) private var contrast
+    @Environment(\.scenePhase) private var scenePhase
 
     @State private var showingPicker = false
     @State private var selectedEntry: MealPlanEntry?
@@ -223,6 +224,7 @@ struct MealCard: View {
     /// is a popover, and a sheet put up by a popover goes down with it.
     @State private var newDishToEdit: Dish?
     @State private var showingPaywall = false
+    @State private var currentLocalDay = Date.now.startOfDay
 
     private static let cornerRadius: CGFloat = 14
     private static let palette: [Color] = [
@@ -256,6 +258,7 @@ struct MealCard: View {
     }
 
     private var isPlanningLocked: Bool { !purchaseManager.canPlan(on: date) }
+    private var isPastDay: Bool { date.startOfDay < currentLocalDay }
 
     var body: some View {
         // The snapshot contains only scalar dish metadata and its persistent
@@ -367,6 +370,7 @@ struct MealCard: View {
                         : accent.opacity(showsBackdrop ? 0 : (contrast == .increased ? 0.7 : 0.35)),
                     lineWidth: isTargeted ? 2.5 : (contrast == .increased ? 1.5 : 1)
                 )
+                .saturation(isPastDay && !isTargeted ? 0.35 : 1)
         )
         .contentShape(Rectangle())
         .dropDestination(for: DishReference.self) { refs, _ in
@@ -397,6 +401,10 @@ struct MealCard: View {
         .detailPresentation(isPresented: $showingPaywall, route: .unlock) {
             PaywallView()
                 .dismissesOnOutsideClick()
+        }
+        .onAppear { refreshLocalDay() }
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .active { refreshLocalDay() }
         }
     }
 
@@ -429,9 +437,12 @@ struct MealCard: View {
     private func cardBackground(_ dish: DishValueSnapshot?) -> some View {
         ZStack(alignment: .bottomTrailing) {
             Rectangle().fill(.background)
-            Rectangle().fill(accent.opacity(colorScheme == .dark ? 0.28 : 0.16))
+            Rectangle()
+                .fill(accent.opacity(colorScheme == .dark ? 0.28 : 0.16))
+                .saturation(isPastDay ? 0.35 : 1)
             backdropSymbol
                 .offset(x: 22, y: 20)
+                .saturation(isPastDay ? 0.35 : 1)
 
             if let dish, let dishID = dish.persistentID {
                 CachedDishPhoto(
@@ -440,6 +451,7 @@ struct MealCard: View {
                     cacheKey: "dish-" + dish.uuid.uuidString + "-" + dish.modifiedAt.timeIntervalSinceReferenceDate.description,
                     maxPixelSize: 900
                 )
+                .saturation(isPastDay ? 0.35 : 1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(
                     LinearGradient(
@@ -486,6 +498,10 @@ struct MealCard: View {
         }
         .foregroundStyle(showsBackdrop ? AnyShapeStyle(.white) : AnyShapeStyle(accent))
         .shadow(color: .black.opacity(showsBackdrop ? 0.5 : 0), radius: 2, y: 1)
+    }
+
+    private func refreshLocalDay() {
+        currentLocalDay = Date.now.startOfDay
     }
 
     // MARK: - Drag and drop
