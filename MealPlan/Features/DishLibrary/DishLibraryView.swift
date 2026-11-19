@@ -1128,7 +1128,9 @@ private struct SharedSitePreviewView: View {
             }
         }
         .navigationTitle(String(localized: "Discover recipes"))
+        #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
+        #endif
     }
 }
 

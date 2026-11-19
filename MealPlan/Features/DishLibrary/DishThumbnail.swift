@@ -441,7 +441,7 @@ actor DishPhotoDataActor {
         // calendar save is being propagated.
         if let registered: DishImage = modelContext.registeredModel(for: imageID) {
             guard !Task.isCancelled else { return nil }
-            let data = registered.data
+            guard let data = registered.data else { return nil }
             guard !Task.isCancelled else { return nil }
             sourceDataCache.setObject(data as NSData, forKey: cacheKey, cost: data.count)
             return data

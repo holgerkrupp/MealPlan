@@ -190,12 +190,17 @@ struct DishFilter: Equatable, Codable {
         let query = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
         if !query.isEmpty {
             if let searchScores {
-                result = result.enumerated().compactMap { indexedDish in
-                    let (index, dish) = indexedDish
-                    return searchScores[dish.uuid].map { (dish: dish, score: $0, index: index) }
+                var scoredDishes: [(dish: Dish, score: Double, index: Int)] = []
+                scoredDishes.reserveCapacity(result.count)
+                for (index, dish) in result.enumerated() {
+                    guard let score = searchScores[dish.uuid] else { continue }
+                    scoredDishes.append((dish: dish, score: score, index: index))
                 }
-                    .sorted { $0.score == $1.score ? $0.index < $1.index : $0.score > $1.score }
-                    .map(\.dish)
+                scoredDishes.sort { lhs, rhs in
+                    if lhs.score == rhs.score { return lhs.index < rhs.index }
+                    return lhs.score > rhs.score
+                }
+                result = scoredDishes.map { $0.dish }
             } else {
                 let words = query.searchFolded.split(whereSeparator: \.isWhitespace).map(String.init)
                 result = result

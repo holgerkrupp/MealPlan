@@ -225,17 +225,21 @@ enum DishSearch {
         guard !query.isEmpty else {
             return dishes.prefix(limit).map { ValueResult(id: $0.id, score: 0, reason: nil) }
         }
-        let ranked = dishes
-            .compactMap { dish in
-                guard !Task.isCancelled else { return nil }
-                return result(for: dish, query: query)
+        var ranked: [(result: ValueResult, name: String)] = []
+        ranked.reserveCapacity(dishes.count)
+        for dish in dishes {
+            guard !Task.isCancelled else { return [] }
+            if let match = result(for: dish, query: query) {
+                ranked.append(match)
             }
-            .sorted {
-                $0.result.score == $1.result.score
-                    ? $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending
-                    : $0.result.score > $1.result.score
+        }
+        ranked.sort { lhs, rhs in
+            if lhs.result.score == rhs.result.score {
+                return lhs.name.localizedCaseInsensitiveCompare(rhs.name) == .orderedAscending
             }
-        return Array(ranked.prefix(limit).map(\.result))
+            return lhs.result.score > rhs.result.score
+        }
+        return ranked.prefix(limit).map { $0.result }
     }
 
     /// Broad library/sidebar semantics: fuzzy dish names plus an all-words
