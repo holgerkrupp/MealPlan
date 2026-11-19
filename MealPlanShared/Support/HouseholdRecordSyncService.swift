@@ -1062,10 +1062,14 @@ final class HouseholdRecordSyncService {
             // Advancing sync clocks can update hundreds of legacy records.
             // Save them through a private SwiftData executor so SQLite never
             // blocks the scrolling main context.
-            try await touchRecords(changesToTouch, householdID: household.uuid)
+            let touchDate = Date.now
+            try await touchRecords(changesToTouch, at: touchDate, householdID: household.uuid)
             try ensureForegroundScanCanContinue()
-            snapshots = Self.canonicalSnapshots(try await snapshotRecords(for: household.uuid))
-            try ensureForegroundScanCanContinue()
+            snapshots = try HouseholdRecordCodec.advancingConflictClocks(
+                in: snapshots,
+                changes: changesToTouch,
+                at: touchDate
+            )
             let touchedSnapshots = snapshots
             evaluated = await Task.detached(priority: .utility) {
                 touchedSnapshots.map { (snapshot: $0, fingerprint: $0.fingerprint) }
@@ -1897,11 +1901,12 @@ final class HouseholdRecordSyncService {
 
     private func touchRecords(
         _ changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
+        at date: Date,
         householdID: UUID
     ) async throws {
         guard let snapshotActor = await backgroundSnapshotActor() else { return }
         try await Task.detached(priority: .utility) {
-            try await snapshotActor.touch(changes, at: .now, householdID: householdID)
+            try await snapshotActor.touch(changes, at: date, householdID: householdID)
         }.value
     }
 

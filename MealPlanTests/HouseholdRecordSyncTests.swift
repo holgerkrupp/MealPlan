@@ -400,6 +400,54 @@ struct HouseholdRecordSyncTests {
         #expect(await loader.data(for: secondID, uuid: duplicateUUID) == Data([7, 8, 9]))
     }
 
+    @Test func dirtyScanClockPatchMatchesDiskBackedPlanAndShoppingSnapshots() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appending(path: "MealPlan-touch-snapshot-\(UUID().uuidString)", directoryHint: .isDirectory)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let schema = SharedStore.makeSchema()
+        let configuration = ModelConfiguration(
+            schema: schema,
+            url: directory.appending(path: "test.sqlite"),
+            cloudKitDatabase: .none
+        )
+        let container = try ModelContainer(for: schema, configurations: [configuration])
+        let context = container.mainContext
+        let household = Household(name: "Home")
+        let dish = Dish(name: "Soup")
+        dish.household = household
+        let entry = MealPlanEntry(date: .now, slot: .lunch, dish: dish)
+        entry.household = household
+        let item = ShoppingListItem(name: "Flour")
+        item.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(entry)
+        context.insert(item)
+        try context.save()
+
+        let actor = HouseholdSnapshotActor(modelContainer: container)
+        let before = try await actor.records(for: household.uuid)
+        let at = Date(timeIntervalSince1970: 1_800_000_000)
+        let changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)] = [
+            (.init(type: .planEntry, uuid: entry.uuid), ["placement"]),
+            (.init(type: .shoppingItem, uuid: item.uuid), ["content", "check"]),
+        ]
+        try await actor.touch(changes, at: at, householdID: household.uuid)
+        let persisted = try await actor.records(for: household.uuid)
+        let patched = try HouseholdRecordCodec.advancingConflictClocks(in: before, changes: changes, at: at)
+        let persistedByName = Dictionary(uniqueKeysWithValues: persisted.map { ($0.identity.recordName, $0) })
+        let patchedByName = Dictionary(uniqueKeysWithValues: patched.map { ($0.identity.recordName, $0) })
+
+        for change in changes {
+            let name = change.identity.recordName
+            #expect(persistedByName[name]?.fingerprint == patchedByName[name]?.fingerprint)
+            #expect(persistedByName[name]?.modifiedAt == at)
+        }
+        let householdName = HouseholdRecordIdentity(type: .household, uuid: household.uuid).recordName
+        #expect(persistedByName[householdName]?.fingerprint == patchedByName[householdName]?.fingerprint)
+    }
+
     @Test func syncPhotoBytesMatchTheSelectedDuplicateSnapshot() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appending(path: "MealPlan-sync-photo-\(UUID().uuidString)", directoryHint: .isDirectory)

@@ -547,6 +547,46 @@ enum HouseholdRecordCodec {
         return result
     }
 
+    /// Applies only the conflict-clock changes made by a dirty scan to its
+    /// already-built snapshots. Touching a known record changes its envelope
+    /// timestamp and, for plan/shopping records, the corresponding payload
+    /// clocks; it does not require serializing every household relationship a
+    /// second time.
+    static func advancingConflictClocks(
+        in records: [LocalHouseholdRecord],
+        changes: [(identity: HouseholdRecordIdentity, changedGroups: Set<String>)],
+        at date: Date
+    ) throws -> [LocalHouseholdRecord] {
+        let groupsByName = Dictionary(
+            changes.map { ($0.identity.recordName, $0.changedGroups) },
+            uniquingKeysWith: { $0.union($1) }
+        )
+        return try records.map { record in
+            guard let changedGroups = groupsByName[record.identity.recordName] else { return record }
+            var updated = record
+            updated.modifiedAt = date
+            switch record.identity.type {
+            case .planEntry:
+                guard case .planEntry(var payload) = try decode(record.payloadData) else {
+                    throw HouseholdRecordCodecError.missingPayload
+                }
+                if changedGroups.contains("placement") { payload.placementModifiedAt = date }
+                if changedGroups.contains("content") { payload.contentModifiedAt = date }
+                updated.payloadData = try encode(HouseholdRecordPayload.planEntry(payload))
+            case .shoppingItem:
+                guard case .shoppingItem(var payload) = try decode(record.payloadData) else {
+                    throw HouseholdRecordCodecError.missingPayload
+                }
+                if changedGroups.contains("content") { payload.contentModifiedAt = date }
+                if changedGroups.contains("check") { payload.checkStateModifiedAt = date }
+                updated.payloadData = try encode(HouseholdRecordPayload.shoppingItem(payload))
+            default:
+                break
+            }
+            return updated
+        }
+    }
+
     static func records(for household: Household, context: ModelContext) throws -> [LocalHouseholdRecord] {
         var imageDigestCache: [PersistentIdentifier: HouseholdImageDigestCacheEntry] = [:]
         return try records(for: household, context: context, imageDigestCache: &imageDigestCache)
@@ -722,8 +762,8 @@ actor HouseholdSnapshotActor {
         // context after the UI context saves can serialize yesterday's values
         // and make a local edit look identical to the server fingerprint.
         let context = ModelContext(modelContainer)
-        let households = try context.fetch(FetchDescriptor<Household>())
-        guard let household = households.first(where: { $0.uuid == householdID }) else { return [] }
+        let descriptor = FetchDescriptor<Household>(predicate: #Predicate { $0.uuid == householdID })
+        guard let household = try context.fetch(descriptor).first else { return [] }
         return try HouseholdRecordCodec.records(
             for: household,
             context: context,
@@ -745,10 +785,17 @@ actor HouseholdSnapshotActor {
         householdID: UUID
     ) throws {
         let context = ModelContext(modelContainer)
-        let households = try context.fetch(FetchDescriptor<Household>())
-        guard let household = households.first(where: { $0.uuid == householdID }) else { return }
+        let descriptor = FetchDescriptor<Household>(predicate: #Predicate { $0.uuid == householdID })
+        guard let household = try context.fetch(descriptor).first else { return }
         try touch(changes, at: date, household: household, context: context)
         try context.save()
+        let changedImages = Set(changes.lazy.filter { $0.identity.type == .dishImage }.map { $0.identity.uuid })
+        for image in (household.dishes ?? []).flatMap({ $0.images ?? [] }) where changedImages.contains(image.uuid) {
+            let id = image.persistentModelID
+            if let cached = imageDigestCache[id] {
+                imageDigestCache[id] = .init(modifiedAt: date, digest: cached.digest)
+            }
+        }
     }
 
     /// Advance local conflict clocks without issuing one whole-table SwiftData
