@@ -651,6 +651,8 @@ enum HouseholdRecordApplier {
         dish.collectionNames = value.collectionNames
         dish.tagNames = value.tagNames
         dish.servings = value.servings
+        dish.yieldUnitRaw = value.yieldUnitRaw
+        dish.yieldLabel = value.yieldLabel
         dish.prepTimeMinutes = value.prepTimeMinutes
         dish.cookTimeMinutes = value.cookTimeMinutes
         dish.mealTypeTagsRaw = value.mealTypeTagsRaw

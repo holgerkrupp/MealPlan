@@ -358,7 +358,7 @@ struct RecipePDFBlockView: View {
             }
 
             HStack(spacing: 18 * style.scale) {
-                metric(String(localized: "Serves"), "\(content.servings)")
+                metric(String(localized: "Yield"), content.servingsText)
                 ForEach(content.metrics, id: \.label) { metric($0.label, $0.value) }
             }
             .padding(.top, 2)

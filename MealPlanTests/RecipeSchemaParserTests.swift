@@ -73,6 +73,29 @@ struct RecipeSchemaParserTests {
         #expect(RecipeSchemaParser.servings(quantitativeValue) == 8)
     }
 
+    @Test func recipeYieldKeepsPieceUnitsAndNames() {
+        let pieces = RecipeSchemaParser.yieldInfo("12 Stück")
+        #expect(pieces?.amount == 12)
+        #expect(pieces?.unitRaw == "pieces")
+        #expect(pieces?.label == "Stück")
+
+        let muffins = RecipeSchemaParser.yieldInfo("12 muffins")
+        #expect(muffins?.amount == 12)
+        #expect(muffins?.unitRaw == "pieces")
+        #expect(muffins?.label == "muffins")
+
+        let numeric = RecipeSchemaParser.yieldInfo(12 as NSNumber)
+        #expect(numeric?.amount == 12)
+        #expect(numeric?.unitRaw == nil)
+        let structuredNumeric = RecipeSchemaParser.yieldInfo(["value": 12])
+        #expect(structuredNumeric?.amount == 12)
+        #expect(structuredNumeric?.unitRaw == nil)
+        #expect(RecipeSchemaParser.yieldInfo("4 servings")?.unitRaw == "servings")
+
+        let candidates: [Any] = [12 as NSNumber, "12 muffins"]
+        #expect(RecipeSchemaParser.yieldInfo(candidates)?.label == "muffins")
+    }
+
     @Test func microdataFallback() {
         let html = """
         <div itemscope itemtype="https://schema.org/Recipe">
@@ -199,6 +222,16 @@ struct RecipeSchemaParserTests {
         #expect(recipe?.servings == 2)
         #expect(recipe?.prepTimeMinutes == 20)
         #expect(recipe?.needsReview == false)
+    }
+
+    @Test func chefkochVisibleYieldReadsExplicitPieceUnit() {
+        let html = #"<div class="ds-quantity-control__label">Für <span class="ds-quantity-control__amount">12</span> Stück</div>"#
+        let yield = RecipeSchemaParser.chefkochYield(in: html)
+        #expect(yield?.amount == 12)
+        #expect(yield?.unitRaw == "pieces")
+        #expect(yield?.label == "Stück")
+        let ambiguous = RecipeSchemaParser.chefkochYield(in: #"<div class="ds-quantity-control__label"><span class="ds-quantity-control__amount">12</span></div>"#)
+        #expect(ambiguous?.amount == nil)
     }
 
     @Test func genericHTMLFallbackFindsIngredientAndInstructionLists() {

@@ -45,6 +45,10 @@ final class Dish {
     /// typed and compared through `DishTag`.
     var tagNames: [String] = []
     var servings: Int = 2
+    /// `nil` is the legacy/default serving basis. New piece-based recipes store
+    /// `pieces` and an optional source label such as "muffins".
+    var yieldUnitRaw: String?
+    var yieldLabel: String?
     var prepTimeMinutes: Int?
     var cookTimeMinutes: Int?
     var mealTypeTagsRaw: [String] = []
@@ -124,6 +128,16 @@ final class Dish {
     var routines: [MealRoutine]? = []
 
     var household: Household?
+
+    var yieldIsPieces: Bool { yieldUnitRaw == "pieces" }
+    var yieldUnitLabel: String {
+        if yieldIsPieces {
+            if let label = yieldLabel?.trimmingCharacters(in: .whitespacesAndNewlines), !label.isEmpty { return label }
+            return String(localized: "pieces")
+        }
+        return String(localized: "servings")
+    }
+    var yieldText: String { "\(max(1, servings)) \(yieldUnitLabel)" }
 
     init(name: String = "") {
         self.uuid = UUID()

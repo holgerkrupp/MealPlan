@@ -69,7 +69,7 @@ struct RecipeShareSheet: View {
                 } header: {
                     Text("Anyone")
                 } footer: {
-                    Text("Amounts are for \(servings) servings.")
+                    Text("Amounts are for \(servings) \(dish.yieldUnitLabel).")
                 }
 
                 Section {
@@ -156,7 +156,7 @@ struct RecipeShareSheet: View {
                     .font(.headline)
                     .fixedSize(horizontal: false, vertical: true)
                 Stepper(value: $servings, in: 1...50) {
-                    Text("\(servings) servings")
+                    Text("\(servings) \(dish.yieldUnitLabel)")
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .monospacedDigit()

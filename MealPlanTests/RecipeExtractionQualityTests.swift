@@ -84,4 +84,27 @@ struct RecipeExtractionQualityTests {
         #expect(merged?.provenance[.ingredients] == .jsonLD)
         #expect(merged?.provenance[.instructions] == .semanticHTML)
     }
+
+    @Test func mergingCandidatesKeepsAnExplicitYieldUnitForTheSameAmount() {
+        var numeric = ImportedRecipe(name: "Apple muffins")
+        numeric.servings = 12
+        let numericResult = RecipeExtractionResult(
+            recipe: numeric,
+            provenance: [.title: .jsonLD, .servings: .jsonLD]
+        )
+
+        var explicit = ImportedRecipe(name: "Apple muffins")
+        explicit.servings = 12
+        explicit.yieldUnitRaw = "pieces"
+        explicit.yieldLabel = "muffins"
+        let explicitResult = RecipeExtractionResult(
+            recipe: explicit,
+            provenance: [.title: .semanticHTML, .servings: .semanticHTML]
+        )
+
+        let merged = RecipeExtractionResult.merging([numericResult, explicitResult])
+        #expect(merged?.recipe.servings == 12)
+        #expect(merged?.recipe.yieldUnitRaw == "pieces")
+        #expect(merged?.recipe.yieldLabel == "muffins")
+    }
 }

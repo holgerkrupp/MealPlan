@@ -54,6 +54,13 @@ struct GermanUnitParserTests {
         #expect(e.quantity == Quantity(value: 3, dimension: .count))
     }
 
+    @Test func bareSupportedUnitStillDefaultsToOneInIngredientLines() {
+        let a = GermanUnitParser.parse("g Mehl")
+        #expect(a.name == "Mehl")
+        #expect(a.quantity == Quantity(value: 1, dimension: .mass))
+        #expect(a.displayUnit == "g")
+    }
+
     @Test func rangeTakesLowerBoundAndNotes() {
         let r = GermanUnitParser.parse("2-3 Stück Tomaten")
         #expect(r.name == "Tomaten")
@@ -85,6 +92,18 @@ struct GermanUnitParserTests {
         let a = GermanUnitParser.parse("1 Dose (400 g) Kidneybohnen")
         #expect(a.name == "Kidneybohnen")
         #expect(a.quantity == Quantity(value: 400, dimension: .mass))
+
+        let volume = GermanUnitParser.parse("1 Flasche (750 ml) Sahne")
+        #expect(volume.name == "Sahne")
+        #expect(volume.quantity == Quantity(value: 750, dimension: .volume))
+    }
+
+    @Test func parentheticalEggSizeRemainsANoteInsteadOfChangingCount() {
+        let eggs = GermanUnitParser.parse("2 Eier (Gr. M)")
+        #expect(eggs.name == "Eier")
+        #expect(eggs.quantity == Quantity(value: 2, dimension: .count))
+        #expect(eggs.displayUnit == nil)
+        #expect(eggs.note == "Gr. M")
     }
 
     @Test func imperialUnits() {

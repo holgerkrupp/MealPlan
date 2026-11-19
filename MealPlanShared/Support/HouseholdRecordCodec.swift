@@ -661,6 +661,7 @@ enum HouseholdRecordCodec {
             importedSourceID: dish.importedSourceID, variantGroupID: dish.variantGroupID,
             variantGroupName: dish.variantGroupName, isFavorite: dish.isFavorite, rating: dish.rating,
             collectionNames: dish.collectionNames, tagNames: dish.tagNames, servings: dish.servings,
+            yieldUnitRaw: dish.yieldUnitRaw, yieldLabel: dish.yieldLabel,
             prepTimeMinutes: dish.prepTimeMinutes, cookTimeMinutes: dish.cookTimeMinutes,
             mealTypeTagsRaw: dish.mealTypeTagsRaw, dietaryTagsRaw: dish.dietaryTagsRaw, seasonRaw: dish.seasonRaw,
             createdByName: dish.createdByName, dateCreated: dish.dateCreated, lastUsedDate: dish.lastUsedDate,

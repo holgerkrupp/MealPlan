@@ -127,6 +127,11 @@ struct RecipeSchemaParser: RecipeImporter {
         let semantic = SemanticRecipeExtractor.extract(html: html, sourceURL: sourceURL)
 
         if var structured {
+            if structured.yieldUnitRaw == nil, let amount = structured.servings,
+               let visibleYield = Self.chefkochYield(in: html), visibleYield.amount == amount {
+                structured.yieldUnitRaw = visibleYield.unitRaw
+                structured.yieldLabel = visibleYield.label
+            }
             if let semantic { augment(&structured, with: semantic) }
             return structured
         }
@@ -418,11 +423,23 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     private static func bestCandidate(_ candidates: [RecipeExtractionCandidate]) -> RecipeExtractionCandidate? {
-        candidates.max {
+        guard var best = candidates.max(by: {
             if $0.score != $1.score { return $0.score < $1.score }
             let priority: [RecipeExtractionProvenance: Int] = [.jsonLD: 3, .embeddedJSON: 2, .microdata: 1]
             return (priority[$0.provenance] ?? 0) < (priority[$1.provenance] ?? 0)
+        }) else { return nil }
+        if best.recipe.yieldUnitRaw == nil, let amount = best.recipe.servings,
+           let explicit = candidates.first(where: {
+               $0.recipe.servings == amount
+                   && $0.recipe.yieldUnitRaw != nil
+                   && Ingredient.normalize($0.recipe.name) == Ingredient.normalize(best.recipe.name)
+           })?.recipe {
+            var recipe = best.recipe
+            recipe.yieldUnitRaw = explicit.yieldUnitRaw
+            recipe.yieldLabel = explicit.yieldLabel
+            best = RecipeExtractionCandidate(recipe: recipe, provenance: best.provenance, evidence: best.evidence, score: best.score)
         }
+        return best
     }
 
     private static func candidate(_ recipe: ImportedRecipe, provenance: RecipeExtractionProvenance) -> RecipeExtractionCandidate {
@@ -460,7 +477,7 @@ struct RecipeSchemaParser: RecipeImporter {
         if Self.isPlaceholderPayload(recipe.ingredientLines) { recipe.ingredientLines = [] }
         recipe.instructions = instructions(dict["recipeInstructions"])
         if let instructions = recipe.instructions, Self.isPlaceholderPayload([instructions]) { recipe.instructions = nil }
-        recipe.servings = servings(dict["recipeYield"] ?? dict["yield"])
+        applyYield(dict["recipeYield"] ?? dict["yield"], to: &recipe)
         recipe.tagNames = tagList([
             dict["keywords"], dict["recipeCategory"], dict["recipeCuisine"], dict["suitableForDiet"]
         ])
@@ -640,14 +657,66 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     static func servings(_ any: Any?) -> Int? {
+        yieldInfo(any)?.amount
+    }
+
+    static func yieldInfo(_ any: Any?) -> (amount: Int, unitRaw: String?, label: String?)? {
         switch any {
-        case let n as NSNumber: return max(1, n.intValue)
+        case let n as NSNumber: return (max(1, n.intValue), nil, nil)
         case let s as String:
-            let digits = s.firstInteger
-            return digits.map { max(1, $0) }
-        case let a as [Any]: return a.compactMap { servings($0) }.first
-        default: return string(any).flatMap(servings)
+            guard let amount = s.firstInteger else { return nil }
+            let remainder: String
+            if let range = s.range(of: #"[0-9٠-٩۰-۹]+(?:[.,][0-9]+)?"#, options: .regularExpression) {
+                remainder = String(s[range.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+            } else {
+                remainder = ""
+            }
+            let normalized = remainder.lowercased()
+            let servingWords = ["serv", "portion", "person", "people", "dose", "portionen", "personen", "portioner", "raciones", "porciones", "حصص"]
+            guard !remainder.isEmpty else {
+                return (max(1, amount), nil, nil)
+            }
+            if servingWords.contains(where: { normalized.contains($0) }) {
+                return (max(1, amount), "servings", nil)
+            }
+            let cleaned = remainder.trimmingCharacters(in: CharacterSet(charactersIn: " .,:;()[]"))
+            return (max(1, amount), "pieces", cleaned.isEmpty ? nil : cleaned)
+        case let a as [Any]:
+            let values = a.compactMap { yieldInfo($0) }
+            guard let first = values.first else { return nil }
+            if first.unitRaw == nil, let explicit = values.first(where: { $0.amount == first.amount && $0.unitRaw != nil }) {
+                return explicit
+            }
+            return first
+        case let d as [String: Any]:
+            guard let amount = servings(d["value"] ?? d["amount"] ?? d["minValue"]) else { return nil }
+            guard let label = string(d["unitText"] ?? d["unit"]) else {
+                return (amount, nil, nil)
+            }
+            if ["serv", "portion", "person", "people"].contains(where: { label.lowercased().contains($0) }) {
+                return (amount, "servings", nil)
+            }
+            return (amount, "pieces", label)
+        default: return string(any).flatMap(yieldInfo)
         }
+    }
+
+    private static func applyYield(_ any: Any?, to recipe: inout ImportedRecipe) {
+        guard let yield = yieldInfo(any) else { return }
+        recipe.servings = yield.amount
+        recipe.yieldUnitRaw = yield.unitRaw
+        recipe.yieldLabel = yield.label
+    }
+
+    /// Uses only the site's explicit recipe-yield label. A number without a
+    /// recognized nearby unit stays ambiguous and doesn't change the yield.
+    static func chefkochYield(in html: String) -> (amount: Int, unitRaw: String?, label: String?)? {
+        guard let label = firstCapture(
+            of: #"class\s*=\s*['\"][^'\"]*ds-quantity-control__label[^'\"]*['\"][^>]*>(.*?)</div>"#,
+            in: html
+        )?.strippingHTML.trimmedCollapsed,
+              let yield = yieldInfo(label), yield.unitRaw != nil else { return nil }
+        return yield
     }
 
     /// ISO-8601 duration ("PT1H15M", "P0DT0H30M") → minutes.
@@ -704,10 +773,14 @@ struct RecipeSchemaParser: RecipeImporter {
         recipe.needsReview = false
         recipe.ingredientLines = ingredients
         recipe.instructions = Self.numberedSteps(steps)
-        recipe.servings = Self.firstCapture(
+        if let yield = Self.chefkochYield(in: html) ?? Self.firstCapture(
             of: #"ds-quantity-control__amount[^>]*>\s*([0-9]+(?:[.,][0-9]+)?)"#,
             in: html
-        ).flatMap { Self.servings($0) }
+        ).flatMap({ Self.yieldInfo($0) }) {
+            recipe.servings = yield.amount
+            recipe.yieldUnitRaw = yield.unitRaw
+            recipe.yieldLabel = yield.label
+        }
         recipe.prepTimeMinutes = Self.chefkochWorkingTime(in: html)
         return recipe
     }
@@ -867,10 +940,14 @@ struct RecipeSchemaParser: RecipeImporter {
         .map { "\($0.offset + 1). \($0.element)" }
         .joined(separator: "\n\n")
         .nilIfEmpty
-        recipe.servings = Self.firstCapture(
+        if let yield = Self.firstCapture(
             of: #"itemprop\s*=\s*['\"]recipeYield['\"][^>]*>(.*?)<"#,
             in: html
-        ).flatMap { Self.servings($0) }
+        ).flatMap({ Self.yieldInfo($0) }) {
+            recipe.servings = yield.amount
+            recipe.yieldUnitRaw = yield.unitRaw
+            recipe.yieldLabel = yield.label
+        }
         recipe.cookTimeMinutes = Self.firstCapture(
             of: #"itemprop\s*=\s*['\"]totalTime['\"][^>]*>(.*?)<"#,
             in: html
@@ -958,8 +1035,12 @@ struct RecipeSchemaParser: RecipeImporter {
             )
             let instructionValues = (properties["recipeinstructions"] ?? [])
             recipe.instructions = Self.instructions(instructionValues)
-            recipe.servings = ((properties["recipeyield"] ?? []) + (properties["yield"] ?? []))
-                .compactMap(Self.servings).first
+            if let yield = ((properties["recipeyield"] ?? []) + (properties["yield"] ?? []))
+                .compactMap(Self.yieldInfo).first {
+                recipe.servings = yield.amount
+                recipe.yieldUnitRaw = yield.unitRaw
+                recipe.yieldLabel = yield.label
+            }
             recipe.prepTimeMinutes = properties["preptime"]?.compactMap(Self.minutes).first
             recipe.cookTimeMinutes = properties["cooktime"]?.compactMap(Self.minutes).first
             if recipe.prepTimeMinutes == nil, recipe.cookTimeMinutes == nil {

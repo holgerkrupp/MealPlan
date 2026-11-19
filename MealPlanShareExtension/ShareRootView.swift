@@ -10,7 +10,6 @@ struct ShareRootView: View {
 
     @State private var phase: Phase = .loading
     @State private var recipes: [ImportedRecipe] = []
-    @State private var plan = false
     @State private var date = Date.now
     @State private var mealKey = ""
     @State private var meals: [(key: String, name: String, symbol: String)] = []
@@ -21,6 +20,9 @@ struct ShareRootView: View {
     @State private var sharedURL: URL?
     @State private var siteCandidate: RecipeSiteCandidate?
     @State private var isSubscribing = false
+    @State private var isSaving = false
+    @State private var saveNotice: String?
+    @State private var savedDishID: UUID?
 
     private let container = SharedStore.container(cloudKit: false)
 
@@ -53,11 +55,6 @@ struct ShareRootView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button(String(localized: "Cancel")) { onComplete() }
-                }
-                ToolbarItem(placement: .confirmationAction) {
-                    if phase == .ready {
-                        Button(String(localized: "Save")) { Task { await save() } }
-                    }
                 }
             }
         }
@@ -100,38 +97,68 @@ struct ShareRootView: View {
                 }
             }
 
-            Section {
-                if let siteCandidate {
-                    Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
-                        Task { await subscribeToSite(siteCandidate) }
+            Section(String(localized: "Plan")) {
+                MealPlannerStripCore(
+                    slots: stripSlots,
+                    plannedKeys: { plannedByDay[$0.dayID] ?? [] },
+                    selectedDate: $date,
+                    selectedMealKey: $mealKey,
+                    onSelect: { day, key in
+                        date = day.startOfDay
+                        mealKey = key
+                    },
+                    isDateLocked: {
+                        !PlanningAccess.canPlan(on: $0, isUnlocked: PurchaseEntitlementCache.isUnlocked)
+                    },
+                    selectHint: String(localized: "Plans it here")
+                )
+                .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
+                Text(String(localized: "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day."))
+                    .font(.footnote).foregroundStyle(.secondary)
+            }
+
+            siteActionSection
+            actionSection
+        }
+    }
+
+    private var actionSection: some View {
+        Section {
+            Button(String(localized: "Save recipe"), systemImage: "bookmark") {
+                Task { await save(planRecipe: false) }
+            }
+            .disabled(isSaving)
+            Button(String(localized: "Save & plan"), systemImage: "calendar.badge.plus") {
+                Task { await save(planRecipe: true) }
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isSaving || !PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked))
+            Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") {
+                queueHandoff()
+            }
+            if let saveNotice {
+                Text(saveNotice).font(.footnote).foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var siteActionSection: some View {
+        if let siteCandidate {
+            Section(String(localized: "Recipe site")) {
+                Label {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(siteCandidate.title).font(.headline)
+                        Text(siteCandidate.detail)
+                            .font(.caption).foregroundStyle(.secondary)
                     }
-                    .disabled(isSubscribing)
+                } icon: { Image(systemName: "globe") }
+                Text(String(localized: "Subscribe to bring future recipes from this site into Discover."))
+                    .font(.footnote).foregroundStyle(.secondary)
+                Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
+                    Task { await subscribeToSite(siteCandidate) }
                 }
-                Toggle(String(localized: "Also plan it"), isOn: $plan.animation(.snappy))
-                if plan {
-                    MealPlannerStripCore(
-                        slots: stripSlots,
-                        plannedKeys: { plannedByDay[$0.dayID] ?? [] },
-                        selectedDate: $date,
-                        selectedMealKey: $mealKey,
-                        onSelect: { day, key in
-                            date = day.startOfDay
-                            mealKey = key
-                        },
-                        isDateLocked: {
-                            !PlanningAccess.canPlan(
-                                on: $0,
-                                isUnlocked: PurchaseEntitlementCache.isUnlocked
-                            )
-                        },
-                        selectHint: String(localized: "Plans it here")
-                    )
-                    .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
-                }
-            } footer: {
-                if plan {
-                    Text(String(localized: "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day, without using one of your meals."))
-                }
+                .disabled(isSubscribing)
             }
         }
     }
@@ -164,22 +191,13 @@ struct ShareRootView: View {
                         .foregroundStyle(.tint)
                 }
             } footer: {
-                Text(String(localized: "MealPlan found a public recipe feed or discovery page. It will keep the source and show future recipes in Discover."))
+                Text(String(localized: "MealPlan found a public recipe feed or discovery page. Subscribe to bring future recipes into Discover."))
             }
-            if let siteCandidate {
-                Section {
-                    Button(String(localized: "Add recipe to plan"), systemImage: "fork.knife") {
-                        Task { await importSharedRecipeAndPlan() }
-                    }
-                    .buttonStyle(.borderedProminent)
-
-                    Button(String(localized: "Subscribe to recipe site"), systemImage: "dot.radiowaves.left.and.right") {
-                        Task { await subscribeToSite(siteCandidate) }
-                    }
-                    .disabled(isSubscribing)
-                    if let url = sharedURL {
-                        Link(String(localized: "Open in MealPlan"), destination: url)
-                    }
+            if siteCandidate != nil {
+                Section(String(localized: "Continue in MealPlan")) {
+                    Text(String(localized: "Open MealPlan to preview this site in Discover. Subscribing is optional."))
+                        .font(.footnote).foregroundStyle(.secondary)
+                    Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") { queueHandoff() }
                 }
             }
         }
@@ -190,14 +208,21 @@ struct ShareRootView: View {
             Section {
                 Text(String(localized: "This shared page could be a recipe or a recipe site."))
                     .foregroundStyle(.secondary)
+            }
+            Section(String(localized: "Recipe")) {
                 Button(String(localized: "Import recipe"), systemImage: "fork.knife") {
                     Task { await importSharedURL() }
                 }
-                Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
-                    Task { await subscribeToSite(siteCandidate ?? .manual(for: sharedURL ?? URL(string: "https://example.com")!)) }
+            }
+            if siteCandidate != nil {
+                Section(String(localized: "Recipe site")) {
+                    Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
+                        Task { await subscribeToSite(siteCandidate ?? .manual(for: sharedURL ?? URL(string: "https://example.com")!)) }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isSubscribing)
+                    Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") { queueHandoff() }
                 }
-                .buttonStyle(.borderedProminent)
-                .disabled(isSubscribing)
             }
         }
     }
@@ -277,12 +302,6 @@ struct ShareRootView: View {
     }
 
     @MainActor
-    private func importSharedRecipeAndPlan() async {
-        plan = true
-        await importSharedURL()
-    }
-
-    @MainActor
     private func subscribeToSite(_ candidate: RecipeSiteCandidate) async {
         isSubscribing = true
         defer { isSubscribing = false }
@@ -334,8 +353,10 @@ struct ShareRootView: View {
     }
 
     @MainActor
-    private func save() async {
-        phase = .saving
+    private func save(planRecipe: Bool) async {
+        guard !isSaving else { return }
+        isSaving = true
+        defer { isSaving = false }
         let context = container.mainContext
         let household = try? context.fetch(FetchDescriptor<Household>()).first
         guard HouseholdMutationAuthorization.canMutate(household: household) else {
@@ -351,18 +372,54 @@ struct ShareRootView: View {
             recipes, household: household, createdByName: member, context: context
         )
         guard !result.persistenceFailed else {
-            phase = .failed(result.summary)
+            saveNotice = result.summary
             return
         }
-        if plan, PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked) {
+        if let dish = result.dishesForPlanning.first { savedDishID = dish.uuid }
+        var planned = false
+        if planRecipe {
+            guard PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked) else {
+                saveNotice = String(localized: "Recipe saved to Dishes. This date is locked, so it wasn’t planned.")
+                HouseholdStoreGeneration.markDirty()
+                return
+            }
+            var allPlanned = !result.dishesForPlanning.isEmpty
             for dish in result.dishesForPlanning {
-                MealPlanner.plan(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context)
+                switch MealPlanner.planOnce(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context) {
+                case .saved, .alreadyPlanned: break
+                case .failed: allPlanned = false
+                }
+            }
+            planned = allPlanned
+            guard planned else {
+                saveNotice = String(localized: "Recipe saved to Dishes, but the plan couldn’t be saved. Try Save & plan again.")
+                HouseholdStoreGeneration.markDirty()
+                return
             }
         }
-        saveMessage = result.isEmpty
-            ? String(localized: "Already in MealPlan")
-            : String(localized: "Saved \(result.imported) recipes to MealPlan")
+        saveMessage = planRecipe
+            ? String(localized: "Recipe saved to Dishes and planned.")
+            : (result.isEmpty ? String(localized: "Recipe already saved to Dishes.") : String(localized: "Recipe saved to Dishes."))
         HouseholdStoreGeneration.markDirty()
+        phase = .done
+    }
+
+    @MainActor
+    private func queueHandoff() {
+        let destination: ShareHandoff.Destination
+        if let savedDishID {
+            destination = .dish(savedDishID)
+        } else if let sharedURL {
+            if siteCandidate != nil && recipes.isEmpty { destination = .site(sharedURL) }
+            else { destination = .addDish(url: sharedURL, name: recipes.first?.name) }
+        } else {
+            destination = .addDish(url: nil, name: recipes.first?.name)
+        }
+        guard ShareHandoff.store(destination) else {
+            saveNotice = String(localized: "MealPlan couldn’t prepare the handoff. Try again.")
+            return
+        }
+        saveMessage = String(localized: "Handoff ready. Open MealPlan to continue.")
         phase = .done
     }
 

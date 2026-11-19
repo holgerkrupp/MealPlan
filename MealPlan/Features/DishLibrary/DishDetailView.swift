@@ -164,7 +164,7 @@ struct DishDetailView: View {
             }
         }
         .onAppear {
-            if targetServings == 0 { targetServings = appState.standardServings }
+            if targetServings == 0 { targetServings = dish.yieldIsPieces ? dish.servings : appState.standardServings }
             showsTranslation = dish.prefersTranslation
         }
         // Backs the Dish menu. It is the only publisher of this value, so the
@@ -408,7 +408,7 @@ struct DishDetailView: View {
             if let cook = dish.cookTimeMinutes {
                 metric(String(localized: "Cook"), UnitConversion.duration(minutes: cook))
             }
-            metric(String(localized: "Recipe"), String(localized: "\(dish.servings) servings"))
+            metric(String(localized: "Recipe"), dish.yieldText)
         }
     }
 
@@ -417,8 +417,12 @@ struct DishDetailView: View {
             HStack {
                 Text(String(localized: "For"))
                 Stepper(value: $targetServings, in: 1...50) {
-                    Text(String(localized: "\(max(1, targetServings)) servings"))
+                    Text("\(max(1, targetServings)) \(dish.yieldUnitLabel)")
                         .monospacedDigit()
+                }
+                if targetServings != dish.servings {
+                    Button(String(localized: "Original yield: \(dish.yieldText)")) { targetServings = dish.servings }
+                        .font(.footnote)
                 }
             }
             .padding(.bottom, 4)

@@ -9,6 +9,63 @@ import SwiftData
 /// Share Extension's fixed vocabulary.
 enum MealPlanner {
 
+    enum PlanOnceResult {
+        case saved
+        case alreadyPlanned
+        case failed
+    }
+
+    /// Idempotent, checked planning for flows such as the share extension.
+    /// It does not report success until SwiftData has persisted the entry.
+    @MainActor
+    static func planOnce(
+        dish: Dish,
+        on date: Date,
+        mealKey: String,
+        household: Household?,
+        memberName: String,
+        context: ModelContext
+    ) -> PlanOnceResult {
+        guard HouseholdMutationAuthorization.canMutate(household: household ?? dish.household) else {
+            return .failed
+        }
+        let day = date.startOfDay
+        let existing: [MealPlanEntry]
+        do {
+            existing = try context.fetch(FetchDescriptor<MealPlanEntry>(
+                predicate: #Predicate { $0.date == day && $0.mealKey == mealKey }
+            ))
+        } catch {
+            return .failed
+        }
+        if let duplicate = existing.first(where: { $0.dish?.uuid == dish.uuid }) {
+            guard duplicate.skipped else { return .alreadyPlanned }
+            duplicate.skipped = false
+            do {
+                try context.save()
+                SharedStore.reloadWidgets()
+                return .saved
+            } catch {
+                duplicate.skipped = true
+                return .failed
+            }
+        }
+
+        let entry = MealPlanEntry(date: day, mealKey: mealKey, dish: dish)
+        entry.household = household
+        entry.plannedByName = memberName
+        entry.sortIndex = nextSortIndex(for: day, mealKey: mealKey, context: context)
+        context.insert(entry)
+        do {
+            try context.save()
+            SharedStore.reloadWidgets()
+            return .saved
+        } catch {
+            context.delete(entry)
+            return .failed
+        }
+    }
+
     @MainActor
     @discardableResult
     static func plan(

@@ -198,6 +198,8 @@ struct MealPlanBackup: Codable, Sendable {
         var collectionNames: [String]
         var tagNames: [String]
         var servings: Int
+        var yieldUnitRaw: String? = nil
+        var yieldLabel: String? = nil
         var prepTimeMinutes: Int?
         var cookTimeMinutes: Int?
         var mealTypeTagsRaw: [String]
@@ -725,6 +727,8 @@ extension MealPlanBackup {
                 collectionNames: dish.collectionNames,
                 tagNames: dish.tagNames,
                 servings: dish.servings,
+                yieldUnitRaw: dish.yieldUnitRaw,
+                yieldLabel: dish.yieldLabel,
                 prepTimeMinutes: dish.prepTimeMinutes,
                 cookTimeMinutes: dish.cookTimeMinutes,
                 mealTypeTagsRaw: dish.mealTypeTagsRaw,

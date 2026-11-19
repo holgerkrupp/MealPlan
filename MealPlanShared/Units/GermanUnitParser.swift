@@ -109,7 +109,12 @@ enum GermanUnitParser {
         var usedHintAsQuantity = false
         if let hint, quantity == nil || quantity?.dimension == .count {
             let parsedHint = parse(hint)
-            if let hq = parsedHint.quantity, hq.dimension != .count {
+            let firstHintToken = hint.split(whereSeparator: { $0 == " " }).first.map(String.init)
+            let hintAmountToken = firstHintToken.flatMap { splitGlued($0)?.number } ?? firstHintToken
+            let hintHasExplicitAmount = hintAmountToken.flatMap(scanAmount) != nil
+            if hintHasExplicitAmount,
+               let hq = parsedHint.quantity,
+               (hq.dimension == .mass || hq.dimension == .volume) {
                 quantity = hq
                 displayUnit = parsedHint.displayUnit
                 approximate = approximate || parsedHint.isApproximate

@@ -49,7 +49,7 @@ struct SpatialCookingGuideView: View {
             ?? CookingDishProgress(
                 id: currentDish.uuid,
                 name: currentDish.name,
-                targetServings: appState.standardServings
+                targetServings: currentDish.yieldIsPieces ? currentDish.servings : appState.standardServings
             )
     }
 
@@ -113,7 +113,7 @@ struct SpatialCookingGuideView: View {
             }
             Button(String(localized: "Start new"), role: .destructive) {
                 store.finish()
-                store.begin(with: dish, servings: appState.standardServings)
+                store.begin(with: dish, servings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
                 openCorePanels()
                 speakCurrentStep(force: false)
             }
@@ -310,7 +310,7 @@ struct SpatialCookingGuideView: View {
                 showingResumePrompt = true
             }
         } else {
-            store.begin(with: dish, servings: appState.standardServings)
+            store.begin(with: dish, servings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
             openCorePanels()
             speakCurrentStep(force: false)
         }
@@ -452,7 +452,7 @@ private struct SpatialIngredientsView: View {
 
     private var progress: CookingDishProgress {
         store.session?.dishes.first(where: { $0.id == dish.uuid })
-            ?? CookingDishProgress(id: dish.uuid, name: dish.name, targetServings: appState.standardServings)
+            ?? CookingDishProgress(id: dish.uuid, name: dish.name, targetServings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
     }
 
     private var scaler: ServingScaler {
@@ -505,7 +505,7 @@ private struct SpatialIngredientsView: View {
 
     private var servingsControl: some View {
         HStack {
-            Label(String(localized: "Servings"), systemImage: "person.2")
+            Label(dish.yieldUnitLabel.capitalized, systemImage: "person.2")
                 .font(.headline)
             Spacer()
             Stepper(
@@ -567,7 +567,7 @@ private struct SpatialInstructionsView: View {
 
     private var progress: CookingDishProgress {
         store.session?.dishes.first(where: { $0.id == dish.uuid })
-            ?? CookingDishProgress(id: dish.uuid, name: dish.name, targetServings: appState.standardServings)
+            ?? CookingDishProgress(id: dish.uuid, name: dish.name, targetServings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
     }
 
     private var steps: [CookingStep] {

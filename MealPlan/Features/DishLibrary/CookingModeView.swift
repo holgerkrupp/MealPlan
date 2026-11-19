@@ -47,7 +47,7 @@ struct CookingModeView: View {
 
     private var progress: CookingDishProgress {
         store.session?.dishes.first(where: { $0.id == currentDish.uuid })
-            ?? CookingDishProgress(id: currentDish.uuid, name: currentDish.name, targetServings: appState.standardServings)
+            ?? CookingDishProgress(id: currentDish.uuid, name: currentDish.name, targetServings: currentDish.yieldIsPieces ? currentDish.servings : appState.standardServings)
     }
 
     private var steps: [CookingStep] {
@@ -153,7 +153,7 @@ struct CookingModeView: View {
             }
             Button(String(localized: "Start new"), role: .destructive) {
                 store.finish()
-                store.begin(with: dish, servings: appState.standardServings)
+                store.begin(with: dish, servings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
             }
         } message: {
             Text(String(localized: "Your dishes, steps, ingredients and timers are still here."))
@@ -162,7 +162,7 @@ struct CookingModeView: View {
             CookingDishPicker(
                 dishes: availableDishes,
                 suggestions: plannedCompanions,
-                onAdd: { store.add($0, servings: appState.standardServings) }
+                onAdd: { store.add($0, servings: $0.yieldIsPieces ? $0.servings : appState.standardServings) }
             )
         }
         .sheet(isPresented: $showingManualTimer) {
@@ -286,7 +286,7 @@ struct CookingModeView: View {
             Divider().frame(height: 28)
 
             Stepper(value: servingsBinding, in: 1...50) {
-                Text(String(localized: "\(progress.targetServings) servings"))
+                Text("\(progress.targetServings) \(currentDish.yieldUnitLabel)")
                     .font(.callout)
                     .monospacedDigit()
             }
@@ -397,10 +397,10 @@ struct CookingModeView: View {
 
     private var servingsControl: some View {
         HStack {
-            Text(String(localized: "Servings")).font(.headline)
+            Text(currentDish.yieldUnitLabel.capitalized).font(.headline)
             Spacer()
             Stepper(value: servingsBinding, in: 1...50) {
-                Text(String(localized: "\(progress.targetServings) servings"))
+                Text("\(progress.targetServings) \(currentDish.yieldUnitLabel)")
                     .monospacedDigit()
             }
             .fixedSize()
@@ -774,7 +774,7 @@ struct CookingModeView: View {
         if store.hasInterruptedSession {
             showingResumePrompt = true
         } else {
-            store.begin(with: dish, servings: appState.standardServings)
+            store.begin(with: dish, servings: dish.yieldIsPieces ? dish.servings : appState.standardServings)
         }
     }
 

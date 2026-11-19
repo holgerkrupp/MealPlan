@@ -45,12 +45,12 @@ struct PlanDishSheet: View {
 
             Section {
                 Stepper(value: $servings, in: 1...50) {
-                    Text(String(localized: "\(servings) servings"))
+                    Text("\(servings) \(dish.yieldUnitLabel)")
                 }
             }
 
             if !dish.sortedIngredients.isEmpty {
-                Section(String(localized: "Ingredients for \(servings)")) {
+                Section(String(localized: "Ingredients for \(servings) \(dish.yieldUnitLabel)")) {
                     ForEach(dish.sortedIngredients) { line in
                         HStack {
                             Text(line.ingredient?.name ?? line.rawText ?? "—")
@@ -80,7 +80,7 @@ struct PlanDishSheet: View {
         .onAppear {
             date = defaultDate
             mealKey = resolvedMealKey
-            servings = appState.standardServings
+            servings = dish.yieldIsPieces ? dish.servings : appState.standardServings
         }
     }
 

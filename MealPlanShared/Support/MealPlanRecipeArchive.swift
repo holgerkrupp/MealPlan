@@ -18,6 +18,8 @@ struct MealPlanRecipeArchive: Codable, Sendable {
         var sourceURL: String?
         var deepLinkURL: String?
         var servings: Int
+        var yieldUnitRaw: String? = nil
+        var yieldLabel: String? = nil
         var prepTimeMinutes: Int?
         var cookTimeMinutes: Int?
         var mealTypes: [String]
@@ -73,6 +75,8 @@ struct MealPlanRecipeArchive: Codable, Sendable {
                 sourceURL: dish.sourceURLString,
                 deepLinkURL: dish.deepLinkURLString,
                 servings: dish.servings,
+                yieldUnitRaw: dish.yieldUnitRaw,
+                yieldLabel: dish.yieldLabel,
                 prepTimeMinutes: dish.prepTimeMinutes,
                 cookTimeMinutes: dish.cookTimeMinutes,
                 mealTypes: dish.mealTypeTagsRaw,
@@ -137,6 +141,8 @@ struct MealPlanRecipeArchive: Codable, Sendable {
             recipe.deepLinkURL = stored.deepLinkURL.flatMap(URL.init(string:))
             recipe.instructions = stored.instructions
             recipe.servings = max(stored.servings, 1)
+            recipe.yieldUnitRaw = stored.yieldUnitRaw
+            recipe.yieldLabel = stored.yieldLabel
             recipe.prepTimeMinutes = stored.prepTimeMinutes.map { max($0, 0) }
             recipe.cookTimeMinutes = stored.cookTimeMinutes.map { max($0, 0) }
             recipe.categories = stored.collections

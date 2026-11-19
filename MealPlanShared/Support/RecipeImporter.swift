@@ -63,6 +63,8 @@ struct ImportedRecipe: Sendable {
     var ingredientLines: [String] = []
     var instructions: String?
     var servings: Int?
+    var yieldUnitRaw: String?
+    var yieldLabel: String?
     var prepTimeMinutes: Int?
     var cookTimeMinutes: Int?
     var categories: [String] = []
@@ -167,7 +169,22 @@ struct RecipeExtractionResult: Identifiable, Sendable {
                 merged.structuredIngredients = candidate.recipe.structuredIngredients
             }
             if shouldTake(.instructions) { merged.instructions = candidate.recipe.instructions }
-            if shouldTake(.servings) { merged.servings = candidate.recipe.servings }
+            if shouldTake(.servings) {
+                let sameAmount = merged.servings == candidate.recipe.servings
+                let previousUnit = sameAmount ? merged.yieldUnitRaw : nil
+                let previousLabel = sameAmount ? merged.yieldLabel : nil
+                merged.servings = candidate.recipe.servings
+                merged.yieldUnitRaw = candidate.recipe.yieldUnitRaw ?? previousUnit
+                merged.yieldLabel = candidate.recipe.yieldLabel ?? (candidate.recipe.yieldUnitRaw == nil ? previousLabel : nil)
+            } else if merged.servings == candidate.recipe.servings,
+                      merged.yieldUnitRaw == nil,
+                      candidate.recipe.yieldUnitRaw != nil {
+                // A number-only candidate must not erase explicit yield
+                // semantics for the same amount, even when both candidates
+                // have equal field quality.
+                merged.yieldUnitRaw = candidate.recipe.yieldUnitRaw
+                merged.yieldLabel = candidate.recipe.yieldLabel
+            }
             if shouldTake(.prepTime) { merged.prepTimeMinutes = candidate.recipe.prepTimeMinutes }
             if shouldTake(.cookTime) { merged.cookTimeMinutes = candidate.recipe.cookTimeMinutes }
             if shouldTake(.image) {

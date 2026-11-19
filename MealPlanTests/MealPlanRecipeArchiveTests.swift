@@ -7,6 +7,8 @@ struct MealPlanRecipeArchiveTests {
     @Test func roundTripsRecipeMetadataAndStructuredIngredients() throws {
         let dish = Dish(name: "Soup")
         dish.servings = 4
+        dish.yieldUnitRaw = "pieces"
+        dish.yieldLabel = "muffins"
         dish.recipeText = "Simmer for 20 min"
         dish.isFavorite = true
         dish.rating = 5
@@ -31,6 +33,8 @@ struct MealPlanRecipeArchiveTests {
         let data = try MealPlanRecipeArchive.data(from: [dish])
         let imported = try #require(MealPlanRecipeArchive.importedRecipes(from: data).first)
         #expect(imported.name == "Soup")
+        #expect(imported.yieldUnitRaw == "pieces")
+        #expect(imported.yieldLabel == "muffins")
         #expect(imported.isFavorite)
         #expect(imported.rating == 5)
         #expect(imported.collectionNames == ["Winter"])
@@ -68,5 +72,6 @@ struct MealPlanRecipeArchiveTests {
         )
         #expect(imported.name == "Soup")
         #expect(imported.tagNames.isEmpty)
+        #expect(imported.yieldUnitRaw == nil)
     }
 }

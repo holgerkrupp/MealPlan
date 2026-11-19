@@ -131,6 +131,8 @@ enum DishBuilder {
         dish.variantGroupName = recipe.variantGroupName
         dish.recipeText = recipe.instructions
         dish.servings = recipe.servings ?? 2
+        dish.yieldUnitRaw = recipe.yieldUnitRaw
+        dish.yieldLabel = recipe.yieldLabel
         dish.prepTimeMinutes = recipe.prepTimeMinutes
         dish.cookTimeMinutes = recipe.cookTimeMinutes
         dish.needsReview = recipe.needsReview || importedName.isEmpty
@@ -261,6 +263,10 @@ enum DishBuilder {
         if dish.cookTimeMinutes == nil { dish.cookTimeMinutes = recipe.cookTimeMinutes }
         if let servings = recipe.servings, (dish.ingredients ?? []).isEmpty {
             dish.servings = servings
+            if dish.yieldUnitRaw == nil, let yieldUnitRaw = recipe.yieldUnitRaw {
+                dish.yieldUnitRaw = yieldUnitRaw
+                dish.yieldLabel = recipe.yieldLabel
+            }
         }
 
         if (dish.images ?? []).isEmpty, let imageData = recipe.imageData {
@@ -324,7 +330,13 @@ enum DishBuilder {
         dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
         dish.importedSourceID = recipe.sourceIdentifier ?? dish.importedSourceID
         dish.recipeText = recipe.instructions ?? dish.recipeText
-        if let servings = recipe.servings { dish.servings = servings }
+        if let servings = recipe.servings {
+            dish.servings = servings
+            if dish.yieldUnitRaw == nil, let yieldUnitRaw = recipe.yieldUnitRaw {
+                dish.yieldUnitRaw = yieldUnitRaw
+                dish.yieldLabel = recipe.yieldLabel
+            }
+        }
         if let prep = recipe.prepTimeMinutes { dish.prepTimeMinutes = prep }
         if let cook = recipe.cookTimeMinutes { dish.cookTimeMinutes = cook }
         if let nutrition = recipe.nutritionPerServing {
@@ -452,6 +464,8 @@ enum DishBuilder {
         // would make a later re-import mistake it for the original.
         copy.recipeText = dish.recipeText
         copy.servings = dish.servings
+        copy.yieldUnitRaw = dish.yieldUnitRaw
+        copy.yieldLabel = dish.yieldLabel
         copy.prepTimeMinutes = dish.prepTimeMinutes
         copy.cookTimeMinutes = dish.cookTimeMinutes
         copy.needsReview = dish.needsReview

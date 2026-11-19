@@ -1,5 +1,43 @@
 import Foundation
 
+/// One-shot destination queued by the share extension for the next user-open
+/// of the app. Keeping this in the existing App Group avoids unsupported
+/// attempts to launch the containing app from a Share extension.
+enum ShareHandoff {
+    enum Destination: Codable, Sendable {
+        case site(URL)
+        case dish(UUID)
+        case addDish(url: URL?, name: String?)
+    }
+
+    struct Pending: Codable, Sendable {
+        let id: UUID
+        let destination: Destination
+    }
+
+    private static let key = "pendingShareHandoff.v1"
+
+    static func store(_ destination: Destination) -> Bool {
+        guard let defaults = UserDefaults(suiteName: SharedStore.appGroupID),
+              let data = try? JSONEncoder().encode(Pending(id: UUID(), destination: destination))
+        else { return false }
+        defaults.set(data, forKey: key)
+        return defaults.synchronize()
+    }
+
+    static func pending() -> Pending? {
+        guard let data = UserDefaults(suiteName: SharedStore.appGroupID)?.data(forKey: key) else { return nil }
+        return try? JSONDecoder().decode(Pending.self, from: data)
+    }
+
+    static func consume(id: UUID) {
+        guard let defaults = UserDefaults(suiteName: SharedStore.appGroupID),
+              let current = pending(), current.id == id else { return }
+        defaults.removeObject(forKey: key)
+        defaults.synchronize()
+    }
+}
+
 /// Parsed representation of a `mealplan://` URL (also used by App Intents and
 /// the Share Extension hand-off).
 enum DeepLink: Equatable, Sendable {

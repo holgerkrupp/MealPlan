@@ -90,6 +90,9 @@ struct DishFilterAndDuplicateTests {
         )
         dish.tagNames = ["Family favorite"]
         dish.rating = 5
+        // A cook's explicit unit correction must survive a later source refresh.
+        dish.yieldUnitRaw = "pieces"
+        dish.yieldLabel = "muffins"
         let photo = DishImage(data: Data([1]), isPrimary: true)
         photo.dish = dish
         context.insert(photo)
@@ -101,12 +104,15 @@ struct DishFilterAndDuplicateTests {
         refreshed.ingredientLines = ["300 g Karotten", "200 ml Brühe"]
         refreshed.instructions = "New instructions"
         refreshed.servings = 4
+        refreshed.yieldUnitRaw = "servings"
         refreshed.importedSourceApp = "KptnCook"
         DishBuilder.refresh(refreshed, to: dish, context: context)
 
         #expect(dish.name == "New soup")
         #expect(dish.recipeText == "New instructions")
         #expect(dish.servings == 4)
+        #expect(dish.yieldUnitRaw == "pieces")
+        #expect(dish.yieldLabel == "muffins")
         #expect(dish.sortedIngredients.map { $0.ingredient?.name } == ["Karotten", "Brühe"])
         #expect(dish.tagNames.contains("Family favorite"))
         #expect(dish.rating == 5)

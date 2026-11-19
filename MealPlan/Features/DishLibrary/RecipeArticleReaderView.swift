@@ -214,6 +214,9 @@ struct RecipeArticleReaderView: View {
     @ViewBuilder
     private func timeRow(_ recipe: ImportedRecipe) -> some View {
         if recipe.prepTimeMinutes != nil || recipe.cookTimeMinutes != nil || recipe.servings != nil {
+            let yieldLabel = recipe.yieldUnitRaw == "pieces"
+                ? recipe.yieldLabel ?? String(localized: "pieces")
+                : String(localized: "servings")
             HStack(spacing: 20) {
                 if let prep = recipe.prepTimeMinutes {
                     RecipeMetric(String(localized: "Prep"), "\(prep) min")
@@ -222,7 +225,7 @@ struct RecipeArticleReaderView: View {
                     RecipeMetric(String(localized: "Cook"), "\(cook) min")
                 }
                 if let servings = recipe.servings {
-                    RecipeMetric(String(localized: "Recipe"), String(localized: "\(servings) servings"))
+                    RecipeMetric(String(localized: "Recipe"), "\(servings) \(yieldLabel)")
                 }
             }
         }

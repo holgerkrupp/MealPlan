@@ -33791,8 +33791,30 @@
         }
       }
     },
+    "pieces" : {
+      "localizations" : {
+        "da" : { "stringUnit" : { "state" : "translated", "value" : "stykker" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Stücke" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "piezas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "pièces" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "pezzi" } },
+        "nl" : { "stringUnit" : { "state" : "translated", "value" : "stuks" } },
+        "pt-PT" : { "stringUnit" : { "state" : "translated", "value" : "unidades" } }
+      }
+    },
     "servings" : {
 
+    },
+    "Pieces" : {
+      "localizations" : {
+        "da" : { "stringUnit" : { "state" : "translated", "value" : "Stykker" } },
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Stücke" } },
+        "es" : { "stringUnit" : { "state" : "translated", "value" : "Piezas" } },
+        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pièces" } },
+        "it" : { "stringUnit" : { "state" : "translated", "value" : "Pezzi" } },
+        "nl" : { "stringUnit" : { "state" : "translated", "value" : "Stuks" } },
+        "pt-PT" : { "stringUnit" : { "state" : "translated", "value" : "Unidades" } }
+      }
     },
     "Servings" : {
       "localizations" : {

@@ -5,6 +5,21 @@ import Testing
 @MainActor
 struct ServingScalerTests {
     @Test
+    func scalesPieceBasedRecipeFromItsOriginalYield() {
+        let butter = DishIngredient(canonicalValue: 125, dimension: .mass, displayUnit: "g")
+        let flour = DishIngredient(canonicalValue: 225, dimension: .mass, displayUnit: "g")
+        let halfBatch = ServingScaler(baseServings: 12, targetServings: 6, system: .metric, roundsAmounts: false)
+        let doubleBatch = ServingScaler(baseServings: 12, targetServings: 24, system: .metric, roundsAmounts: false)
+
+        #expect(halfBatch.factor == 0.5)
+        #expect(doubleBatch.factor == 2)
+        #expect(butter.quantity?.scaled(by: halfBatch.factor).value == 62.5)
+        #expect(butter.quantity?.scaled(by: doubleBatch.factor).value == 250)
+        #expect(flour.quantity?.scaled(by: halfBatch.factor).value == 112.5)
+        #expect(flour.quantity?.scaled(by: doubleBatch.factor).value == 450)
+    }
+
+    @Test
     func scaledEggsRoundToPracticalWholeCounts() {
         let eggs = Ingredient(name: "Eggs")
         let line = DishIngredient(

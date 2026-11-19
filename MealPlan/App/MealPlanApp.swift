@@ -136,6 +136,7 @@ struct MealPlanApp: App {
                         #endif
                         // Calendar access can be revoked while the app is away.
                         guard phase == .active, !Self.isRunningTests else { return }
+                        appState.acceptPendingShareHandoff()
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         Task {
                             await calendarStore.applicationBecameActive()

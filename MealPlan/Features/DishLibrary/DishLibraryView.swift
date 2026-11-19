@@ -60,6 +60,7 @@ private struct DishLibraryContent: View {
     @State private var importingFile: ImportableRecipeFile?
     @State private var importError: String?
     @State private var requestedDish: Dish?
+    @State private var handoffSitePreview: SharedSitePreview?
     /// Driven by the menu bar's Find command so ⌘F lands in the search field.
     @State private var isSearchPresented = false
     @State private var availableTags: [String] = []
@@ -317,6 +318,10 @@ private struct DishLibraryContent: View {
             NavigationStack { DishDetailView(dish: dish) }
         }
         .sheet(item: $exportedArchive) { RecipeArchiveShareSheet(archive: $0).dismissesOnOutsideClick() }
+        .sheet(item: $handoffSitePreview) { preview in
+            NavigationStack { SharedSitePreviewView(url: preview.url) }
+                .presentationDetents([.medium, .large])
+        }
         .detailPresentation(item: $importingFile, route: { .importRecipes($0.url) }) {
             ImportRecipesSheet(fileURL: $0.url).dismissesOnOutsideClick()
         }
@@ -396,6 +401,11 @@ private struct DishLibraryContent: View {
             requestedDish = try? context.fetch(FetchDescriptor<Dish>(
                 predicate: #Predicate { $0.uuid == id && $0.household?.uuid == householdID }
             )).first
+        }
+        .task(id: appState.pendingSharedSiteURL) {
+            guard let url = appState.pendingSharedSiteURL else { return }
+            handoffSitePreview = SharedSitePreview(url: url)
+            appState.pendingSharedSiteURL = nil
         }
     }
 
@@ -966,6 +976,31 @@ private struct DishLibraryContent: View {
         dish.refreshAutoGlyph()
         context.insert(dish)
         newDish = dish
+    }
+}
+
+private struct SharedSitePreview: Identifiable {
+    let id = UUID()
+    let url: URL
+}
+
+private struct SharedSitePreviewView: View {
+    let url: URL
+
+    var body: some View {
+        Form {
+            Section {
+                Label(url.host() ?? url.absoluteString, systemImage: "globe")
+                    .font(.headline)
+                Text(String(localized: "This site was shared with MealPlan. Subscribe from Discover when you want future recipes to appear here."))
+                    .font(.subheadline).foregroundStyle(.secondary)
+            }
+            Section {
+                Link(String(localized: "Open website"), destination: url)
+            }
+        }
+        .navigationTitle(String(localized: "Discover recipes"))
+        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

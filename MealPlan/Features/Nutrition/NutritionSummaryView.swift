@@ -38,7 +38,7 @@ struct NutritionSummaryView: View {
                 perServing(label)
                 factsTable(label)
                 if targetServings != 1 {
-                    Text("For \(targetServings) servings: \(NutritionFormatting.energy(estimate.facts.scaled(by: Double(targetServings)), unit: unit, approximate: label.source == .estimated))")
+                    Text("For \(targetServings) \(dish.yieldUnitLabel): \(NutritionFormatting.energy(estimate.facts.scaled(by: Double(targetServings)), unit: unit, approximate: label.source == .estimated))")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -81,12 +81,18 @@ struct NutritionSummaryView: View {
                     .font(.title2.weight(.semibold))
                     .monospacedDigit()
             }
-            Text(String(localized: "per serving"))
+            Text(nutritionBasis)
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Spacer(minLength: 0)
             NutritionBandBadge(band: .band(forKcalPerServing: label.estimate.facts.energyKcal))
         }
+    }
+
+    private var nutritionBasis: String {
+        dish.yieldIsPieces && estimate.origin == .computed
+            ? String(localized: "per \(dish.yieldUnitLabel)")
+            : String(localized: "per serving")
     }
 
     /// Fat, saturated fat, cholesterol, sodium, carbohydrate, fibre, sugar,

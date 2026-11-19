@@ -52,6 +52,9 @@ final class AppState: HouseholdRecoveryAppState {
     var requestedSection: AppSection?
     /// A recipe hand-off from Open Dish intent or a deep link.
     var requestedDishID: UUID?
+    /// A site URL accepted from the share extension, shown as a Discover
+    /// preview without creating a feed or bookmark.
+    var pendingSharedSiteURL: URL?
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
@@ -447,6 +450,22 @@ final class AppState: HouseholdRecoveryAppState {
 
     func handle(url: URL) {
         if let link = DeepLink(url: url) { handle(link) }
+    }
+
+    /// Accepts a one-shot App Group destination after the containing app is
+    /// active. The queue is cleared only after navigation state is installed.
+    func acceptPendingShareHandoff() {
+        guard let pending = ShareHandoff.pending() else { return }
+        switch pending.destination {
+        case .site(let url):
+            pendingSharedSiteURL = url
+            requestedSection = .dishes
+        case .dish(let id):
+            handle(.dish(id))
+        case .addDish(let url, let name):
+            handle(.addDish(url: url, name: name))
+        }
+        ShareHandoff.consume(id: pending.id)
     }
 
     /// Handles recipe archives opened from Files/Finder as well as the app's

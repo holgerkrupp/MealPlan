@@ -151,8 +151,24 @@ struct DishEditorView: View {
             Stepper(value: $dish.servings, in: 1...50) {
                 LabeledContent(
                     String(localized: "Recipe yield"),
-                    value: String(localized: "\(dish.servings) servings")
+                    value: dish.yieldText
                 )
+            }
+            Picker(String(localized: "Yield type"), selection: Binding(
+                get: { dish.yieldIsPieces ? "pieces" : "servings" },
+                set: { value in
+                    dish.yieldUnitRaw = value
+                    if value != "pieces" { dish.yieldLabel = nil }
+                }
+            )) {
+                Text(String(localized: "Servings")).tag("servings")
+                Text(String(localized: "Pieces")).tag("pieces")
+            }
+            if dish.yieldIsPieces {
+                TextField(String(localized: "Yield label (optional)"), text: Binding(
+                    get: { dish.yieldLabel ?? "" },
+                    set: { dish.yieldLabel = $0.isEmpty ? nil : $0 }
+                ))
             }
             if let household = appState.currentHousehold {
                 Stepper(value: standardServings(household), in: 1...50) {

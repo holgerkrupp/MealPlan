@@ -9,7 +9,7 @@ import Foundation
 /// model container.
 struct RecipeShareContent: Equatable, Sendable {
     var title: String
-    /// "4 servings" — what the amounts below are for.
+    /// The selected yield amount and its unit — what the amounts below are for.
     var servingsText: String
     var servings: Int = 1
     var metrics: [Metric]
@@ -129,7 +129,10 @@ extension RecipeShareContent {
                 let protein = NutritionFormatting.grams(facts.proteinGrams, locale: locale)
                 let carbs = NutritionFormatting.grams(facts.carbGrams, locale: locale)
                 let fat = NutritionFormatting.grams(facts.fatGrams, locale: locale)
-                nutritionText = String(localized: "Per serving \(energy) · P \(protein) · C \(carbs) · F \(fat)")
+                let basis = dish.yieldIsPieces && estimate.origin == .computed
+                    ? String(localized: "Per \(dish.yieldUnitLabel)")
+                    : String(localized: "Per serving")
+                nutritionText = "\(basis) \(energy) · P \(protein) · C \(carbs) · F \(fat)"
                 nutrition = NutritionSummary(energy: energy, protein: protein, carbs: carbs, fat: fat)
             }
         }
@@ -137,7 +140,7 @@ extension RecipeShareContent {
         let title = dish.displayName(translated: translated).trimmingCharacters(in: .whitespacesAndNewlines)
         return RecipeShareContent(
             title: title.isEmpty ? String(localized: "Untitled dish") : title,
-            servingsText: String(localized: "\(servings) servings"),
+            servingsText: "\(servings) \(dish.yieldUnitLabel)",
             servings: servings,
             metrics: metrics,
             tags: dish.sortedTagNames,

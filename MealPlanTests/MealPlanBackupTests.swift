@@ -27,6 +27,8 @@ struct MealPlanBackupTests {
     private func makeDish(_ name: String, household: Household?) -> Dish {
         let dish = Dish(name: name)
         dish.servings = 4
+        dish.yieldUnitRaw = "pieces"
+        dish.yieldLabel = "muffins"
         dish.recipeText = "Simmer"
         dish.rating = 4
         dish.isFavorite = true
@@ -156,6 +158,8 @@ struct MealPlanBackupTests {
         #expect(storedDish.uuid == dish.uuid)
         #expect(storedDish.name == "Linseneintopf")
         #expect(storedDish.servings == 4)
+        #expect(storedDish.yieldUnitRaw == "pieces")
+        #expect(storedDish.yieldLabel == "muffins")
         #expect(storedDish.rating == 4)
         #expect(storedDish.isFavorite)
         #expect(storedDish.collectionNames == ["Weeknight"])
