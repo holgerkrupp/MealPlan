@@ -52,7 +52,12 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
     /// form wants a different floor from one that opens onto a web view.
     var minimumSize: CGSize {
         switch self {
-        case .recipe, .newRecipe, .editRecipe, .cookRecipe, .discoverRecipes:
+        case .cookRecipe:
+            // Cooking needs enough room for both panes when the window opens.
+            // The scene-level default size remains compact for other detail
+            // windows; this route's floor lets macOS grow it as needed.
+            CGSize(width: 1000, height: 700)
+        case .recipe, .newRecipe, .editRecipe, .discoverRecipes:
             CGSize(width: 640, height: 560)
         case .findRecipe, .browseSite, .importRecipes, .printPlan, .printShoppingList, .dataTransfer:
             CGSize(width: 720, height: 600)
@@ -146,6 +151,11 @@ private struct DetailPresentationModifier<Sheet: View>: ViewModifier {
                 isPresented = false
                 openWindow(value: route())
             }
+        } else if case .cookRecipe = route() {
+            // Cooking is a workspace with two independently scrolling panes.
+            // Use the full current scene bounds on iPad (including Stage
+            // Manager and Split View sizing) instead of a centered sheet.
+            content.fullScreenCover(isPresented: $isPresented) { sheet() }
         } else {
             content.sheet(isPresented: $isPresented) { sheet() }
         }
