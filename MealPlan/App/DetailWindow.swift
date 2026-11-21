@@ -52,12 +52,7 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
     /// form wants a different floor from one that opens onto a web view.
     var minimumSize: CGSize {
         switch self {
-        case .cookRecipe:
-            // Cooking needs enough room for both panes when the window opens.
-            // The scene-level default size remains compact for other detail
-            // windows; this route's floor lets macOS grow it as needed.
-            CGSize(width: 1000, height: 700)
-        case .recipe, .newRecipe, .editRecipe, .discoverRecipes:
+        case .recipe, .newRecipe, .editRecipe, .cookRecipe, .discoverRecipes:
             CGSize(width: 640, height: 560)
         case .findRecipe, .browseSite, .importRecipes, .printPlan, .printShoppingList, .dataTransfer:
             CGSize(width: 720, height: 600)
@@ -70,6 +65,13 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
             CGSize(width: 520, height: 440)
         }
     }
+}
+
+/// A separate scene identity gives Mac cooking windows their own initial
+/// workspace size without changing the default size of other detail windows.
+struct CookingWindowRoute: Codable, Hashable, Identifiable {
+    let dishID: UUID
+    var id: UUID { dishID }
 }
 
 /// What this device can do with windows, and what it should do by default.
@@ -149,15 +151,27 @@ private struct DetailPresentationModifier<Sheet: View>: ViewModifier {
             content.onChange(of: isPresented) { _, wanted in
                 guard wanted else { return }
                 isPresented = false
+                #if os(macOS)
+                if case .cookRecipe(let dishID) = route() {
+                    openWindow(value: CookingWindowRoute(dishID: dishID))
+                    return
+                }
+                #endif
                 openWindow(value: route())
             }
-        } else if case .cookRecipe = route() {
-            // Cooking is a workspace with two independently scrolling panes.
-            // Use the full current scene bounds on iPad (including Stage
-            // Manager and Split View sizing) instead of a centered sheet.
-            content.fullScreenCover(isPresented: $isPresented) { sheet() }
         } else {
+            #if os(iOS)
+            if case .cookRecipe = route() {
+                // Cooking is a workspace with two independently scrolling
+                // panes. Use the full current iOS scene bounds (including
+                // Stage Manager and Split View) instead of a centered sheet.
+                content.fullScreenCover(isPresented: $isPresented) { sheet() }
+            } else {
+                content.sheet(isPresented: $isPresented) { sheet() }
+            }
+            #else
             content.sheet(isPresented: $isPresented) { sheet() }
+            #endif
         }
     }
 }

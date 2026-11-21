@@ -5,25 +5,26 @@ import SwiftUI
 struct LandscapeLayoutTests {
     @Test func cookingUsesTwoColumnsOnLandscapePhone() {
         #expect(CookingModeLayoutPolicy.usesSideBySideLayout(
-            in: CGSize(width: 812, height: 375),
-            horizontalSizeClass: .compact,
-            verticalSizeClass: .compact
+            in: CGSize(width: 812, height: 375)
         ))
     }
 
     @Test func cookingKeepsPortraitPhoneSingleColumn() {
         #expect(!CookingModeLayoutPolicy.usesSideBySideLayout(
-            in: CGSize(width: 390, height: 844),
-            horizontalSizeClass: .compact,
-            verticalSizeClass: .regular
+            in: CGSize(width: 390, height: 844)
         ))
     }
 
-    @Test func cookingDoesNotUsePhoneLayoutForWideRegularWindow() {
+    @Test func cookingUsesBothPanesForWideRegularWindow() {
+        #expect(CookingModeLayoutPolicy.usesSideBySideLayout(
+            in: CGSize(width: 1_024, height: 768)
+        ))
+    }
+
+    @Test func cookingStacksAtAccessibilityTextSizes() {
         #expect(!CookingModeLayoutPolicy.usesSideBySideLayout(
-            in: CGSize(width: 1_024, height: 768),
-            horizontalSizeClass: .regular,
-            verticalSizeClass: .regular
+            in: CGSize(width: 1_200, height: 800),
+            dynamicTypeSize: .accessibility1
         ))
     }
 

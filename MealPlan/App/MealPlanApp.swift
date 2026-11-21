@@ -219,6 +219,21 @@ struct MealPlanApp: App {
         #endif
         #endif
 
+        #if os(macOS)
+        // Cooking is the only auxiliary screen that needs a wider initial
+        // workspace. Keep that size scoped to its own scene so recipe and
+        // planning windows retain their compact default.
+        WindowGroup("Cooking", for: CookingWindowRoute.self) { $route in
+            if let route {
+                DetailWindow(route: .cookRecipe(route.dishID))
+                    .environment(appState)
+            }
+        }
+        .defaultSize(width: 1050, height: 750)
+        .modelContainer(container)
+        .windowToolbarStyle(.unified)
+        #endif
+
         #if os(visionOS)
         // Cooking uses small, independently placeable panels in the cook's
         // space. Every panel observes the same durable session on `AppState`,

@@ -396,8 +396,8 @@ struct HouseholdRecordSyncTests {
         let secondID = second.persistentModelID
         let loader = DishPhotoDataActor(modelContainer: container)
 
-        #expect(await loader.data(for: firstID, uuid: duplicateUUID) == Data([1, 2, 3]))
-        #expect(await loader.data(for: secondID, uuid: duplicateUUID) == Data([7, 8, 9]))
+        #expect(await loader.data(for: firstID, uuid: duplicateUUID, cacheKey: "first") == Data([1, 2, 3]))
+        #expect(await loader.data(for: secondID, uuid: duplicateUUID, cacheKey: "second") == Data([7, 8, 9]))
     }
 
     @Test func dirtyScanClockPatchMatchesDiskBackedPlanAndShoppingSnapshots() async throws {
@@ -512,7 +512,11 @@ struct HouseholdRecordSyncTests {
         try context.save()
 
         let loader = DishPhotoDataActor(modelContainer: container)
-        let data = await loader.primaryImageData(for: dish.persistentModelID, uuid: dish.uuid)
+        let data = await loader.primaryImageData(
+            for: dish.persistentModelID,
+            uuid: dish.uuid,
+            cacheKey: "primary-image"
+        )
 
         #expect(data == Data([7, 8, 9]))
     }

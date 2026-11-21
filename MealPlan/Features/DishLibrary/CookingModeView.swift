@@ -15,6 +15,7 @@ struct CookingModeView: View {
     @Query private var allDishes: [Dish]
 
     @AppStorage("CookingMode.textScale") private var textScale = 1.0
+    @ScaledMetric(relativeTo: .body) private var stepFontSize = 20.0
     /// Mirrors the two cooking columns so the step controls can sit nearest
     /// the cook's dominant hand.
     @AppStorage("CookingMode.leftHandedLayout") private var usesLeftHandedLayout = false
@@ -557,7 +558,7 @@ struct CookingModeView: View {
                                 // Scales with the system Dynamic Type setting
                                 // *and* the in-view text-size control.
                                 .font(.system(
-                                    size: (isCurrent ? 25 : 20) * textScale,
+                                    size: stepFontSize * (isCurrent ? 1.25 : 1) * textScale,
                                     weight: isCurrent ? .semibold : .regular
                                 ))
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -921,8 +922,6 @@ enum CookingModeLayoutPolicy {
 
     static func usesSideBySideLayout(
         in size: CGSize,
-        horizontalSizeClass: UserInterfaceSizeClass? = nil,
-        verticalSizeClass: UserInterfaceSizeClass? = nil,
         dynamicTypeSize: DynamicTypeSize = .large
     ) -> Bool {
         size.width >= minimumSideBySideWidth && !dynamicTypeSize.isAccessibilitySize
