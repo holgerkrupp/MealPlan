@@ -10,9 +10,8 @@ struct CookingModeView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.dismiss) private var dismiss
-    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.verticalSizeClass) private var verticalSizeClass
     @Query private var allDishes: [Dish]
 
     @AppStorage("CookingMode.textScale") private var textScale = 1.0
@@ -100,8 +99,7 @@ struct CookingModeView: View {
         GeometryReader { geometry in
             if CookingModeLayoutPolicy.usesSideBySideLayout(
                 in: geometry.size,
-                horizontalSizeClass: horizontalSizeClass,
-                verticalSizeClass: verticalSizeClass
+                dynamicTypeSize: dynamicTypeSize
             ) {
                 landscapeContent
             } else {
@@ -199,22 +197,27 @@ struct CookingModeView: View {
         }
     }
 
-    /// iPhone landscape keeps the two things a cook cross-references visible
-    /// at once. Each pane scrolls independently, so a long ingredient list
-    /// never pushes the current instruction or its controls off screen.
+    /// Each pane scrolls independently, so a long ingredient list never
+    /// pushes the current instruction or its controls off screen.
     private var landscapeContent: some View {
         VStack(spacing: 0) {
             landscapeSessionBar
             Divider()
-            HStack(spacing: 0) {
-                if usesLeftHandedLayout {
-                    ingredientPane
-                    Divider()
-                    instructionPane
-                } else {
-                    instructionPane
-                    Divider()
-                    ingredientPane
+            GeometryReader { geometry in
+                HStack(spacing: 0) {
+                    if usesLeftHandedLayout {
+                        instructionPane
+                            .frame(width: geometry.size.width * 0.58)
+                        Divider()
+                        ingredientPane
+                            .frame(maxWidth: .infinity)
+                    } else {
+                        ingredientPane
+                            .frame(width: geometry.size.width * 0.42)
+                        Divider()
+                        instructionPane
+                            .frame(maxWidth: .infinity)
+                    }
                 }
             }
         }
@@ -371,18 +374,9 @@ struct CookingModeView: View {
     }
 
     private var sessionDishStrip: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(String(localized: "Cooking session"), systemImage: "frying.pan")
-                    .font(.title2.bold())
-                Spacer()
-                Button(String(localized: "Add dish"), systemImage: "plus") {
-                    showingDishPicker = true
-                }
-                .buttonStyle(.bordered)
-            }
+        HStack(spacing: 10) {
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack {
+                HStack(spacing: 8) {
                     ForEach(store.session?.dishes ?? []) { item in
                         if item.id == currentDish.uuid {
                             Button(label(for: item)) { store.select(item.id) }
@@ -394,6 +388,10 @@ struct CookingModeView: View {
                     }
                 }
             }
+            Button(String(localized: "Add dish"), systemImage: "plus") {
+                showingDishPicker = true
+            }
+            .buttonStyle(.bordered)
         }
     }
 
@@ -425,7 +423,16 @@ struct CookingModeView: View {
 
     private var ingredients: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "Ingredients")).font(.title2.bold())
+            HStack(alignment: .firstTextBaseline) {
+                Text(String(localized: "Ingredients")).font(.title2.bold())
+                Spacer(minLength: 8)
+                if !currentDish.sortedIngredients.isEmpty {
+                    Text("\(progress.checkedIngredientIndexes.intersection(Set(currentDish.sortedIngredients.indices)).count) / \(currentDish.sortedIngredients.count)")
+                        .font(.subheadline.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                        .accessibilityLabel(String(localized: "Ingredients checked"))
+                }
+            }
             if currentDish.sortedIngredients.isEmpty {
                 Text(String(localized: "No ingredients added yet."))
                     .foregroundStyle(.secondary)
@@ -463,18 +470,10 @@ struct CookingModeView: View {
 
     @ViewBuilder
     private func ingredientGroupHeader(_ group: CookingIngredientGroup) -> some View {
-        if let stepID = group.stepID, let step = steps.first(where: { $0.id == stepID }) {
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(localized: "Step \(step.id + 1)"))
-                    .font(.headline)
-                        .foregroundStyle(
-                            group.stepID == progress.currentStep ? Color.accentColor : Color.secondary
-                        )
-                Text(step.text)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
+        if let stepID = group.stepID, steps.contains(where: { $0.id == stepID }) {
+            Text(String(localized: "Step \(stepID + 1)"))
+                .font(.headline)
+                .foregroundStyle(group.stepID == progress.currentStep ? Color.accentColor : Color.secondary)
             .padding(.bottom, 6)
         } else {
             Text(String(localized: "Other ingredients"))
@@ -516,7 +515,6 @@ struct CookingModeView: View {
             .font(.title3)
             .frame(maxWidth: .infinity, minHeight: 44, alignment: .leading)
             .contentShape(Rectangle())
-            .opacity(checked ? 0.62 : 1)
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .ignore)
@@ -532,7 +530,7 @@ struct CookingModeView: View {
     private var directions: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack {
-                Text(String(localized: "Method")).font(.title2.bold())
+                Text(String(localized: "Preparation")).font(.title2.bold())
                 Spacer()
                 Button(String(localized: "Add timer"), systemImage: "timer") {
                     showingManualTimer = true
@@ -577,7 +575,7 @@ struct CookingModeView: View {
                             }
                         }
                     }
-                    .opacity(isCurrent ? 1 : (abs(step.id - progress.currentStep) == 1 ? 0.58 : 0.34))
+                    .opacity(isCurrent ? 1 : 0.82)
                     .padding(16)
                     .background(isCurrent ? Color.accentColor.opacity(0.10) : Color.clear,
                                 in: RoundedRectangle(cornerRadius: 16))
@@ -915,21 +913,19 @@ private struct ManualCookingTimerSheet: View {
     }
 }
 
-/// Geometry-based because iPhones keep a compact horizontal size class in
-/// both orientations. Requiring compact height avoids turning iPad and Mac
-/// windows into the phone-specific cooking layout simply because they are wide.
+/// Chooses panes from the space this view actually has, so iPad and Mac
+/// windows adapt as they resize. Accessibility text keeps the single-column
+/// layout so content remains comfortably readable.
 enum CookingModeLayoutPolicy {
-    static let minimumSideBySideWidth: Double = 620
+    static let minimumSideBySideWidth: Double = 760
 
     static func usesSideBySideLayout(
         in size: CGSize,
-        horizontalSizeClass: UserInterfaceSizeClass?,
-        verticalSizeClass: UserInterfaceSizeClass?
+        horizontalSizeClass: UserInterfaceSizeClass? = nil,
+        verticalSizeClass: UserInterfaceSizeClass? = nil,
+        dynamicTypeSize: DynamicTypeSize = .large
     ) -> Bool {
-        horizontalSizeClass == .compact
-            && verticalSizeClass == .compact
-            && size.width > size.height
-            && size.width >= minimumSideBySideWidth
+        size.width >= minimumSideBySideWidth && !dynamicTypeSize.isAccessibilitySize
     }
 }
 
