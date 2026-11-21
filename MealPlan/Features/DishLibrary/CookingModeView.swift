@@ -112,7 +112,7 @@ struct CookingModeView: View {
         .navigationBarTitleDisplayMode(.inline)
         #endif
         .toolbar { cookingToolbar }
-        .safeAreaInset(edge: .bottom) { listeningIndicator }
+        .safeAreaInset(edge: .bottom) { cookingControlBar }
         .onAppear {
             enterCookingMode()
             showsTranslation = currentDish.prefersTranslation
@@ -190,7 +190,6 @@ struct CookingModeView: View {
                 servingsControl
                 ingredients
                 directions
-                if !(store.session?.timers.isEmpty ?? true) { activeTimers }
             }
             .padding()
             .frame(maxWidth: 760, alignment: .leading)
@@ -233,7 +232,6 @@ struct CookingModeView: View {
             VStack(alignment: .leading, spacing: 20) {
                 handsFreeTip
                 directions
-                if !(store.session?.timers.isEmpty ?? true) { activeTimers }
             }
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -592,18 +590,6 @@ struct CookingModeView: View {
                         : InteractionWording.jumpToStepHint)
                 }
 
-                HStack(spacing: 12) {
-                    if usesLeftHandedLayout {
-                        nextStepButton
-                        Spacer(minLength: 0)
-                        previousStepButton
-                    } else {
-                        previousStepButton
-                        Spacer(minLength: 0)
-                        nextStepButton
-                    }
-                }
-                .buttonStyle(.bordered)
             }
         }
     }
@@ -622,53 +608,75 @@ struct CookingModeView: View {
         .disabled(progress.currentStep >= steps.count - 1)
     }
 
-    private var activeTimers: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(String(localized: "Timers")).font(.title2.bold())
-            TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                VStack(spacing: 10) {
-                    ForEach(store.session?.timers ?? []) { timer in
-                        let remaining = timer.remaining(at: timeline.date)
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 12) {
-                                timerDetails(timer, remaining: remaining)
-                                Spacer(minLength: 8)
-                                timerButtons(timer, at: timeline.date)
-                            }
-                            VStack(alignment: .leading, spacing: 10) {
-                                timerDetails(timer, remaining: remaining)
-                                timerButtons(timer, at: timeline.date)
+    private var cookingControlBar: some View {
+        VStack(spacing: 0) {
+            if !(store.session?.timers.isEmpty ?? true) {
+                TimelineView(.periodic(from: .now, by: 1)) { timeline in
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(store.session?.timers ?? []) { timer in
+                                let remaining = timer.remaining(at: timeline.date)
+                                HStack(spacing: 8) {
+                                    Image(systemName: remaining <= 0 ? "alarm.waves.left.and.right.fill" : "timer")
+                                        .foregroundStyle(remaining <= 0 ? .red : .accentColor)
+                                        .accessibilityHidden(true)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(timer.label).font(.callout.weight(.semibold)).lineLimit(1)
+                                        Text(clockText(remaining))
+                                            .font(.caption.monospacedDigit())
+                                            .foregroundStyle(remaining <= 0 ? .red : .secondary)
+                                    }
+                                    Button(timer.pausedRemaining == nil ? String(localized: "Pause") : String(localized: "Resume")) {
+                                        store.pauseOrResumeTimer(timer.id, at: timeline.date)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                    Button(String(localized: "Cancel"), role: .destructive) {
+                                        store.cancelTimer(timer.id)
+                                    }
+                                    .buttonStyle(.bordered)
+                                    .controlSize(.small)
+                                }
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 5)
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                .accessibilityElement(children: .contain)
+                                .accessibilityLabel(timer.contextLabel)
                             }
                         }
-                        .padding(12)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+                        .padding(.horizontal, 12)
+                    }
+                    .frame(height: 48)
+                }
+                Divider()
+            }
+
+            if !steps.isEmpty {
+                HStack(spacing: 12) {
+                    if usesLeftHandedLayout {
+                        nextStepButton
+                        Spacer(minLength: 0)
+                    } else {
+                        previousStepButton
+                        Spacer(minLength: 0)
+                    }
+                    Text(verbatim: "\(String(localized: "Step \(progress.currentStep + 1)")) / \(steps.count)")
+                        .font(.callout.monospacedDigit())
+                    Spacer(minLength: 0)
+                    if usesLeftHandedLayout {
+                        previousStepButton
+                    } else {
+                        nextStepButton
                     }
                 }
+                .buttonStyle(.bordered)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
             }
-        }
-    }
 
-    private func timerDetails(_ timer: CookingTimerState, remaining: TimeInterval) -> some View {
-        HStack(spacing: 10) {
-            Image(systemName: remaining <= 0 ? "alarm.waves.left.and.right.fill" : "timer")
-                .foregroundStyle(remaining <= 0 ? .red : .accentColor)
-            VStack(alignment: .leading) {
-                Text(timer.contextLabel).font(.caption).foregroundStyle(.secondary)
-                Text(timer.label).font(.headline)
-                Text(clockText(remaining)).font(.title2.monospacedDigit())
-            }
+            listeningIndicator
         }
-    }
-
-    private func timerButtons(_ timer: CookingTimerState, at date: Date) -> some View {
-        HStack(spacing: 8) {
-            Button(timer.pausedRemaining == nil ? String(localized: "Pause") : String(localized: "Resume")) {
-                store.pauseOrResumeTimer(timer.id, at: date)
-            }
-            Button(String(localized: "Cancel"), role: .destructive) {
-                store.cancelTimer(timer.id)
-            }
-        }
+        .background(.bar)
     }
 
     private var availableDishes: [Dish] {
