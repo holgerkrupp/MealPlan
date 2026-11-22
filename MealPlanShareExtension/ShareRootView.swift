@@ -19,9 +19,12 @@ struct ShareRootView: View {
     @State private var saveMessage = String(localized: "Saved to MealPlan")
     @State private var sharedURL: URL?
     @State private var siteCandidate: RecipeSiteCandidate?
+    @State private var classification: SharedRecipeURLKind?
     @State private var isSubscribing = false
     @State private var isSaving = false
     @State private var saveNotice: String?
+    @State private var subscriptionNotice: String?
+    @State private var subscriptionSucceeded = false
     @State private var savedDishID: UUID?
 
     private let container = SharedStore.container(cloudKit: false)
@@ -160,8 +163,8 @@ struct ShareRootView: View {
                     .font(.footnote).foregroundStyle(.secondary)
             }
 
-            siteActionSection
             actionSection
+            siteActionSection
         }
     }
 
@@ -217,31 +220,43 @@ struct ShareRootView: View {
     @ViewBuilder
     private var siteActionSection: some View {
         if let siteCandidate {
-            Section(String(localized: "Recipe site")) {
-                Label {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text(siteCandidate.title).font(.headline)
+            siteSubscriptionSection(siteCandidate)
+        }
+    }
+
+    private func siteSubscriptionSection(_ siteCandidate: RecipeSiteCandidate) -> some View {
+        Section {
+                HStack(spacing: 8) {
+                    Image(systemName: "dot.radiowaves.left.and.right")
+                        .foregroundStyle(.secondary)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "Subscribe to site"))
+                            .font(.subheadline)
                         Text(siteCandidate.detail)
-                            .font(.caption).foregroundStyle(.secondary)
+                            .font(.caption2)
+                            .foregroundStyle(.secondary)
                     }
-                } icon: { Image(systemName: "globe") }
-                Text(String(localized: "Subscribe to bring future recipes from this site into Discover."))
-                    .font(.footnote).foregroundStyle(.secondary)
-                Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
-                    Task { await subscribeToSite(siteCandidate) }
+                    Spacer(minLength: 8)
+                    Button(String(localized: "Subscribe")) {
+                        Task { await subscribeToSite(siteCandidate) }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(isSubscribing)
                 }
-                .disabled(isSubscribing)
                 if isSubscribing {
                     ProgressView(String(localized: "Subscribing…"))
-                        .font(.footnote)
+                        .font(.caption)
                 }
-                if let saveNotice {
-                    Label(saveNotice, systemImage: "exclamationmark.triangle")
-                        .font(.footnote)
-                        .foregroundStyle(.red)
+                if let subscriptionNotice {
+                    Text(subscriptionNotice)
+                        .font(.caption)
+                        .foregroundStyle(subscriptionSucceeded ? Color.secondary : Color.red)
                 }
+            } footer: {
+                Text(String(localized: "Optional: future recipes from this site will appear in Discover."))
+                    .font(.caption)
             }
-        }
     }
 
     private func ingredientTextBinding(at index: Int) -> Binding<String> {
@@ -261,52 +276,30 @@ struct ShareRootView: View {
     private var siteForm: some View {
         Form {
             Section {
-                Label {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(siteCandidate?.title ?? String(localized: "Recipe site")).font(.headline)
-                        Text(siteCandidate?.detail ?? sharedURL?.host() ?? "")
-                            .font(.subheadline).foregroundStyle(.secondary)
-                    }
-                } icon: {
-                    Image(systemName: "globe")
-                        .foregroundStyle(.tint)
-                }
-            } footer: {
-                Text(String(localized: "MealPlan found a public recipe feed or discovery page. Subscribe to bring future recipes into Discover."))
-            }
-            Section(String(localized: "Recipe")) {
-                Text(String(localized: "This page may also contain an individual recipe. Try extracting it before subscribing."))
+                Label(String(localized: "No recipe found"), systemImage: "doc.text.magnifyingglass")
+                    .font(.headline)
+                Text(String(localized: "MealPlan could not find enough recipe details to show a saving and planning form. You can retry extraction or continue in MealPlan for a fuller review."))
                     .font(.footnote)
                     .foregroundStyle(.secondary)
-                Button(String(localized: "Try extracting recipe"), systemImage: "fork.knife") {
-                    Task { await importSharedURL() }
+                if let saveNotice {
+                    Text(saveNotice)
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
+            } footer: {
+                Text(siteCandidate?.detail ?? sharedURL?.host() ?? "")
+            }
+            Section {
+                Button(String(localized: "Try extracting recipe"), systemImage: "arrow.clockwise") {
+                    Task { await importSharedURL(classification: classification) }
                 }
                 .disabled(isSubscribing)
+                Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") {
+                    queueHandoff()
+                }
             }
-            if siteCandidate != nil {
-                Section(String(localized: "Recipe site")) {
-                    Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
-                        if let siteCandidate {
-                            Task { await subscribeToSite(siteCandidate) }
-                        }
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(isSubscribing)
-                    if isSubscribing {
-                        ProgressView(String(localized: "Subscribing…"))
-                            .font(.footnote)
-                    }
-                    if let saveNotice {
-                        Label(saveNotice, systemImage: "exclamationmark.triangle")
-                            .font(.footnote)
-                            .foregroundStyle(.red)
-                    }
-                }
-                Section(String(localized: "Continue in MealPlan")) {
-                    Text(String(localized: "Open MealPlan to preview this site in Discover. Subscribing is optional."))
-                        .font(.footnote).foregroundStyle(.secondary)
-                    Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") { queueHandoff() }
-                }
+            if let siteCandidate {
+                siteSubscriptionSection(siteCandidate)
             }
         }
     }
@@ -378,6 +371,9 @@ struct ShareRootView: View {
     private func load() async {
         failureRecovery = .none
         saveNotice = nil
+        subscriptionNotice = nil
+        classification = nil
+        siteCandidate = nil
         loadMeals()
         loadPlannedDays()
         switch payload {
@@ -389,27 +385,29 @@ struct ShareRootView: View {
             phase = .ready
         case .url(let url):
             sharedURL = url
-            switch await RecipeSiteDiscoveryService.classify(url) {
+            phase = .extracting
+            let kind = await RecipeSiteDiscoveryService.classify(url)
+            classification = kind
+            switch kind {
             case .recipe(let candidate):
                 // Keep the recipe as the primary action, but preserve a
                 // separately rendered subscription option when the article
                 // advertises its site's feed.
                 siteCandidate = candidate.subscriptionCandidate
-                await importSharedURL()
             case .recipeSite(let candidate):
                 siteCandidate = candidate
-                phase = .siteReady
             case .feed(let feed):
                 siteCandidate = RecipeSiteCandidate(title: feed.title, siteURL: feed.siteURL, feedURL: feed.feedURL)
-                phase = .siteReady
             case .ambiguous(let url):
                 sharedURL = url
                 siteCandidate = .manual(for: url)
-                phase = .ambiguous
             case .unsupported(let url):
                 sharedURL = url
-                siteCandidate = .manual(for: url)
-                await importSharedURL()
+            }
+            if case .feed = kind {
+                phase = .siteReady
+            } else {
+                await importSharedURL(classification: kind)
             }
         case .paprika(let data):
             do {
@@ -447,38 +445,46 @@ struct ShareRootView: View {
     }
 
     @MainActor
-    private func importSharedURL() async {
+    private func importSharedURL(classification requestedClassification: SharedRecipeURLKind? = nil) async {
         guard let url = sharedURL else { return }
         saveNotice = nil
         phase = .extracting
         do {
-            recipes = [try await RecipeSchemaParser().importRecipe(from: url)]
-            phase = .ready
+            let recipe = try await RecipeSchemaParser().importRecipe(from: url)
+            recipes = [recipe]
+            let kind = requestedClassification ?? classification
+            if ShareRecipeImportPolicy.accepts(recipe, classification: kind) {
+                phase = .ready
+            } else {
+                saveNotice = String(localized: "MealPlan found no complete recipe on this page. You can continue in MealPlan to review it, but nothing will be saved until it has ingredients or preparation steps.")
+                phase = .siteReady
+            }
         } catch {
             recipes = [fallbackURLRecipe(url)]
             saveNotice = String(localized: "MealPlan could not fully extract this page. Review the fields before saving, or continue in MealPlan to finish it.")
-            phase = .ready
+            phase = .siteReady
         }
     }
 
     @MainActor
     private func subscribeToSite(_ candidate: RecipeSiteCandidate) async {
         isSubscribing = true
-        saveNotice = nil
+        subscriptionNotice = nil
+        subscriptionSucceeded = false
         defer { isSubscribing = false }
         do {
             let context = container.mainContext
             let household = try? context.fetch(FetchDescriptor<Household>()).first
             guard HouseholdMutationAuthorization.canMutate(household: household) else {
-                saveNotice = HouseholdSharingError.readOnlyHousehold.localizedDescription
+                subscriptionNotice = HouseholdSharingError.readOnlyHousehold.localizedDescription
                 return
             }
             _ = try await RecipeFeedService.subscribe(to: candidate, household: household, context: context)
             HouseholdStoreGeneration.markDirty()
-            saveMessage = String(localized: "Subscribed to \(candidate.title)")
-            phase = .done
+            subscriptionSucceeded = true
+            subscriptionNotice = String(localized: "Subscribed to \(candidate.title)")
         } catch {
-            saveNotice = error.localizedDescription
+            subscriptionNotice = error.localizedDescription
         }
     }
 
@@ -582,7 +588,7 @@ struct ShareRootView: View {
         if let savedDishID {
             destination = .dish(savedDishID)
         } else if let sharedURL {
-            if siteCandidate != nil && recipes.isEmpty { destination = .site(sharedURL) }
+            if siteCandidate != nil && !canSaveRecipes { destination = .site(sharedURL) }
             else { destination = .addDish(url: sharedURL, name: recipes.first?.name) }
         } else {
             destination = .addDish(url: nil, name: recipes.first?.name)
