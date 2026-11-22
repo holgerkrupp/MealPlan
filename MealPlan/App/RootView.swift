@@ -86,11 +86,15 @@ struct RootView: View {
             }
         }
         .overlay { cloudBootstrapOverlay }
-        .onChange(of: appState.requestedSection) { _, requested in
-            if let requested {
-                selection = requested
-                appState.requestedSection = nil
-            }
+        .onAppear {
+            // A share extension may finish while this app scene is already
+            // alive (including a newly created iPad window). Re-check the
+            // App Group queue before applying any prepared route.
+            appState.acceptPendingShareHandoff()
+            acceptRequestedSectionIfNeeded()
+        }
+        .onChange(of: appState.requestedSection) { _, _ in
+            acceptRequestedSectionIfNeeded()
         }
         .onChange(of: showsFridge) { _, visible in
             if !visible, selection == .fridge { selection = .plan }
@@ -225,6 +229,17 @@ struct RootView: View {
             showDataTransfer: { rootSheet = .dataTransfer },
             undo: undoAction
         ))
+    }
+
+    /// A handoff may be prepared during cold launch before this root view has
+    /// mounted. Handle both that initial state and normal foreground changes.
+    /// All app windows share AppState; the first visible root that accepts the
+    /// section also completes the durable one-shot handoff.
+    private func acceptRequestedSectionIfNeeded() {
+        guard let requested = appState.requestedSection else { return }
+        selection = requested
+        appState.requestedSection = nil
+        appState.acknowledgePendingShareHandoffRoute()
     }
 
     /// The forgiving undo the plan offers after a destructive tap, lifted into

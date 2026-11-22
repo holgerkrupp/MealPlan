@@ -58,6 +58,12 @@ final class AppState: HouseholdRecoveryAppState {
     /// A pending "add dish" request from a deep link (the picker consumes it).
     var pendingAddDish: PendingAddDish?
     var importNotice: String?
+    /// The share handoff is prepared only after the local store and SwiftUI
+    /// root are available. It is acknowledged by RootView after it accepts
+    /// the requested section, so a cold launch cannot consume a destination
+    /// before the actual recipe/site route exists.
+    private var pendingShareHandoffID: UUID?
+    private var isReadyForShareHandoff = false
     /// Covers the app while an accepted invitation downloads the household
     /// the person asked to join.
     var cloudBootstrapState: CloudBootstrapState = .ready
@@ -468,9 +474,21 @@ final class AppState: HouseholdRecoveryAppState {
         if let link = DeepLink(url: url) { handle(link) }
     }
 
-    /// Accepts a one-shot App Group destination after the containing app is
-    /// active. The queue is cleared only after navigation state is installed.
+    /// Marks the app ready to receive a share handoff. This is called after
+    /// the local SwiftData store has bootstrapped, which keeps dish and import
+    /// routes from racing the first household lookup.
+    func markReadyForShareHandoff() {
+        isReadyForShareHandoff = true
+        acceptPendingShareHandoff()
+    }
+
+    /// Installs the destination from the App Group queue without consuming
+    /// it. The root router calls `acknowledgePendingShareHandoffRoute()` only
+    /// after it has accepted the requested section. Keeping the durable item
+    /// until that point makes a failed or interrupted route retryable on the
+    /// next app opening.
     func acceptPendingShareHandoff() {
+        guard isReadyForShareHandoff, pendingShareHandoffID == nil else { return }
         guard let pending = ShareHandoff.pending() else { return }
         switch pending.destination {
         case .site(let url):
@@ -481,7 +499,16 @@ final class AppState: HouseholdRecoveryAppState {
         case .addDish(let url, let name):
             handle(.addDish(url: url, name: name))
         }
-        ShareHandoff.consume(id: pending.id)
+        pendingShareHandoffID = pending.id
+    }
+
+    /// Completes the two-phase handoff after RootView has installed the
+    /// destination section. The ID comparison prevents an old acknowledgement
+    /// from consuming a newer extension handoff.
+    func acknowledgePendingShareHandoffRoute() {
+        guard let id = pendingShareHandoffID else { return }
+        ShareHandoff.consume(id: id)
+        pendingShareHandoffID = nil
     }
 
     /// Handles recipe archives opened from Files/Finder as well as the app's

@@ -17,11 +17,17 @@ enum ShareHandoff {
 
     private static let key = "pendingShareHandoff.v1"
 
+    /// Stores exactly one destination for the next app opening. The extension
+    /// cannot reliably activate its containing app, so this is the durable
+    /// boundary between the extension process and the app process.
     static func store(_ destination: Destination) -> Bool {
         guard let defaults = UserDefaults(suiteName: SharedStore.appGroupID),
               let data = try? JSONEncoder().encode(Pending(id: UUID(), destination: destination))
         else { return false }
         defaults.set(data, forKey: key)
+        // The share extension can be torn down as soon as its view is
+        // dismissed. Ask UserDefaults to flush the App Group write before
+        // reporting success to the user.
         return defaults.synchronize()
     }
 

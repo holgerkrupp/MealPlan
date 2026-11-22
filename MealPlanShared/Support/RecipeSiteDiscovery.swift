@@ -14,6 +14,16 @@ enum SharedRecipeURLKind: Equatable, Sendable {
 struct RecipeImportCandidate: Equatable, Sendable {
     let url: URL
     let title: String?
+    /// A recipe page may advertise the site's feed as well. Keep that
+    /// subscription choice available without changing the primary result from
+    /// "import this recipe" to "subscribe to this site".
+    let subscriptionCandidate: RecipeSiteCandidate?
+
+    init(url: URL, title: String?, subscriptionCandidate: RecipeSiteCandidate? = nil) {
+        self.url = url
+        self.title = title
+        self.subscriptionCandidate = subscriptionCandidate
+    }
 }
 
 enum RecipeSiteSourceKind: String, Codable, Sendable {
@@ -141,15 +151,48 @@ enum RecipeSiteDiscoveryService {
         let canonical = canonicalURL(in: html, baseURL: url) ?? url
         let itemList = containsItemList(in: html)
         let recipeLinks = recipeLinkCount(in: html, baseURL: url)
-        let jsonLDBlocks = RecipeSchemaParser.jsonLDBlocks(in: html)
-        let hasRecipe = jsonLDBlocks.contains { block in
-            guard let data = block.data(using: .utf8), let object = try? JSONSerialization.jsonObject(with: data) else { return false }
-            return !RecipeSchemaParser.recipeDicts(in: object).isEmpty
+        // Use the same JSON-LD, embedded JSON and microdata candidate parser
+        // as the importer. Counting raw JSON-LD blocks is not sufficient: a
+        // collection page may publish a featured Recipe object, while an
+        // individual recipe can also advertise the site's feed and related
+        // recipe links.
+        let structuredCandidates = RecipeSchemaParser()
+            .structuredCandidates(in: html, sourceURL: url)
+        let recipeCandidates = uniqueRecipeCandidates(structuredCandidates)
+        let bestRecipe = structuredCandidates.max { lhs, rhs in
+            if lhs.score != rhs.score { return lhs.score < rhs.score }
+            return lhs.recipe.ingredientLines.count < rhs.recipe.ingredientLines.count
         }
-        let recipeTitle = hasRecipe ? RecipeSchemaParser().parseJSONLD(html: html, sourceURL: url)?.name : nil
+        let semanticRecipe = SemanticRecipeExtractor.extract(html: html, sourceURL: url)
+        let hasRecipePayload = bestRecipe.map {
+            !$0.recipe.ingredientLines.isEmpty || !($0.recipe.instructions ?? "").trimmedCollapsed.isEmpty
+        } ?? (semanticRecipe?.hasContent == true)
+        let recipeTitle = bestRecipe?.recipe.name ?? semanticRecipe?.name
         let title = pageTitle(in: html) ?? recipeTitle ?? canonical.host() ?? String(localized: "Recipe site")
-        let looksLikeIndex = itemList || recipeLinks >= 2 || isCollectionPath(url.path)
+        let hasCollectionSignals = itemList
+            || recipeCandidates.count > 1
+            || isCollectionPath(url.path)
+            || (recipeLinks >= 2 && !isLikelyIndividualRecipePath(url.path))
 
+        // A credible individual recipe wins over an advertised feed. The
+        // feed remains attached as an optional subscription action for the
+        // share UI instead of being discarded.
+        if hasRecipePayload, !hasCollectionSignals {
+            return .recipe(RecipeImportCandidate(
+                url: url,
+                title: recipeTitle?.nilIfEmpty ?? title,
+                subscriptionCandidate: feedURLs.first.map {
+                    subscriptionCandidate(
+                        feedURL: $0,
+                        pageURL: url,
+                        title: title,
+                        canonicalURL: canonical
+                    )
+                }
+            ))
+        }
+
+        let looksLikeIndex = itemList || recipeLinks >= 2 || isCollectionPath(url.path) || recipeCandidates.count > 1
         if !feedURLs.isEmpty || looksLikeIndex {
             let candidates = feedURLs.map { feedURL in
                 RecipeSiteCandidate(
@@ -173,10 +216,10 @@ enum RecipeSiteDiscoveryService {
             }
         }
 
-        if hasRecipe && !itemList && recipeLinks < 2 {
-            return .recipe(RecipeImportCandidate(url: url, title: title))
-        }
-        if hasRecipe { return .ambiguous(url) }
+        // Structured markup that is not strong enough to identify one
+        // individual recipe should still be offered to the explicit import /
+        // review flow rather than being treated as a dead end.
+        if bestRecipe != nil { return .ambiguous(url) }
         return .unsupported(url)
     }
 
@@ -258,11 +301,57 @@ enum RecipeSiteDiscoveryService {
 
     private static func isCollectionPath(_ path: String) -> Bool {
         let path = path.lowercased()
-        if path.isEmpty || path == "/" || path == "/rezepte" || path == "/recipes" {
+        if path.isEmpty || path == "/" || path == "/index.html" || path == "/index.htm"
+            || path == "/home" || path == "/home/" || path == "/rezepte" || path == "/recipes" {
             return true
         }
-        return ["/category", "/categories", "/blog", "/suche", "/search"]
+        return ["/category", "/categories", "/blog", "/suche", "/search", "/collection", "/collections", "/tag", "/tags", "/author", "/authors", "/featured", "/highlights"]
             .contains { path == $0 || path.hasPrefix($0 + "/") }
+    }
+
+    private static func isLikelyIndividualRecipePath(_ path: String) -> Bool {
+        let normalized = path.lowercased()
+        guard !normalized.isEmpty, normalized != "/" else { return false }
+        if isRecipePath(normalized) { return true }
+        let lastComponent = normalized.split(separator: "/").last.map(String.init) ?? ""
+        return lastComponent.hasSuffix(".html") || lastComponent.hasSuffix(".htm")
+    }
+
+    private static func uniqueRecipeCandidates(_ candidates: [RecipeExtractionCandidate]) -> [RecipeExtractionCandidate] {
+        var seen = Set<String>()
+        return candidates.filter { candidate in
+            let name = candidate.recipe.name
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let ingredients = candidate.recipe.ingredientLines
+                .prefix(2)
+                .joined(separator: "|")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .lowercased()
+            let key = "\(name)|\(ingredients)"
+            return seen.insert(key).inserted
+        }
+    }
+
+    private static func subscriptionCandidate(
+        feedURL: URL,
+        pageURL: URL,
+        title: String,
+        canonicalURL: URL
+    ) -> RecipeSiteCandidate {
+        var siteComponents = URLComponents(url: canonicalURL, resolvingAgainstBaseURL: false)
+        siteComponents?.path = "/"
+        siteComponents?.query = nil
+        siteComponents?.fragment = nil
+        let siteURL = siteComponents?.url ?? canonicalURL
+        return RecipeSiteCandidate(
+            title: title,
+            siteURL: siteURL,
+            contentURL: pageURL,
+            feedURL: feedURL,
+            sourceKind: .feed,
+            detail: feedURL.host() ?? String(localized: "RSS / Atom feed")
+        )
     }
 
     private static func isRecipePath(_ path: String) -> Bool {

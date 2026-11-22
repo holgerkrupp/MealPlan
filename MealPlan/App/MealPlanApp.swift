@@ -95,6 +95,11 @@ struct MealPlanApp: App {
                             context: container.mainContext,
                             planningThrough: purchaseManager.latestPlanningDate()
                         )
+                        // Share extensions cannot launch this process. Once
+                        // the store is usable, install (but do not consume) a
+                        // queued destination; RootView acknowledges it after
+                        // accepting the actual route.
+                        appState.markReadyForShareHandoff()
 
                         // CloudKit is a reconciliation step, never a launch
                         // prerequisite. Keep it separate from the foreground

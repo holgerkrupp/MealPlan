@@ -26,7 +26,24 @@ struct ShareRootView: View {
 
     private let container = SharedStore.container(cloudKit: false)
 
-    enum Phase: Equatable { case loading, ready, siteReady, ambiguous, saving, done, failed(String) }
+    enum Phase: Equatable {
+        case loading
+        case extracting
+        case ready
+        case siteReady
+        case ambiguous
+        case saving
+        case done
+        case handoffReady
+        case failed(String)
+    }
+
+    private enum FailureRecovery: Equatable {
+        case none
+        case reload
+    }
+
+    @State private var failureRecovery: FailureRecovery = .none
 
     var body: some View {
         NavigationStack {
@@ -35,8 +52,24 @@ struct ShareRootView: View {
                 case .loading:
                     ProgressView(String(localized: "Reading recipe…"))
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                case .extracting:
+                    ProgressView(String(localized: "Extracting recipe…"))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .failed(let message):
-                    ContentUnavailableView(String(localized: "Couldn’t import"), systemImage: "exclamationmark.triangle", description: Text(message))
+                    VStack(spacing: 16) {
+                        ContentUnavailableView(
+                            String(localized: "Couldn’t import"),
+                            systemImage: "exclamationmark.triangle",
+                            description: Text(message)
+                        )
+                        if failureRecovery == .reload {
+                            Button(String(localized: "Try again"), systemImage: "arrow.clockwise") {
+                                Task { await retryLoad() }
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .siteReady:
                     siteForm
                 case .ambiguous:
@@ -46,6 +79,8 @@ struct ShareRootView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                 case .done:
                     ContentUnavailableView(saveMessage, systemImage: "checkmark.circle.fill")
+                case .handoffReady:
+                    handoffReadyView
                 case .ready:
                     form
                 }
@@ -81,13 +116,18 @@ struct ShareRootView: View {
                             Text(String(localized: "\(recipes[index].ingredientLines.count) ingredients"))
                                 .font(.caption).foregroundStyle(.secondary)
                             if recipes[index].needsReview {
-                                Text(String(localized: "Needs a quick check"))
+                                Label(String(localized: "Needs review"), systemImage: "exclamationmark.circle")
                                     .font(.caption2).foregroundStyle(.orange)
                             }
                         }
                     }
 
-                    if case .text = payload {
+                    if recipes[index].needsReview || isTextPayload {
+                        if recipes[index].needsReview {
+                            Text(String(localized: "Check the extracted details before saving. MealPlan will keep this recipe marked for review until it is complete."))
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                        }
                         TextField(String(localized: "Recipe name"), text: $recipes[index].name)
                         TextField(String(localized: "Ingredients, one per line"), text: ingredientTextBinding(at: index), axis: .vertical)
                             .lineLimit(4...10)
@@ -110,6 +150,9 @@ struct ShareRootView: View {
                     isDateLocked: {
                         !PlanningAccess.canPlan(on: $0, isUnlocked: PurchaseEntitlementCache.isUnlocked)
                     },
+                    onSelectLockedDate: { lockedDate in
+                        saveNotice = String(localized: "\(lockedDate.formatted(.dateTime.month(.wide).day())) is locked. Unlock planning in MealPlan to use this date.")
+                    },
                     selectHint: String(localized: "Plans it here")
                 )
                 .listRowInsets(EdgeInsets(top: 4, leading: 4, bottom: 4, trailing: 4))
@@ -122,22 +165,51 @@ struct ShareRootView: View {
         }
     }
 
+    private var handoffReadyView: some View {
+        VStack(spacing: 16) {
+            Image(systemName: "arrow.up.forward.app.fill")
+                .font(.system(size: 42))
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            Text(String(localized: "Handoff ready"))
+                .font(.headline)
+            Text(String(localized: "Open MealPlan to continue. The shared recipe or site preview is queued for the next time MealPlan opens."))
+                .multilineTextAlignment(.center)
+                .foregroundStyle(.secondary)
+            Button(String(localized: "Done")) { onComplete() }
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(24)
+        .frame(maxWidth: 420)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     private var actionSection: some View {
         Section {
             Button(String(localized: "Save recipe"), systemImage: "bookmark") {
                 Task { await save(planRecipe: false) }
             }
-            .disabled(isSaving)
+            .disabled(isSaving || !canSaveRecipes)
             Button(String(localized: "Save & plan"), systemImage: "calendar.badge.plus") {
                 Task { await save(planRecipe: true) }
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isSaving || !PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked))
+            .disabled(isSaving || !canSaveRecipes || !PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked))
             Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") {
                 queueHandoff()
             }
+            if !canSaveRecipes {
+                Label(
+                    String(localized: "Add ingredients or preparation steps before saving this recipe. You can continue in MealPlan to finish the review."),
+                    systemImage: "pencil.and.list.clipboard"
+                )
+                .font(.footnote)
+                .foregroundStyle(.secondary)
+            }
             if let saveNotice {
-                Text(saveNotice).font(.footnote).foregroundStyle(.secondary)
+                Label(saveNotice, systemImage: "exclamationmark.triangle")
+                    .font(.footnote)
+                    .foregroundStyle(.red)
             }
         }
     }
@@ -159,6 +231,15 @@ struct ShareRootView: View {
                     Task { await subscribeToSite(siteCandidate) }
                 }
                 .disabled(isSubscribing)
+                if isSubscribing {
+                    ProgressView(String(localized: "Subscribing…"))
+                        .font(.footnote)
+                }
+                if let saveNotice {
+                    Label(saveNotice, systemImage: "exclamationmark.triangle")
+                        .font(.footnote)
+                        .foregroundStyle(.red)
+                }
             }
         }
     }
@@ -193,7 +274,34 @@ struct ShareRootView: View {
             } footer: {
                 Text(String(localized: "MealPlan found a public recipe feed or discovery page. Subscribe to bring future recipes into Discover."))
             }
+            Section(String(localized: "Recipe")) {
+                Text(String(localized: "This page may also contain an individual recipe. Try extracting it before subscribing."))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Button(String(localized: "Try extracting recipe"), systemImage: "fork.knife") {
+                    Task { await importSharedURL() }
+                }
+                .disabled(isSubscribing)
+            }
             if siteCandidate != nil {
+                Section(String(localized: "Recipe site")) {
+                    Button(String(localized: "Subscribe to site"), systemImage: "dot.radiowaves.left.and.right") {
+                        if let siteCandidate {
+                            Task { await subscribeToSite(siteCandidate) }
+                        }
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(isSubscribing)
+                    if isSubscribing {
+                        ProgressView(String(localized: "Subscribing…"))
+                            .font(.footnote)
+                    }
+                    if let saveNotice {
+                        Label(saveNotice, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
+                }
                 Section(String(localized: "Continue in MealPlan")) {
                     Text(String(localized: "Open MealPlan to preview this site in Discover. Subscribing is optional."))
                         .font(.footnote).foregroundStyle(.secondary)
@@ -213,6 +321,7 @@ struct ShareRootView: View {
                 Button(String(localized: "Import recipe"), systemImage: "fork.knife") {
                     Task { await importSharedURL() }
                 }
+                .disabled(isSubscribing)
             }
             if siteCandidate != nil {
                 Section(String(localized: "Recipe site")) {
@@ -221,6 +330,11 @@ struct ShareRootView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .disabled(isSubscribing)
+                    if let saveNotice {
+                        Label(saveNotice, systemImage: "exclamationmark.triangle")
+                            .font(.footnote)
+                            .foregroundStyle(.red)
+                    }
                     Button(String(localized: "Continue in MealPlan"), systemImage: "arrow.up.forward.app") { queueHandoff() }
                 }
             }
@@ -242,12 +356,33 @@ struct ShareRootView: View {
 
     // MARK: - Work
 
+    private var isTextPayload: Bool {
+        if case .text = payload { return true }
+        return false
+    }
+
+    private var canSaveRecipes: Bool {
+        !recipes.isEmpty && recipes.allSatisfy { recipe in
+            let hasName = !recipe.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            let hasIngredients = recipe.ingredientLines.contains {
+                !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            }
+            let hasInstructions = !(recipe.instructions ?? "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .isEmpty
+            return hasName && (hasIngredients || hasInstructions)
+        }
+    }
+
     @MainActor
     private func load() async {
+        failureRecovery = .none
+        saveNotice = nil
         loadMeals()
         loadPlannedDays()
         switch payload {
         case .empty:
+            failureRecovery = .none
             phase = .failed(String(localized: "Nothing to import here."))
         case .text(let text):
             recipes = [textRecipe(text)]
@@ -255,7 +390,11 @@ struct ShareRootView: View {
         case .url(let url):
             sharedURL = url
             switch await RecipeSiteDiscoveryService.classify(url) {
-            case .recipe:
+            case .recipe(let candidate):
+                // Keep the recipe as the primary action, but preserve a
+                // separately rendered subscription option when the article
+                // advertises its site's feed.
+                siteCandidate = candidate.subscriptionCandidate
                 await importSharedURL()
             case .recipeSite(let candidate):
                 siteCandidate = candidate
@@ -275,28 +414,49 @@ struct ShareRootView: View {
         case .paprika(let data):
             do {
                 recipes = try PaprikaArchive.recipes(from: data)
-                phase = recipes.isEmpty ? .failed(String(localized: "No recipes in that file.")) : .ready
+                if recipes.isEmpty {
+                    failureRecovery = .reload
+                    phase = .failed(String(localized: "No recipes in that file."))
+                } else {
+                    phase = .ready
+                }
             } catch {
+                failureRecovery = .reload
                 phase = .failed(error.localizedDescription)
             }
         case .mealPlan(let data):
             do {
                 recipes = try MealPlanRecipeArchive.importedRecipes(from: data)
-                phase = recipes.isEmpty ? .failed(String(localized: "No recipes in that file.")) : .ready
+                if recipes.isEmpty {
+                    failureRecovery = .reload
+                    phase = .failed(String(localized: "No recipes in that file."))
+                } else {
+                    phase = .ready
+                }
             } catch {
+                failureRecovery = .reload
                 phase = .failed(error.localizedDescription)
             }
         }
     }
 
     @MainActor
+    private func retryLoad() async {
+        phase = .loading
+        await load()
+    }
+
+    @MainActor
     private func importSharedURL() async {
         guard let url = sharedURL else { return }
+        saveNotice = nil
+        phase = .extracting
         do {
             recipes = [try await RecipeSchemaParser().importRecipe(from: url)]
             phase = .ready
         } catch {
             recipes = [fallbackURLRecipe(url)]
+            saveNotice = String(localized: "MealPlan could not fully extract this page. Review the fields before saving, or continue in MealPlan to finish it.")
             phase = .ready
         }
     }
@@ -304,12 +464,13 @@ struct ShareRootView: View {
     @MainActor
     private func subscribeToSite(_ candidate: RecipeSiteCandidate) async {
         isSubscribing = true
+        saveNotice = nil
         defer { isSubscribing = false }
         do {
             let context = container.mainContext
             let household = try? context.fetch(FetchDescriptor<Household>()).first
             guard HouseholdMutationAuthorization.canMutate(household: household) else {
-                phase = .failed(HouseholdSharingError.readOnlyHousehold.localizedDescription)
+                saveNotice = HouseholdSharingError.readOnlyHousehold.localizedDescription
                 return
             }
             _ = try await RecipeFeedService.subscribe(to: candidate, household: household, context: context)
@@ -317,7 +478,7 @@ struct ShareRootView: View {
             saveMessage = String(localized: "Subscribed to \(candidate.title)")
             phase = .done
         } catch {
-            phase = .failed(error.localizedDescription)
+            saveNotice = error.localizedDescription
         }
     }
 
@@ -355,12 +516,20 @@ struct ShareRootView: View {
     @MainActor
     private func save(planRecipe: Bool) async {
         guard !isSaving else { return }
+        guard canSaveRecipes else {
+            saveNotice = String(localized: "Add ingredients or preparation steps before saving this recipe.")
+            return
+        }
         isSaving = true
+        saveNotice = nil
+        phase = .saving
+        await Task.yield()
         defer { isSaving = false }
         let context = container.mainContext
         let household = try? context.fetch(FetchDescriptor<Household>()).first
         guard HouseholdMutationAuthorization.canMutate(household: household) else {
-            phase = .failed(HouseholdSharingError.readOnlyHousehold.localizedDescription)
+            saveNotice = HouseholdSharingError.readOnlyHousehold.localizedDescription
+            phase = .ready
             return
         }
         let member = household.flatMap { household in
@@ -373,6 +542,7 @@ struct ShareRootView: View {
         )
         guard !result.persistenceFailed else {
             saveNotice = result.summary
+            phase = .ready
             return
         }
         if let dish = result.dishesForPlanning.first { savedDishID = dish.uuid }
@@ -381,6 +551,7 @@ struct ShareRootView: View {
             guard PlanningAccess.canPlan(on: date, isUnlocked: PurchaseEntitlementCache.isUnlocked) else {
                 saveNotice = String(localized: "Recipe saved to Dishes. This date is locked, so it wasn’t planned.")
                 HouseholdStoreGeneration.markDirty()
+                phase = .ready
                 return
             }
             var allPlanned = !result.dishesForPlanning.isEmpty
@@ -394,6 +565,7 @@ struct ShareRootView: View {
             guard planned else {
                 saveNotice = String(localized: "Recipe saved to Dishes, but the plan couldn’t be saved. Try Save & plan again.")
                 HouseholdStoreGeneration.markDirty()
+                phase = .ready
                 return
             }
         }
@@ -401,7 +573,7 @@ struct ShareRootView: View {
             ? String(localized: "Recipe saved to Dishes and planned.")
             : (result.isEmpty ? String(localized: "Recipe already saved to Dishes.") : String(localized: "Recipe saved to Dishes."))
         HouseholdStoreGeneration.markDirty()
-        phase = .done
+        phase = .handoffReady
     }
 
     @MainActor

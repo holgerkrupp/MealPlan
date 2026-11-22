@@ -30,10 +30,15 @@ enum MealPlanner {
             return .failed
         }
         let day = date.startOfDay
+        let householdID = household?.uuid ?? dish.household?.uuid
         let existing: [MealPlanEntry]
         do {
             existing = try context.fetch(FetchDescriptor<MealPlanEntry>(
-                predicate: #Predicate { $0.date == day && $0.mealKey == mealKey }
+                predicate: #Predicate {
+                    $0.date == day
+                        && $0.mealSlotRaw == mealKey
+                        && $0.household?.uuid == householdID
+                }
             ))
         } catch {
             return .failed
