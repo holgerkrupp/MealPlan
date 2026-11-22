@@ -4,6 +4,17 @@ import SwiftData
 import UIKit
 #endif
 
+/// Share sheets need a deterministic, bounded response. Apple Intelligence
+/// and image downloads are still available in the full app, but neither is a
+/// prerequisite for showing the extracted recipe and its save actions here.
+private struct ShareExtensionDeterministicAIExtractor: RecipeAIExtractor {
+    var availability: RecipeAIAvailability { .unavailable }
+
+    func extract(from _: RecipeWebPageRepresentation) async -> RecipeAIExtraction? {
+        nil
+    }
+}
+
 struct ShareRootView: View {
     let payload: SharePayload
     var onComplete: () -> Void
@@ -26,6 +37,7 @@ struct ShareRootView: View {
     @State private var subscriptionNotice: String?
     @State private var subscriptionSucceeded = false
     @State private var savedDishID: UUID?
+    @State private var discoveryGeneration = UUID()
 
     private let container = SharedStore.container(cloudKit: false)
 
@@ -369,6 +381,8 @@ struct ShareRootView: View {
 
     @MainActor
     private func load() async {
+        let loadID = UUID()
+        discoveryGeneration = loadID
         failureRecovery = .none
         saveNotice = nil
         subscriptionNotice = nil
@@ -386,28 +400,22 @@ struct ShareRootView: View {
         case .url(let url):
             sharedURL = url
             phase = .extracting
-            let kind = await RecipeSiteDiscoveryService.classify(url)
-            classification = kind
-            switch kind {
-            case .recipe(let candidate):
-                // Keep the recipe as the primary action, but preserve a
-                // separately rendered subscription option when the article
-                // advertises its site's feed.
-                siteCandidate = candidate.subscriptionCandidate
-            case .recipeSite(let candidate):
-                siteCandidate = candidate
-            case .feed(let feed):
-                siteCandidate = RecipeSiteCandidate(title: feed.title, siteURL: feed.siteURL, feedURL: feed.feedURL)
-            case .ambiguous(let url):
-                sharedURL = url
-                siteCandidate = .manual(for: url)
-            case .unsupported(let url):
-                sharedURL = url
+            // Site discovery and recipe extraction used to run serially. A
+            // slow feed endpoint could therefore add another full network
+            // timeout before the recipe UI appeared. They are independent:
+            // extraction drives the primary UI and discovery only supplies the
+            // optional footer/fallback classification.
+            let discoveryTask = Task.detached(priority: .utility) {
+                await RecipeSiteDiscoveryService.classify(url)
             }
-            if case .feed = kind {
-                phase = .siteReady
-            } else {
-                await importSharedURL(classification: kind)
+            await importSharedURL()
+            // Do not make the optional discovery request part of the visible
+            // extraction latency. It can finish after the recipe preview is
+            // already usable and then add the compact subscription footer.
+            Task { @MainActor in
+                let kind = await discoveryTask.value
+                guard discoveryGeneration == loadID else { return }
+                applyClassification(kind)
             }
         case .paprika(let data):
             do {
@@ -445,12 +453,49 @@ struct ShareRootView: View {
     }
 
     @MainActor
+    private func applyClassification(_ kind: SharedRecipeURLKind) {
+        classification = kind
+        switch kind {
+        case .recipe(let candidate):
+            siteCandidate = candidate.subscriptionCandidate
+        case .recipeSite(let candidate):
+            siteCandidate = candidate
+        case .feed(let feed):
+            siteCandidate = RecipeSiteCandidate(title: feed.title, siteURL: feed.siteURL, feedURL: feed.feedURL)
+        case .ambiguous(let url):
+            sharedURL = url
+            siteCandidate = .manual(for: url)
+        case .unsupported(let url):
+            sharedURL = url
+        }
+
+        // A feed must never leave behind a parser-generated title-only
+        // placeholder that could be mistaken for a recipe. Never replace a
+        // save result that has already been accepted while discovery finishes.
+        guard phase != .saving, phase != .done else { return }
+        if case .feed = kind {
+            recipes = []
+            phase = .siteReady
+        } else if let recipe = recipes.first, ShareRecipeImportPolicy.accepts(recipe, classification: kind) {
+            phase = .ready
+        } else if !recipes.isEmpty {
+            saveNotice = String(localized: "MealPlan found no complete recipe on this page. You can continue in MealPlan to review it, but nothing will be saved until it has ingredients or preparation steps.")
+            phase = .siteReady
+        } else {
+            phase = .siteReady
+        }
+    }
+
+    @MainActor
     private func importSharedURL(classification requestedClassification: SharedRecipeURLKind? = nil) async {
         guard let url = sharedURL else { return }
         saveNotice = nil
         phase = .extracting
         do {
-            let recipe = try await RecipeSchemaParser().importRecipe(from: url)
+            let recipe = try await RecipeSchemaParser(
+                aiExtractor: ShareExtensionDeterministicAIExtractor(),
+                loadImage: false
+            ).importRecipe(from: url)
             recipes = [recipe]
             let kind = requestedClassification ?? classification
             if ShareRecipeImportPolicy.accepts(recipe, classification: kind) {

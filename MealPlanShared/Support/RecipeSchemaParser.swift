@@ -35,10 +35,19 @@ struct RecipeSchemaParser: RecipeImporter {
 
     var session: URLSession = .shared
     var aiExtractor: any RecipeAIExtractor
+    /// Image retrieval is useful for a full-screen import, but it must not
+    /// block a Share Extension from showing the recipe actions. Callers can
+    /// enrich the recipe later when they have a longer-lived process.
+    var loadImage: Bool
 
-    init(session: URLSession = .shared, aiExtractor: any RecipeAIExtractor = FoundationModelsRecipeAIExtractor()) {
+    init(
+        session: URLSession = .shared,
+        aiExtractor: any RecipeAIExtractor = FoundationModelsRecipeAIExtractor(),
+        loadImage: Bool = true
+    ) {
         self.session = session
         self.aiExtractor = aiExtractor
+        self.loadImage = loadImage
     }
 
     func importRecipe(from url: URL) async throws -> ImportedRecipe {
@@ -69,7 +78,7 @@ struct RecipeSchemaParser: RecipeImporter {
                 parsed = RecipeAIMerger.merge(extraction, into: parsed, representation: representation)
             }
         }
-        let recipe = await withImage(parsed, html: html)
+        let recipe = loadImage ? await withImage(parsed, html: html) : parsed
         var provenance: [RecipeExtractionField: RecipeExtractionProvenance] = [:]
         for (field, evidence) in recipe.fieldEvidence {
             let mapped: RecipeExtractionProvenance = switch evidence.source {
