@@ -115,6 +115,10 @@ private struct CalendarHomeContent: View {
             Divider()
             plan(entries: entrySnapshots.entries)
         }
+        .onAppear { goTo(appState.selectedDate) }
+        .onChange(of: appState.selectedDate) { _, date in
+            goTo(date)
+        }
         // The Plan menu only works while the calendar is on screen; switching
         // to another section drops this value and greys the menu out.
         .focusedSceneValue(\.planCommands, PlanCommands(

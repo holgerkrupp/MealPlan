@@ -72,4 +72,26 @@ struct DeepLinkTests {
         let day = DeepLink.parseDate("2026-01-07")!
         #expect(DeepLink.date(day).url.absoluteString == "mealplan://date/2026-01-07")
     }
+
+    @Test func planLinkRoundTripsDateAndMealDetails() {
+        let date = DeepLink.parseDate("2026-11-23")!
+        let dishID = UUID(uuidString: "5B6C9AF8-4EEA-456A-93A0-A1B36B9D55A4")!
+        let destination = DeepLink.plan(
+            dishName: "Soup & bread",
+            dishUUID: dishID,
+            date: date,
+            slot: .dinner
+        )
+
+        #expect(DeepLink(url: destination.url) == destination)
+        #expect(destination.url.absoluteString.contains("date=2026-11-23"))
+    }
+
+    @Test func widgetPlanLinkOpensTargetDayWithoutSelectingADish() {
+        let date = DeepLink.parseDate("2026-11-24")!
+        let destination = DeepLink.plan(dishName: nil, dishUUID: nil, date: date, slot: nil)
+
+        #expect(DeepLink(url: destination.url) == destination)
+        #expect(destination.url.absoluteString == "mealplan://plan?date=2026-11-24")
+    }
 }

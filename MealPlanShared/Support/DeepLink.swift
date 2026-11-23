@@ -128,9 +128,20 @@ extension DeepLink {
             return URL(string: "\(DeepLink.scheme)://date/\(date.dayID)") ?? DeepLink.today.url
         case .shoppingList:
             return URL(string: "\(DeepLink.scheme)://shopping") ?? DeepLink.today.url
-        case .addDish, .plan:
+        case .plan(let dishName, let dishUUID, let date, let slot):
+            var components = URLComponents()
+            components.scheme = DeepLink.scheme
+            components.host = "plan"
+            var items: [URLQueryItem] = []
+            if let dishName { items.append(URLQueryItem(name: "dish", value: dishName)) }
+            if let dishUUID { items.append(URLQueryItem(name: "id", value: dishUUID.uuidString)) }
+            if let date { items.append(URLQueryItem(name: "date", value: date.dayID)) }
+            if let slot { items.append(URLQueryItem(name: "slot", value: slot.rawValue)) }
+            components.queryItems = items.isEmpty ? nil : items
+            return components.url ?? DeepLink.today.url
+        case .addDish:
             // Both carry free-form text that would need escaping, and nothing
-            // links *into* them from outside yet.
+            // links *into* add-dish from outside yet.
             return DeepLink.today.url
         case .dish(let id):
             var components = URLComponents()
