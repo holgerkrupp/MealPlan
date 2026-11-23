@@ -7,136 +7,6 @@
     " " : {
 
     },
-    "Delete %@?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%@ löschen?"
-          }
-        }
-      }
-    },
-    "Delete and unlink uses" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Löschen und Verwendungen entkoppeln"
-          }
-        }
-      }
-    },
-    "Delete duplicate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Duplikat löschen"
-          }
-        }
-      }
-    },
-    "Delete ingredient?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zutat löschen?"
-          }
-        }
-      }
-    },
-    "Ingredient deleted" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Zutat gelöscht"
-          }
-        }
-      }
-    },
-    "Merge %lld duplicates" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Duplikate zusammenführen"
-          }
-        }
-      }
-    },
-    "Merge 1 duplicate" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 Duplikat zusammenführen"
-          }
-        }
-      }
-    },
-    "Merge clear matches" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Eindeutige Treffer zusammenführen"
-          }
-        }
-      }
-    },
-    "Only exact or high-confidence suggestions with matching category, aisle, pantry, nutrition, and stock data will be merged. You can undo the last merge from the Edit menu." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur exakte oder hochsichere Vorschläge mit übereinstimmender Kategorie, Abteilung, Vorratskennzeichnung, Nährwerten und Vorratsdaten werden zusammengeführt. Die letzte Zusammenführung kannst du im Menü „Bearbeiten“ rückgängig machen."
-          }
-        }
-      }
-    },
-    "Review match" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Treffer prüfen"
-          }
-        }
-      }
-    },
-    "This match has %lld recipe lines, %lld shopping items, %lld aliases, and %@. Review the match to keep its links. If deleted, recipe wording, amounts, and shopping items stay but become unlinked. Its aliases, pantry data, and catalogue metadata are removed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Treffer hat %1$lld Rezeptzeilen, %2$lld Einkaufslisteneinträge, %3$lld Aliase und %@. Prüfe den Treffer, um seine Verknüpfungen zu behalten. Beim Löschen bleiben Rezepttexte, Mengen und Einkaufslisteneinträge erhalten, werden aber entkoppelt. Aliase, Vorratsdaten und Katalogmetadaten werden entfernt."
-          }
-        }
-      }
-    },
-    "no pantry stock" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "kein Vorratsbestand"
-          }
-        }
-      }
-    },
-    "pantry stock" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vorratsbestand"
-          }
-        }
-      }
-    },
     "—" : {
 
     },
@@ -219,9 +89,6 @@
           }
         }
       }
-    },
-    "(Int((value * 100).rounded()))% match" : {
-
     },
     "%@" : {
 
@@ -349,6 +216,9 @@
       }
     },
     "%@ has been unavailable for two weeks." : {
+
+    },
+    "%@ is locked. Unlock planning in MealPlan to use this date." : {
 
     },
     "%@ Meal Plan" : {
@@ -686,6 +556,16 @@
           "stringUnit" : {
             "state" : "new",
             "value" : "%1$lld / %2$lld"
+          }
+        }
+      }
+    },
+    "%lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld %2$@"
           }
         }
       }
@@ -3363,6 +3243,12 @@
     "Add ingredient" : {
 
     },
+    "Add ingredients or preparation steps before saving this recipe." : {
+
+    },
+    "Add ingredients or preparation steps before saving this recipe. You can continue in MealPlan to finish the review." : {
+
+    },
     "Add ingredients or steps first — there is nothing to translate yet." : {
 
     },
@@ -3632,9 +3518,6 @@
           }
         }
       }
-    },
-    "Add recipe to plan" : {
-
     },
     "Add several items" : {
 
@@ -4649,6 +4532,7 @@
 
     },
     "Already in MealPlan" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -4793,6 +4677,7 @@
 
     },
     "Also plan it" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -4936,11 +4821,21 @@
     "Amount" : {
 
     },
+    "Amount and unit" : {
+
+    },
     "Amount, e.g. 500 g or 3" : {
 
     },
-    "Amounts are for %lld servings." : {
-
+    "Amounts are for %lld %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Amounts are for %1$lld %2$@."
+          }
+        }
+      }
     },
     "An amount is optional. With one, rebuilding the shopping list buys only what's missing; “Have” without an amount leaves the item off." : {
 
@@ -5946,6 +5841,9 @@
 
     },
     "Best before %@" : {
+
+    },
+    "Best-before date" : {
 
     },
     "Both lists were already the same." : {
@@ -7656,6 +7554,9 @@
     "Check that you are signed in to iCloud, then refresh." : {
 
     },
+    "Check the extracted details before saving. MealPlan will keep this recipe marked for review until it is complete." : {
+
+    },
     "Check the split is right, then save. The dish opens for editing and is marked to review." : {
       "localizations" : {
         "da" : {
@@ -8049,7 +7950,13 @@
     "Choose the icon MealPlan uses on your Home Screen and in search." : {
 
     },
+    "Choose value" : {
+
+    },
     "Choose which ingredient it means." : {
+
+    },
+    "Choose which row’s value to keep for each difference. Amounts are never added together; choose Keep separate to preserve both records." : {
 
     },
     "Chop the vegetables, stir-fry until crisp-tender, then season and serve with rice." : {
@@ -9106,6 +9013,9 @@
         }
       }
     },
+    "Continue in MealPlan" : {
+
+    },
     "Continue opening" : {
 
     },
@@ -9501,6 +9411,9 @@
         }
       }
     },
+    "Cooking" : {
+
+    },
     "Cooking mode walks you through the steps and scales ingredients to the servings you cook." : {
       "localizations" : {
         "da" : {
@@ -9594,6 +9507,7 @@
       }
     },
     "Cooking session" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -11216,11 +11130,42 @@
         }
       }
     },
+    "Delete %@?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ löschen?"
+          }
+        }
+      }
+    },
+    "Delete and unlink uses" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Löschen und Verwendungen entkoppeln"
+          }
+        }
+      }
+    },
     "Delete collection" : {
 
     },
     "Delete collection…" : {
 
+    },
+    "Delete duplicate" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikat löschen"
+          }
+        }
+      }
     },
     "Delete feed" : {
       "extractionState" : "stale",
@@ -11271,6 +11216,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Eliminar feed"
+          }
+        }
+      }
+    },
+    "Delete ingredient?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat löschen?"
           }
         }
       }
@@ -14542,6 +14497,9 @@
         }
       }
     },
+    "Extracting recipe…" : {
+
+    },
     "Family" : {
       "localizations" : {
         "da" : {
@@ -15367,7 +15325,18 @@
     "for %lld" : {
 
     },
+    "For %lld %@: %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "For %1$lld %2$@: %3$@"
+          }
+        }
+      }
+    },
     "For %lld servings: %@" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -16615,6 +16584,12 @@
           }
         }
       }
+    },
+    "Handoff ready" : {
+
+    },
+    "Handoff ready. Open MealPlan to continue." : {
+
     },
     "Hands-free voice control" : {
 
@@ -18302,6 +18277,16 @@
     "Ingredient Cleanup" : {
 
     },
+    "Ingredient deleted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zutat gelöscht"
+          }
+        }
+      }
+    },
     "Ingredient merged" : {
       "localizations" : {
         "de" : {
@@ -18364,10 +18349,14 @@
     "Ingredients and method as a message" : {
 
     },
+    "Ingredients checked" : {
+
+    },
     "Ingredients could not be imported for %@. Add them to the recipe before shopping." : {
 
     },
     "Ingredients for %lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -18403,6 +18392,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Ingredientes para %lld"
+          }
+        }
+      }
+    },
+    "Ingredients for %lld %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Ingredients for %1$lld %2$@"
           }
         }
       }
@@ -19999,6 +19998,9 @@
     "Matcher evidence" : {
 
     },
+    "Matching ingredients need review before another pantry entry can be added. Open Pantry and choose Review duplicates." : {
+
+    },
     "Max. time" : {
       "localizations" : {
         "da" : {
@@ -20374,6 +20376,12 @@
     "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support." : {
 
     },
+    "MealPlan could not find enough recipe details to show a saving and planning form. You can retry extraction or continue in MealPlan for a fuller review." : {
+
+    },
+    "MealPlan could not fully extract this page. Review the fields before saving, or continue in MealPlan to finish it." : {
+
+    },
     "MealPlan couldn’t prepare household sharing." : {
       "localizations" : {
         "de" : {
@@ -20383,6 +20391,9 @@
           }
         }
       }
+    },
+    "MealPlan couldn’t prepare the handoff. Try again." : {
+
     },
     "MealPlan couldn’t prepare the household invitation." : {
 
@@ -20528,10 +20539,10 @@
         }
       }
     },
-    "MealPlan found a public recipe feed or discovery page. It will keep the source and show future recipes in Discover." : {
+    "MealPlan found more than one populated household for this Apple Account. Copying moves this device to the active shared household and retains every original iCloud zone as a backup." : {
 
     },
-    "MealPlan found more than one populated household for this Apple Account. Copying moves this device to the active shared household and retains every original iCloud zone as a backup." : {
+    "MealPlan found no complete recipe on this page. You can continue in MealPlan to review it, but nothing will be saved until it has ingredients or preparation steps." : {
 
     },
     "MealPlan Fridge" : {
@@ -21051,19 +21062,40 @@
     "Merge" : {
 
     },
-    "Merge (batchSuggestions.count)" : {
-
-    },
     "Merge / Same ingredient" : {
 
     },
-    "Merge and keep canonical details" : {
-
+    "Merge %lld duplicates" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%1$lld Duplikate zusammenführen"
+          }
+        }
+      }
+    },
+    "Merge 1 duplicate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Duplikat zusammenführen"
+          }
+        }
+      }
+    },
+    "Merge clear matches" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Eindeutige Treffer zusammenführen"
+          }
+        }
+      }
     },
     "Merge despite catalogue differences?" : {
-
-    },
-    "Merge high-confidence" : {
 
     },
     "Merge high-confidence suggestions?" : {
@@ -21082,7 +21114,10 @@
     "Merge Recipes" : {
 
     },
-    "Merges only high-confidence suggestions without metadata conflicts" : {
+    "Merge with reviewed values" : {
+
+    },
+    "Merges exact and high-confidence suggestions without metadata conflicts" : {
 
     },
     "Merging keeps the recipe wording and moves recipe and shopping list relationships to the canonical ingredient. The last merge can be undone from the Edit menu." : {
@@ -21481,6 +21516,7 @@
       }
     },
     "Needs a quick check" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -22429,6 +22465,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Não há outros pratos"
+          }
+        }
+      }
+    },
+    "no pantry stock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "kein Vorratsbestand"
           }
         }
       }
@@ -25124,8 +25170,15 @@
         }
       }
     },
-    "Only suggestions with high matcher confidence and matching category, aisle, pantry, and nutrition data will be merged. You can undo the last merge from the Edit menu." : {
-
+    "Only exact or high-confidence suggestions with matching category, aisle, pantry, nutrition, and stock data will be merged. You can undo the last merge from the Edit menu." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur exakte oder hochsichere Vorschläge mit übereinstimmender Kategorie, Abteilung, Vorratskennzeichnung, Nährwerten und Vorratsdaten werden zusammengeführt. Die letzte Zusammenführung kannst du im Menü „Bearbeiten“ rückgängig machen."
+          }
+        }
+      }
     },
     "Only the household owner can invite people." : {
       "extractionState" : "stale",
@@ -25432,17 +25485,27 @@
         }
       }
     },
-    "Open in MealPlan" : {
-
-    },
     "Open in New Window" : {
 
     },
     "Open MealPlan" : {
 
     },
+    "Open MealPlan to continue. The shared recipe or site preview is queued for the next time MealPlan opens." : {
+
+    },
     "Open recipe" : {
 
+    },
+    "Open seasonal recipe" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Saisonales Rezept öffnen"
+          }
+        }
+      }
     },
     "Open Settings" : {
       "localizations" : {
@@ -25688,6 +25751,9 @@
     "Optional suggestions use typical regional package sizes. They never change recipes, shopping quantities or your plan." : {
 
     },
+    "Optional: future recipes from this site will appear in Discover." : {
+
+    },
     "Optional. When you say who a calendar belongs to, the plan can show who is still busy around a meal. MealPlan never guesses this from calendar names." : {
       "localizations" : {
         "da" : {
@@ -25877,6 +25943,9 @@
 
     },
     "Original recipe: %@" : {
+
+    },
+    "Original yield: %@" : {
 
     },
     "Other" : {
@@ -26123,6 +26192,9 @@
     "Pantry and inventory" : {
 
     },
+    "Pantry note" : {
+
+    },
     "Pantry staple" : {
       "localizations" : {
         "da" : {
@@ -26306,6 +26378,19 @@
           }
         }
       }
+    },
+    "pantry stock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vorratsbestand"
+          }
+        }
+      }
+    },
+    "Pantry stock" : {
+
     },
     "Paper" : {
 
@@ -26608,6 +26693,12 @@
         }
       }
     },
+    "per %@" : {
+
+    },
+    "Per %@" : {
+
+    },
     "per 100 g" : {
       "localizations" : {
         "da" : {
@@ -26779,16 +26870,6 @@
     },
     "Per serving" : {
 
-    },
-    "Per serving %@ · P %@ · C %@ · F %@" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "new",
-            "value" : "Per serving %1$@ · P %2$@ · C %3$@ · F %4$@"
-          }
-        }
-      }
     },
     "Period" : {
 
@@ -27151,6 +27232,98 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Escolhe primeiro que lista do Bring! usar."
+          }
+        }
+      }
+    },
+    "pieces" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stykker"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stücke"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "piezas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pièces"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "pezzi"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "stuks"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "unidades"
+          }
+        }
+      }
+    },
+    "Pieces" : {
+      "localizations" : {
+        "da" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stykker"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stücke"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piezas"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pièces"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pezzi"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Stuks"
+          }
+        },
+        "pt-PT" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unidades"
           }
         }
       }
@@ -28477,9 +28650,6 @@
         }
       }
     },
-    "Possible duplicates" : {
-
-    },
     "Possible match: %@" : {
 
     },
@@ -28686,6 +28856,9 @@
 
     },
     "Prep time, shortest first" : {
+
+    },
+    "Preparation" : {
 
     },
     "Prepare a copy to share…" : {
@@ -29576,6 +29749,9 @@
         }
       }
     },
+    "Recipe already saved to Dishes." : {
+
+    },
     "Recipe archive" : {
       "localizations" : {
         "da" : {
@@ -29836,6 +30012,18 @@
           }
         }
       }
+    },
+    "Recipe saved to Dishes and planned." : {
+
+    },
+    "Recipe saved to Dishes, but the plan couldn’t be saved. Try Save & plan again." : {
+
+    },
+    "Recipe saved to Dishes." : {
+
+    },
+    "Recipe saved to Dishes. This date is locked, so it wasn’t planned." : {
+
     },
     "Recipe search" : {
       "localizations" : {
@@ -31884,6 +32072,9 @@
     "Review and Copy Household Data" : {
 
     },
+    "Review duplicates" : {
+
+    },
     "Review household invitations" : {
       "extractionState" : "stale",
       "localizations" : {
@@ -31898,10 +32089,20 @@
     "Review ingredient" : {
 
     },
-    "Review recipe" : {
+    "Review match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Treffer prüfen"
+          }
+        }
+      }
+    },
+    "Review matching ingredients" : {
 
     },
-    "Review the evidence before changing your catalogue. Keeping items separate is remembered for this spelling pair." : {
+    "Review recipe" : {
 
     },
     "Room for every routine" : {
@@ -32220,6 +32421,9 @@
         }
       }
     },
+    "same known ingredient in another language" : {
+
+    },
     "same name" : {
       "localizations" : {
         "de" : {
@@ -32281,6 +32485,9 @@
           }
         }
       }
+    },
+    "Save & plan" : {
+
     },
     "Save a good week as a template and reuse it when you run out of ideas." : {
       "localizations" : {
@@ -32722,6 +32929,7 @@
       }
     },
     "Saved %lld recipes to MealPlan" : {
+      "extractionState" : "stale",
       "localizations" : {
         "da" : {
           "stringUnit" : {
@@ -33514,66 +33722,118 @@
     },
     "Seasonal moment: Autumn harvest" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Herbsternte" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herbsternte"
+          }
+        }
       }
     },
     "Seasonal moment: Halloween" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Halloween" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Halloween"
+          }
+        }
       }
     },
     "Seasonal moment: Lunar New Year cooking" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kochen zum Mondneujahr" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kochen zum Mondneujahr"
+          }
+        }
       }
     },
     "Seasonal moment: New Year" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Neujahr" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neujahr"
+          }
+        }
       }
     },
     "Seasonal moment: Spring and Easter cooking" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Frühlings- und Osterküche" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Frühlings- und Osterküche"
+          }
+        }
       }
     },
     "Seasonal moment: Summer grilling and picnics" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Sommergrillen und Picknick" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sommergrillen und Picknick"
+          }
+        }
       }
     },
     "Seasonal moment: Thanksgiving" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Thanksgiving" } }
-      }
-    },
-    "Seasonal moment: Winter holiday baking" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Winterliches Festtagsgebäck" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Thanksgiving"
+          }
+        }
       }
     },
     "Seasonal moment: Winter comfort food" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wärmende Winterküche" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wärmende Winterküche"
+          }
+        }
       }
     },
-    "See all" : {
+    "Seasonal moment: Winter holiday baking" : {
       "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle anzeigen" } }
-      }
-    },
-    "See all seasonal recipes" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Alle saisonalen Rezepte" } }
-      }
-    },
-    "Open seasonal recipe" : {
-      "localizations" : {
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Saisonales Rezept öffnen" } }
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Winterliches Festtagsgebäck"
+          }
+        }
       }
     },
     "Secure invitation and continue" : {
 
+    },
+    "See all" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle anzeigen"
+          }
+        }
+      }
+    },
+    "See all seasonal recipes" : {
+      "extractionState" : "stale",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle saisonalen Rezepte"
+          }
+        }
+      }
     },
     "See what is connected, then open only the service you want to change." : {
       "localizations" : {
@@ -33959,9 +34219,6 @@
     "Separate images" : {
 
     },
-    "Serves" : {
-
-    },
     "Serves %lld" : {
       "localizations" : {
         "da" : {
@@ -34002,30 +34259,8 @@
         }
       }
     },
-    "pieces" : {
-      "localizations" : {
-        "da" : { "stringUnit" : { "state" : "translated", "value" : "stykker" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Stücke" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "piezas" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "pièces" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "pezzi" } },
-        "nl" : { "stringUnit" : { "state" : "translated", "value" : "stuks" } },
-        "pt-PT" : { "stringUnit" : { "state" : "translated", "value" : "unidades" } }
-      }
-    },
     "servings" : {
 
-    },
-    "Pieces" : {
-      "localizations" : {
-        "da" : { "stringUnit" : { "state" : "translated", "value" : "Stykker" } },
-        "de" : { "stringUnit" : { "state" : "translated", "value" : "Stücke" } },
-        "es" : { "stringUnit" : { "state" : "translated", "value" : "Piezas" } },
-        "fr" : { "stringUnit" : { "state" : "translated", "value" : "Pièces" } },
-        "it" : { "stringUnit" : { "state" : "translated", "value" : "Pezzi" } },
-        "nl" : { "stringUnit" : { "state" : "translated", "value" : "Stuks" } },
-        "pt-PT" : { "stringUnit" : { "state" : "translated", "value" : "Unidades" } }
-      }
     },
     "Servings" : {
       "localizations" : {
@@ -34917,6 +35152,9 @@
 
     },
     "Show all dishes" : {
+
+    },
+    "Show all seasonal recipes" : {
 
     },
     "Show amounts in" : {
@@ -36373,6 +36611,9 @@
     "Still to buy" : {
 
     },
+    "Stock status" : {
+
+    },
     "Stop publishing" : {
 
     },
@@ -36551,9 +36792,6 @@
         }
       }
     },
-    "Subscribe to recipe site" : {
-
-    },
     "Subscribe to site" : {
 
     },
@@ -36564,6 +36802,9 @@
 
     },
     "Subscribed to %@" : {
+
+    },
+    "Subscribing…" : {
 
     },
     "Subscriptions" : {
@@ -37245,7 +37486,7 @@
         }
       }
     },
-    "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day, without using one of your meals." : {
+    "Tap a slot to choose the day and meal. The bottom row plans it as an extra on that day." : {
 
     },
     "Tap a slot to move this meal. The bottom row makes it an extra on that day, outside your usual meals." : {
@@ -37861,7 +38102,7 @@
         }
       }
     },
-    "The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Review the differences above before continuing." : {
+    "The canonical ingredient’s category, aisle, pantry setting, and nutrition values will be kept. Stock conflicts use the values you selected above. Review the differences before continuing." : {
 
     },
     "The cooking timer could not be started." : {
@@ -38935,6 +39176,16 @@
     "This invitation no longer exists or was created in a different iCloud environment. Install MealPlan from the same source (Xcode, TestFlight, or App Store) on both phones, then send a new invitation." : {
 
     },
+    "This match has %lld recipe lines, %lld shopping items, %lld aliases, and %@. Review the match to keep its links. If deleted, recipe wording, amounts, and shopping items stay but become unlinked. Its aliases, pantry data, and catalogue metadata are removed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Treffer hat %1$lld Rezeptzeilen, %2$lld Einkaufslisteneinträge, %3$lld Aliase und %@. Prüfe den Treffer, um seine Verknüpfungen zu behalten. Beim Löschen bleiben Rezepttexte, Mengen und Einkaufslisteneinträge erhalten, werden aber entkoppelt. Aliase, Vorratsdaten und Katalogmetadaten werden entfernt."
+          }
+        }
+      }
+    },
     "This meal" : {
       "localizations" : {
         "da" : {
@@ -39255,6 +39506,9 @@
           }
         }
       }
+    },
+    "This site was shared with MealPlan. Subscribe from Discover when you want future recipes to appear here." : {
+
     },
     "This site’s feed has no recent posts." : {
 
@@ -40087,10 +40341,16 @@
     "Translating on this device…" : {
 
     },
+    "Try again" : {
+
+    },
     "Try Again" : {
 
     },
     "Try another word, or widen the filter to include older posts." : {
+
+    },
+    "Try extracting recipe" : {
 
     },
     "Turn off “Hide checked items” to show them again." : {
@@ -41764,6 +42024,9 @@
     "Values entered by someone in your household." : {
 
     },
+    "Values present on only one row are retained automatically." : {
+
+    },
     "Values stated by the recipe’s source. MealPlan hasn’t checked them." : {
 
     },
@@ -43374,6 +43637,15 @@
 
     },
     "Yes" : {
+
+    },
+    "Yield" : {
+
+    },
+    "Yield label (optional)" : {
+
+    },
+    "Yield type" : {
 
     },
     "You" : {
