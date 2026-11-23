@@ -1,0 +1,56 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "Add a meal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mahlzeit hinzufügen" } }
+      }
+    },
+    "Fancy planning a meal?" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lust, eine Mahlzeit zu planen?" } }
+      }
+    },
+    "Find something tasty for the week ahead." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Finde etwas Leckeres für die kommende Woche." } }
+      }
+    },
+    "Meal plan unavailable" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Essensplan nicht verfügbar" } }
+      }
+    },
+    "No plan data is available right now." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Planungsdaten sind gerade nicht verfügbar." } }
+      }
+    },
+    "Open MealPlan to check your plan." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Öffne MealPlan, um deinen Plan zu prüfen." } }
+      }
+    },
+    "Plan a meal" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Mahlzeit planen" } }
+      }
+    },
+    "Plan something for this day." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Plane etwas für diesen Tag." } }
+      }
+    },
+    "Plan something for this week." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Plane etwas für diese Woche." } }
+      }
+    },
+    "What's cooking next?" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Was gibt es als Nächstes?" } }
+      }
+    }
+  },
+  "version" : "1.0"
+}

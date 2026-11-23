@@ -18,11 +18,12 @@ struct UpcomingMealsProvider: TimelineProvider {
     /// gap in it still fills the widget with the meals that come after it.
     private func entry() -> MealPlanWidgetEntry {
         let now = Date.now
-        let days = WidgetPlanLoader.upcoming(from: now, limit: 8, thumbnailBudget: 10)
+        let loaded = WidgetPlanLoader.upcoming(from: now, limit: 8, thumbnailBudget: 10)
         return MealPlanWidgetEntry(
             date: now,
-            days: days,
-            link: WidgetLink.day(days.first?.date ?? now),
+            days: loaded.days,
+            link: WidgetLink.plan(loaded.days.first?.date ?? now),
+            availability: loaded.availability,
             reference: now
         )
     }
@@ -70,8 +71,10 @@ struct UpcomingMealsView: View {
     private var flat: some View {
         VStack(alignment: .leading, spacing: 6) {
             WidgetHeader(title: String(localized: "Coming up"), symbol: "calendar")
-            if meals.isEmpty {
-                NothingPlannedNote()
+            if entry.contentState(hasMeals: !meals.isEmpty) == .unavailable {
+                PlanUnavailableNote(compact: family == .systemSmall)
+            } else if meals.isEmpty {
+                PlanInvitation(date: entry.reference, compact: family == .systemSmall)
             } else {
                 ForEach(meals.prefix(family == .systemSmall ? 3 : 4), id: \.meal.id) { pair in
                     MealRow(
@@ -96,8 +99,10 @@ struct UpcomingMealsView: View {
     private var grouped: some View {
         VStack(alignment: .leading, spacing: 8) {
             WidgetHeader(title: String(localized: "Coming up"), symbol: "calendar")
-            if plannedDays.isEmpty {
-                NothingPlannedNote(text: String(localized: "Nothing planned for the next few weeks"))
+            if entry.contentState(hasMeals: !plannedDays.isEmpty) == .unavailable {
+                PlanUnavailableNote()
+            } else if plannedDays.isEmpty {
+                PlanInvitation(date: entry.reference, kind: .comingUp)
             } else {
                 ForEach(plannedDays.trimmed(toRows: 11)) { day in
                     Link(destination: WidgetLink.day(day.date)) {
@@ -127,8 +132,10 @@ struct UpcomingMealsView: View {
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(String(localized: "Coming up")).font(.headline)
-            if meals.isEmpty {
-                Text(String(localized: "Nothing planned")).font(.caption)
+            if entry.contentState(hasMeals: !meals.isEmpty) == .unavailable {
+                Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable")).font(.caption)
+            } else if meals.isEmpty {
+                Text(String(localized: "Plan a meal", table: "WidgetLocalizable")).font(.caption)
             } else {
                 ForEach(meals.prefix(2), id: \.meal.id) { pair in
                     Text("\(label(for: pair.day, meal: pair.meal)): \(pair.meal.title)")
@@ -143,8 +150,10 @@ struct UpcomingMealsView: View {
     private var inline: some View {
         if let pair = meals.first {
             Text("\(label(for: pair.day, meal: pair.meal)) · \(pair.meal.title)")
+        } else if entry.contentState(hasMeals: false) == .unavailable {
+            Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable"))
         } else {
-            Text(String(localized: "Nothing planned"))
+            Text(String(localized: "Plan a meal", table: "WidgetLocalizable"))
         }
     }
 
@@ -181,6 +190,42 @@ struct UpcomingMealsView: View {
     UpcomingMealsWidget()
 } timeline: {
     MealPlanWidgetEntry.sampleUpcoming
+}
+
+#Preview("Empty small", as: .systemSmall) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUpcomingEmpty
+}
+
+#Preview("Empty medium", as: .systemMedium) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUpcomingEmpty
+}
+
+#Preview("Empty large", as: .systemLarge) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUpcomingEmpty
+}
+
+#Preview("Empty lock screen", as: .accessoryRectangular) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUpcomingEmpty
+}
+
+#Preview("Empty inline", as: .accessoryInline) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUpcomingEmpty
+}
+
+#Preview("Unavailable", as: .systemMedium) {
+    UpcomingMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUnavailable
 }
 
 #Preview("Inline", as: .accessoryInline) {

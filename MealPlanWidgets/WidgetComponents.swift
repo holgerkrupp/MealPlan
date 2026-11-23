@@ -108,24 +108,100 @@ struct WidgetHeader: View {
     }
 }
 
-/// Shown wherever there is nothing planned, in place of an empty list.
-struct NothingPlannedNote: View {
-    var text: String = String(localized: "Nothing planned yet")
-    var compact: Bool = false
+enum PlanInvitationKind {
+    case comingUp
+    case today
+    case week
+}
+
+/// An actual WidgetKit link, styled with the platform's own button treatment.
+/// Compact cards omit the supporting sentence to keep small and mixed-day
+/// widgets readable.
+struct PlanInvitation: View {
+    var date: Date
+    var kind: PlanInvitationKind = .comingUp
+    var compact = false
+
+    private var headline: String {
+        switch kind {
+        case .comingUp: String(localized: "What's cooking next?", table: "WidgetLocalizable")
+        case .today: String(localized: "Fancy planning a meal?", table: "WidgetLocalizable")
+        case .week: String(localized: "What's cooking next?", table: "WidgetLocalizable")
+        }
+    }
+
+    private var supportingText: String {
+        switch kind {
+        case .comingUp: String(localized: "Find something tasty for the week ahead.", table: "WidgetLocalizable")
+        case .today: String(localized: "Plan something for this day.", table: "WidgetLocalizable")
+        case .week: String(localized: "Plan something for this week.", table: "WidgetLocalizable")
+        }
+    }
+
+    private var actionTitle: String {
+        compact
+            ? String(localized: "Add a meal", table: "WidgetLocalizable")
+            : String(localized: "Plan a meal", table: "WidgetLocalizable")
+    }
 
     var body: some View {
-        VStack(spacing: 4) {
-            if !compact {
-                Image(systemName: "calendar.badge.plus")
-                    .font(.title3)
-                    .foregroundStyle(.tertiary)
-            }
-            Text(text)
-                .font(compact ? .caption2 : .footnote)
-                .foregroundStyle(.secondary)
+        VStack(spacing: compact ? 5 : 8) {
+            Image(systemName: "calendar.badge.plus")
+                .font(compact ? .title3 : .title2)
+                .foregroundStyle(.tint)
+                .accessibilityHidden(true)
+            Text(headline)
+                .font(compact ? .caption.weight(.semibold) : .title3.weight(.semibold))
                 .multilineTextAlignment(.center)
+                .lineLimit(2)
+                .minimumScaleFactor(0.85)
+            if !compact {
+                Text(supportingText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+            Link(destination: WidgetLink.plan(date)) {
+                Label(actionTitle, systemImage: "plus")
+                    .font(compact ? .caption.weight(.semibold) : .callout.weight(.semibold))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(compact ? .small : .regular)
+            .accessibilityLabel(Text(verbatim: "\(actionTitle) · \(date.formatted(date: .long, time: .omitted))"))
+            .accessibilityHint(Text(supportingText))
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .multilineTextAlignment(.center)
+    }
+}
+
+struct PlanUnavailableNote: View {
+    var compact = false
+
+    var body: some View {
+        VStack(spacing: compact ? 3 : 6) {
+            Image(systemName: "calendar.badge.exclamationmark")
+                .font(compact ? .caption : .title3)
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+            Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable"))
+                .font(compact ? .caption2.weight(.semibold) : .headline)
+                .multilineTextAlignment(.center)
+                .lineLimit(2)
+            if !compact {
+                Text(String(localized: "No plan data is available right now.", table: "WidgetLocalizable"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .lineLimit(2)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .accessibilityElement(children: .combine)
+        .accessibilityHint(String(localized: "Open MealPlan to check your plan.", table: "WidgetLocalizable"))
     }
 }
 
@@ -184,8 +260,6 @@ private func previewMeal(_ slot: String, _ title: String, _ emoji: String?) -> W
         MealRow(meal: previewMeal("Breakfast", "Porridge", "🥣"))
         MealRow(meal: previewMeal("Dinner", "Spaghetti Bolognese", "🍝"), tileSize: 42, titleFont: .subheadline)
         MealRow(meal: previewMeal("Lunch", "Linsensalat", "🥗"), slotText: "Thu · Lunch")
-        NothingPlannedNote()
-            .frame(height: 60)
     }
     .padding()
     .frame(width: 340)

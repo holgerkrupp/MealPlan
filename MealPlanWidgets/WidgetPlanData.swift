@@ -81,12 +81,17 @@ struct MealPlanWidgetEntry: TimelineEntry {
     var date: Date
     var days: [WidgetDay]
     var link: URL
+    var availability: WidgetPlanAvailability = .available
     /// Labels such as "Today" are resolved against this, so an entry that the
     /// system shows late still reads consistently with the data it carries.
     var reference: Date
 
     var primary: WidgetDay? { days.first }
     var secondary: WidgetDay? { days.dropFirst().first }
+
+    func contentState(hasMeals: Bool) -> WidgetPlanContentState {
+        WidgetPlanContentState.resolve(availability: availability, hasMeals: hasMeals)
+    }
 
     /// Every planned meal across `days`, in day order, paired with its day.
     var flattened: [(day: WidgetDay, meal: WidgetMeal)] {
@@ -101,6 +106,12 @@ enum WidgetLink {
     static let shopping = DeepLink.shoppingList.url
 
     static func day(_ date: Date) -> URL { DeepLink.date(date).url }
+    static func plan(_ date: Date) -> URL { DeepLink.plan(dishName: nil, dishUUID: nil, date: date, slot: nil).url }
+}
+
+struct WidgetPlanLoadResult {
+    var days: [WidgetDay]
+    var availability: WidgetPlanAvailability
 }
 
 // MARK: - Loading
@@ -136,19 +147,26 @@ enum WidgetPlanLoader {
         from start: Date,
         count: Int,
         thumbnailBudget: Int = defaultThumbnailBudget
-    ) -> [WidgetDay] {
+    ) -> WidgetPlanLoadResult {
         let dayCount = max(count, 1)
         let first = start.startOfDay
         let last = first.adding(days: dayCount)
         let blank = (0..<dayCount).map { WidgetDay(date: first.adding(days: $0)) }
 
-        guard let context = makeContext() else { return blank }
+        guard let context = makeContext() else {
+            return WidgetPlanLoadResult(days: blank, availability: .unavailable)
+        }
 
         let descriptor = FetchDescriptor<MealPlanEntry>(
             predicate: #Predicate { $0.date >= first && $0.date < last && $0.skipped == false },
             sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
         )
-        guard let entries = try? context.fetch(descriptor), !entries.isEmpty else { return blank }
+        guard let entries = try? context.fetch(descriptor) else {
+            return WidgetPlanLoadResult(days: blank, availability: .unavailable)
+        }
+        guard !entries.isEmpty else {
+            return WidgetPlanLoadResult(days: blank, availability: .available)
+        }
 
         let meals = mealTypeLookup(in: context)
         var grouped: [Date: [MealPlanEntry]] = [:]
@@ -157,7 +175,7 @@ enum WidgetPlanLoader {
         }
 
         var budget = max(thumbnailBudget, 0)
-        return blank.map { day in
+        let days = blank.map { day in
             let sorted = (grouped[day.date] ?? []).sorted {
                 (meals.rank($0), $0.sortIndex) < (meals.rank($1), $1.sortIndex)
             }
@@ -178,6 +196,7 @@ enum WidgetPlanLoader {
                 }
             )
         }
+        return WidgetPlanLoadResult(days: days, availability: .available)
     }
 
     /// The next `limit` planned meals, starting today and looking `window`
@@ -187,16 +206,17 @@ enum WidgetPlanLoader {
         window: Int = 21,
         limit: Int,
         thumbnailBudget: Int = defaultThumbnailBudget
-    ) -> [WidgetDay] {
+    ) -> WidgetPlanLoadResult {
         var remaining = limit
         var result: [WidgetDay] = []
-        for day in days(from: start, count: window, thumbnailBudget: thumbnailBudget) where !day.isEmpty {
+        let loaded = days(from: start, count: window, thumbnailBudget: thumbnailBudget)
+        for day in loaded.days where !day.isEmpty {
             guard remaining > 0 else { break }
             let take = Array(day.meals.prefix(remaining))
             remaining -= take.count
             result.append(WidgetDay(date: day.date, meals: take))
         }
-        return result
+        return WidgetPlanLoadResult(days: result, availability: loaded.availability)
     }
 
     // MARK: - Meal types
@@ -302,6 +322,32 @@ extension MealPlanWidgetEntry {
         MealPlanWidgetEntry(date: .now, days: sampleDays.filter { !$0.isEmpty }, link: WidgetLink.today, reference: .now)
     }
 
+    static var sampleUpcomingEmpty: MealPlanWidgetEntry {
+        MealPlanWidgetEntry(date: .now, days: [], link: WidgetLink.plan(.now), reference: .now)
+    }
+
+    static var sampleTodayPlannedAndTomorrowEmpty: MealPlanWidgetEntry {
+        let today = Date.now.startOfDay
+        let meal = sampleMeal(String(localized: "Dinner"), "Roasted vegetables", "🍆")
+        return MealPlanWidgetEntry(
+            date: .now,
+            days: [WidgetDay(date: today, meals: [meal]), WidgetDay(date: today.adding(days: 1))],
+            link: WidgetLink.plan(today),
+            reference: .now
+        )
+    }
+
+    static var sampleTodayEmptyAndTomorrowPlanned: MealPlanWidgetEntry {
+        let today = Date.now.startOfDay
+        let meal = sampleMeal(String(localized: "Dinner"), "Roasted vegetables", "🍆")
+        return MealPlanWidgetEntry(
+            date: .now,
+            days: [WidgetDay(date: today), WidgetDay(date: today.adding(days: 1), meals: [meal])],
+            link: WidgetLink.plan(today),
+            reference: .now
+        )
+    }
+
     /// Nothing planned — the state every family sees on their first day.
     static var sampleEmpty: MealPlanWidgetEntry {
         let start = Date.now.startOfDay
@@ -309,6 +355,16 @@ extension MealPlanWidgetEntry {
             date: .now,
             days: (0..<7).map { WidgetDay(date: start.adding(days: $0)) },
             link: WidgetLink.today,
+            reference: .now
+        )
+    }
+
+    static var sampleUnavailable: MealPlanWidgetEntry {
+        MealPlanWidgetEntry(
+            date: .now,
+            days: (0..<7).map { WidgetDay(date: Date.now.startOfDay.adding(days: $0)) },
+            link: WidgetLink.plan(.now),
+            availability: .unavailable,
             reference: .now
         )
     }

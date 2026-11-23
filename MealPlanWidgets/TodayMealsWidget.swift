@@ -25,27 +25,33 @@ struct TodayMealsProvider: TimelineProvider {
     /// last of which keeps the widget honest if the system is late refreshing.
     private func entries() -> [MealPlanWidgetEntry] {
         let now = Date.now
-        let days = WidgetPlanLoader.days(from: now, count: 3, thumbnailBudget: 10)
+        let loaded = WidgetPlanLoader.days(from: now, count: 3, thumbnailBudget: 10)
         let calendar = Calendar.current
         let rollover = calendar.date(bySettingHour: rolloverHour, minute: 0, second: 0, of: now)
         let midnight = now.adding(days: 1).startOfDay
 
-        func entry(at date: Date, leadingWith index: Int) -> MealPlanWidgetEntry {
-            let slice = Array(days.dropFirst(index).prefix(2))
+        func entry(at date: Date) -> MealPlanWidgetEntry {
+            let index = WidgetPlanDatePolicy.todayIndex(
+                at: date,
+                relativeTo: now,
+                rolloverHour: rolloverHour,
+                calendar: calendar
+            )
+            let slice = Array(loaded.days.dropFirst(index).prefix(2))
             return MealPlanWidgetEntry(
                 date: date,
                 days: slice,
-                link: WidgetLink.day(slice.first?.date ?? now),
+                link: WidgetLink.plan(slice.first?.date ?? now),
+                availability: loaded.availability,
                 reference: date
             )
         }
 
-        let pastRollover = calendar.component(.hour, from: now) >= rolloverHour
-        var result = [entry(at: now, leadingWith: pastRollover ? 1 : 0)]
+        var result = [entry(at: now)]
         if let rollover, rollover > now {
-            result.append(entry(at: rollover, leadingWith: 1))
+            result.append(entry(at: rollover))
         }
-        result.append(entry(at: midnight, leadingWith: 1))
+        result.append(entry(at: midnight))
         return result
     }
 }
@@ -95,14 +101,32 @@ struct TodayMealsView: View {
     /// Medium is wide enough for two days, which is the more useful answer
     /// than a single column of the same three meals with air beside it.
     private var medium: some View {
-        HStack(alignment: .top, spacing: 12) {
-            column(for: day, title: title, limit: 4)
-            if let next = entry.secondary {
-                Divider()
-                Link(destination: WidgetLink.day(next.date)) {
-                    column(for: next, title: next.name(relativeTo: entry.reference), limit: 4)
+        Group {
+            if entry.contentState(hasMeals: !day.isEmpty) == .unavailable {
+                VStack(alignment: .leading, spacing: 8) {
+                    WidgetHeader(title: title, subtitle: day.date.widgetShortDayLabel)
+                    PlanUnavailableNote()
                 }
-                .buttonStyle(.plain)
+            } else if day.isEmpty && (entry.secondary?.isEmpty ?? true) {
+                VStack(spacing: 6) {
+                    WidgetHeader(title: title, subtitle: day.date.widgetShortDayLabel)
+                    PlanInvitation(date: day.date, kind: .today)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    column(for: day, title: title, limit: 4)
+                    if let next = entry.secondary {
+                        Divider()
+                        if next.isEmpty {
+                            column(for: next, title: next.name(relativeTo: entry.reference), limit: 4)
+                        } else {
+                            Link(destination: WidgetLink.plan(next.date)) {
+                                column(for: next, title: next.name(relativeTo: entry.reference), limit: 4)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
             }
         }
     }
@@ -110,8 +134,14 @@ struct TodayMealsView: View {
     private func column(for day: WidgetDay, title: String, limit: Int) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             WidgetHeader(title: title, subtitle: day.date.widgetShortDayLabel)
-            if day.isEmpty {
-                NothingPlannedNote(compact: true)
+            if entry.contentState(hasMeals: !day.isEmpty) == .unavailable {
+                PlanUnavailableNote(compact: true)
+            } else if day.isEmpty {
+                PlanInvitation(
+                    date: day.date,
+                    kind: .today,
+                    compact: family != .systemLarge
+                )
             } else {
                 ForEach(day.meals.prefix(limit)) { meal in
                     MealRow(meal: meal, tileSize: 22, titleFont: .system(size: 12))
@@ -129,8 +159,14 @@ struct TodayMealsView: View {
         VStack(alignment: .leading, spacing: 10) {
             WidgetHeader(title: title, subtitle: day.date.widgetDayLabel)
 
-            if day.isEmpty {
-                NothingPlannedNote()
+            if entry.contentState(hasMeals: !day.isEmpty) == .unavailable {
+                PlanUnavailableNote()
+            } else if day.isEmpty {
+                PlanInvitation(
+                    date: day.date,
+                    kind: .today,
+                    compact: entry.secondary?.isEmpty == false
+                )
             } else {
                 VStack(alignment: .leading, spacing: 9) {
                     ForEach(day.meals.prefix(5)) { meal in
@@ -150,9 +186,15 @@ struct TodayMealsView: View {
                             subtitle: next.date.widgetShortDayLabel
                         )
                         if next.isEmpty {
-                            Text(String(localized: "Nothing planned"))
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                            if entry.contentState(hasMeals: false) == .unavailable {
+                                Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable"))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            } else {
+                                Text(String(localized: "Add a meal", table: "WidgetLocalizable"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
                         } else {
                             ForEach(next.meals.prefix(3)) { meal in
                                 MealRow(
@@ -175,8 +217,10 @@ struct TodayMealsView: View {
     private var rectangular: some View {
         VStack(alignment: .leading, spacing: 1) {
             Text(title).font(.headline)
-            if day.isEmpty {
-                Text(String(localized: "Nothing planned")).font(.caption)
+            if entry.contentState(hasMeals: !day.isEmpty) == .unavailable {
+                Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable")).font(.caption)
+            } else if day.isEmpty {
+                Text(String(localized: "Plan a meal", table: "WidgetLocalizable")).font(.caption)
             } else {
                 ForEach(day.meals.prefix(2)) { meal in
                     Text("\(meal.slotName): \(meal.title)").font(.caption).lineLimit(1)
@@ -189,8 +233,10 @@ struct TodayMealsView: View {
     private var inline: some View {
         if let meal = day.meals.last {
             Text("\(meal.slotName) · \(meal.title)")
+        } else if entry.contentState(hasMeals: false) == .unavailable {
+            Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable"))
         } else {
-            Text(String(localized: "Nothing planned"))
+            Text(String(localized: "Plan a meal", table: "WidgetLocalizable"))
         }
     }
 }
@@ -229,4 +275,46 @@ struct TodayMealsView: View {
     TodayMealsWidget()
 } timeline: {
     MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .systemSmall) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .systemMedium) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .accessoryRectangular) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .accessoryInline) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Unavailable", as: .systemLarge) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUnavailable
+}
+
+#Preview("Today empty, tomorrow planned", as: .systemMedium) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleTodayEmptyAndTomorrowPlanned
+}
+
+#Preview("Today planned, tomorrow empty", as: .systemMedium) {
+    TodayMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleTodayPlannedAndTomorrowEmpty
 }

@@ -19,10 +19,12 @@ struct WeekMealsProvider: TimelineProvider {
     private func entry() -> MealPlanWidgetEntry {
         let now = Date.now
         let start = now.startOfWeek()
+        let loaded = WidgetPlanLoader.days(from: start, count: 7, thumbnailBudget: 14)
         return MealPlanWidgetEntry(
             date: now,
-            days: WidgetPlanLoader.days(from: start, count: 7, thumbnailBudget: 14),
-            link: WidgetLink.day(now),
+            days: loaded.days,
+            link: WidgetLink.plan(now),
+            availability: loaded.availability,
             reference: now
         )
     }
@@ -65,12 +67,18 @@ struct WeekMealsView: View {
         VStack(alignment: .leading, spacing: rowSpacing) {
             WidgetHeader(title: String(localized: "This week"), subtitle: subtitle)
                 .padding(.bottom, 1)
-            ForEach(entry.days) { day in
-                Link(destination: WidgetLink.day(day.date)) {
-                    row(for: day, tileSize: tileSize, showsTiles: showsTiles)
+            if entry.contentState(hasMeals: entry.days.contains { !$0.isEmpty }) == .unavailable {
+                PlanUnavailableNote()
+            } else if entry.days.allSatisfy(\.isEmpty) {
+                PlanInvitation(date: entry.reference, kind: .week)
+            } else {
+                ForEach(entry.days) { day in
+                    Link(destination: WidgetLink.plan(day.date)) {
+                        row(for: day, tileSize: tileSize, showsTiles: showsTiles)
+                    }
+                    .buttonStyle(.plain)
+                    .frame(maxHeight: showsTiles ? .infinity : nil)
                 }
-                .buttonStyle(.plain)
-                .frame(maxHeight: showsTiles ? .infinity : nil)
             }
             if !showsTiles { Spacer(minLength: 0) }
         }
@@ -118,8 +126,10 @@ struct WeekMealsView: View {
         let remaining = entry.days.filter { $0.date >= entry.reference.startOfDay && !$0.isEmpty }
         return VStack(alignment: .leading, spacing: 1) {
             Text(String(localized: "This week")).font(.headline)
-            if remaining.isEmpty {
-                Text(String(localized: "Nothing planned")).font(.caption)
+            if entry.contentState(hasMeals: entry.days.contains { !$0.isEmpty }) == .unavailable {
+                Text(String(localized: "Meal plan unavailable", table: "WidgetLocalizable")).font(.caption)
+            } else if remaining.isEmpty {
+                Text(String(localized: "Plan a meal", table: "WidgetLocalizable")).font(.caption)
             } else {
                 ForEach(remaining.prefix(2)) { day in
                     Text("\(day.shortName): \(day.summaryLine)").font(.caption).lineLimit(1)
@@ -151,4 +161,22 @@ struct WeekMealsView: View {
     WeekMealsWidget()
 } timeline: {
     MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .systemMedium) {
+    WeekMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Nothing planned", as: .accessoryRectangular) {
+    WeekMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleEmpty
+}
+
+#Preview("Unavailable", as: .systemLarge) {
+    WeekMealsWidget()
+} timeline: {
+    MealPlanWidgetEntry.sampleUnavailable
 }
