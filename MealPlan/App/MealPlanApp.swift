@@ -153,6 +153,11 @@ struct MealPlanApp: App {
                         #endif
                         // Calendar access can be revoked while the app is away.
                         guard phase == .active, !Self.isRunningTests else { return }
+                        // A notification or AlarmKit request may have been
+                        // removed or denied while the app was suspended. Keep
+                        // platform scheduling reconciled with the persisted
+                        // canonical timer state on every foreground return.
+                        appState.cookingSession.reconcileTimers()
                         appState.acceptPendingShareHandoff()
                         MealPlanSpotlightIndexer.scheduleReindex(context: container.mainContext)
                         Task {

@@ -65,11 +65,23 @@ enum CookingTimerSchedulingKeys {
 /// Production scheduler. AlarmKit is deliberately opt-in and guarded by the
 /// installed SDK/platform. Every failure falls back to a per-UUID local
 /// notification when notification authorization permits it.
+/// `UserDefaults` is documented as thread-safe, but its SDK annotation is not
+/// Sendable. This small boundary wrapper makes that fact explicit when the
+/// reference is transferred to the scheduler actor; the session store and the
+/// scheduler use the same suite, not a copied preference value.
+final class CookingTimerUserDefaultsReference: @unchecked Sendable {
+    let value: UserDefaults
+
+    init(_ value: UserDefaults) {
+        self.value = value
+    }
+}
+
 actor DefaultCookingTimerScheduler: CookingTimerScheduling {
     private let defaults: UserDefaults
 
-    init(defaults: UserDefaults) {
-        self.defaults = defaults
+    init(defaults: CookingTimerUserDefaultsReference) {
+        self.defaults = defaults.value
     }
 
     var preference: CookingTimerAlertPreference {
@@ -282,6 +294,6 @@ actor DefaultCookingTimerScheduler: CookingTimerScheduling {
 
 enum CookingTimerSchedulerFactory {
     static func make(defaults: UserDefaults) -> any CookingTimerScheduling {
-        DefaultCookingTimerScheduler(defaults: defaults)
+        DefaultCookingTimerScheduler(defaults: CookingTimerUserDefaultsReference(defaults))
     }
 }

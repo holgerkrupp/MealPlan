@@ -129,7 +129,7 @@ final class CookingSessionStore {
     func pauseOrResumeTimer(_ id: UUID, at date: Date) {
         guard let timer = session?.pauseOrResumeTimer(id, at: date) else { return }
         saveAndRefreshActivity()
-        if let remaining = timer.pausedRemaining {
+        if timer.pausedRemaining != nil {
             scheduleCancellation(for: id)
         } else {
             schedule(timer)
