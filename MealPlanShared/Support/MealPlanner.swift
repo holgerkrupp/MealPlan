@@ -63,6 +63,7 @@ enum MealPlanner {
         context.insert(entry)
         do {
             try context.save()
+            ReviewEngagementRecorder.recordSuccessfulPlacement(id: entry.uuid)
             SharedStore.reloadWidgets()
             return .saved
         } catch {
@@ -81,7 +82,8 @@ enum MealPlanner {
         note: String? = nil,
         household: Household?,
         memberName: String,
-        context: ModelContext
+        context: ModelContext,
+        reviewSource: ReviewPlacementSource = .direct
     ) -> MealPlanEntry {
         guard HouseholdMutationAuthorization.canMutate(household: household ?? dish.household) else {
             // Keep this source-compatible for App Intents while ensuring no
@@ -98,7 +100,9 @@ enum MealPlanner {
         entry.plannedByName = memberName
         entry.sortIndex = nextSortIndex(for: date, mealKey: mealKey, context: context)
         context.insert(entry)
-        try? context.save()
+        if (try? context.save()) != nil {
+            ReviewEngagementRecorder.recordSuccessfulPlacement(id: entry.uuid, source: reviewSource)
+        }
         SharedStore.reloadWidgets()
         return entry
     }
@@ -113,10 +117,12 @@ enum MealPlanner {
         note: String? = nil,
         household: Household?,
         memberName: String,
-        context: ModelContext
+        context: ModelContext,
+        reviewSource: ReviewPlacementSource = .direct
     ) -> MealPlanEntry {
         plan(dish: dish, on: date, mealKey: slot.rawValue, servings: servings, note: note,
-             household: household, memberName: memberName, context: context)
+             household: household, memberName: memberName, context: context,
+             reviewSource: reviewSource)
     }
 
     /// Plan a meal the family eats out. The place is optional: "we're eating
@@ -133,7 +139,8 @@ enum MealPlanner {
         note: String? = nil,
         household: Household?,
         memberName: String,
-        context: ModelContext
+        context: ModelContext,
+        reviewSource: ReviewPlacementSource = .direct
     ) -> MealPlanEntry {
         guard HouseholdMutationAuthorization.canMutate(household: household) else {
             return MealPlanEntry(date: date, mealKey: mealKey, dish: nil)
@@ -149,7 +156,9 @@ enum MealPlanner {
         entry.plannedByName = memberName
         entry.sortIndex = nextSortIndex(for: date, mealKey: mealKey, context: context)
         context.insert(entry)
-        try? context.save()
+        if (try? context.save()) != nil {
+            ReviewEngagementRecorder.recordSuccessfulPlacement(id: entry.uuid, source: reviewSource)
+        }
         SharedStore.reloadWidgets()
         return entry
     }
@@ -208,7 +217,8 @@ enum MealPlanner {
                 placeName: entry.placeName, placeAddress: entry.placeAddress,
                 latitude: entry.placeLatitude, longitude: entry.placeLongitude,
                 note: entry.note, household: entry.household,
-                memberName: memberName, context: context
+                memberName: memberName, context: context,
+                reviewSource: .bulk
             )
         }
         return plan(
@@ -219,7 +229,8 @@ enum MealPlanner {
             note: entry.note,
             household: entry.household,
             memberName: memberName,
-            context: context
+            context: context,
+            reviewSource: .bulk
         )
     }
 
@@ -233,14 +244,16 @@ enum MealPlanner {
         for entry in entries.sorted(by: { $0.sortIndex < $1.sortIndex }) {
             if let dish = entry.dish {
                 plan(dish: dish, on: target, mealKey: entry.mealKey, servings: entry.servingsOverride,
-                     note: entry.note, household: household ?? entry.household, memberName: memberName, context: context)
+                     note: entry.note, household: household ?? entry.household, memberName: memberName, context: context,
+                     reviewSource: .bulk)
             } else if entry.isEatingOut {
                 planEatingOut(
                     on: target, mealKey: entry.mealKey,
                     placeName: entry.placeName, placeAddress: entry.placeAddress,
                     latitude: entry.placeLatitude, longitude: entry.placeLongitude,
                     note: entry.note, household: household ?? entry.household,
-                    memberName: memberName, context: context
+                    memberName: memberName, context: context,
+                    reviewSource: .bulk
                 )
             }
         }

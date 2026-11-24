@@ -50,7 +50,8 @@ enum MealRoutineScheduler {
                 guard occupied.insert(key).inserted else { continue }
                 let entry = MealPlanner.plan(
                     dish: dish, on: day, mealKey: routine.mealKey,
-                    household: household, memberName: memberName, context: context
+                    household: household, memberName: memberName, context: context,
+                    reviewSource: .bulk
                 )
                 entry.routineUUID = routine.uuid
             }
@@ -102,7 +103,8 @@ enum MealRoutineScheduler {
             let key = "\(day.startOfDay.timeIntervalSinceReferenceDate)|\(routine.mealKey)"
             guard occupied.insert(key).inserted else { continue }
             let entry = MealPlanner.plan(dish: dish, on: day, mealKey: routine.mealKey,
-                household: household ?? routine.household, memberName: memberName, context: context)
+                household: household ?? routine.household, memberName: memberName, context: context,
+                reviewSource: .bulk)
             entry.routineUUID = routine.uuid
         }
         routine.plannedThrough = horizon

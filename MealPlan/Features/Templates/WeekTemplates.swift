@@ -80,7 +80,8 @@ enum TemplateEngine {
                 servings: te.servingsOverride,
                 household: household,
                 memberName: memberName,
-                context: context
+                context: context,
+                reviewSource: .bulk
             )
         }
         try? context.save()

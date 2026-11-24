@@ -570,12 +570,16 @@ struct DishPickerView: View {
         }
     }
 
-    private func planExisting(_ dish: Dish) {
+    private func planExisting(
+        _ dish: Dish,
+        reviewSource: ReviewPlacementSource = .direct
+    ) {
         MealPlanner.plan(
             dish: dish, on: date, mealKey: mealKey,
             household: appState.currentHousehold,
             memberName: appState.currentMemberName,
-            context: context
+            context: context,
+            reviewSource: reviewSource
         )
         dismiss()
     }
@@ -608,7 +612,7 @@ struct DishPickerView: View {
         do {
             var recipe = try await importer.importRecipe(from: url)
             if let existing = RecipeDuplicateDetector.match(recipe, in: allDishes) {
-                planExisting(existing)
+                planExisting(existing, reviewSource: .imported)
                 return
             }
             if let tag = MealTypeTag(rawValue: mealKey), recipe.categories.isEmpty {
@@ -625,7 +629,8 @@ struct DishPickerView: View {
                 dish: dish, on: date, mealKey: mealKey,
                 household: appState.currentHousehold,
                 memberName: appState.currentMemberName,
-                context: context
+                context: context,
+                reviewSource: .imported
             )
             dismiss()
         } catch {

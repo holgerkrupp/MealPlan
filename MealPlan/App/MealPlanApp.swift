@@ -21,6 +21,7 @@ struct MealPlanApp: App {
     private let storeOpenFailure: Error?
     @State private var appState = AppState()
     @State private var purchaseManager = PurchaseManager.shared
+    @State private var reviewCoordinator = AppReviewPromptCoordinator()
     /// Calendar integration. Creating it touches no calendar data and never
     /// asks for permission — it only reads the (off by default) preference.
     @State private var calendarStore = CalendarContextStore()
@@ -80,12 +81,23 @@ struct MealPlanApp: App {
                 StoreOpenFailureView(failure: storeOpenFailure)
             } else {
             AppLaunchContainerView {
-                RootView()
-                    .environment(appState)
-                    .environment(calendarStore)
-                    .environment(purchaseManager)
-                    .environment(publishedCalendarSettings)
-                    .environment(\.calendarEventWriter, calendarEventWriter)
+                AppReviewPromptHost(
+                    coordinator: reviewCoordinator,
+                    isBusy: {
+                        appState.isLookingForCloudHousehold
+                            || appState.cloudBootstrapState.isWorking
+                            || appState.pendingAddDish != nil
+                            || appState.importNotice != nil
+                            || appState.cookingSession.hasInterruptedSession
+                    }
+                ) {
+                    RootView()
+                        .environment(appState)
+                        .environment(calendarStore)
+                        .environment(purchaseManager)
+                        .environment(publishedCalendarSettings)
+                        .environment(\.calendarEventWriter, calendarEventWriter)
+                }
                     .task {
                         guard !Self.isRunningTests else { return }
                         // Open the on-device store synchronously. This creates
@@ -204,12 +216,23 @@ struct MealPlanApp: App {
         // simply never has a window in it.
         WindowGroup("MealPlan", for: DetailWindowRoute.self) { $route in
             if let route {
-                DetailWindow(route: route)
-                    .environment(appState)
-                    .environment(calendarStore)
-                    .environment(purchaseManager)
-                    .environment(publishedCalendarSettings)
-                    .environment(\.calendarEventWriter, calendarEventWriter)
+                AppReviewPromptHost(
+                    coordinator: reviewCoordinator,
+                    isBusy: {
+                        appState.isLookingForCloudHousehold
+                            || appState.cloudBootstrapState.isWorking
+                            || appState.pendingAddDish != nil
+                            || appState.importNotice != nil
+                            || appState.cookingSession.hasInterruptedSession
+                    }
+                ) {
+                    DetailWindow(route: route)
+                        .environment(appState)
+                        .environment(calendarStore)
+                        .environment(purchaseManager)
+                        .environment(publishedCalendarSettings)
+                        .environment(\.calendarEventWriter, calendarEventWriter)
+                }
             }
         }
         .defaultSize(width: 760, height: 780)
