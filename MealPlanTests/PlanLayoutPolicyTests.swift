@@ -38,4 +38,22 @@ struct PlanLayoutPolicyTests {
     @Test func rememberedSidebarWidthIsUsedWhenItFits() {
         #expect(PlanLayoutPolicy.sidebarWidth(preferred: 340, availableWidth: 900) == 340)
     }
+
+    @Test func resizingUsesDragTranslationWithoutExceedingBounds() {
+        #expect(PlanLayoutPolicy.resizingSidebarWidth(
+            startingAt: 300,
+            translation: -100,
+            availableWidth: 900
+        ) == 400)
+        #expect(PlanLayoutPolicy.resizingSidebarWidth(
+            startingAt: 300,
+            translation: 200,
+            availableWidth: 900
+        ) == PlanLayoutPolicy.minimumSidebarWidth)
+        #expect(PlanLayoutPolicy.resizingSidebarWidth(
+            startingAt: 300,
+            translation: -300,
+            availableWidth: 700
+        ) == 310)
+    }
 }

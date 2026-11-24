@@ -13,7 +13,7 @@ struct PlanView: View {
 
     @AppStorage("plan.showsDishSidebar") private var showsSidebar = true
     @AppStorage("plan.dishSidebarWidth") private var sidebarWidth: Double = 300
-    @State private var dragStartWidth: Double?
+    @GestureState private var resizeGesture = PlanResizeGestureState()
     @State private var showingMenus = false
 
     var body: some View {
@@ -22,8 +22,13 @@ struct PlanView: View {
                 in: geometry.size,
                 horizontalSizeClass: sizeClass
             )
-            let width = PlanLayoutPolicy.sidebarWidth(
+            let persistedWidth = PlanLayoutPolicy.sidebarWidth(
                 preferred: sidebarWidth,
+                availableWidth: geometry.size.width
+            )
+            let width = PlanLayoutPolicy.resizingSidebarWidth(
+                startingAt: resizeGesture.startWidth ?? persistedWidth,
+                translation: resizeGesture.translation,
                 availableWidth: geometry.size.width
             )
 
@@ -32,12 +37,16 @@ struct PlanView: View {
                     .frame(maxWidth: .infinity)
 
                 if fits && showsSidebar {
-                    resizeHandle(currentWidth: width, availableWidth: geometry.size.width)
+                    resizeHandle(
+                        persistedWidth: persistedWidth,
+                        availableWidth: geometry.size.width
+                    )
                     DishSidebarView(householdID: appState.currentHousehold?.uuid)
                         .frame(width: width)
                         .transition(.move(edge: .trailing))
                 }
             }
+            .animation(nil, value: width)
             // Nil while the window is too narrow to split, so the View menu's
             // toggle greys out instead of silently doing nothing.
             .focusedSceneValue(
@@ -83,21 +92,26 @@ struct PlanView: View {
         }
     }
 
-    private func resizeHandle(currentWidth: Double, availableWidth: Double) -> some View {
+    private func resizeHandle(persistedWidth: Double, availableWidth: Double) -> some View {
         Divider()
             .frame(width: 10)
             .contentShape(Rectangle())
             .gesture(
                 DragGesture(minimumDistance: 1)
-                    .onChanged { value in
-                        let start = dragStartWidth ?? currentWidth
-                        if dragStartWidth == nil { dragStartWidth = start }
-                        sidebarWidth = min(
-                            max(start - Double(value.translation.width), PlanLayoutPolicy.minimumSidebarWidth),
-                            PlanLayoutPolicy.maximumSidebarWidth(availableWidth: availableWidth)
+                    .updating($resizeGesture) { value, state, _ in
+                        if !state.isActive {
+                            state.startWidth = persistedWidth
+                        }
+                        state.isActive = true
+                        state.translation = Double(value.translation.width)
+                    }
+                    .onEnded { value in
+                        sidebarWidth = PlanLayoutPolicy.resizingSidebarWidth(
+                            startingAt: persistedWidth,
+                            translation: Double(value.translation.width),
+                            availableWidth: availableWidth
                         )
                     }
-                    .onEnded { _ in dragStartWidth = nil }
             )
             #if os(macOS)
             .pointerStyle(.columnResize)
@@ -105,6 +119,12 @@ struct PlanView: View {
             .help(String(localized: "Drag to resize the dish list"))
             .accessibilityLabel(String(localized: "Resize dish list"))
     }
+}
+
+private struct PlanResizeGestureState {
+    var isActive = false
+    var startWidth: Double?
+    var translation = 0.0
 }
 
 /// Geometry rules for the plan's optional dish list. iPhones report a compact
@@ -133,6 +153,17 @@ enum PlanLayoutPolicy {
         min(
             max(preferred, minimumSidebarWidth),
             maximumSidebarWidth(availableWidth: availableWidth)
+        )
+    }
+
+    static func resizingSidebarWidth(
+        startingAt: Double,
+        translation: Double,
+        availableWidth: Double
+    ) -> Double {
+        sidebarWidth(
+            preferred: startingAt - translation,
+            availableWidth: availableWidth
         )
     }
 
