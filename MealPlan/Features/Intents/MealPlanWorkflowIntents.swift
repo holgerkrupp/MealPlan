@@ -40,7 +40,7 @@ struct ShoppingListItemEntity: AppEntity {
 struct ShoppingListItemEntityQuery: EnumerableEntityQuery, EntityStringQuery {
     @MainActor
     private func items() throws -> [ShoppingListItem] {
-        let household = MealPlanIntentStore.household()
+        guard let household = MealPlanIntentStore.household() else { return [] }
         let generated = ShoppingListStoreMigration.ensureGeneratedList(
             for: household,
             context: MealPlanIntentStore.context
@@ -474,7 +474,9 @@ struct ClearCompletedShoppingItemsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try MealPlanIntentResolver.requireEditingAllowed()
-        let household = MealPlanIntentStore.household()
+        guard let household = MealPlanIntentStore.household() else {
+            return .result(dialog: "No household is available.")
+        }
         let generated = ShoppingListStoreMigration.ensureGeneratedList(
             for: household,
             context: MealPlanIntentStore.context

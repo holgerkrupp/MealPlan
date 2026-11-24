@@ -26,10 +26,7 @@ enum MealPlanPrintBuilder {
             ? (try? context.fetch(FetchDescriptor<MealPlanEntry>(
                 predicate: #Predicate { $0.date >= start && $0.date < end && $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
-            )))?.filter { item in
-                guard let shoppingListID else { return true }
-                return item.list?.uuid == shoppingListID
-            } ?? []
+            ))) ?? []
             : []
 
         let mealTypes = (try? context.fetch(FetchDescriptor<MealType>(
@@ -42,7 +39,10 @@ enum MealPlanPrintBuilder {
         let shoppingItems = settings.content.includesShoppingList
             ? (try? context.fetch(FetchDescriptor<ShoppingListItem>(
                 sortBy: [SortDescriptor(\.sortIndex)]
-            ))) ?? []
+            )))?.filter { item in
+                guard let shoppingListID else { return true }
+                return item.list?.uuid == shoppingListID
+            } ?? []
             : []
 
         return document(
