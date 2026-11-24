@@ -24,7 +24,8 @@ enum MealPlanner {
         mealKey: String,
         household: Household?,
         memberName: String,
-        context: ModelContext
+        context: ModelContext,
+        reviewSource: ReviewPlacementSource = .direct
     ) -> PlanOnceResult {
         guard HouseholdMutationAuthorization.canMutate(household: household ?? dish.household) else {
             return .failed
@@ -48,6 +49,7 @@ enum MealPlanner {
             duplicate.skipped = false
             do {
                 try context.save()
+                ReviewEngagementRecorder.recordSuccessfulPlacement(id: duplicate.uuid, source: reviewSource)
                 SharedStore.reloadWidgets()
                 return .saved
             } catch {
@@ -63,7 +65,7 @@ enum MealPlanner {
         context.insert(entry)
         do {
             try context.save()
-            ReviewEngagementRecorder.recordSuccessfulPlacement(id: entry.uuid)
+            ReviewEngagementRecorder.recordSuccessfulPlacement(id: entry.uuid, source: reviewSource)
             SharedStore.reloadWidgets()
             return .saved
         } catch {

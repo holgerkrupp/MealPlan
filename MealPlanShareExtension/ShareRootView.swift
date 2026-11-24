@@ -607,7 +607,10 @@ struct ShareRootView: View {
             }
             var allPlanned = !result.dishesForPlanning.isEmpty
             for dish in result.dishesForPlanning {
-                switch MealPlanner.planOnce(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context) {
+                // The user explicitly chose “Save & plan”, so this placement
+                // is direct engagement even though the recipe itself arrived
+                // through an import. Saving without planning records nothing.
+                switch MealPlanner.planOnce(dish: dish, on: date, mealKey: mealKey, household: household, memberName: member, context: context, reviewSource: .direct) {
                 case .saved, .alreadyPlanned: break
                 case .failed: allPlanned = false
                 }

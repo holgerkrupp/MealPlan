@@ -52,6 +52,10 @@ final class AppReviewPromptCoordinator {
 
     func sceneBecameActive(_ sceneID: UUID) {
         activeScenes.insert(sceneID)
+        if presentationDelay == .zero {
+            attemptIfEligible()
+            return
+        }
         scheduleIfAppropriate()
     }
 
@@ -77,29 +81,37 @@ final class AppReviewPromptCoordinator {
         requestTask?.cancel()
         requestTask = Task { @MainActor [weak self] in
             guard let self else { return }
-            try? await Task.sleep(for: presentationDelay)
-            guard !Task.isCancelled,
-                  generation == scheduleGeneration,
-                  !activeScenes.isEmpty,
-                  isBusy?() != true,
-                  let requestReview
-            else { return }
-
-            let state = store.snapshot()
-            guard state.pendingRequest || policy.isEligible(state),
-                  policy.canAttempt(
-                    state,
-                    at: now(),
-                    appVersion: appVersion,
-                    cooldown: cooldown
-                  ),
-                  store.recordPromptAttempt(at: now(), appVersion: appVersion)
-            else { return }
-
-            // StoreKit decides whether a dialog is displayed. We record the
-            // attempt before invoking it and never infer a review outcome.
-            requestReview()
+            if presentationDelay == .zero {
+                // Test and debug callers can request a deterministic next-turn
+                // presentation without introducing a real wall-clock wait.
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: presentationDelay)
+            }
+            guard !Task.isCancelled, generation == scheduleGeneration else { return }
+            attemptIfEligible()
         }
+    }
+
+    private func attemptIfEligible() {
+        guard !activeScenes.isEmpty,
+              isBusy?() != true,
+              let requestReview
+        else { return }
+        let state = store.snapshot()
+        guard state.pendingRequest || policy.isEligible(state),
+              policy.canAttempt(
+                state,
+                at: now(),
+                appVersion: appVersion,
+                cooldown: cooldown
+              ),
+              store.recordPromptAttempt(at: now(), appVersion: appVersion)
+        else { return }
+
+        // StoreKit decides whether a dialog is displayed. We record the
+        // attempt before invoking it and never infer a review outcome.
+        requestReview()
     }
 }
 

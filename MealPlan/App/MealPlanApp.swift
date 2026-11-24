@@ -89,6 +89,8 @@ struct MealPlanApp: App {
                             || appState.pendingAddDish != nil
                             || appState.importNotice != nil
                             || appState.cookingSession.hasInterruptedSession
+                            || purchaseManager.purchaseInFlight
+                            || !UserDefaults.standard.bool(forKey: OnboardingPreferenceKeys.didCompleteOnboarding)
                     }
                 ) {
                     RootView()
@@ -229,6 +231,8 @@ struct MealPlanApp: App {
                             || appState.pendingAddDish != nil
                             || appState.importNotice != nil
                             || appState.cookingSession.hasInterruptedSession
+                            || purchaseManager.purchaseInFlight
+                            || !UserDefaults.standard.bool(forKey: OnboardingPreferenceKeys.didCompleteOnboarding)
                     }
                 ) {
                     DetailWindow(route: route)
