@@ -228,6 +228,27 @@ struct HouseholdRecordSyncTests {
         ))
     }
 
+    @Test func missingRecordSaveErrorsAreClassifiedWithoutLocalizedText() {
+        let id = CKRecord.ID(recordName: "MPDishIngredient-\(UUID().uuidString)", zoneID: CKRecordZone.ID(zoneName: "test"))
+        let missing = CKError(.unknownItem)
+        let staleTagWithoutServerRecord = CKError(.serverRecordChanged)
+        let server = CKRecord(recordType: HouseholdRecordType.dishIngredient.rawValue, recordID: id)
+        let conflict = CKError(.serverRecordChanged, userInfo: [CKRecordChangedErrorServerRecordKey: server])
+        let otherID = CKRecord.ID(recordName: "MPDish-\(UUID().uuidString)", zoneID: id.zoneID)
+        let mixed = CKError(.partialFailure, userInfo: [
+            CKPartialErrorsByItemIDKey: [id: missing, otherID: conflict]
+        ])
+
+        #expect(HouseholdRecordSyncService.isMissingRecordSaveError(missing))
+        #expect(HouseholdRecordSyncService.isMissingRecordSaveError(staleTagWithoutServerRecord))
+        #expect(HouseholdRecordSyncService.isMissingRecordSaveError(mixed))
+        #expect(!HouseholdRecordSyncService.isMissingRecordSaveError(conflict))
+        #expect(HouseholdRecordSyncService.isRecoverableRecordSendError(mixed))
+        #expect(!HouseholdRecordSyncService.isRecoverableRecordSendError(
+            CKError(.partialFailure, userInfo: [CKPartialErrorsByItemIDKey: [id: CKError(.permissionFailure)]])
+        ))
+    }
+
     @Test func journalReconciliationClearsOnlyOrphanedPendingMarkers() {
         var metadata = HouseholdSyncMetadata()
         metadata.serverFingerprints = ["sent": "old", "stillQueued": "old"]

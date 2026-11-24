@@ -299,6 +299,27 @@ struct MealPlanCloudKitStateStoreTests {
             #expect(try Data(contentsOf: archive) == Data([2]))
         }
     }
+
+    @Test func confirmedMissingRecordCanBeRemovedFromDurableJournal() async throws {
+        let fixture = try Fixture()
+        defer { fixture.cleanUp() }
+        let recordID = CKRecord.ID(
+            recordName: "MPDishIngredient-\(UUID().uuidString)",
+            zoneID: fixture.locator.zoneID
+        )
+        let record = CKRecord(recordType: HouseholdRecordType.dishIngredient.rawValue, recordID: recordID)
+        record[HouseholdRecordCodec.payloadKey] = Data("payload".utf8) as CKRecordValue
+
+        let store = fixture.makeStore()
+        try await store.stageLocalChanges([.save(record)], advancingTo: nil, in: .private)
+        let staged = try await store.pendingLocalChanges(in: .private)
+        #expect(staged.count == 1)
+
+        try await store.discardPendingChanges(for: [recordID], in: .private)
+
+        let remaining = try await store.pendingLocalChanges(in: .private)
+        #expect(remaining.isEmpty)
+    }
 }
 
 private enum InjectedFault: Error, Sendable {

@@ -278,6 +278,22 @@ struct HouseholdCloudSharingServiceTests {
         #expect(!HouseholdCloudSharingService.isTemporarySyncFailure(CKError(.quotaExceeded)))
     }
 
+    @Test func syncAlertsNeverExposeCloudKitDiagnostics() {
+        let recordName = "MPDishIngredient-\(UUID().uuidString)"
+        let message = HouseholdCloudSharingService.userFacingErrorMessage(
+            for: CKError(.unknownItem, userInfo: [
+                NSLocalizedDescriptionKey: "recordChangeTag specified, but \(recordName) not found"
+            ])
+        )
+
+        #expect(!message.contains(recordName))
+        #expect(!message.contains("recordChangeTag"))
+        #expect(message.contains("iCloud"))
+        #expect(HouseholdCloudSharingService.isTemporarySyncFailure(
+            HouseholdRecordSyncError.recordRecoveryDeferred(recordType: HouseholdRecordType.dishIngredient.rawValue)
+        ))
+    }
+
     #if canImport(UIKit)
     @Test func windowScenesUseCloudSharingDelegate() {
         let configuration = AppDelegate.sceneConfiguration(for: .windowApplication)

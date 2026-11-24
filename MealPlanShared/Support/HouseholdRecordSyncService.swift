@@ -1276,9 +1276,9 @@ final class HouseholdRecordSyncService {
         if let error {
             let failure = error as NSError
             let codes = Self.partialFailureCodes(error)
-            if Self.isResolvedConflictSendError(error) {
+            if Self.isRecoverableRecordSendError(error) {
                 logger.info("CloudKit delivered recoverable record conflicts (count=\(codes.count, privacy: .public)).")
-            } else {
+            } else if lastError == nil {
                 logger.error("CloudKit operation failed (domain=\(failure.domain, privacy: .public), code=\(failure.code, privacy: .public), itemCodes=\(codes.description, privacy: .public)).")
                 lastError = error
             }
@@ -1727,7 +1727,19 @@ final class HouseholdRecordSyncService {
             needsLocalScan = true
             scheduleScan()
         }
-        for failure in changes.failedRecordSaves where failure.error.code != .serverRecordChanged || failure.error.serverRecord == nil {
+        for failure in changes.failedRecordSaves where Self.isMissingRecordSaveError(failure.error) {
+            do {
+                try await recoverMissingRecordSave(failure.record, generation: generation)
+            } catch {
+                didFail = true
+                lastError = error is HouseholdRecordSyncError
+                    ? error
+                    : HouseholdRecordSyncError.recordRecoveryDeferred(recordType: failure.record.recordType)
+            }
+        }
+        for failure in changes.failedRecordSaves where
+            !Self.isMissingRecordSaveError(failure.error) &&
+            (failure.error.code != .serverRecordChanged || failure.error.serverRecord == nil) {
             didFail = true
             lastError = failure.error
         }
@@ -1746,6 +1758,134 @@ final class HouseholdRecordSyncService {
                 pendingCount: metadata.pendingFingerprints.count
             )
         }
+    }
+
+    /// A failed save can carry a stale system field even though the local
+    /// payload is still valid. Confirm the server's current record before
+    /// deciding whether to merge, recreate, or accept a remote deletion.
+    private func recoverMissingRecordSave(
+        _ attemptedRecord: CKRecord,
+        generation: UInt64
+    ) async throws {
+        guard generation == lifecycleGeneration,
+              let locator,
+              let pool = syncEnginePool,
+              let stateStore = packageStateStore else { throw CancellationError() }
+
+        let database = activeScope == .private
+            ? container.privateCloudDatabase
+            : container.sharedCloudDatabase
+        let authoritative: Result<CKRecord, Error>
+        do {
+            guard let result = try await database.records(for: [attemptedRecord.recordID])[attemptedRecord.recordID] else {
+                throw HouseholdRecordSyncError.recordRecoveryDeferred(recordType: attemptedRecord.recordType)
+            }
+            authoritative = result
+        } catch let error as HouseholdRecordSyncError {
+            throw error
+        } catch {
+            logger.warning("record.recovery.lookup.failed type=\(attemptedRecord.recordType, privacy: .public) domain=\((error as NSError).domain, privacy: .public) code=\((error as NSError).code, privacy: .public)")
+            throw HouseholdRecordSyncError.recordRecoveryDeferred(recordType: attemptedRecord.recordType)
+        }
+
+        switch authoritative {
+        case .success(let serverRecord):
+            // The record reappeared or another device recreated it while the
+            // save was in flight. Use the normal domain conflict resolver.
+            try await applyServerConflicts([serverRecord], generation: generation)
+            logger.info("record.recovery.reappeared type=\(attemptedRecord.recordType, privacy: .public) recovered=true")
+
+        case .failure(let error):
+            guard Self.isRecordGone(error) else {
+                throw HouseholdRecordSyncError.recordRecoveryDeferred(recordType: attemptedRecord.recordType)
+            }
+            try await reconcileConfirmedMissingRecord(
+                attemptedRecord,
+                pool: pool,
+                stateStore: stateStore,
+                locator: locator,
+                generation: generation
+            )
+        }
+    }
+
+    private func reconcileConfirmedMissingRecord(
+        _ attemptedRecord: CKRecord,
+        pool: CloudKitSyncEnginePool,
+        stateStore: MealPlanCloudKitStateStore,
+        locator: HouseholdShareLocator,
+        generation: UInt64
+    ) async throws {
+        let name = attemptedRecord.recordID.recordName
+        let local = try await snapshotsByName()[name]
+        let acknowledged = metadata.serverFingerprints[name]
+        let isPending = metadata.pendingFingerprints[name] != nil
+        let hasLocalIntent = local.map {
+            isPending || acknowledged == nil || acknowledged != $0.fingerprint
+        } ?? false
+
+        if let local, hasLocalIntent {
+            guard !locator.isReadOnly else {
+                throw HouseholdRecordSyncError.recordRecoveryDeferred(recordType: attemptedRecord.recordType)
+            }
+            if attemptedRecord.recordType == HouseholdRecordType.dishIngredient.rawValue,
+               try !hasValidDishIngredientReferences(local) {
+                throw HouseholdRecordSyncError.recordRecoveryDeferred(recordType: attemptedRecord.recordType)
+            }
+
+            // A create must not carry the stale change tag. Keep the durable
+            // payload/fingerprint and replace only this record's system fields.
+            metadata.systemFields.removeValue(forKey: name)
+            pendingSnapshots[name] = local
+            metadata.pendingFingerprints[name] = local.fingerprint
+            metadata.pendingGroupFingerprints[name] = local.groupFingerprints
+            let replacement = try await makeCloudRecord(
+                from: local,
+                zoneID: locator.zoneID,
+                systemRecord: nil
+            )
+            guard generation == lifecycleGeneration else { throw CancellationError() }
+            try await pool.enqueue([.save(replacement)], in: activeScope)
+            try await persistMetadata(expectedGeneration: generation)
+            logger.info("record.recovery.recreated type=\(attemptedRecord.recordType, privacy: .public) recovered=true")
+            return
+        }
+
+        // The local value matches the last acknowledged server value, so a
+        // confirmed missing record is a remote deletion rather than a local
+        // edit. Apply the normal deletion policy and retire the stale journal
+        // entry without touching unrelated records.
+        metadata.pendingFingerprints.removeValue(forKey: name)
+        metadata.pendingGroupFingerprints.removeValue(forKey: name)
+        metadata.systemFields.removeValue(forKey: name)
+        pendingSnapshots.removeValue(forKey: name)
+        if local != nil {
+            try await applyRemoteChanges(
+                records: [],
+                deletions: [(id: attemptedRecord.recordID, recordType: attemptedRecord.recordType)],
+                generation: generation
+            )
+        } else {
+            metadata.serverFingerprints.removeValue(forKey: name)
+            metadata.serverGroupFingerprints.removeValue(forKey: name)
+            try await persistMetadata(expectedGeneration: generation)
+        }
+        try await stateStore.discardPendingChanges(for: [attemptedRecord.recordID], in: activeScope)
+        logger.info("record.recovery.remoteDeletion type=\(attemptedRecord.recordType, privacy: .public) recovered=true")
+    }
+
+    private func hasValidDishIngredientReferences(_ snapshot: LocalHouseholdRecord) throws -> Bool {
+        guard let context,
+              case .dishIngredient(let value) = try HouseholdRecordCodec.decode(snapshot.payloadData) else {
+            return false
+        }
+        var dishDescriptor = FetchDescriptor<Dish>(predicate: #Predicate { $0.uuid == value.dishID })
+        dishDescriptor.fetchLimit = 1
+        guard try context.fetch(dishDescriptor).first != nil else { return false }
+        guard let ingredientID = value.ingredientID else { return true }
+        var ingredientDescriptor = FetchDescriptor<Ingredient>(predicate: #Predicate { $0.uuid == ingredientID })
+        ingredientDescriptor.fetchLimit = 1
+        return try context.fetch(ingredientDescriptor).first != nil
     }
 
     private func applyServerConflicts(_ servers: [CKRecord], generation: UInt64) async throws {
@@ -2129,6 +2269,36 @@ final class HouseholdRecordSyncService {
         return failures.allSatisfy(isResolvedConflictSendError)
     }
 
+    /// CloudKit reports a deleted record as either `unknownItem`, a
+    /// `serverRecordChanged` without a replacement record, or a nested item
+    /// error in a partial failure. Classification is code-based and does not
+    /// depend on localized server text.
+    nonisolated static func isMissingRecordSaveError(_ error: Error) -> Bool {
+        guard let error = error as? CKError else {
+            let nsError = error as NSError
+            return (nsError.userInfo[NSUnderlyingErrorKey] as? Error).map(isMissingRecordSaveError) ?? false
+        }
+        if error.code == .unknownItem { return true }
+        if error.code == .serverRecordChanged { return error.serverRecord == nil }
+        guard error.code == .partialFailure,
+              let failures = error.partialErrorsByItemID?.values,
+              !failures.isEmpty else {
+            let nsError = error as NSError
+            return (nsError.userInfo[NSUnderlyingErrorKey] as? Error).map(isMissingRecordSaveError) ?? false
+        }
+        return failures.contains(where: isMissingRecordSaveError)
+    }
+
+    nonisolated static func isRecoverableRecordSendError(_ error: Error) -> Bool {
+        guard let error = error as? CKError else { return false }
+        if isMissingRecordSaveError(error) { return true }
+        if error.code == .serverRecordChanged { return true }
+        guard error.code == .partialFailure,
+              let failures = error.partialErrorsByItemID?.values,
+              !failures.isEmpty else { return false }
+        return failures.allSatisfy(isRecoverableRecordSendError)
+    }
+
     private static func partialFailureCodes(_ error: Error) -> [Int] {
         guard let error = error as? CKError,
               let failures = error.partialErrorsByItemID?.values else { return [] }
@@ -2168,6 +2338,7 @@ enum HouseholdRecordSyncError: LocalizedError {
     case anotherAppCopyIsSyncing
     case requiredAssetUnavailable
     case householdBelongsToAnotherAccount
+    case recordRecoveryDeferred(recordType: String)
 
     var errorDescription: String? {
         switch self {
@@ -2177,6 +2348,8 @@ enum HouseholdRecordSyncError: LocalizedError {
             String(localized: "This household syncs with a different iCloud account. Sign back in to that account, or choose to use this one in Household settings.")
         case .requiredAssetUnavailable:
             String(localized: "A household image could not be downloaded completely. Your existing household data was kept. Retry the sync before continuing.")
+        case .recordRecoveryDeferred:
+            String(localized: "MealPlan will retry a household sync change in the background. Your local data was kept.")
         case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal:
             String(localized: "MealPlan can’t verify saved iCloud sync information yet. Your household data has not been deleted. Retry or share diagnostics with MealPlan Support.")
         default: nil
@@ -2204,6 +2377,7 @@ enum HouseholdRecordSyncError: LocalizedError {
         case .syncLockUnavailable: "stage=syncLockUnavailable"
         case .anotherAppCopyIsSyncing: "stage=anotherAppCopyIsSyncing"
         case .householdBelongsToAnotherAccount: "stage=householdBelongsToAnotherAccount"
+        case .recordRecoveryDeferred(let recordType): "stage=recordRecoveryDeferred; recordType=\(recordType)"
         }
     }
 }

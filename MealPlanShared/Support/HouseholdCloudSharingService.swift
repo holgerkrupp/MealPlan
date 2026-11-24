@@ -634,6 +634,10 @@ enum HouseholdCloudSharingService {
            case .requiredAssetUnavailable = syncError {
             return true
         }
+        if let syncError = error as? HouseholdRecordSyncError,
+           case .recordRecoveryDeferred = syncError {
+            return true
+        }
         if let failure = error as? CollaborationFailure {
             return failure == .offline || failure == .cancelled
         }
@@ -652,6 +656,35 @@ enum HouseholdCloudSharingService {
             .requestRateLimited, .zoneBusy, .accountTemporarilyUnavailable,
             .operationCancelled,
         ].contains(cloudError.code)
+    }
+
+    /// Converts sync/share failures into concise app language. CloudKit and
+    /// collaboration errors can include record IDs, zone IDs, change tags,
+    /// and internal server text; none of that belongs in an ordinary alert.
+    static func userFacingErrorMessage(for error: Error) -> String {
+        if let sharingError = error as? HouseholdSharingError {
+            return sharingError.errorDescription ?? String(localized: "iCloud sharing needs attention. Try again.")
+        }
+        if let syncError = error as? HouseholdRecordSyncError,
+           let description = syncError.errorDescription {
+            return description
+        }
+        if isTemporarySyncFailure(error) {
+            return String(localized: "MealPlan will retry iCloud sync in the background. Your local data is still available.")
+        }
+        if let cloudError = error as? CKError {
+            switch cloudError.code {
+            case .notAuthenticated:
+                return String(localized: "Sign in to iCloud to sync this household.")
+            case .permissionFailure:
+                return String(localized: "MealPlan does not have permission to update this household. Check iCloud settings or ask the owner for access.")
+            case .quotaExceeded:
+                return String(localized: "iCloud storage is full. Free up space and try syncing again.")
+            default:
+                break
+            }
+        }
+        return String(localized: "iCloud sync needs attention. Your local data is safe; try again later.")
     }
 
     /// Moves this device off a shared household it can no longer reach onto

@@ -301,7 +301,7 @@ struct RootView: View {
                 // A failed SwiftData fetch cannot mean "nothing to preserve".
                 // Keep the invitation eligible for redelivery and fail closed.
                 HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-                sharingErrorMessage = error.localizedDescription
+                sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
                 continue
             }
             if let firstAtRisk = atRisk.first {
@@ -360,7 +360,7 @@ struct RootView: View {
         } catch {
             HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
             appState.finishCloudDownload()
-            sharingErrorMessage = error.localizedDescription
+            sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
         }
     }
 
@@ -441,7 +441,7 @@ struct RootView: View {
             // CloudKit retries temporary outages. Keep the foreground plan
             // usable and reserve the alert for failures needing an action.
             if !HouseholdCloudSharingService.isTemporarySyncFailure(error) {
-                sharingErrorMessage = error.localizedDescription
+                sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
             }
         }
     }
@@ -494,7 +494,7 @@ struct RootView: View {
             MealType.ensure(for: own, context: context)
             lostHouseholdName = name
         } catch {
-            sharingErrorMessage = error.localizedDescription
+            sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
         }
     }
 

@@ -220,6 +220,27 @@ actor MealPlanCloudKitStateStore: CloudKitSyncEngineStateStore {
         try saveJournal(journal, for: scope)
     }
 
+    /// Removes a journal entry after CloudKit has authoritatively confirmed
+    /// that the corresponding server record is already gone. Keeping the
+    /// write-ahead entry would otherwise restore the same stale operation
+    /// after relaunch.
+    func discardPendingChanges(
+        for recordIDs: [CKRecord.ID],
+        in scope: CollaborationDatabaseScope
+    ) throws {
+        guard !recordIDs.isEmpty else { return }
+        var journal = try loadJournal(for: scope)
+        for recordID in recordIDs {
+            let key = Self.entryKey(
+                recordName: recordID.recordName,
+                zoneName: recordID.zoneID.zoneName,
+                ownerName: recordID.zoneID.ownerName
+            )
+            journal.entries.removeValue(forKey: key)
+        }
+        try saveJournal(journal, for: scope)
+    }
+
     func discardDatabaseState(for scope: CollaborationDatabaseScope) throws {
         let stateURL = try fileURL(kind: "state", scope: scope)
         let journalURL = try fileURL(kind: "journal", scope: scope)
