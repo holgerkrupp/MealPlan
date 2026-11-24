@@ -289,6 +289,10 @@ final class PhoneWatchSyncService: NSObject {
         switch command.action {
         case .pauseOrResume:
             sessionStore.pauseOrResumeTimer(command.timerID, at: .now)
+        case .extend:
+            sessionStore.extendTimer(command.timerID)
+        case .repeatTimer:
+            sessionStore.repeatTimer(command.timerID)
         case .cancel:
             sessionStore.cancelTimer(command.timerID)
         }

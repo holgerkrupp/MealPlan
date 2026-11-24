@@ -113,6 +113,22 @@ private struct WatchCookingTimerRow: View {
                     .disabled(pending)
                 }
 
+                if state == .completed {
+                    Button {
+                        store.sendTimerCommand(for: timer, action: .repeatTimer)
+                    } label: {
+                        Label(String(localized: "Repeat"), systemImage: "arrow.clockwise")
+                    }
+                    .disabled(pending)
+                } else {
+                    Button {
+                        store.sendTimerCommand(for: timer, action: .extend)
+                    } label: {
+                        Label(String(localized: "+1 minute"), systemImage: "plus")
+                    }
+                    .disabled(pending)
+                }
+
                 Button(role: .destructive) {
                     confirmingCancellation = true
                 } label: {

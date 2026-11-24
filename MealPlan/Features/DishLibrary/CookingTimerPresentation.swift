@@ -279,6 +279,46 @@ struct CookingTimerStylePicker: View {
     }
 }
 
+/// Alert delivery remains optional: local notifications are the default and
+/// AlarmKit is offered only when the current platform supports it.
+struct CookingTimerAlertSettingsView: View {
+    @State private var authorization: CookingTimerAlertAuthorization = .notDetermined
+    private let store = CookingSessionStore.shared
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Picker(String(localized: "Timer alerts"), selection: Binding(
+                get: { store.alertPreference },
+                set: { store.alertPreference = $0 }
+            )) {
+                Text(String(localized: "Local notifications")).tag(CookingTimerAlertPreference.localNotifications)
+                #if os(iOS)
+                Text(String(localized: "System alerts (AlarmKit)")).tag(CookingTimerAlertPreference.alarmKit)
+                #endif
+            }
+            .pickerStyle(.menu)
+
+            Text(statusText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .task { authorization = await store.timerAlertAuthorizationStatus() }
+        .onChange(of: store.alertPreference) { _, _ in
+            Task { authorization = await store.timerAlertAuthorizationStatus() }
+        }
+    }
+
+    private var statusText: String {
+        switch authorization {
+        case .authorized: String(localized: "Timer alerts are authorized.")
+        case .denied: String(localized: "Alerts are denied. Timers still run in Cooking Mode.")
+        case .notDetermined: String(localized: "Permission is requested when a timer starts.")
+        case .unavailable: String(localized: "System alerts are unavailable on this device.")
+        }
+    }
+}
+
 /// A reusable timer card. All mutations are callbacks into the existing
 /// CookingSessionStore, keeping cards independent even when labels and
 /// durations happen to be identical.
@@ -288,6 +328,8 @@ struct CookingTimerCard: View {
     let style: CookingTimerStyle
     let isFocused: Bool
     let onPauseResume: () -> Void
+    let onExtend: () -> Void
+    let onRepeat: () -> Void
     let onCancel: () -> Void
     let onFocus: () -> Void
 
@@ -342,6 +384,20 @@ struct CookingTimerCard: View {
                 .buttonStyle(.bordered)
                 .controlSize(.regular)
                 .accessibilityLabel(String(localized: "Cancel timer"))
+                if isComplete {
+                    Button(String(localized: "Repeat"), systemImage: "arrow.clockwise") {
+                        onRepeat()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                } else {
+                    Button(String(localized: "+1 minute"), systemImage: "plus") {
+                        onExtend()
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.regular)
+                    .accessibilityLabel(String(localized: "Add one minute"))
+                }
             }
         }
         .padding(14)
@@ -373,6 +429,8 @@ struct CookingTimerSummary: View {
     let style: CookingTimerStyle
     @Binding var focusedTimerID: UUID?
     let onPauseResume: (UUID) -> Void
+    let onExtend: (UUID) -> Void
+    let onRepeat: (UUID) -> Void
     let onCancel: (UUID) -> Void
     let onAddTimer: () -> Void
 
@@ -409,6 +467,8 @@ struct CookingTimerSummary: View {
                     style: style,
                     isFocused: true,
                     onPauseResume: { onPauseResume(focusedTimer.id) },
+                    onExtend: { onExtend(focusedTimer.id) },
+                    onRepeat: { onRepeat(focusedTimer.id) },
                     onCancel: { onCancel(focusedTimer.id) },
                     onFocus: { focusedTimerID = nil }
                 )
@@ -423,6 +483,8 @@ struct CookingTimerSummary: View {
                             style: style,
                             isFocused: false,
                             onPauseResume: { onPauseResume(timer.id) },
+                            onExtend: { onExtend(timer.id) },
+                            onRepeat: { onRepeat(timer.id) },
                             onCancel: { onCancel(timer.id) },
                             onFocus: { focusedTimerID = timer.id }
                         )
@@ -460,6 +522,8 @@ private struct CookingTimerStylePreview: View {
                 style: style,
                 isFocused: true,
                 onPauseResume: {},
+                onExtend: {},
+                onRepeat: {},
                 onCancel: {},
                 onFocus: {}
             )

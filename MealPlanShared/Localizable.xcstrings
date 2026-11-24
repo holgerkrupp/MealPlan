@@ -9660,6 +9660,91 @@
         }
       }
     },
+    "Native" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Nativ" } }
+      }
+    },
+    "Segmented Digital" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Segmentiert digital" } }
+      }
+    },
+    "Circular" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Kreisförmig" } }
+      }
+    },
+    "Clean system-style countdown" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Klare systemnahe Zeitdarstellung" } }
+      }
+    },
+    "Digital kitchen timer" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Digitale Küchenuhr" } }
+      }
+    },
+    "Progress ring with remaining time" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Fortschrittsring mit verbleibender Zeit" } }
+      }
+    },
+    "Timer appearance" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timerdarstellung" } }
+      }
+    },
+    "Timer alerts" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timerbenachrichtigungen" } }
+      }
+    },
+    "Local notifications" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Lokale Mitteilungen" } }
+      }
+    },
+    "System alerts (AlarmKit)" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Systemwarnungen (AlarmKit)" } }
+      }
+    },
+    "Timer alerts are authorized." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Timerbenachrichtigungen sind aktiviert." } }
+      }
+    },
+    "Alerts are denied. Timers still run in Cooking Mode." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Benachrichtigungen sind deaktiviert. Timer laufen weiterhin im Kochmodus." } }
+      }
+    },
+    "Permission is requested when a timer starts." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Die Berechtigung wird beim Start eines Timers angefragt." } }
+      }
+    },
+    "System alerts are unavailable on this device." : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Systemwarnungen sind auf diesem Gerät nicht verfügbar." } }
+      }
+    },
+    "Add one minute" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Eine Minute hinzufügen" } }
+      }
+    },
+    "Repeat" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "Wiederholen" } }
+      }
+    },
+    "+1 minute" : {
+      "localizations" : {
+        "de" : { "stringUnit" : { "state" : "translated", "value" : "+1 Minute" } }
+      }
+    },
     "Copied" : {
 
     },

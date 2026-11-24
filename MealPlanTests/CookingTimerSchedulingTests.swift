@@ -112,15 +112,13 @@ struct CookingTimerSchedulingTests {
             duration: 1_500
         ))
 
-        await Task.yield()
-        await Task.yield()
+        for _ in 0..<10 { await Task.yield() }
         let snapshot = await scheduler.snapshot()
         #expect(Set(snapshot.scheduled) == Set([firstID, secondID]))
         #expect(store.session?.timers.map(\.id) == [firstID, secondID])
 
         store.pauseOrResumeTimer(firstID, at: start.addingTimeInterval(60))
-        await Task.yield()
-        await Task.yield()
+        for _ in 0..<10 { await Task.yield() }
         let afterPause = await scheduler.snapshot()
         #expect(afterPause.cancelled.contains(firstID))
         #expect(store.session?.timers.first { $0.id == firstID }?.pausedRemaining == 1_440)
@@ -151,5 +149,24 @@ struct CookingTimerSchedulingTests {
         #expect(restored.timers.count == 1)
         #expect(restored.timers[0].id == timerID)
         #expect(restored.timers[0].remaining(at: date.addingTimeInterval(120)) == 780)
+    }
+
+    @Test func extendAndRepeatKeepTimerIdentityIndependent() {
+        let dishID = UUID()
+        let date = Date(timeIntervalSince1970: 40_000)
+        var session = CookingSessionState(dishID: dishID, dishName: "Soup", servings: 2, now: date)
+        let original = CookingTimerState(
+            dishID: dishID, dishName: "Soup", stepNumber: 1, stepText: "Simmer",
+            label: "Sauce", duration: 60, endDate: date.addingTimeInterval(60)
+        )
+        session.addTimer(original, at: date)
+
+        let extended = session.extendTimer(original.id, by: 60, at: date)
+        #expect(extended?.id == original.id)
+        #expect(extended?.remaining(at: date) == 120)
+
+        let repeated = session.repeatTimer(original.id, at: date)
+        #expect(repeated?.id != original.id)
+        #expect(session.timers.map(\.id) == [original.id, repeated?.id].compactMap { $0 })
     }
 }

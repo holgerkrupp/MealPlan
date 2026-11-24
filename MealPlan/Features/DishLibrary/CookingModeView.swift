@@ -196,7 +196,14 @@ struct CookingModeView: View {
         }
         .sheet(isPresented: $showingTimerStylePicker) {
             NavigationStack {
-                CookingTimerStylePicker(selection: timerStyleBinding)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        CookingTimerStylePicker(selection: timerStyleBinding)
+                        Divider()
+                        CookingTimerAlertSettingsView()
+                            .padding(.horizontal)
+                    }
+                }
                     .navigationTitle(String(localized: "Timer appearance"))
                     .toolbar {
                         ToolbarItem(placement: .confirmationAction) {
@@ -647,6 +654,8 @@ struct CookingModeView: View {
                         style: timerStyle,
                         focusedTimerID: $focusedTimerID,
                         onPauseResume: { id in store.pauseOrResumeTimer(id, at: timeline.date) },
+                        onExtend: { id in store.extendTimer(id) },
+                        onRepeat: { id in store.repeatTimer(id) },
                         onCancel: { id in
                             if focusedTimerID == id { focusedTimerID = nil }
                             store.cancelTimer(id)

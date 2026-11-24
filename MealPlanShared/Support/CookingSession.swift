@@ -115,6 +115,40 @@ struct CookingSessionState: Codable, Equatable, Sendable {
         return timers[index]
     }
 
+    /// Adds time to one timer without changing any other timer. Paused timers
+    /// keep their paused state and completed timers cannot be extended.
+    mutating func extendTimer(_ id: UUID, by additionalTime: TimeInterval, at date: Date) -> CookingTimerState? {
+        guard additionalTime > 0,
+              let index = timers.firstIndex(where: { $0.id == id }),
+              timers[index].remaining(at: date) > 0 else { return nil }
+        timers[index].duration += additionalTime
+        if let paused = timers[index].pausedRemaining {
+            timers[index].pausedRemaining = paused + additionalTime
+        } else {
+            timers[index].endDate = timers[index].endDate.addingTimeInterval(additionalTime)
+        }
+        touch(at: date)
+        return timers[index]
+    }
+
+    /// Creates a fresh timer with the same recipe context and duration. A new
+    /// UUID is intentional: repeating never replaces the original timer.
+    mutating func repeatTimer(_ id: UUID, at date: Date) -> CookingTimerState? {
+        guard let source = timers.first(where: { $0.id == id }) else { return nil }
+        let timer = CookingTimerState(
+            dishID: source.dishID,
+            dishName: source.dishName,
+            stepNumber: source.stepNumber,
+            stepText: source.stepText,
+            label: source.label,
+            duration: source.duration,
+            endDate: date.addingTimeInterval(source.duration)
+        )
+        timers.append(timer)
+        touch(at: date)
+        return timer
+    }
+
     mutating func removeTimer(_ id: UUID, at date: Date = .now) {
         timers.removeAll { $0.id == id }
         touch(at: date)

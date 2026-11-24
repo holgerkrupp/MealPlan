@@ -136,6 +136,18 @@ final class CookingSessionStore {
         }
     }
 
+    func extendTimer(_ id: UUID, by additionalTime: TimeInterval = 60) {
+        guard let timer = session?.extendTimer(id, by: additionalTime, at: clock.now) else { return }
+        saveAndRefreshActivity()
+        schedule(timer)
+    }
+
+    func repeatTimer(_ id: UUID) {
+        guard let timer = session?.repeatTimer(id, at: clock.now) else { return }
+        saveAndRefreshActivity()
+        schedule(timer)
+    }
+
     func cancelTimer(_ id: UUID) {
         session?.removeTimer(id, at: clock.now)
         timerDeliveryStatuses.removeValue(forKey: id)

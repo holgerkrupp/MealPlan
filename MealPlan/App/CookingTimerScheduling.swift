@@ -3,6 +3,7 @@ import UserNotifications
 
 #if canImport(AlarmKit) && os(iOS)
 import AlarmKit
+import ActivityKit
 import SwiftUI
 #endif
 

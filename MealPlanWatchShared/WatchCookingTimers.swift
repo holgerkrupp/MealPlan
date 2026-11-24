@@ -54,6 +54,8 @@ struct WatchCookingTimersSnapshot: Codable, Hashable, Sendable {
 /// local mutation action: the phone owns the canonical timer state.
 enum WatchCookingTimerAction: Codable, Hashable, Sendable {
     case pauseOrResume
+    case extend
+    case repeatTimer
     case cancel
 }
 
