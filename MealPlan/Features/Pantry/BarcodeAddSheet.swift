@@ -22,10 +22,10 @@ enum BarcodeScanAvailability {
 /// Scan a product's barcode, then put it on the shopping list or in the
 /// pantry.
 ///
-/// There is no product database: a code is resolved only against names this
-/// device remembered from earlier scans (`BarcodeProductMemory`). An unknown
-/// code — or no scan at all — just leaves the name field empty to type into,
-/// so the sheet always works as a fast manual add.
+/// A code is resolved against names this device remembered from earlier scans
+/// first (`BarcodeProductMemory`). When the person has opted in, an unknown
+/// code can then be looked up by barcode only through the public Open Food
+/// Facts API. An unknown code — or no scan at all — remains a fast manual add.
 @MainActor
 struct BarcodeAddSheet: View {
     enum Destination { case shoppingList, pantry }
@@ -42,8 +42,10 @@ struct BarcodeAddSheet: View {
     @State private var addedMessage: String?
     @State private var isAddError = false
     @State private var lookupMessage: String?
+    @State private var lookupOutcome: BarcodeProductLookupOutcome?
+    @State private var isLookingUp = false
     @State private var lookupTask: Task<Void, Never>?
-    @AppStorage("barcodeProductLookupEnabled") private var productLookupEnabled = false
+    @AppStorage(BarcodeProductLookupSettings.enabledKey) private var productLookupEnabled = false
     @FocusState private var nameFocused: Bool
 
     private let memory = BarcodeProductMemory()
@@ -79,7 +81,7 @@ struct BarcodeAddSheet: View {
                     Button(String(localized: "Done")) { dismiss() }
                 }
             }
-            .onDisappear { lookupTask?.cancel() }
+            .onDisappear { cancelLookup() }
         }
     }
 
@@ -93,9 +95,12 @@ struct BarcodeAddSheet: View {
                 if let code {
                     LabeledContent(String(localized: "Barcode"), value: code)
                     Button(String(localized: "Scan another")) {
+                        cancelLookup()
                         self.code = nil
                         name = ""
                         addedMessage = nil
+                        lookupMessage = nil
+                        lookupOutcome = nil
                     }
                 }
             } footer: {
@@ -111,13 +116,27 @@ struct BarcodeAddSheet: View {
                     .onChange(of: productLookupEnabled) { _, enabled in
                         if enabled, code != nil, name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                             lookupUnknownProduct()
+                        } else if !enabled {
+                            cancelLookup()
                         }
                     }
+                if isLookingUp {
+                    ProgressView(String(localized: "Looking up product…"))
+                        .accessibilityLabel(String(localized: "Looking up product"))
+                }
                 if let lookupMessage {
                     Text(lookupMessage).font(.caption).foregroundStyle(.secondary)
                 }
+                if canRetryLookup {
+                    Button(String(localized: "Try lookup again")) {
+                        lookupUnknownProduct()
+                    }
+                }
+                Link(destination: BarcodeProductLookupSettings.attributionURL) {
+                    Label(String(localized: "About Open Food Facts"), systemImage: "info.circle")
+                }
             } footer: {
-                Text("Optional lookup sends only the barcode to Open Food Facts. You can always enter or correct the product name yourself.")
+                Text("Optional lookup sends only the barcode to Open Food Facts. Product data is provided under the Open Database License. You can always enter or correct the product name yourself.")
             }
 
             Section {
@@ -149,6 +168,7 @@ struct BarcodeAddSheet: View {
         code = scanned
         addedMessage = nil
         lookupMessage = nil
+        lookupOutcome = nil
         name = memory.name(for: scanned) ?? ""
         if name.isEmpty {
             if productLookupEnabled { lookupUnknownProduct() }
@@ -158,10 +178,15 @@ struct BarcodeAddSheet: View {
 
     private func lookupUnknownProduct() {
         guard productLookupEnabled, let code, memory.name(for: code) == nil else { return }
-        lookupTask?.cancel()
+        cancelLookup()
+        isLookingUp = true
+        lookupMessage = nil
+        lookupOutcome = nil
         lookupTask = Task { @MainActor in
             let outcome = await BarcodeProductLookup.shared.lookup(barcode: code)
             guard !Task.isCancelled, self.code == code else { return }
+            isLookingUp = false
+            lookupOutcome = outcome
             switch outcome {
             case let .found(productName, brand, source):
                 guard name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
@@ -176,7 +201,25 @@ struct BarcodeAddSheet: View {
             case .failed:
                 lookupMessage = String(localized: "Product lookup failed. Enter the name manually.")
                 nameFocused = true
+            case .cancelled:
+                break
             }
+        }
+    }
+
+    private var canRetryLookup: Bool {
+        switch lookupOutcome {
+        case .unknown, .offline, .failed: true
+        case .found, .cancelled, .none: false
+        }
+    }
+
+    private func cancelLookup() {
+        lookupTask?.cancel()
+        lookupTask = nil
+        isLookingUp = false
+        if let code {
+            Task { await BarcodeProductLookup.shared.cancel(barcode: code) }
         }
     }
 

@@ -14,6 +14,7 @@ Links below are a navigation inventory, not a statement that every document is c
 - [docs/ease-of-use.md](ease-of-use.md)
 - [docs/icloud-sharing.md](icloud-sharing.md)
 - [docs/ingredient-matching.md](ingredient-matching.md)
+- [docs/barcode-product-lookup.md](barcode-product-lookup.md)
 - [docs/macos-entitlements.md](macos-entitlements.md)
 - [docs/recipe-discovery-performance.md](recipe-discovery-performance.md)
 - [docs/recipe-translation.md](recipe-translation.md)
