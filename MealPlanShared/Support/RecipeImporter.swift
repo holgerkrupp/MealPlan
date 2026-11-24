@@ -399,6 +399,10 @@ enum RecipeImportError: LocalizedError {
     case timedOut
     case noRecipeFound
     case unreadableFile
+    case secureConnectionRequired
+    case notFound
+    case temporarilyUnavailable
+    case invalidRecipePage
 
     var errorDescription: String? {
         switch self {
@@ -407,7 +411,27 @@ enum RecipeImportError: LocalizedError {
         case .timedOut: String(localized: "That page took too long to respond. Check your connection and try again.")
         case .noRecipeFound: String(localized: "No recipe found on that page.")
         case .unreadableFile: String(localized: "That file couldn’t be read.")
+        case .secureConnectionRequired: String(localized: "This website could not be loaded securely. MealPlan did not use an insecure connection.")
+        case .notFound: String(localized: "That recipe link is no longer available. Choose a different link or open the website to find the recipe.")
+        case .temporarilyUnavailable: String(localized: "That website is temporarily unavailable. Check your connection and try again.")
+        case .invalidRecipePage: String(localized: "The page loaded, but it did not contain a trustworthy recipe. Open it in the browser to review the page.")
         }
+    }
+}
+
+/// URL policy shared by direct recipe imports and refresh. Stored HTTP links
+/// get one secure candidate; callers never silently fall back to HTTP.
+enum RecipeSourceURLPolicy {
+    static func secureCandidates(for url: URL) -> [URL] {
+        guard url.scheme?.lowercased() == "http",
+              var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        else { return [url] }
+        components.scheme = "https"
+        return components.url.map { [$0] } ?? []
+    }
+
+    static func isSecureWebURL(_ url: URL) -> Bool {
+        url.scheme?.lowercased() == "https"
     }
 }
 

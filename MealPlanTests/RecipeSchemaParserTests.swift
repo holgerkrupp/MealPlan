@@ -8,6 +8,21 @@ struct RecipeSchemaParserTests {
     let url = URL(string: "https://www.chefkoch.de/rezepte/123/Test.html")!
     private let completeJSONLD = #"<script type="application/ld+json">{"@type":"Recipe","name":"Spaghetti Bolognese","recipeIngredient":["500 g beef","1 onion"],"recipeInstructions":"Cook the onion and beef."}</script>"#
 
+    @Test func httpSourceGetsOnlyAnHttpsCandidateWithoutChangingPathOrQuery() {
+        let source = URL(string: "http://recipes.example/soup?id=42&sig=abc")!
+        let candidates = RecipeSourceURLPolicy.secureCandidates(for: source)
+
+        #expect(candidates.map(\.absoluteString) == ["https://recipes.example/soup?id=42&sig=abc"])
+        #expect(RecipeSourceURLPolicy.isSecureWebURL(candidates[0]))
+        #expect(RecipeSourceURLPolicy.secureCandidates(for: candidates[0]) == [candidates[0]])
+    }
+
+    @Test func importErrorsUseActionableSecureLanguage() {
+        #expect(RecipeImportError.secureConnectionRequired.localizedDescription.contains("secure"))
+        #expect(RecipeImportError.notFound.localizedDescription.contains("link"))
+        #expect(RecipeImportError.temporarilyUnavailable.localizedDescription.contains("try again"))
+    }
+
     @Test func extractsPlainJSONLDRecipe() {
         let html = """
         <html><head>
@@ -352,6 +367,21 @@ struct RecipeSchemaParserTests {
         #expect(recipe?.imageURLString == "https://example.test/pasta.jpg")
     }
 
+    @Test func microdataDoesNotConcatenateRecipeIngredientAlias() {
+        let html = """
+        <article itemscope itemtype="https://schema.org/Recipe">
+          <h1 itemprop="name">Chili</h1>
+          <li itemprop="recipeIngredient">500 g Hackfleisch</li>
+          <li itemprop="recipeIngredient">1 Zwiebel</li>
+          <span itemprop="ingredients">10 ml Schweinenacken ohne Knochen</span>
+        </article>
+        """
+
+        let recipe = parser.parseMicrodata(html: html, sourceURL: url)
+
+        #expect(recipe?.ingredientLines == ["500 g Hackfleisch", "1 Zwiebel"])
+    }
+
     @Test func moreCompleteRecipeCandidateWinsAcrossJSONLDBlocks() {
         let html = """
         <script type="application/ld+json">
@@ -368,6 +398,25 @@ struct RecipeSchemaParserTests {
         #expect(parser.parseJSONLD(html: html, sourceURL: url)?.name == "Complete copy")
         #expect(candidates.allSatisfy { $0.provenance == .jsonLD })
         #expect(candidates.max(by: { $0.score < $1.score })?.evidence.contains("instructions") == true)
+    }
+
+    @Test func visibleRecipeTitleOutranksACompleteRelatedRecipeObject() {
+        let html = """
+        <html><head><title>Main recipe</title></head><body>
+          <h1>Main recipe</h1>
+          <script type="application/ld+json">
+          {"@type":"Recipe","name":"Related casserole","recipeIngredient":["1 kg unrelated meat","2 onions","300 ml sauce"],"recipeInstructions":["Mix.","Bake."],"recipeYield":"6 servings"}
+          </script>
+          <script type="application/ld+json">
+          {"@type":"Recipe","name":"Main recipe","recipeIngredient":["500 g potatoes"],"recipeInstructions":"Boil the potatoes."}
+          </script>
+        </body></html>
+        """
+
+        let recipe = parser.parseJSONLD(html: html, sourceURL: url)
+
+        #expect(recipe?.name == "Main recipe")
+        #expect(recipe?.ingredientLines == ["500 g potatoes"])
     }
 
     @Test func headingsAreNotRecipePayload() {

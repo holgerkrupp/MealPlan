@@ -70,7 +70,7 @@ struct DishFilterAndDuplicateTests {
         #expect(dish.images?.count == 2)
     }
 
-    @Test func refreshReplacesImportedRecipeContentButKeepsPersonalDetails() {
+    @Test func refreshReplacesImportedRecipeContentButKeepsPersonalDetails() throws {
         let container = SharedStore.make(cloudKit: false, inMemory: true)
         let context = container.mainContext
         let household = Household(name: "Family")
@@ -106,7 +106,7 @@ struct DishFilterAndDuplicateTests {
         refreshed.servings = 4
         refreshed.yieldUnitRaw = "servings"
         refreshed.importedSourceApp = "KptnCook"
-        DishBuilder.refresh(refreshed, to: dish, context: context)
+        try DishBuilder.refresh(refreshed, to: dish, context: context)
 
         #expect(dish.name == "New soup")
         #expect(dish.recipeText == "New instructions")
@@ -117,5 +117,41 @@ struct DishFilterAndDuplicateTests {
         #expect(dish.tagNames.contains("Family favorite"))
         #expect(dish.rating == 5)
         #expect(dish.primaryImage?.data == Data([1]))
+    }
+
+    @Test func refreshSelectionPreservesUnselectedContentAndDoesNotDeduplicateIntentionalRows() throws {
+        let container = SharedStore.make(cloudKit: false, inMemory: true)
+        let context = container.mainContext
+        let household = Household(name: "Family")
+        context.insert(household)
+        let original = ImportedRecipe(name: "Saved name", sourceURL: URL(string: "https://example.com/old")!)
+        let dish = DishBuilder.makeDish(from: original, household: household, createdByName: nil, context: context)
+        dish.recipeText = "My instructions"
+        dish.tagNames = ["Personal"]
+        var refreshed = ImportedRecipe(name: "Fetched name", sourceURL: URL(string: "https://example.com/new")!)
+        refreshed.ingredientLines = ["1 onion", "1 onion", "2 onions"]
+        refreshed.instructions = "Fetched instructions"
+
+        let selection = DishBuilder.RefreshSelection(
+            title: true,
+            ingredients: true,
+            instructions: false,
+            servings: false,
+            prepTime: false,
+            cookTime: false,
+            nutrition: false,
+            sourceURL: true
+        )
+        try DishBuilder.refresh(refreshed, to: dish, context: context, selection: selection)
+
+        #expect(dish.name == "Fetched name")
+        #expect(dish.recipeText == "My instructions")
+        #expect(dish.sortedIngredients.count == 3)
+        #expect(dish.sortedIngredients.map { $0.ingredient?.name } == ["onion", "onion", "onions"])
+        #expect(dish.tagNames == ["Personal"])
+        #expect(DishBuilder.suspiciousDuplicateIngredientIndices(refreshed) == [1])
+
+        try DishBuilder.refresh(refreshed, to: dish, context: context, selection: selection)
+        #expect(dish.sortedIngredients.count == 3)
     }
 }

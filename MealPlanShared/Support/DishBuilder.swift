@@ -5,6 +5,47 @@ import SwiftData
 /// Shared by the app's importer and the Share Extension so both behave alike.
 enum DishBuilder {
 
+    /// The fields a refresh is allowed to replace after the cook reviews the
+    /// extraction. Personal recipe content is deliberately opt-in.
+    struct RefreshSelection: Equatable, Sendable {
+        var title = false
+        var ingredients = false
+        var instructions = false
+        var servings = false
+        var prepTime = false
+        var cookTime = false
+        var nutrition = false
+        var sourceURL = true
+
+        static func conservative(for dish: Dish, result: RecipeExtractionResult) -> Self {
+            let ingredientsAvailable = result.fieldQuality[.ingredients, default: 0] >= 0.5
+                && (!result.recipe.ingredientLines.isEmpty || result.recipe.structuredIngredients?.isEmpty == false)
+            let instructionsAvailable = result.fieldQuality[.instructions, default: 0] >= 0.35
+                && !(result.recipe.instructions ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            return Self(
+                title: dish.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                ingredients: (dish.ingredients ?? []).isEmpty && ingredientsAvailable,
+                instructions: (dish.recipeText ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && instructionsAvailable,
+                servings: dish.servings <= 0 && result.recipe.servings != nil,
+                prepTime: dish.prepTimeMinutes == nil && result.recipe.prepTimeMinutes != nil,
+                cookTime: dish.cookTimeMinutes == nil && result.recipe.cookTimeMinutes != nil,
+                nutrition: dish.statedNutritionPerServing == nil && result.recipe.nutritionPerServing != nil,
+                sourceURL: result.recipe.sourceURL != nil
+            )
+        }
+
+        static let all = Self(
+            title: true,
+            ingredients: true,
+            instructions: true,
+            servings: true,
+            prepTime: true,
+            cookTime: true,
+            nutrition: true,
+            sourceURL: true
+        )
+    }
+
     /// State shared by every recipe in one bulk import. It avoids repeatedly
     /// traversing SwiftData relationships for the household's complete
     /// ingredient catalogue and tag vocabulary.
@@ -324,94 +365,203 @@ enum DishBuilder {
     static func refresh(
         _ recipe: ImportedRecipe,
         to dish: Dish,
-        context: ModelContext
-    ) {
-        let importedName = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !importedName.isEmpty { dish.name = importedName }
-        dish.sourceURL = recipe.sourceURL ?? dish.sourceURL
-        dish.deepLinkURL = recipe.deepLinkURL ?? dish.deepLinkURL
-        dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
-        dish.importedSourceID = recipe.sourceIdentifier ?? dish.importedSourceID
-        dish.recipeText = recipe.instructions ?? dish.recipeText
-        if let servings = recipe.servings {
+        context: ModelContext,
+        selection: RefreshSelection = .all
+    ) throws {
+        let oldLines = dish.sortedIngredients
+        let oldState = RefreshState(dish: dish)
+        var newLines: [DishIngredient] = []
+
+        do {
+            try context.transaction {
+                if selection.ingredients, let incoming = refreshIngredientValues(from: recipe), !incoming.isEmpty {
+                    let importSession = ImportSession(household: dish.household)
+                    newLines = incoming.enumerated().map { index, value in
+                        let ingredient: Ingredient
+                        let line: DishIngredient
+                        switch value {
+                        case .structured(let imported):
+                            ingredient = importSession.ingredient(named: imported.name, household: dish.household, context: context)
+                            importSession.applyImportedMetadata(imported, to: ingredient)
+                            line = DishIngredient(
+                                canonicalValue: imported.canonicalValue,
+                                dimension: imported.dimension,
+                                displayUnit: imported.displayUnit,
+                                isApproximate: imported.isApproximate,
+                                note: imported.note,
+                                rawText: imported.rawText,
+                                sortIndex: index
+                            )
+                        case .raw(let raw):
+                            let parsed = GermanUnitParser.parse(raw)
+                            ingredient = importSession.ingredient(named: parsed.name, household: dish.household, context: context)
+                            line = DishIngredient(
+                                canonicalValue: parsed.quantity?.value,
+                                dimension: parsed.quantity?.dimension,
+                                displayUnit: parsed.displayUnit,
+                                isApproximate: parsed.isApproximate,
+                                note: parsed.note,
+                                rawText: parsed.rawText,
+                                sortIndex: index
+                            )
+                        }
+                        line.dish = dish
+                        line.ingredient = ingredient
+                        context.insert(line)
+                        return line
+                    }
+                    oldLines.forEach(context.delete)
+                    dish.ingredients = newLines
+                }
+
+                if selection.title {
+                    let importedName = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if !importedName.isEmpty { dish.name = importedName }
+                }
+                if selection.sourceURL, let sourceURL = recipe.sourceURL {
+                    dish.sourceURL = sourceURL
+                    dish.deepLinkURL = recipe.deepLinkURL ?? dish.deepLinkURL
+                    dish.importedSourceApp = recipe.importedSourceApp ?? dish.importedSourceApp
+                    dish.importedSourceID = recipe.sourceIdentifier ?? dish.importedSourceID
+                }
+                if selection.instructions, let instructions = recipe.instructions,
+                   !instructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    dish.recipeText = instructions
+                }
+                if selection.servings, let servings = recipe.servings, servings > 0 {
+                    dish.servings = servings
+                    if dish.yieldUnitRaw == nil, let yieldUnitRaw = recipe.yieldUnitRaw {
+                        dish.yieldUnitRaw = yieldUnitRaw
+                        dish.yieldLabel = recipe.yieldLabel
+                    }
+                }
+                if selection.prepTime, let prep = recipe.prepTimeMinutes { dish.prepTimeMinutes = prep }
+                if selection.cookTime, let cook = recipe.cookTimeMinutes { dish.cookTimeMinutes = cook }
+                if selection.nutrition, let nutrition = recipe.nutritionPerServing {
+                    dish.setStatedNutritionPerServing(nutrition)
+                }
+
+                let contentChanged = selection.title || selection.ingredients || selection.instructions
+                if contentChanged {
+                    // Translations describe the old source wording, so retaining
+                    // one after a content refresh would be misleading.
+                    dish.clearTranslation()
+                    dish.needsReview = recipe.needsReview
+                    dish.refreshAutoGlyph()
+                }
+                try context.save()
+            }
+        } catch {
+            for line in newLines { context.delete(line) }
+            dish.ingredients = oldLines
+            for line in oldLines { line.dish = dish }
+            oldState.restore(on: dish)
+            throw error
+        }
+    }
+
+    /// Returns only exact normalized repeats. Different quantities, notes or
+    /// sections remain distinct; this is a review signal, never automatic
+    /// deduplication.
+    static func suspiciousDuplicateIngredientIndices(_ recipe: ImportedRecipe) -> Set<Int> {
+        let keys: [String]
+        if let structured = recipe.structuredIngredients {
+            keys = structured.map {
+                let amount = $0.canonicalValue.map { String($0) } ?? ""
+                return [Ingredient.normalize($0.name), amount, $0.dimension?.rawValue ?? "", $0.displayUnit ?? "", $0.note ?? ""].joined(separator: "|")
+            }
+        } else {
+            keys = recipe.ingredientLines.map {
+                let parsed = GermanUnitParser.parse($0)
+                let amount = parsed.quantity.map { String($0.value) } ?? ""
+                return [Ingredient.normalize(parsed.name), amount, parsed.quantity?.dimension.rawValue ?? "", parsed.displayUnit ?? "", parsed.note ?? ""].joined(separator: "|")
+            }
+        }
+        var seen = Set<String>()
+        var duplicates = Set<Int>()
+        for (index, key) in keys.enumerated() where !key.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            if !seen.insert(key).inserted { duplicates.insert(index) }
+        }
+        return duplicates
+    }
+
+    private enum RefreshIngredientValue {
+        case structured(ImportedIngredient)
+        case raw(String)
+    }
+
+    private static func refreshIngredientValues(from recipe: ImportedRecipe) -> [RefreshIngredientValue]? {
+        if let structured = recipe.structuredIngredients, !structured.isEmpty {
+            return structured.map(RefreshIngredientValue.structured)
+        }
+        let raw = recipe.ingredientLines.filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+        return raw.isEmpty ? nil : raw.map(RefreshIngredientValue.raw)
+    }
+
+    private struct RefreshState {
+        let name: String
+        let sourceURLString: String?
+        let deepLinkURLString: String?
+        let importedSourceApp: String?
+        let importedSourceID: String?
+        let recipeText: String?
+        let servings: Int
+        let yieldUnitRaw: String?
+        let yieldLabel: String?
+        let prepTimeMinutes: Int?
+        let cookTimeMinutes: Int?
+        let statedNutrition: NutritionFacts?
+        let statedNutritionProvenanceRaw: String?
+        let translationLanguageCode: String?
+        let translatedName: String?
+        let translatedRecipeText: String?
+        let needsReview: Bool
+        let glyphRaw: String?
+        let glyphIsAuto: Bool
+
+        init(dish: Dish) {
+            name = dish.name
+            sourceURLString = dish.sourceURLString
+            deepLinkURLString = dish.deepLinkURLString
+            importedSourceApp = dish.importedSourceApp
+            importedSourceID = dish.importedSourceID
+            recipeText = dish.recipeText
+            servings = dish.servings
+            yieldUnitRaw = dish.yieldUnitRaw
+            yieldLabel = dish.yieldLabel
+            prepTimeMinutes = dish.prepTimeMinutes
+            cookTimeMinutes = dish.cookTimeMinutes
+            statedNutrition = dish.statedNutritionPerServing
+            statedNutritionProvenanceRaw = dish.statedNutritionProvenanceRaw
+            translationLanguageCode = dish.translationLanguageCode
+            translatedName = dish.translatedName
+            translatedRecipeText = dish.translatedRecipeText
+            needsReview = dish.needsReview
+            glyphRaw = dish.glyphRaw
+            glyphIsAuto = dish.glyphIsAuto
+        }
+
+        func restore(on dish: Dish) {
+            dish.name = name
+            dish.sourceURLString = sourceURLString
+            dish.deepLinkURLString = deepLinkURLString
+            dish.importedSourceApp = importedSourceApp
+            dish.importedSourceID = importedSourceID
+            dish.recipeText = recipeText
             dish.servings = servings
-            if dish.yieldUnitRaw == nil, let yieldUnitRaw = recipe.yieldUnitRaw {
-                dish.yieldUnitRaw = yieldUnitRaw
-                dish.yieldLabel = recipe.yieldLabel
-            }
+            dish.yieldUnitRaw = yieldUnitRaw
+            dish.yieldLabel = yieldLabel
+            dish.prepTimeMinutes = prepTimeMinutes
+            dish.cookTimeMinutes = cookTimeMinutes
+            dish.setStatedNutritionPerServing(statedNutrition)
+            dish.statedNutritionProvenanceRaw = statedNutritionProvenanceRaw
+            dish.translationLanguageCode = translationLanguageCode
+            dish.translatedName = translatedName
+            dish.translatedRecipeText = translatedRecipeText
+            dish.needsReview = needsReview
+            dish.glyphRaw = glyphRaw
+            dish.glyphIsAuto = glyphIsAuto
         }
-        if let prep = recipe.prepTimeMinutes { dish.prepTimeMinutes = prep }
-        if let cook = recipe.cookTimeMinutes { dish.cookTimeMinutes = cook }
-        if let nutrition = recipe.nutritionPerServing {
-            dish.setStatedNutritionPerServing(nutrition)
-        }
-
-        // A KptnCook import with no visible rows deliberately means there are
-        // no trustworthy ingredients. Replace the old rows with nothing so a
-        // later shopping-list rebuild can show its missing-ingredients alert.
-        let replacesIngredients = !recipe.ingredientLines.isEmpty
-            || recipe.structuredIngredients?.isEmpty == false
-            || recipe.importedSourceApp == "KptnCook"
-        if replacesIngredients {
-            for line in dish.ingredients ?? [] { context.delete(line) }
-            let importSession = ImportSession(household: dish.household)
-            if let structured = recipe.structuredIngredients {
-                for (index, value) in structured.enumerated() {
-                    let ingredient = importSession.ingredient(
-                        named: value.name,
-                        household: dish.household,
-                        context: context
-                    )
-                    importSession.applyImportedMetadata(value, to: ingredient)
-                    let line = DishIngredient(
-                        canonicalValue: value.canonicalValue,
-                        dimension: value.dimension,
-                        displayUnit: value.displayUnit,
-                        isApproximate: value.isApproximate,
-                        note: value.note,
-                        rawText: value.rawText,
-                        sortIndex: index
-                    )
-                    line.dish = dish
-                    line.ingredient = ingredient
-                    context.insert(line)
-                }
-            } else {
-                for (index, rawLine) in recipe.ingredientLines.enumerated() {
-                    let parsed = GermanUnitParser.parse(rawLine)
-                    let ingredient = importSession.ingredient(
-                        named: parsed.name,
-                        household: dish.household,
-                        context: context
-                    )
-                    let line = DishIngredient(
-                        canonicalValue: parsed.quantity?.value,
-                        dimension: parsed.quantity?.dimension,
-                        displayUnit: parsed.displayUnit,
-                        isApproximate: parsed.isApproximate,
-                        note: parsed.note,
-                        rawText: parsed.rawText,
-                        sortIndex: index
-                    )
-                    line.dish = dish
-                    line.ingredient = ingredient
-                    context.insert(line)
-                }
-            }
-        }
-
-        // Translations describe the old source wording, so retaining one
-        // after a refresh would show a misleading recipe.
-        dish.clearTranslation()
-        dish.needsReview = recipe.needsReview
-        dish.refreshAutoGlyph()
-        dish.tagNames = DishLabelConsolidation.tags(
-            existing: DishTag.merge(dish.tagNames, adding: recipe.tagNames),
-            dietaryRawValues: recipe.dietaryTags.map(\.rawValue)
-        )
-        dish.collectionNames = DishTag.merge(dish.collectionNames, adding: recipe.collectionNames)
-        addSuggestedTags(to: dish, household: dish.household)
-        persist(context)
     }
 
     /// Replaces the photo the app shows for a dish while retaining any

@@ -135,10 +135,15 @@ struct RecipeSchemaParser: RecipeImporter {
         // KptnCook's page contains a hidden, incomplete microdata block as
         // well as the rows a person actually sees. Give its narrow parser
         // first refusal so generic extraction cannot mix the two.
+        // The generic structured formats are considered together. A page can
+        // publish the same recipe as JSON-LD, embedded state and microdata,
+        // while also publishing related recipes. Picking the first format
+        // made the result depend on script order; picking a field from every
+        // format could concatenate different recipes. Select one candidate
+        // and only use semantic HTML to fill a missing field below.
         let structured = parseKptnCook(html: html, sourceURL: sourceURL)
-            ?? parseJSONLD(html: html, sourceURL: sourceURL)
             ?? parseChefkoch(html: html, sourceURL: sourceURL)
-            ?? parseMicrodata(html: html, sourceURL: sourceURL)
+            ?? bestStructuredCandidate(in: html, sourceURL: sourceURL)?.recipe
         let semantic = SemanticRecipeExtractor.extract(html: html, sourceURL: sourceURL)
 
         if var structured {
@@ -213,11 +218,15 @@ struct RecipeSchemaParser: RecipeImporter {
     /// recipe URL lives in JavaScript, so URLSession never reaches the page
     /// that contains the ingredients and steps without this extra hop.
     private func fetchRecipePage(from url: URL) async throws -> (html: String, url: URL) {
-        let html = try await fetchHTML(from: url)
-        guard let destination = Self.kptnCookDestination(in: html, from: url) else {
-            return (html, url)
+        guard let candidate = RecipeSourceURLPolicy.secureCandidates(for: url).first else {
+            throw RecipeImportError.secureConnectionRequired
         }
-        return (try await fetchHTML(from: destination), destination)
+        let page = try await fetchHTML(from: candidate)
+        let html = page.html
+        guard let destination = Self.kptnCookDestination(in: html, from: page.url) else {
+            return page
+        }
+        return try await fetchHTML(from: destination)
     }
 
     static func kptnCookDestination(in html: String, from url: URL) -> URL? {
@@ -230,7 +239,7 @@ struct RecipeSchemaParser: RecipeImporter {
         return destination
     }
 
-    private func fetchHTML(from url: URL) async throws -> String {
+    private func fetchHTML(from url: URL) async throws -> (html: String, url: URL) {
         var request = URLRequest(url: url)
         request.setValue(
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
@@ -239,13 +248,40 @@ struct RecipeSchemaParser: RecipeImporter {
         request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
         request.timeoutInterval = 20
 
-        let (data, response) = try await BoundedDownload.data(for: request, session: session)
-        if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
-            throw RecipeImportError.notReachable
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await BoundedDownload.data(for: request, session: session)
+        } catch let error as RecipeImportError {
+            throw error
+        } catch let error as URLError {
+            switch error.code {
+            case .appTransportSecurityRequiresSecureConnection:
+                throw RecipeImportError.secureConnectionRequired
+            case .timedOut:
+                throw RecipeImportError.timedOut
+            case .userAuthenticationRequired:
+                throw RecipeImportError.accessRestricted
+            default:
+                throw RecipeImportError.notReachable
+            }
         }
-        if let s = String(data: data, encoding: .utf8) { return s }
-        if let s = String(data: data, encoding: .isoLatin1) { return s }
-        throw RecipeImportError.notReachable
+        if let http = response as? HTTPURLResponse {
+            switch http.statusCode {
+            case 401, 403: throw RecipeImportError.accessRestricted
+            case 404, 410: throw RecipeImportError.notFound
+            case 408, 429, 500...599: throw RecipeImportError.temporarilyUnavailable
+            case 200..<400: break
+            default: throw RecipeImportError.notReachable
+            }
+        }
+        guard let finalURL = response.url,
+              RecipeSourceURLPolicy.isSecureWebURL(finalURL) else {
+            throw RecipeImportError.secureConnectionRequired
+        }
+        if let s = String(data: data, encoding: .utf8) { return (s, finalURL) }
+        if let s = String(data: data, encoding: .isoLatin1) { return (s, finalURL) }
+        throw RecipeImportError.invalidRecipePage
     }
 
     /// Downloads the recipe's picture. Structured markup is preferred, but a
@@ -291,7 +327,7 @@ struct RecipeSchemaParser: RecipeImporter {
     func parseJSONLD(html: String, sourceURL: URL) -> ImportedRecipe? {
         Self.bestCandidate(Self.candidates(
             from: Self.jsonLDBlocks(in: html), sourceURL: sourceURL, provenance: .jsonLD
-        ))?.recipe
+        ), preferredName: heuristicTitle(html))?.recipe
     }
 
     static func jsonLDBlocks(in html: String) -> [String] {
@@ -411,7 +447,7 @@ struct RecipeSchemaParser: RecipeImporter {
     func parseEmbeddedJSON(html: String, sourceURL: URL) -> ImportedRecipe? {
         Self.bestCandidate(Self.candidates(
             from: Self.embeddedJSONBlocks(in: html), sourceURL: sourceURL, provenance: .embeddedJSON
-        ))?.recipe
+        ), preferredName: heuristicTitle(html))?.recipe
     }
 
     func structuredCandidates(in html: String, sourceURL: URL) -> [RecipeExtractionCandidate] {
@@ -421,7 +457,10 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     private func bestStructuredCandidate(in html: String, sourceURL: URL) -> RecipeExtractionCandidate? {
-        Self.bestCandidate(structuredCandidates(in: html, sourceURL: sourceURL))
+        Self.bestCandidate(
+            structuredCandidates(in: html, sourceURL: sourceURL),
+            preferredName: heuristicTitle(html)
+        )
     }
 
     private static func candidates(
@@ -437,8 +476,14 @@ struct RecipeSchemaParser: RecipeImporter {
         }
     }
 
-    private static func bestCandidate(_ candidates: [RecipeExtractionCandidate]) -> RecipeExtractionCandidate? {
+    private static func bestCandidate(
+        _ candidates: [RecipeExtractionCandidate],
+        preferredName: String? = nil
+    ) -> RecipeExtractionCandidate? {
         guard var best = candidates.max(by: {
+            let lhsMatchesPreferred = matchesPreferredName($0, preferredName: preferredName)
+            let rhsMatchesPreferred = matchesPreferredName($1, preferredName: preferredName)
+            if lhsMatchesPreferred != rhsMatchesPreferred { return !lhsMatchesPreferred }
             if $0.score != $1.score { return $0.score < $1.score }
             let priority: [RecipeExtractionProvenance: Int] = [.jsonLD: 3, .embeddedJSON: 2, .microdata: 1]
             return (priority[$0.provenance] ?? 0) < (priority[$1.provenance] ?? 0)
@@ -455,6 +500,15 @@ struct RecipeSchemaParser: RecipeImporter {
             best = RecipeExtractionCandidate(recipe: recipe, provenance: best.provenance, evidence: best.evidence, score: best.score)
         }
         return best
+    }
+
+    private static func matchesPreferredName(
+        _ candidate: RecipeExtractionCandidate,
+        preferredName: String?
+    ) -> Bool {
+        guard let preferredName else { return false }
+        return RecipeDuplicateDetector.normalizedName(preferredName)
+            == RecipeDuplicateDetector.normalizedName(candidate.recipe.name)
     }
 
     private static func candidate(_ recipe: ImportedRecipe, provenance: RecipeExtractionProvenance) -> RecipeExtractionCandidate {
@@ -1005,7 +1059,10 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     func parseMicrodata(html: String, sourceURL: URL) -> ImportedRecipe? {
-        Self.bestCandidate(parseMicrodataCandidates(html: html, sourceURL: sourceURL))?.recipe
+        Self.bestCandidate(
+            parseMicrodataCandidates(html: html, sourceURL: sourceURL),
+            preferredName: heuristicTitle(html)
+        )?.recipe
     }
 
     private func parseMicrodataCandidates(html: String, sourceURL: URL) -> [RecipeExtractionCandidate] {
@@ -1045,9 +1102,15 @@ struct RecipeSchemaParser: RecipeImporter {
             guard let cleanedName = name.strippingHTML.trimmedCollapsed.nilIfEmpty else { return nil }
             var recipe = ImportedRecipe(name: cleanedName, sourceURL: sourceURL)
             recipe.needsReview = true
-            recipe.ingredientLines = Self.cleanedPayloadLines(
-                (properties["recipeingredient"] ?? []) + (properties["ingredients"] ?? [])
-            )
+            // `ingredients` is the older schema.org spelling for the same
+            // property. Some sites emit both arrays, often with identical
+            // content. Concatenating them doubled every line and could be
+            // amplified again by another structured representation. Prefer
+            // the canonical property and use the alias only as a fallback.
+            let ingredientValues = properties["recipeingredient"].flatMap { values in
+                values.isEmpty ? nil : values
+            } ?? properties["ingredients"] ?? []
+            recipe.ingredientLines = Self.cleanedPayloadLines(ingredientValues)
             let instructionValues = (properties["recipeinstructions"] ?? [])
             recipe.instructions = Self.instructions(instructionValues)
             if let yield = ((properties["recipeyield"] ?? []) + (properties["yield"] ?? []))

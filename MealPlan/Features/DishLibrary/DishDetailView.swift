@@ -28,6 +28,10 @@ struct DishDetailView: View {
     @State private var confirmingRefresh = false
     @State private var isRefreshingRecipe = false
     @State private var refreshError: String?
+    @State private var pendingRefresh: RecipeExtractionResult?
+    @State private var showingRefreshBrowser = false
+    @State private var showingRefreshSourceEditor = false
+    @State private var refreshSourceText = ""
     /// Whether the saved translation is the wording on screen. Starts from
     /// what this device reads (see `Dish.prefersTranslation`) and is a
     /// per-visit choice after that — switching to the original is a glance at
@@ -55,7 +59,7 @@ struct DishDetailView: View {
 
     private var refreshableSourceURL: URL? {
         guard let url = dish.sourceURL,
-              url.scheme == "http" || url.scheme == "https" else { return nil }
+              url.scheme?.lowercased() == "http" || url.scheme?.lowercased() == "https" else { return nil }
         return url
     }
 
@@ -225,6 +229,39 @@ struct DishDetailView: View {
             NavigationStack { IngredientNutritionEditor(ingredient: ingredient) }
                 .dismissesOnOutsideClick()
         }
+        .sheet(item: $pendingRefresh) { result in
+            RecipeRefreshPreview(
+                result: result,
+                dish: dish,
+                onApply: { recipe, selection in
+                    do {
+                        try DishBuilder.refresh(recipe, to: dish, context: context, selection: selection)
+                        pendingRefresh = nil
+                    } catch {
+                        refreshError = String(localized: "The refreshed recipe could not be saved. Your existing recipe was kept. Try again.")
+                    }
+                },
+                onCancel: { pendingRefresh = nil }
+            )
+        }
+        .sheet(isPresented: $showingRefreshBrowser) {
+            NavigationStack {
+                RecipeFinderView(
+                    dish: dish,
+                    initialURL: URL(string: refreshSourceText) ?? refreshableSourceURL,
+                    refreshesExisting: true
+                )
+            }
+            .dismissesOnOutsideClick()
+        }
+        .sheet(isPresented: $showingRefreshSourceEditor) {
+            RecipeSourceEditorView(initialText: refreshSourceText) { url in
+                refreshSourceText = url.absoluteString
+                showingRefreshSourceEditor = false
+                Task { await refreshRecipe(from: url) }
+            }
+            .dismissesOnOutsideClick()
+        }
         .sheet(item: $substitutingLine) { line in
             NavigationStack { IngredientSubstitutionSheet(line: line) }
                 .dismissesOnOutsideClick()
@@ -256,21 +293,37 @@ struct DishDetailView: View {
             }
         }
         .confirmationDialog(
-            String(localized: "Refresh recipe from its source?"),
+            String(localized: "Fetch the latest recipe?"),
             isPresented: $confirmingRefresh,
             titleVisibility: .visible
         ) {
             Button(String(localized: "Refresh recipe")) {
-                Task { await refreshRecipe() }
+                Task { await refreshRecipe(from: refreshableSourceURL) }
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
-            Text("This replaces the recipe’s title, ingredients, instructions and timings with the latest information from its saved link. Your photos, tags, ratings and meal plan stay unchanged.")
+            Text("MealPlan will fetch the source and show a review of the changes. Your saved recipe stays unchanged until you apply selected updates.")
         }
         .alert(
             String(localized: "Couldn’t refresh recipe"),
             isPresented: Binding(get: { refreshError != nil }, set: { if !$0 { refreshError = nil } })
         ) {
+            Button(String(localized: "Try again")) {
+                let url = URL(string: refreshSourceText) ?? refreshableSourceURL
+                Task { await refreshRecipe(from: url) }
+            }
+            Button(String(localized: "Edit source")) {
+                refreshSourceText = refreshSourceText.isEmpty
+                    ? refreshableSourceURL?.absoluteString ?? ""
+                    : refreshSourceText
+                showingRefreshSourceEditor = true
+            }
+            Button(String(localized: "Open website")) {
+                refreshSourceText = refreshSourceText.isEmpty
+                    ? refreshableSourceURL?.absoluteString ?? ""
+                    : refreshSourceText
+                showingRefreshBrowser = true
+            }
             Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(refreshError ?? "")
@@ -593,20 +646,26 @@ struct DishDetailView: View {
         editingVariant = DishBuilder.duplicateAsVariant(of: dish, context: context)
     }
 
-    private func refreshRecipe() async {
-        guard let url = refreshableSourceURL else { return }
+    private func refreshRecipe(from url: URL?) async {
+        guard let url else {
+            refreshError = String(localized: "Add a valid recipe website link before refreshing.")
+            return
+        }
+        refreshSourceText = url.absoluteString
         isRefreshingRecipe = true
         defer { isRefreshingRecipe = false }
 
         do {
-            let recipe = try await RecipeSchemaParser().importRecipe(from: url)
-            guard !recipe.ingredientLines.isEmpty || !(recipe.instructions ?? "").isEmpty else {
-                refreshError = String(localized: "No recipe details were found at the saved link.")
+            let result = try await RecipeSchemaParser().importExtraction(from: url)
+            guard result.outcome != .failed else {
+                refreshError = result.warnings.first
+                    ?? RecipeImportError.noRecipeFound.localizedDescription
                 return
             }
-            DishBuilder.refresh(recipe, to: dish, context: context)
+            pendingRefresh = result
         } catch {
-            refreshError = error.localizedDescription
+            refreshError = (error as? LocalizedError)?.errorDescription
+                ?? String(localized: "The recipe could not be loaded. Your existing recipe was kept.")
         }
     }
 
