@@ -31,6 +31,7 @@ actor BarcodeProductLookup {
     private struct CacheEntry: Sendable {
         let outcome: BarcodeProductLookupOutcome
         let expiresAt: Date
+        var lastAccess: UInt64
     }
 
     private let request: Request
@@ -38,6 +39,7 @@ actor BarcodeProductLookup {
     private let cacheLifetime: TimeInterval
     private var cache: [String: CacheEntry] = [:]
     private var inFlight: [String: Task<BarcodeProductLookupOutcome, Never>] = [:]
+    private var accessCounter: UInt64 = 0
 
     init(
         cacheLimit: Int = 128,
@@ -54,7 +56,11 @@ actor BarcodeProductLookup {
         guard !code.isEmpty else { return .unknown }
 
         if let cached = cache[code] {
-            if cached.expiresAt > now { return cached.outcome }
+            if cached.expiresAt > now {
+                accessCounter &+= 1
+                cache[code]?.lastAccess = accessCounter
+                return cached.outcome
+            }
             cache.removeValue(forKey: code)
         }
         if let task = inFlight[code] { return await task.value }
@@ -70,7 +76,12 @@ actor BarcodeProductLookup {
         }
         inFlight.removeValue(forKey: code)
         if outcome.isCacheable {
-            cache[code] = CacheEntry(outcome: outcome, expiresAt: now.addingTimeInterval(cacheLifetime))
+            accessCounter &+= 1
+            cache[code] = CacheEntry(
+                outcome: outcome,
+                expiresAt: now.addingTimeInterval(cacheLifetime),
+                lastAccess: accessCounter
+            )
             trimCache()
         }
         return outcome
@@ -88,7 +99,7 @@ actor BarcodeProductLookup {
     private func trimCache() {
         guard cache.count > cacheLimit else { return }
         let excess = cache.count - cacheLimit
-        for key in cache.sorted(by: { $0.value.expiresAt < $1.value.expiresAt }).prefix(excess).map(\.key) {
+        for key in cache.sorted(by: { $0.value.lastAccess < $1.value.lastAccess }).prefix(excess).map(\.key) {
             cache.removeValue(forKey: key)
         }
     }
