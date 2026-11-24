@@ -215,6 +215,25 @@ struct NutritionEstimatorTests {
         #expect(estimate.isTrustworthy)
     }
 
+    @Test func provenanceAndIncompleteQualityAreExplicit() throws {
+        let d = dish("Gemischt", servings: 1)
+        line(d, "Mehl", 100, .mass)
+        line(d, "unbekannte Zutat", 100, .mass)
+
+        let estimate = NutritionEstimator.perServing(for: d)
+        #expect(estimate.isIncomplete)
+        #expect(estimate.quality == .partial(percent: 50))
+        let known = try #require(d.sortedIngredients.first)
+        #expect(NutritionEstimator.source(for: known) == .builtIn)
+        #expect(estimate.missingNames == ["unbekannte Zutat"])
+    }
+
+    @Test func matchingIsDeterministicAcrossGermanAndEnglishCompounds() {
+        #expect(NutritionTable.facts(for: "Bio-Olivenöl") != nil)
+        #expect(NutritionTable.facts(for: "gehackte Tomaten") != nil)
+        #expect(NutritionTable.facts(for: "sweet potato") != nil)
+    }
+
     @Test func aDishWithNoIngredientsHasNoEstimate() {
         #expect(NutritionEstimator.perServing(for: dish("Nur ein Name")).origin == .none)
     }

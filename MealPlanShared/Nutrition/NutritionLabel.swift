@@ -59,6 +59,23 @@ struct NutritionLabel: Equatable, Sendable {
     /// Kept so the UI can say what an estimate was built from.
     var estimate: NutritionEstimate
 
+    /// A compact, non-medical disclosure suitable for a label footer or an
+    /// accessibility value. Unknown quantities remain unknown; they are never
+    /// converted into zero merely to make coverage look better.
+    var disclosure: String {
+        switch source {
+        case .statedByRecipe:
+            return String(localized: "Values supplied by the recipe source.")
+        case .enteredByHand:
+            return String(localized: "Values entered by someone in your household.")
+        case .estimated:
+            if estimate.isIncomplete {
+                return String(localized: "Approximate estimate; some ingredients are unknown.")
+            }
+            return String(localized: "Approximate estimate from the ingredient list.")
+        }
+    }
+
     func value(of nutrient: Nutrient) -> Double? {
         rows.first { $0.nutrient == nutrient }?.value
     }

@@ -27,6 +27,16 @@ enum NutritionEstimator {
         case unknown
     }
 
+    /// The source of a line's values, exposed for review UIs without making
+    /// callers duplicate the estimator's matching rules.
+    static func source(for line: DishIngredient) -> NutritionSource? {
+        if let ingredient = line.ingredient, ingredient.nutritionFacts != nil {
+            return ingredient.nutritionSource
+        }
+        let candidates = [line.ingredient?.name, line.rawText].compactMap { $0 }
+        return candidates.contains(where: { NutritionTable.facts(for: $0) != nil }) ? .builtIn : nil
+    }
+
     static func outcome(for line: DishIngredient) -> LineOutcome {
         guard let quantity = line.quantity else { return .unmeasured }
 
@@ -184,7 +194,7 @@ enum NutritionEstimator {
             unknownLines: unknown,
             unmeasuredLines: unmeasured,
             convertedLines: converted,
-            missingNames: missing,
+            missingNames: missing.sorted { Ingredient.normalize($0) < Ingredient.normalize($1) },
             origin: .computed
         )
     }
@@ -242,6 +252,28 @@ struct NutritionEstimate: Equatable, Sendable {
     /// Planned dishes with no ingredient list at all, when this covers a day.
     var dishesWithoutEstimate = 0
     var origin: Origin = .none
+
+    /// True whenever a measured ingredient was not included. This deliberately
+    /// ignores “to taste” lines, which have no quantity to estimate.
+    var isIncomplete: Bool { unknownLines > 0 || dishesWithoutEstimate > 0 }
+
+    enum Quality: Equatable, Sendable {
+        case unavailable
+        case complete
+        case partial(percent: Int)
+        case stated
+    }
+
+    var quality: Quality {
+        switch origin {
+        case .none: .unavailable
+        case .statedByRecipe: .stated
+        case .computed, .mixed:
+            guard countedLines > 0 else { return .unavailable }
+            let percent = Int((coverage * 100).rounded())
+            return isIncomplete ? .partial(percent: percent) : .complete
+        }
+    }
 
     enum Origin: Equatable, Sendable {
         /// Nothing to go on.
