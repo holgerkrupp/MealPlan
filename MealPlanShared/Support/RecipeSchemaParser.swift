@@ -55,6 +55,9 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     func importExtraction(from url: URL) async throws -> RecipeExtractionResult {
+        if SocialRecipeImporter.platform(for: url) != nil {
+            return try await SocialRecipeImporter(session: session).importExtraction(from: url)
+        }
         let page = try await fetchRecipePage(from: url)
         return await extract(fromHTML: page.html, sourceURL: page.url)
     }
@@ -118,6 +121,9 @@ struct RecipeSchemaParser: RecipeImporter {
     }
 
     func importExtraction(fromHTML html: String, sourceURL: URL) async throws -> RecipeExtractionResult {
+        if SocialRecipeImporter.platform(for: sourceURL) != nil {
+            return try await SocialRecipeImporter(session: session).importExtraction(fromHTML: html, sourceURL: sourceURL)
+        }
         await extract(fromHTML: html, sourceURL: sourceURL)
     }
 

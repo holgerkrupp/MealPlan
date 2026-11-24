@@ -7,6 +7,29 @@ import Foundation
 /// page. The network paths and the on-device model are not exercised here.
 struct SocialRecipeImporterTests {
 
+    @Test func socialFixturesProduceEditablePartialResultsForEverySupportedPlatform() async throws {
+        let fixtures: [(SocialRecipeImporter.Platform, String)] = [
+            (.youTube, "https://www.youtube.com/watch?v=fixture-youtube"),
+            (.instagram, "https://www.instagram.com/p/fixture/"),
+            (.tikTok, "https://www.tiktok.com/@chef/video/fixture"),
+            (.pinterest, "https://www.pinterest.com/pin/fixture/"),
+            (.facebook, "https://www.facebook.com/watch/?v=fixture")
+        ]
+        let html = #"""
+        <meta property="og:title" content="Weeknight tomato pasta">
+        <meta property="og:description" content="Boil pasta. Add tomatoes, garlic, olive oil and basil. Toss and serve hot.">
+        """
+        for (platform, rawURL) in fixtures {
+            let url = URL(string: rawURL)!
+            let result = try await SocialRecipeImporter().importExtraction(fromHTML: html, sourceURL: url)
+            #expect(result.outcome != .failed)
+            #expect(result.recipe.name == "Weeknight tomato pasta")
+            #expect(result.recipe.needsReview)
+            #expect(result.evidence.contains("social-platform=\(platform.rawValue)"))
+            #expect(result.provenance[.instructions] == .semanticHTML)
+        }
+    }
+
     // MARK: - Platform detection
 
     @Test func recognisesTheSupportedPlatforms() {

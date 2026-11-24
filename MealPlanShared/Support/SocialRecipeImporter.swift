@@ -57,12 +57,45 @@ struct SocialRecipeImporter: Sendable {
         return try await buildRecipe(from: post, platform: platform)
     }
 
+    /// Keeps a social import in the same reviewable result pipeline as normal
+    /// web extraction. Captions and transcripts are inherently heuristic, so
+    /// the result is deliberately marked for review and carries its source
+    /// platform as evidence instead of looking like verified recipe markup.
+    func importExtraction(from url: URL) async throws -> RecipeExtractionResult {
+        guard let platform = Self.platform(for: url) else { throw RecipeImportError.noRecipeFound }
+        let recipe = try await importRecipe(from: url)
+        let fields: [RecipeExtractionField: RecipeExtractionProvenance] = [
+            .title: .semanticHTML,
+            .ingredients: .semanticHTML,
+            .instructions: .semanticHTML
+        ]
+        return RecipeExtractionResult(
+            recipe: recipe,
+            provenance: fields,
+            evidence: ["social-platform=\(platform.rawValue)", "source=caption-or-transcript"]
+        )
+    }
+
     /// Used by the in-app recipe finder, which already has the rendered DOM.
     func importRecipe(fromHTML html: String, sourceURL url: URL) async throws -> ImportedRecipe {
         guard let platform = Self.platform(for: url) else { throw RecipeImportError.noRecipeFound }
         var post = SocialPost(canonicalURL: url)
         await harvest(html: html, platform: platform, into: &post)
         return try await buildRecipe(from: post, platform: platform)
+    }
+
+    func importExtraction(fromHTML html: String, sourceURL url: URL) async throws -> RecipeExtractionResult {
+        guard let platform = Self.platform(for: url) else { throw RecipeImportError.noRecipeFound }
+        let recipe = try await importRecipe(fromHTML: html, sourceURL: url)
+        return RecipeExtractionResult(
+            recipe: recipe,
+            provenance: [
+                .title: .semanticHTML,
+                .ingredients: .semanticHTML,
+                .instructions: .semanticHTML
+            ],
+            evidence: ["social-platform=\(platform.rawValue)", "source=caption-or-transcript"]
+        )
     }
 
     // MARK: - Harvesting
@@ -281,7 +314,7 @@ struct SocialRecipeImporter: Sendable {
     private func buildRecipe(from post: SocialPost, platform: Platform) async throws -> ImportedRecipe {
         // A Pinterest pin usually just points at a real recipe site — import
         // that page properly instead of guessing from the pin's blurb.
-        if let outbound = post.outboundURL,
+        if let outbound = post.outboundURL, Self.platform(for: outbound) == nil,
            let real = try? await RecipeSchemaParser(session: session).importRecipe(from: outbound),
            !real.ingredientLines.isEmpty || !(real.instructions ?? "").isEmpty {
             var copy = real
@@ -298,7 +331,10 @@ struct SocialRecipeImporter: Sendable {
         .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty }
         .joined(separator: "\n\n")
 
-        guard blob.count >= 40 else { throw RecipeImportError.noRecipeFound }
+        // Short captions are common on TikTok and Instagram. Keep any
+        // meaningful text as an editable partial recipe; the review UI is the
+        // place to fill missing ingredients or steps, not the importer.
+        guard blob.count >= 12 else { throw RecipeImportError.noRecipeFound }
 
         let draft = await RecipeExtractor.extract(from: blob, source: .socialPost)
 
@@ -339,9 +375,20 @@ struct SocialRecipeImporter: Sendable {
     private func fetchHTML(from url: URL, cookie: String? = nil) async throws -> String {
         var request = Self.request(for: url)
         if let cookie { request.setValue(cookie, forHTTPHeaderField: "Cookie") }
-        let (data, response) = try await BoundedDownload.data(for: request, session: session)
-        if let http = response as? HTTPURLResponse, !(200..<400).contains(http.statusCode) {
+        let data: Data
+        let response: URLResponse
+        do {
+            (data, response) = try await BoundedDownload.data(for: request, session: session)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch let error as URLError where error.code == .timedOut {
+            throw RecipeImportError.timedOut
+        } catch {
             throw RecipeImportError.notReachable
+        }
+        if let http = response as? HTTPURLResponse {
+            if [401, 403, 429].contains(http.statusCode) { throw RecipeImportError.accessRestricted }
+            if !(200..<400).contains(http.statusCode) { throw RecipeImportError.notReachable }
         }
         if let string = String(data: data, encoding: .utf8) { return string }
         if let string = String(data: data, encoding: .isoLatin1) { return string }

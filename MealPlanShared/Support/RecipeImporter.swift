@@ -395,12 +395,16 @@ struct ImportedIngredient: Sendable {
 
 enum RecipeImportError: LocalizedError {
     case notReachable
+    case accessRestricted
+    case timedOut
     case noRecipeFound
     case unreadableFile
 
     var errorDescription: String? {
         switch self {
         case .notReachable: String(localized: "Couldn’t reach that page.")
+        case .accessRestricted: String(localized: "That post is restricted or requires a sign-in. You can save the link and add the recipe manually.")
+        case .timedOut: String(localized: "That page took too long to respond. Check your connection and try again.")
         case .noRecipeFound: String(localized: "No recipe found on that page.")
         case .unreadableFile: String(localized: "That file couldn’t be read.")
         }
