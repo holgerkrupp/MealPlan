@@ -20,6 +20,7 @@ Links below are a navigation inventory, not a statement that every document is c
 - [docs/release-2026.5-validation.md](release-2026.5-validation.md)
 - [docs/sharing-architecture.md](sharing-architecture.md)
 - [docs/sharing-roadmap-audit.md](sharing-roadmap-audit.md)
+- [docs/marketing-claims-manifest.md](marketing-claims-manifest.md): dated Meals/Paprika positioning copy, evidence, and release handoff.
 
 ## Keeping guidance current
 
