@@ -18,7 +18,7 @@ struct SocialRecipeImporterTests {
         let html = #"""
         <meta property="og:title" content="Weeknight tomato pasta">
         <meta property="og:description" content="Boil pasta. Add tomatoes, garlic, olive oil and basil. Toss and serve hot.">
-        """
+        """#
         for (platform, rawURL) in fixtures {
             let url = URL(string: rawURL)!
             let result = try await SocialRecipeImporter().importExtraction(fromHTML: html, sourceURL: url)
