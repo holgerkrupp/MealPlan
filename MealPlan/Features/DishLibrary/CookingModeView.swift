@@ -30,6 +30,9 @@ struct CookingModeView: View {
     @State private var showingResumePrompt = false
     @State private var showingDishPicker = false
     @State private var showingManualTimer = false
+    @State private var showingTimerStylePicker = false
+    @State private var focusedTimerID: UUID?
+    @AppStorage(CookingTimerStylePreferences.storageKey) private var timerStyleRawValue = CookingTimerStylePreferences.defaultStyle.rawValue
     @State private var narrator = CookingNarrator()
     @State private var voice = CookingVoiceController()
     /// Set when permission was refused, so the toggle can explain itself.
@@ -48,6 +51,17 @@ struct CookingModeView: View {
     }
 
     private var store: CookingSessionStore { appState.cookingSession }
+
+    private var timerStyle: CookingTimerStyle {
+        CookingTimerStylePreferences.style(for: timerStyleRawValue)
+    }
+
+    private var timerStyleBinding: Binding<CookingTimerStyle> {
+        Binding(
+            get: { CookingTimerStylePreferences.style(for: timerStyleRawValue) },
+            set: { timerStyleRawValue = $0.rawValue }
+        )
+    }
 
     private var currentDish: Dish {
         guard let id = store.session?.selectedDishID else { return dish }
@@ -179,6 +193,17 @@ struct CookingModeView: View {
                 stepNumber: progress.currentStep + 1,
                 onStart: startManualTimer
             )
+        }
+        .sheet(isPresented: $showingTimerStylePicker) {
+            NavigationStack {
+                CookingTimerStylePicker(selection: timerStyleBinding)
+                    .navigationTitle(String(localized: "Timer appearance"))
+                    .toolbar {
+                        ToolbarItem(placement: .confirmationAction) {
+                            Button(String(localized: "Done")) { showingTimerStylePicker = false }
+                        }
+                    }
+            }
         }
     }
 
@@ -328,6 +353,10 @@ struct CookingModeView: View {
                 Divider()
                 Toggle(isOn: $usesLeftHandedLayout) {
                     Label(String(localized: "Left-handed layout"), systemImage: "hand.raised")
+                }
+                Divider()
+                Button(String(localized: "Timer appearance"), systemImage: "timer") {
+                    showingTimerStylePicker = true
                 }
             } label: {
                 Label(String(localized: "Display"), systemImage: "rectangle.split.2x1")
@@ -612,41 +641,18 @@ struct CookingModeView: View {
         VStack(spacing: 0) {
             if !(store.session?.timers.isEmpty ?? true) {
                 TimelineView(.periodic(from: .now, by: 1)) { timeline in
-                    ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
-                            ForEach(store.session?.timers ?? []) { timer in
-                                let remaining = timer.remaining(at: timeline.date)
-                                HStack(spacing: 8) {
-                                    Image(systemName: remaining <= 0 ? "alarm.waves.left.and.right.fill" : "timer")
-                                        .foregroundStyle(remaining <= 0 ? .red : .accentColor)
-                                        .accessibilityHidden(true)
-                                    VStack(alignment: .leading, spacing: 1) {
-                                        Text(timer.label).font(.callout.weight(.semibold)).lineLimit(1)
-                                        Text(clockText(remaining))
-                                            .font(.caption.monospacedDigit())
-                                            .foregroundStyle(remaining <= 0 ? .red : .secondary)
-                                    }
-                                    Button(timer.pausedRemaining == nil ? String(localized: "Pause") : String(localized: "Resume")) {
-                                        store.pauseOrResumeTimer(timer.id, at: timeline.date)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                    Button(String(localized: "Cancel"), role: .destructive) {
-                                        store.cancelTimer(timer.id)
-                                    }
-                                    .buttonStyle(.bordered)
-                                    .controlSize(.small)
-                                }
-                                .padding(.horizontal, 10)
-                                .padding(.vertical, 5)
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                                .accessibilityElement(children: .contain)
-                                .accessibilityLabel(timer.contextLabel)
-                            }
-                        }
-                        .padding(.horizontal, 12)
-                    }
-                    .frame(height: 48)
+                    CookingTimerSummary(
+                        timers: store.session?.timers ?? [],
+                        date: timeline.date,
+                        style: timerStyle,
+                        focusedTimerID: $focusedTimerID,
+                        onPauseResume: { id in store.pauseOrResumeTimer(id, at: timeline.date) },
+                        onCancel: { id in
+                            if focusedTimerID == id { focusedTimerID = nil }
+                            store.cancelTimer(id)
+                        },
+                        onAddTimer: { showingManualTimer = true }
+                    )
                 }
                 Divider()
             }
@@ -823,15 +829,6 @@ struct CookingModeView: View {
         )
     }
 
-    private func clockText(_ interval: TimeInterval) -> String {
-        let seconds = max(0, Int(interval.rounded(.up)))
-        let hours = seconds / 3600
-        let minutes = (seconds % 3600) / 60
-        let remainder = seconds % 60
-        return hours > 0
-            ? String(format: "%d:%02d:%02d", hours, minutes, remainder)
-            : String(format: "%02d:%02d", minutes, remainder)
-    }
 }
 
 @MainActor
