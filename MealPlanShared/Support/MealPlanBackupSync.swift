@@ -295,6 +295,41 @@ enum MealPlanBackupSync {
         }
         deleteMissing(templates, keeping: backup.weekTemplates.map(\.uuid), context: context)
 
+        // MARK: Reusable menus
+
+        var menus = partition(household.menus ?? [], by: \.uuid)
+        for stored in backup.menus {
+            let model = menus.map[stored.uuid] ?? insert(MealMenu(name: stored.name), uuid: stored.uuid, into: context, map: &menus.map)
+            model.name = stored.name
+            model.createdByName = stored.createdByName
+            model.dateCreated = stored.dateCreated
+            model.household = household
+            let currentEntries = model.sortedEntries.map {
+                MealPlanBackup.PortableMealMenuEntry(
+                    uuid: $0.uuid,
+                    mealKey: $0.mealKey,
+                    dishUUID: $0.dish?.uuid,
+                    servingsOverride: $0.servingsOverride,
+                    sortIndex: $0.sortIndex
+                )
+            }
+            if currentEntries != stored.entries {
+                for existingEntry in model.entries ?? [] { context.delete(existingEntry) }
+                for storedEntry in stored.entries {
+                    let entry = MealMenuEntry(
+                        dish: storedEntry.dishUUID.flatMap { dishes.map[$0] },
+                        mealKey: storedEntry.mealKey,
+                        servingsOverride: storedEntry.servingsOverride,
+                        sortIndex: storedEntry.sortIndex
+                    )
+                    entry.uuid = storedEntry.uuid
+                    entry.menu = model
+                    context.insert(entry)
+                }
+            }
+        }
+        deleteMissing(menus, keeping: backup.menus.map(\.uuid), context: context)
+
         // MARK: Recipe discovery
 
         var feeds = partition(household.recipeFeeds ?? [], by: \.uuid)
@@ -487,6 +522,7 @@ enum MealPlanBackupSync {
         merged.shoppingLists = union(base.shoppingLists ?? [], other.shoppingLists ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
         merged.shoppingItems = union(base.shoppingItems, other.shoppingItems, baseIsNewer: baseIsNewer, id: { $0.uuid?.uuidString ?? $0.normalizedName })
         merged.weekTemplates = union(base.weekTemplates, other.weekTemplates, baseIsNewer: baseIsNewer, id: \.uuid)
+        merged.menus = union(base.menus, other.menus, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.recipeFeeds = union(base.recipeFeeds ?? [], other.recipeFeeds ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
         merged.recipeBookmarks = union(base.recipeBookmarks ?? [], other.recipeBookmarks ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
         return merged
@@ -538,6 +574,8 @@ enum MealPlanBackupSync {
         case let m as CookedLog: m.uuid = uuid
         case let m as ShoppingListItem: m.uuid = uuid
         case let m as WeekTemplate: m.uuid = uuid
+        case let m as MealMenu: m.uuid = uuid
+        case let m as MealMenuEntry: m.uuid = uuid
         case let m as RecipeFeed: m.uuid = uuid
         case let m as RecipeFeedItem: m.uuid = uuid
         case let m as RecipeBookmark: m.uuid = uuid

@@ -27,6 +27,8 @@ extension ShoppingList: LegacyMigrationModel {}
 extension ShoppingListItem: LegacyMigrationModel {}
 extension WeekTemplate: LegacyMigrationModel {}
 extension WeekTemplateEntry: LegacyMigrationModel {}
+extension MealMenu: LegacyMigrationModel {}
+extension MealMenuEntry: LegacyMigrationModel {}
 extension RecipeFeed: LegacyMigrationModel {}
 extension RecipeFeedItem: LegacyMigrationModel {}
 extension RecipeBookmark: LegacyMigrationModel {}
@@ -666,6 +668,22 @@ final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSou
                 try record(.weekTemplateEntry, entry, scope: scope(for: entry.template?.household), attributes: attributes(
                     "weekday", integer(entry.weekday), "mealSlotRaw", string(entry.mealSlotRaw), "servingsOverride", entry.servingsOverride.map(integer) as Any, "sortIndex", integer(entry.sortIndex)
                 ), relationships: relationships("dish", entry.dish?.uuid, "template", entry.template?.uuid))
+            }
+        case .mealMenu:
+            return try context.fetch(FetchDescriptor<MealMenu>()).map { menu in
+                try record(.mealMenu, menu, scope: scope(for: menu.household), attributes: attributes(
+                    "name", string(menu.name),
+                    "createdByName", menu.createdByName.map(ManagedHouseholdMigrationValue.string) as Any,
+                    "dateCreated", date(menu.dateCreated)
+                ), relationships: relationship("household", menu.household?.uuid))
+            }
+        case .mealMenuEntry:
+            return try context.fetch(FetchDescriptor<MealMenuEntry>()).map { entry in
+                try record(.mealMenuEntry, entry, scope: scope(for: entry.menu?.household), attributes: attributes(
+                    "mealKey", entry.mealKey.map(ManagedHouseholdMigrationValue.string) as Any,
+                    "servingsOverride", entry.servingsOverride.map(integer) as Any,
+                    "sortIndex", integer(entry.sortIndex)
+                ), relationships: relationships("dish", entry.dish?.uuid, "menu", entry.menu?.uuid))
             }
         case .recipeFeed:
             return try context.fetch(FetchDescriptor<RecipeFeed>()).map { feed in

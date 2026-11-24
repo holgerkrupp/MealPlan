@@ -64,7 +64,8 @@ enum ReusableMenuStore {
     static func apply(_ menu: ReusableMenu, on date: Date, dishes: [Dish], household: Household, memberName: String, replaceExisting: Bool, context: ModelContext) -> [MealPlanEntry] {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { return [] }
         let day = date.startOfDay
-        let existing = (try? context.fetch(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { $0.date == day && $0.household?.uuid == household.uuid }))) ?? []
+        let householdID = household.uuid
+        let existing = (try? context.fetch(FetchDescriptor<MealPlanEntry>(predicate: #Predicate { $0.date == day && $0.household?.uuid == householdID }))) ?? []
         if replaceExisting { existing.forEach(context.delete) }
 
         let byID = Dictionary(dishes.map { ($0.uuid, $0) }, uniquingKeysWith: { first, _ in first })

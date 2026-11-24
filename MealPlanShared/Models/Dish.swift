@@ -122,6 +122,9 @@ final class Dish {
     @Relationship(deleteRule: .nullify, inverse: \WeekTemplateEntry.dish)
     var templateEntries: [WeekTemplateEntry]? = []
 
+    @Relationship(deleteRule: .nullify, inverse: \MealMenuEntry.dish)
+    var menuEntries: [MealMenuEntry]? = []
+
     /// Standing arrangements that repeat this dish (Taco Tuesday and friends).
     /// Cascaded: a routine without its dish has nothing left to plan.
     @Relationship(deleteRule: .cascade, inverse: \MealRoutine.dish)
