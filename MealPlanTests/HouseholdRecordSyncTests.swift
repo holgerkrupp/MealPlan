@@ -791,6 +791,33 @@ struct HouseholdRecordSyncTests {
         ))
     }
 
+    @Test func repeatedCloudKitDishIngredientRecordsChooseNewestPayloadOnce() throws {
+        let uuid = UUID()
+        let zoneID = CKRecordZone.ID(zoneName: "test")
+        let old = CKRecord(
+            recordType: HouseholdRecordType.dishIngredient.rawValue,
+            recordID: CKRecord.ID(
+                recordName: HouseholdRecordIdentity(type: .dishIngredient, uuid: uuid).recordName,
+                zoneID: zoneID
+            )
+        )
+        old[HouseholdRecordCodec.payloadKey] = Data("older-quantity".utf8) as CKRecordValue
+        old[HouseholdRecordCodec.modifiedAtKey] = Date(timeIntervalSince1970: 100) as CKRecordValue
+        let new = CKRecord(
+            recordType: HouseholdRecordType.dishIngredient.rawValue,
+            recordID: CKRecord.ID(
+                recordName: HouseholdRecordIdentity(type: .dishIngredient, uuid: uuid).recordName,
+                zoneID: zoneID
+            )
+        )
+        new[HouseholdRecordCodec.payloadKey] = Data("newer-quantity".utf8) as CKRecordValue
+        new[HouseholdRecordCodec.modifiedAtKey] = Date(timeIntervalSince1970: 200) as CKRecordValue
+
+        let records = HouseholdRecordSyncService.deduplicatedRemoteRecords([old, new])
+        #expect(records.count == 1)
+        #expect(records.first?[HouseholdRecordCodec.payloadKey] as? Data == Data("newer-quantity".utf8))
+    }
+
     @Test func rawDeletionPreservesPendingLocalRecord() {
         let local = LocalHouseholdRecord(
             identity: .init(type: .dish, uuid: UUID()),

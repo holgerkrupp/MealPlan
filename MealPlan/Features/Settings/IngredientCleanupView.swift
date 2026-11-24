@@ -26,6 +26,8 @@ private struct IngredientCleanupContent: View {
     @State private var showingBatchError = false
     @State private var batchErrorMessage = ""
     @State private var integrityAudit: IngredientIntegrityAudit?
+    @State private var selectedRecipeIssue: IngredientIntegrityIssue?
+    @State private var isAuditingRecipeIngredients = false
 
     init(householdID: UUID?) {
         let scopedHouseholdID = householdID ?? UUID()
@@ -122,6 +124,12 @@ private struct IngredientCleanupContent: View {
             }
             .dismissesOnOutsideClick()
         }
+        .sheet(item: $selectedRecipeIssue, onDismiss: refreshIntegrityAudit) { issue in
+            NavigationStack {
+                IngredientRecipeIssueDetailView(issue: issue)
+            }
+            .dismissesOnOutsideClick()
+        }
         .confirmationDialog(
             String(localized: "Merge high-confidence suggestions?"),
             isPresented: $showingBatchConfirmation,
@@ -162,11 +170,16 @@ private struct IngredientCleanupContent: View {
     @ViewBuilder
     private var integritySection: some View {
         Section {
-            Button {
-                guard let household = appState.currentHousehold else { return }
-                integrityAudit = IngredientIntegrityAuditor.audit(household: household, context: context)
-            } label: {
-                Label(String(localized: "Check ingredient data"), systemImage: "checkmark.shield")
+            if isAuditingRecipeIngredients {
+                Label(String(localized: "Checking recipe ingredients…"), systemImage: "hourglass")
+                    .foregroundStyle(.secondary)
+            } else {
+                Button {
+                    startIntegrityAudit()
+                } label: {
+                    Label(String(localized: "Check recipe ingredients"), systemImage: "checkmark.shield")
+                }
+                .accessibilityHint(String(localized: "Scans recipe lines without changing them"))
             }
 
             if canEditIngredients,
@@ -190,8 +203,29 @@ private struct IngredientCleanupContent: View {
                             repair(integrityAudit)
                         }
                     }
+
+                    let recipeIssues = integrityAudit.recipeIngredientIssues
+                    if !recipeIssues.isEmpty {
+                        let affectedRecipeCount = Set(recipeIssues.compactMap(\.dishUUID)).count
+                        Text(String(localized: "\(affectedRecipeCount) recipes contain \(recipeIssues.count) ingredient findings"))
+                            .font(.subheadline.weight(.medium))
+                        ForEach(Array(recipeIssues.prefix(100))) { issue in
+                            Button {
+                                selectedRecipeIssue = issue
+                            } label: {
+                                recipeIssueRow(issue)
+                            }
+                            .buttonStyle(.plain)
+                        }
+                        if recipeIssues.count > 100 {
+                            Text(String(localized: "Only the first 100 findings are shown. Run the scan again after reviewing them."))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+
                     if integrityAudit.issues.contains(where: { !$0.isSafeToRepair }) {
-                        Text("Potential duplicates and broken links are reported for review; this repair never merges or deletes data.")
+                        Text("Potential duplicates, mismatched canonical ingredients, and broken links are reported for review; automatic repair only removes redundant references to the same persistent line object.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -200,8 +234,33 @@ private struct IngredientCleanupContent: View {
         } header: {
             Text(String(localized: "Data integrity"))
         } footer: {
-            Text("Checks existing recipe and shopping-list links plus catalogue search keys. Automatic repair is limited to rebuilding stale search keys.")
+            Text("The scan is non-destructive. Original ingredient text and quantities are shown for review. Safe repair is limited to stale search keys and repeated references to the same persistent recipe-line object; distinct rows are never merged automatically.")
         }
+    }
+
+    private func recipeIssueRow(_ issue: IngredientIntegrityIssue) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(issue.canonicalName ?? String(localized: "Unlinked ingredient"))
+                    .font(.subheadline.weight(.medium))
+                Spacer()
+                Text(issue.classification.localizedName)
+                    .font(.caption2)
+                    .foregroundStyle(issue.classification == .safeAutomaticRepair ? .green : .orange)
+            }
+            if let rawText = issue.rawText, !rawText.isEmpty {
+                Text(rawText)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+            Text(issue.detail)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(2)
+        }
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 
     private func suggestionRow(_ suggestion: IngredientCleanupSuggestion) -> some View {
@@ -231,11 +290,36 @@ private struct IngredientCleanupContent: View {
     private func repair(_ audit: IngredientIntegrityAudit) {
         guard let household = appState.currentHousehold else { return }
         do {
-            _ = try IngredientIntegrityRepairService.repairSafely(audit, in: household, context: context)
+            let result = try IngredientIntegrityRepairService.repairSafely(audit, in: household, context: context)
+            if !result.repairedIssueIDs.isEmpty {
+                let undo = context.undoManager
+                appState.offerUndo(String(localized: "Recipe integrity repaired")) {
+                    undo?.undo()
+                    try? context.save()
+                }
+            }
             integrityAudit = IngredientIntegrityAuditor.audit(household: household, context: context)
         } catch {
             batchErrorMessage = String(localized: "The safe repairs could not be saved.")
             showingBatchError = true
+        }
+    }
+
+    private func startIntegrityAudit() {
+        guard !isAuditingRecipeIngredients, let household = appState.currentHousehold else { return }
+        isAuditingRecipeIngredients = true
+        Task { @MainActor in
+            let audit = await IngredientIntegrityAuditor.auditResponsive(household: household, context: context)
+            guard !Task.isCancelled else { return }
+            integrityAudit = audit
+            isAuditingRecipeIngredients = false
+        }
+    }
+
+    private func refreshIntegrityAudit() {
+        guard let household = appState.currentHousehold else { return }
+        Task { @MainActor in
+            integrityAudit = await IngredientIntegrityAuditor.auditResponsive(household: household, context: context)
         }
     }
 
@@ -592,5 +676,154 @@ private struct IngredientCleanupDetailView: View {
     private func locationText(_ ingredient: Ingredient) -> String {
         if let custom = ingredient.trimmedCustomStorageLocation, !custom.isEmpty { return custom }
         return ingredient.storageLocation?.localizedName ?? String(localized: "Not set")
+    }
+}
+
+@MainActor
+private struct IngredientRecipeIssueDetailView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+    @Environment(\.dismiss) private var dismiss
+
+    let issue: IngredientIntegrityIssue
+    @State private var showingRemovalConfirmation = false
+    @State private var errorMessage: String?
+
+    private var household: Household? { appState.currentHousehold }
+    private var dish: Dish? {
+        guard let household, let dishUUID = issue.dishUUID else { return nil }
+        return (household.dishes ?? []).first { $0.uuid == dishUUID }
+    }
+    private var line: DishIngredient? {
+        guard let dish, let lineUUID = issue.dishIngredientUUID else { return nil }
+        return (dish.ingredients ?? []).first { $0.uuid == lineUUID }
+    }
+    private var suggestedIngredient: Ingredient? {
+        guard let household, let uuid = issue.suggestedIngredientUUID else { return nil }
+        return (household.ingredients ?? []).first { $0.uuid == uuid }
+    }
+    private var canEdit: Bool {
+        appState.collaboration.canEdit
+            && HouseholdMutationAuthorization.canMutate(household: household)
+    }
+    private var canRemoveReviewedLine: Bool {
+        issue.kind == .duplicateDishIngredientContent && line != nil && dish != nil && canEdit
+    }
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent(String(localized: "Classification"), value: issue.classification.localizedName)
+                if let dish { LabeledContent(String(localized: "Recipe"), value: dish.name) }
+                if let line { LabeledContent(String(localized: "Line ID"), value: line.uuid.uuidString) }
+            } header: {
+                Text(String(localized: "Finding"))
+            }
+
+            Section {
+                LabeledContent(String(localized: "Original ingredient text"), value: issue.rawText ?? String(localized: "Not available"))
+                LabeledContent(String(localized: "Current canonical ingredient"), value: issue.canonicalName ?? String(localized: "Unlinked"))
+                if let value = issue.quantityValue {
+                    LabeledContent(String(localized: "Stored quantity"), value: "\(value.formatted(.number)) \(issue.quantityDimensionRaw ?? "")")
+                } else {
+                    LabeledContent(String(localized: "Stored quantity"), value: String(localized: "Not set"))
+                }
+            } header: {
+                Text(String(localized: "Preserved source data"))
+            } footer: {
+                Text("Review actions never rewrite the original ingredient text or stored quantity.")
+            }
+
+            Section {
+                Text(issue.detail)
+                    .foregroundStyle(.secondary)
+                if !issue.relatedDishIngredientUUIDs.isEmpty {
+                    LabeledContent(String(localized: "Related line IDs"), value: issue.relatedDishIngredientUUIDs.map(\.uuidString).joined(separator: ", "))
+                }
+            } header: {
+                Text(String(localized: "Evidence"))
+            }
+
+            if let suggestedIngredient, let line, issue.kind == .dishIngredientRawTextMismatch {
+                Section {
+                    LabeledContent(String(localized: "Suggested canonical ingredient"), value: suggestedIngredient.name)
+                    Button {
+                        reassign(line, to: suggestedIngredient)
+                    } label: {
+                        Label(String(localized: "Use suggested ingredient"), systemImage: "arrow.right.circle")
+                    }
+                    .disabled(!canEdit)
+                } header: {
+                    Text(String(localized: "Review suggested correction"))
+                } footer: {
+                    Text("This changes only the canonical relationship. Raw text, quantity, unit, and notes stay unchanged.")
+                }
+            }
+
+            if canRemoveReviewedLine {
+                Section {
+                    Button(String(localized: "Remove this duplicate recipe line"), role: .destructive) {
+                        showingRemovalConfirmation = true
+                    }
+                } footer: {
+                    Text("Only remove a line after checking that it is not a legitimate repeated ingredient for another preparation section. Undo is available immediately after removal.")
+                }
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(String(localized: "Recipe ingredient finding"))
+        .toolbar {
+            ToolbarItem(placement: .confirmationAction) {
+                Button(String(localized: "Done")) { dismiss() }
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Remove this recipe line?"),
+            isPresented: $showingRemovalConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Remove line"), role: .destructive) { removeLine() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text("The original text and quantity are kept in Undo, but this recipe line will no longer belong to the recipe. Existing shopping and pantry records are not deleted.")
+        }
+        .alert(String(localized: "Couldn’t update recipe ingredient"), isPresented: Binding(
+            get: { errorMessage != nil },
+            set: { if !$0 { errorMessage = nil } }
+        )) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(errorMessage ?? "")
+        }
+    }
+
+    private func reassign(_ line: DishIngredient, to ingredient: Ingredient) {
+        guard canEdit else { return }
+        do {
+            try IngredientIntegrityRepairService.reassignRecipeLine(line, to: ingredient, context: context)
+            let undo = context.undoManager
+            appState.offerUndo(String(localized: "Canonical ingredient corrected")) {
+                undo?.undo()
+                try? context.save()
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeLine() {
+        guard canEdit, let dish, let line else { return }
+        do {
+            try IngredientIntegrityRepairService.removeReviewedDuplicateLine(line, from: dish, context: context)
+            let undo = context.undoManager
+            appState.offerUndo(String(localized: "Duplicate recipe line removed")) {
+                undo?.undo()
+                try? context.save()
+            }
+            dismiss()
+        } catch {
+            errorMessage = error.localizedDescription
+        }
     }
 }

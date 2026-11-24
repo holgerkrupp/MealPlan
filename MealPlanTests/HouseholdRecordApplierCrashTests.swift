@@ -29,6 +29,26 @@ struct HouseholdRecordApplierCrashTests {
         )))
     }
 
+    private func dishIngredientPayload(
+        dishID: UUID,
+        ingredientID: UUID,
+        rawText: String,
+        value: Double,
+        dimension: QuantityDimension = .mass
+    ) throws -> Data {
+        try HouseholdRecordCodec.encode(HouseholdRecordPayload.dishIngredient(.init(
+            dishID: dishID,
+            ingredientID: ingredientID,
+            canonicalValue: value,
+            canonicalDimensionRaw: dimension.rawValue,
+            displayUnit: dimension.rawValue == QuantityDimension.mass.rawValue ? "g" : "ml",
+            isApproximate: false,
+            note: nil,
+            rawText: rawText,
+            sortIndex: 0
+        )))
+    }
+
     private func applyIngredient(
         _ data: Data,
         uuid: UUID,
@@ -165,6 +185,132 @@ struct HouseholdRecordApplierCrashTests {
         #expect(moved.household?.uuid == reloaded.uuid)
         #expect(reloaded.ingredients?.contains { $0.uuid == uuid } == true)
         #expect(other.ingredients?.contains { $0.uuid == uuid } == false)
+    }
+
+    /// A DishIngredient is a stable CloudKit row, not a new row on every
+    /// replay. Reapplying the same record must leave one inverse reference,
+    /// and an older replay must not restore stale text or quantity.
+    @Test func repeatedAndOutOfOrderDishIngredientApplyIsIdempotentOnDisk() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        let otherDish = Dish(name: "Other")
+        let ingredient = Ingredient(name: "Tomato")
+        dish.household = household
+        otherDish.household = household
+        ingredient.household = household
+        context.insert(household)
+        context.insert(dish)
+        context.insert(otherDish)
+        context.insert(ingredient)
+        try context.save()
+
+        let lineID = UUID()
+        let olderDate = Date(timeIntervalSince1970: 100)
+        let newerDate = Date(timeIntervalSince1970: 200)
+        let olderPayload = try dishIngredientPayload(
+            dishID: otherDish.uuid, ingredientID: ingredient.uuid,
+            rawText: "100 g tomato", value: 100
+        )
+        let newerPayload = try dishIngredientPayload(
+            dishID: dish.uuid, ingredientID: ingredient.uuid,
+            rawText: "250 g tomato", value: 250
+        )
+
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: newerPayload,
+                identity: .init(type: .dishIngredient, uuid: lineID),
+                modifiedAt: newerDate,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+            // This is the out-of-order replay that used to be able to move a
+            // line back to an older quantity/relationship state.
+            try HouseholdRecordApplier.apply(
+                payloadData: olderPayload,
+                identity: .init(type: .dishIngredient, uuid: lineID),
+                modifiedAt: olderDate,
+                assetData: nil,
+                household: household,
+                context: context
+            )
+            for _ in 0..<3 {
+                try HouseholdRecordApplier.apply(
+                    payloadData: newerPayload,
+                    identity: .init(type: .dishIngredient, uuid: lineID),
+                    modifiedAt: newerDate,
+                    assetData: nil,
+                    household: household,
+                    context: context
+                )
+            }
+            try context.save()
+        }
+
+        #expect(try context.fetchCount(FetchDescriptor<DishIngredient>()) == 1)
+        #expect(dish.ingredients?.count == 1)
+        #expect(ingredient.dishIngredients?.count == 1)
+        let line = try #require(dish.ingredients?.first)
+        #expect(line.uuid == lineID)
+        #expect(line.rawText == "250 g tomato")
+        #expect(line.canonicalValue == 250)
+        #expect(line.dish?.uuid == dish.uuid)
+        #expect(line.ingredient?.uuid == ingredient.uuid)
+        #expect(otherDish.ingredients?.isEmpty == true)
+
+        let relaunched = ModelContext(container)
+        let dishUUID = dish.uuid
+        let reloadedDish = try #require(try relaunched.fetch(FetchDescriptor<Dish>(
+            predicate: #Predicate { $0.uuid == dishUUID }
+        )).first)
+        let reloadedLine = try #require(reloadedDish.ingredients?.first)
+        #expect(reloadedLine.uuid == lineID)
+        #expect(reloadedLine.rawText == "250 g tomato")
+        #expect(reloadedDish.ingredients?.count == 1)
+    }
+
+    @Test func staleDishIngredientDeletionMarkerCannotRemoveNewerLine() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let household = Household(name: "Test")
+        let dish = Dish(name: "Soup")
+        let ingredient = Ingredient(name: "Tomato")
+        let line = DishIngredient(rawText: "250 g tomato")
+        line.modifiedAt = Date(timeIntervalSince1970: 200)
+        dish.household = household
+        ingredient.household = household
+        line.dish = dish
+        line.ingredient = ingredient
+        context.insert(household)
+        context.insert(dish)
+        context.insert(ingredient)
+        context.insert(line)
+        try context.save()
+
+        let marker = HouseholdRecordPayload.deletionMarker(.init(
+            deletedType: .dishIngredient,
+            deletedUUID: line.uuid,
+            deletedAt: Date(timeIntervalSince1970: 100)
+        ))
+        try HouseholdRecordApplier.withBatchLookup(in: context, expectedRecordCount: 1) {
+            try HouseholdRecordApplier.apply(
+                payloadData: HouseholdRecordCodec.encode(marker),
+                identity: .init(type: .deletionMarker, uuid: UUID()),
+                modifiedAt: Date(timeIntervalSince1970: 100),
+                assetData: nil,
+                household: household,
+                context: context
+            )
+            try context.save()
+        }
+
+        #expect(try context.fetchCount(FetchDescriptor<DishIngredient>()) == 1)
+        #expect(dish.ingredients?.first?.uuid == line.uuid)
     }
 
     @Test(arguments: [1, 100])

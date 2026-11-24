@@ -7,6 +7,9 @@ import SwiftData
 /// originally entered it.
 @Model
 final class DishIngredient {
+    /// Stable identity of this recipe line. CloudKit records and refreshes
+    /// address the line by this UUID; replaying a record updates the existing
+    /// object rather than allocating a replacement line.
     var uuid: UUID = UUID()
     var modifiedAt: Date = Date.now
     /// Amount in the canonical unit for `dimension`. `nil` for things like

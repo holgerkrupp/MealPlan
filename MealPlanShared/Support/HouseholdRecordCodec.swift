@@ -468,6 +468,12 @@ enum HouseholdRecordCodec {
             )))
         }
         var liveImageIDs = Set<PersistentIdentifier>()
+        // A damaged SwiftData inverse can expose the same line more than once
+        // through a dish relationship. A DishIngredient is one CloudKit
+        // record addressed by its UUID; emitting it once keeps a bad inverse
+        // from becoming repeated remote work and preserves the line's stable
+        // identity. Distinct UUIDs are intentionally not collapsed here.
+        var emittedDishIngredientUUIDs = Set<UUID>()
         for dish in household.dishes ?? [] {
             try append(.init(type: .dish, uuid: dish.uuid), dish.modifiedAt, .dish(portableDish(dish)))
             for image in dish.images ?? [] {
@@ -488,6 +494,12 @@ enum HouseholdRecordCodec {
                 )), assetDigest: digest, assetBytesRead: bytesRead)
             }
             for line in dish.ingredients ?? [] {
+                // The owning side is authoritative. If an old inverse array
+                // is stale or contains a line from another recipe, never
+                // serialize that line under this dish and amplify the wrong
+                // ownership to another device.
+                guard line.dish?.uuid == dish.uuid else { continue }
+                guard emittedDishIngredientUUIDs.insert(line.uuid).inserted else { continue }
                 try append(.init(type: .dishIngredient, uuid: line.uuid), line.modifiedAt, .dishIngredient(.init(
                     dishID: dish.uuid, ingredientID: line.ingredient?.uuid, canonicalValue: line.canonicalValue,
                     canonicalDimensionRaw: line.canonicalDimensionRaw, displayUnit: line.displayUnit,

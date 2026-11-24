@@ -1,5 +1,6 @@
 import Testing
 import Foundation
+import SwiftData
 @testable import MealPlan
 
 /// Covers the path the in-app recipe finder uses: parse HTML the browser
@@ -68,6 +69,37 @@ struct RecipeImportFromHTMLTests {
         let parsed = GermanUnitParser.parse("500 g Hackfleisch")
         #expect(parsed.name == "Hackfleisch")
         #expect(parsed.quantity?.value == 500)
+    }
+
+    @Test @MainActor func refreshKeepsIngredientLinesOwnedByOtherRecipesUntouched() throws {
+        let (container, directory) = try makeTestModelContainer()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let context = container.mainContext
+        let household = Household(name: "Family")
+        context.insert(household)
+
+        var firstImport = ImportedRecipe(name: "First recipe")
+        firstImport.ingredientLines = ["500 g ground beef", "10 ml olive oil"]
+        let first = DishBuilder.makeDish(
+            from: firstImport, household: household, createdByName: nil, context: context
+        )
+
+        var secondImport = ImportedRecipe(name: "Second recipe")
+        secondImport.ingredientLines = ["2 onions"]
+        let second = DishBuilder.makeDish(
+            from: secondImport, household: household, createdByName: nil, context: context
+        )
+        let secondIDs = second.sortedIngredients.map(\.uuid)
+        let secondRawText = second.sortedIngredients.map(\.rawText)
+
+        var refresh = ImportedRecipe(name: "First recipe refreshed")
+        refresh.ingredientLines = ["250 g potatoes", "200 ml stock"]
+        try DishBuilder.refresh(refresh, to: first, context: context)
+
+        #expect(first.sortedIngredients.map { $0.rawText } == ["250 g potatoes", "200 ml stock"])
+        #expect(first.sortedIngredients.map { $0.dimension } == [.mass, .volume])
+        #expect(second.sortedIngredients.map(\.uuid) == secondIDs)
+        #expect(second.sortedIngredients.map(\.rawText) == secondRawText)
     }
 
     @Test func semanticFallbackReadsEnglishRecipeSections() async throws {

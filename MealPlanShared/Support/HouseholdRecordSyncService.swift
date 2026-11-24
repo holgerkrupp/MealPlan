@@ -1338,7 +1338,7 @@ final class HouseholdRecordSyncService {
             }
         }
         var failures = 0
-        for record in records.sorted(by: { priority($0) < priority($1) }) {
+        for record in records.sorted(by: { Self.priority($0) < Self.priority($1) }) {
             do { try await applyRemoteChanges(records: [record], deletions: []) }
             catch { failures += 1 }
         }
@@ -1387,9 +1387,9 @@ final class HouseholdRecordSyncService {
 
         var local = Self.keyedSnapshots(try await snapshotRecords(for: household.uuid))
         if let generation, generation != lifecycleGeneration { throw CancellationError() }
-        let modifications = records
-            .filter { $0.recordID.zoneID == locator.zoneID }
-            .sorted { priority($0) < priority($1) }
+        let modifications = Self.deduplicatedRemoteRecords(
+            records.filter { $0.recordID.zoneID == locator.zoneID }
+        )
         let deletions = fetchedDeletions
             .filter { $0.id.zoneID == locator.zoneID }
             .sorted { deletionPriority(recordType: $0.recordType) < deletionPriority(recordType: $1.recordType) }
@@ -1899,7 +1899,7 @@ final class HouseholdRecordSyncService {
         }
         guard generation == lifecycleGeneration else { throw CancellationError() }
         var resolved: [(identity: HouseholdRecordIdentity, server: CKRecord, resolution: HouseholdRecordResolution, assetData: Data?)] = []
-        for server in servers.sorted(by: { priority($0) < priority($1) }) {
+        for server in Self.deduplicatedRemoteRecords(servers) {
             guard let identity = HouseholdRecordIdentity(recordType: server.recordType, recordName: server.recordID.recordName) else { continue }
             let asset = server[HouseholdRecordCodec.assetKey] as? CKAsset
             let assetData = try Self.readAssetData(asset)
@@ -1993,6 +1993,40 @@ final class HouseholdRecordSyncService {
         guard generation == lifecycleGeneration else { throw CancellationError() }
         try await persistMetadata(expectedGeneration: generation)
         guard generation == lifecycleGeneration else { throw CancellationError() }
+    }
+
+    /// CloudKit normally sends one modification per record name, but retries
+    /// and test/integration transports can replay a name in one callback. Pick
+    /// one deterministic winner before preparing resolutions. Without this,
+    /// two payloads for one DishIngredient could be applied in callback order,
+    /// allowing an older relationship or quantity to win after the conflict
+    /// resolver had already inspected the same local snapshot.
+    static func deduplicatedRemoteRecords(_ records: [CKRecord]) -> [CKRecord] {
+        var latestByName: [String: CKRecord] = [:]
+        for record in records {
+            let name = record.recordID.recordName
+            guard let previous = latestByName[name] else {
+                latestByName[name] = record
+                continue
+            }
+            let incomingDate = HouseholdRecordCodec.modifiedAt(of: record)
+            let previousDate = HouseholdRecordCodec.modifiedAt(of: previous)
+            if incomingDate > previousDate {
+                latestByName[name] = record
+            } else if incomingDate == previousDate {
+                let incomingPayload: [UInt8] = (record[HouseholdRecordCodec.payloadKey] as? Data).map { Array($0) } ?? []
+                let previousPayload: [UInt8] = (previous[HouseholdRecordCodec.payloadKey] as? Data).map { Array($0) } ?? []
+                if previousPayload.lexicographicallyPrecedes(incomingPayload) {
+                    latestByName[name] = record
+                }
+            }
+        }
+        return latestByName.values.sorted {
+            let lhsPriority = Self.priority($0)
+            let rhsPriority = Self.priority($1)
+            if lhsPriority != rhsPriority { return lhsPriority < rhsPriority }
+            return $0.recordID.recordName < $1.recordID.recordName
+        }
     }
 
     private func logConflictFailure(_ error: Error, stage: String, recordType: String = "batch") {
@@ -2101,7 +2135,7 @@ final class HouseholdRecordSyncService {
         return nil
     }
 
-    private func priority(_ record: CKRecord) -> Int {
+    private static func priority(_ record: CKRecord) -> Int {
         HouseholdRecordType(rawValue: record.recordType)?.applyPriority ?? .max
     }
 

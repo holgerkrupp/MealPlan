@@ -92,12 +92,22 @@ enum HouseholdRecordApplier {
         }
     }
 
-    private static var batchLookup: BatchLookup?
+    // Sync callbacks for different contexts can interleave on the main actor.
+    // A process-wide cache would let one batch answer another context's UUID
+    // lookup, which can leave relationship updates or deletions unapplied.
+    private static var batchLookups: [ObjectIdentifier: BatchLookup] = [:]
 
     static func withBatchLookup<T>(in context: ModelContext, expectedRecordCount: Int = .max, _ operation: () throws -> T) rethrows -> T {
-        let previous = batchLookup
-        batchLookup = BatchLookup(context: context, expectedRecordCount: expectedRecordCount)
-        defer { batchLookup = previous }
+        let key = ObjectIdentifier(context)
+        let previous = batchLookups[key]
+        batchLookups[key] = BatchLookup(context: context, expectedRecordCount: expectedRecordCount)
+        defer {
+            if let previous {
+                batchLookups[key] = previous
+            } else {
+                batchLookups.removeValue(forKey: key)
+            }
+        }
         return try operation()
     }
 
@@ -173,6 +183,18 @@ enum HouseholdRecordApplier {
         context: ModelContext
     ) throws {
         let payload = try HouseholdRecordCodec.decode(payloadData)
+
+        // The sync service resolves conflicts before entering this method, but
+        // keeping the monotonic check here protects every other caller too
+        // (including a replay after a failed transaction). A stale payload
+        // must never move a line back to an older dish or restore older
+        // ingredient text/quantities over a newer local edit.
+        if identity.type != .deletionMarker,
+           let existingModifiedAt = try existingModifiedAt(for: identity, context: context),
+           existingModifiedAt > modifiedAt {
+            return
+        }
+
         switch payload {
         case .household(let value):
             household.name = value.name
@@ -215,7 +237,9 @@ enum HouseholdRecordApplier {
             model.shareMetadataModifiedAt = value.shareMetadataModifiedAt ?? modifiedAt
             model.profileModifiedAt = value.profileModifiedAt ?? modifiedAt
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .mealType(let value):
             let model = try find(MealType.self, identity.uuid, context) ?? insert(MealType(), identity.uuid, context)
@@ -224,7 +248,9 @@ enum HouseholdRecordApplier {
             model.symbolName = value.symbolName
             model.sortOrder = value.sortOrder
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .ingredient(let value):
             let model = try find(Ingredient.self, identity.uuid, context) ?? insert(Ingredient(), identity.uuid, context)
@@ -269,7 +295,9 @@ enum HouseholdRecordApplier {
             model.sourceRaw = value.sourceRaw
             model.confidence = value.confidence
             model.modifiedAt = modifiedAt
-            model.ingredient = ingredient
+            if model.ingredient?.persistentModelID != ingredient.persistentModelID {
+                model.ingredient = ingredient
+            }
 
         case .packageSize(let value):
             let model = try find(IngredientPackageSize.self, identity.uuid, context)
@@ -298,7 +326,9 @@ enum HouseholdRecordApplier {
             model.isEnabled = value.isEnabled
             model.isPreferred = value.isPreferred
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .ingredientMatchRule(let value):
             let model = try find(IngredientMatchRule.self, identity.uuid, context) ?? insert(IngredientMatchRule(), identity.uuid, context)
@@ -306,7 +336,9 @@ enum HouseholdRecordApplier {
             model.rightKey = value.rightKey
             model.kindRaw = value.kindRaw
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .dish(let value):
             let model = try find(Dish.self, identity.uuid, context) ?? insert(Dish(), identity.uuid, context)
@@ -330,7 +362,9 @@ enum HouseholdRecordApplier {
             model.isPrimary = value.isPrimary
             model.dateAdded = value.dateAdded
             model.modifiedAt = modifiedAt
-            model.dish = dish
+            if model.dish?.persistentModelID != dish.persistentModelID {
+                model.dish = dish
+            }
 
         case .dishIngredient(let value):
             guard let dish = try find(Dish.self, value.dishID, context) else { throw HouseholdRecordCodecError.missingRelationship }
@@ -345,15 +379,23 @@ enum HouseholdRecordApplier {
             model.translatedName = value.translatedName
             model.translatedNote = value.translatedNote
             model.modifiedAt = modifiedAt
-            model.dish = dish
-            model.ingredient = try findOptional(Ingredient.self, value.ingredientID, context)
+            if model.dish?.persistentModelID != dish.persistentModelID {
+                model.dish = dish
+            }
+            let ingredient = try findOptional(Ingredient.self, value.ingredientID, context)
+            if model.ingredient?.persistentModelID != ingredient?.persistentModelID {
+                model.ingredient = ingredient
+            }
 
         case .planEntry(let wrapped):
             let value = wrapped.value
             let model = try find(MealPlanEntry.self, identity.uuid, context) ?? insert(MealPlanEntry(), identity.uuid, context)
             model.date = value.date
             model.mealSlotRaw = value.mealKey
-            model.dish = try findOptional(Dish.self, value.dishUUID, context)
+            let dish = try findOptional(Dish.self, value.dishUUID, context)
+            if model.dish?.persistentModelID != dish?.persistentModelID {
+                model.dish = dish
+            }
             model.servingsOverride = value.servingsOverride
             model.note = value.note
             model.sortIndex = value.sortIndex
@@ -373,11 +415,16 @@ enum HouseholdRecordApplier {
             model.placementModifiedAt = wrapped.placementModifiedAt
             model.contentModifiedAt = wrapped.contentModifiedAt
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .routine(let value):
             let model = try find(MealRoutine.self, identity.uuid, context) ?? insert(MealRoutine(), identity.uuid, context)
-            model.dish = try findOptional(Dish.self, value.dishUUID, context)
+            let dish = try findOptional(Dish.self, value.dishUUID, context)
+            if model.dish?.persistentModelID != dish?.persistentModelID {
+                model.dish = dish
+            }
             model.mealKey = value.mealKey
             model.weekday = value.weekday
             model.intervalWeeks = value.intervalWeeks
@@ -386,7 +433,9 @@ enum HouseholdRecordApplier {
             model.plannedThrough = value.plannedThrough
             model.dateCreated = value.dateCreated
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .cookedLog(let value):
             let model = try find(CookedLog.self, identity.uuid, context) ?? insert(CookedLog(), identity.uuid, context)
@@ -416,7 +465,9 @@ enum HouseholdRecordApplier {
             model.sortIndex = value.sortIndex
             model.dateCreated = value.dateCreated
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .shoppingItem(let wrapped):
             let value = wrapped.value
@@ -439,13 +490,21 @@ enum HouseholdRecordApplier {
             model.rangeEnd = value.rangeEnd
             model.sourceDishNames = value.sourceDishNames
             model.dateCreated = value.dateCreated
-            model.ingredient = try findOptional(Ingredient.self, wrapped.ingredientID, context)
-            model.list = try findOptional(ShoppingList.self, wrapped.listID, context)
+            let ingredient = try findOptional(Ingredient.self, wrapped.ingredientID, context)
+            if model.ingredient?.persistentModelID != ingredient?.persistentModelID {
+                model.ingredient = ingredient
+            }
+            let list = try findOptional(ShoppingList.self, wrapped.listID, context)
                 ?? ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
+            if model.list?.persistentModelID != list.persistentModelID {
+                model.list = list
+            }
             model.contentModifiedAt = wrapped.contentModifiedAt
             model.checkStateModifiedAt = wrapped.checkStateModifiedAt
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .weekTemplate(let value):
             let model = try find(WeekTemplate.self, identity.uuid, context) ?? insert(WeekTemplate(), identity.uuid, context)
@@ -453,18 +512,25 @@ enum HouseholdRecordApplier {
             model.createdByName = value.createdByName
             model.dateCreated = value.dateCreated
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .weekTemplateEntry(let value):
             guard let template = try find(WeekTemplate.self, value.templateID, context) else { throw HouseholdRecordCodecError.missingRelationship }
             let model = try find(WeekTemplateEntry.self, identity.uuid, context) ?? insert(WeekTemplateEntry(), identity.uuid, context)
             model.weekday = value.weekday
             model.mealSlotRaw = value.mealKey
-            model.dish = try findOptional(Dish.self, value.dishID, context)
+            let dish = try findOptional(Dish.self, value.dishID, context)
+            if model.dish?.persistentModelID != dish?.persistentModelID {
+                model.dish = dish
+            }
             model.servingsOverride = value.servingsOverride
             model.sortIndex = value.sortIndex
             model.modifiedAt = modifiedAt
-            model.template = template
+            if model.template?.persistentModelID != template.persistentModelID {
+                model.template = template
+            }
 
         case .menu(let value):
             let model = try find(MealMenu.self, identity.uuid, context) ?? insert(MealMenu(name: value.name), identity.uuid, context)
@@ -472,17 +538,24 @@ enum HouseholdRecordApplier {
             model.createdByName = value.createdByName
             model.dateCreated = value.dateCreated
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .menuEntry(let value):
             guard let menu = try find(MealMenu.self, value.menuID, context) else { throw HouseholdRecordCodecError.missingRelationship }
             let model = try find(MealMenuEntry.self, identity.uuid, context) ?? insert(MealMenuEntry(), identity.uuid, context)
             model.mealKey = value.mealKey
-            model.dish = try findOptional(Dish.self, value.dishID, context)
+            let dish = try findOptional(Dish.self, value.dishID, context)
+            if model.dish?.persistentModelID != dish?.persistentModelID {
+                model.dish = dish
+            }
             model.servingsOverride = value.servingsOverride
             model.sortIndex = value.sortIndex
             model.modifiedAt = modifiedAt
-            model.menu = menu
+            if model.menu?.persistentModelID != menu.persistentModelID {
+                model.menu = menu
+            }
 
         case .recipeFeed(let value):
             guard let site = URL(string: value.siteURLString) else { return }
@@ -504,7 +577,9 @@ enum HouseholdRecordApplier {
             // result. A remote subscription edit must not reset that cache.
             model.dateAdded = value.dateAdded
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .recipeFeedItem(let wrapped):
             guard let feed = try find(RecipeFeed.self, wrapped.feedID, context), let url = URL(string: wrapped.value.urlString) else {
@@ -522,7 +597,9 @@ enum HouseholdRecordApplier {
             model.imageURLString = value.imageURLString
             model.archivedAt = value.archivedAt
             model.modifiedAt = modifiedAt
-            model.feed = feed
+            if model.feed?.persistentModelID != feed.persistentModelID {
+                model.feed = feed
+            }
 
         case .recipeBookmark(let value):
             guard let url = URL(string: value.urlString) else { return }
@@ -531,9 +608,20 @@ enum HouseholdRecordApplier {
             model.urlString = value.urlString
             model.dateAdded = value.dateAdded
             model.modifiedAt = modifiedAt
-            model.household = household
+            if model.household?.persistentModelID != household.persistentModelID {
+                model.household = household
+            }
 
         case .deletionMarker(let marker):
+            if let existingModifiedAt = try existingModifiedAt(
+                for: .init(type: marker.deletedType, uuid: marker.deletedUUID),
+                context: context
+            ), existingModifiedAt > marker.deletedAt {
+                // Tombstones are timestamped. A late deletion must not remove
+                // a newer local edit or recreate the old relationship on the
+                // next snapshot.
+                return
+            }
             try delete(type: marker.deletedType, uuid: marker.deletedUUID, context: context)
         }
     }
@@ -573,19 +661,54 @@ enum HouseholdRecordApplier {
             // Evict the live instance before SwiftData invalidates it. The
             // build-57 crash is in BatchLookup.remove, which previously ran
             // after `context.delete` during small CloudKit batches.
-            if batchLookup?.context === context { batchLookup?.remove(type, uuid: uuid) }
+            if batchLookups[ObjectIdentifier(context)]?.context === context {
+                batchLookups[ObjectIdentifier(context)]?.remove(type, uuid: uuid)
+            }
             context.delete(model)
         }
     }
 
     private static func find<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID, _ context: ModelContext) throws -> T? {
-        if let batchLookup, batchLookup.context === context { return try batchLookup.find(type, uuid: uuid) }
+        if let batchLookup = batchLookups[ObjectIdentifier(context)], batchLookup.context === context {
+            return try batchLookup.find(type, uuid: uuid)
+        }
         return try fetch(type, uuid: uuid, in: context)
     }
 
     private static func findOptional<T: HouseholdSyncModel>(_ type: T.Type, _ uuid: UUID?, _ context: ModelContext) throws -> T? {
         guard let uuid else { return nil }
         return try find(type, uuid, context)
+    }
+
+    private static func existingModifiedAt(
+        for identity: HouseholdRecordIdentity,
+        context: ModelContext
+    ) throws -> Date? {
+        switch identity.type {
+        case .household: return try find(Household.self, identity.uuid, context)?.modifiedAt
+        case .member: return try find(HouseholdMember.self, identity.uuid, context)?.modifiedAt
+        case .mealType: return try find(MealType.self, identity.uuid, context)?.modifiedAt
+        case .dish: return try find(Dish.self, identity.uuid, context)?.modifiedAt
+        case .dishImage: return try find(DishImage.self, identity.uuid, context)?.modifiedAt
+        case .ingredient: return try find(Ingredient.self, identity.uuid, context)?.modifiedAt
+        case .ingredientAlias: return try find(IngredientAlias.self, identity.uuid, context)?.modifiedAt
+        case .packageSize: return try find(IngredientPackageSize.self, identity.uuid, context)?.modifiedAt
+        case .ingredientMatchRule: return try find(IngredientMatchRule.self, identity.uuid, context)?.modifiedAt
+        case .dishIngredient: return try find(DishIngredient.self, identity.uuid, context)?.modifiedAt
+        case .planEntry: return try find(MealPlanEntry.self, identity.uuid, context)?.modifiedAt
+        case .routine: return try find(MealRoutine.self, identity.uuid, context)?.modifiedAt
+        case .cookedLog, .cookedLogImage: return try find(CookedLog.self, identity.uuid, context)?.modifiedAt
+        case .shoppingList: return try find(ShoppingList.self, identity.uuid, context)?.modifiedAt
+        case .shoppingItem: return try find(ShoppingListItem.self, identity.uuid, context)?.modifiedAt
+        case .weekTemplate: return try find(WeekTemplate.self, identity.uuid, context)?.modifiedAt
+        case .weekTemplateEntry: return try find(WeekTemplateEntry.self, identity.uuid, context)?.modifiedAt
+        case .menu: return try find(MealMenu.self, identity.uuid, context)?.modifiedAt
+        case .menuEntry: return try find(MealMenuEntry.self, identity.uuid, context)?.modifiedAt
+        case .recipeFeed: return try find(RecipeFeed.self, identity.uuid, context)?.modifiedAt
+        case .recipeFeedItem: return try find(RecipeFeedItem.self, identity.uuid, context)?.modifiedAt
+        case .recipeBookmark: return try find(RecipeBookmark.self, identity.uuid, context)?.modifiedAt
+        case .deletionMarker: return nil
+        }
     }
 
     private static func fetch<T: HouseholdSyncModel>(_ type: T.Type, uuid: UUID, in context: ModelContext) throws -> T? {
@@ -676,7 +799,9 @@ enum HouseholdRecordApplier {
     private static func insert<T: HouseholdSyncModel>(_ model: T, _ uuid: UUID, _ context: ModelContext) -> T {
         model.uuid = uuid
         context.insert(model)
-        if batchLookup?.context === context { batchLookup?.insert(model) }
+        if batchLookups[ObjectIdentifier(context)]?.context === context {
+            batchLookups[ObjectIdentifier(context)]?.insert(model)
+        }
         return model
     }
 
