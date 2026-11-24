@@ -28,6 +28,10 @@ final class WatchDataStore {
     private(set) var isReachable = false
     /// Ticks made here that the phone has not yet confirmed, newest per line.
     private var pending: [UUID: WatchShoppingCheck] = [:]
+    /// Commands remain pending until the phone acknowledges the authoritative
+    /// result. WatchConnectivity queues the command while disconnected.
+    private var pendingTimerCommands: [UUID: WatchCookingTimerCommand] = [:]
+    private(set) var timerCommandFeedback: WatchTimerCommandFeedback?
 
     private let cache = WatchSnapshotCache()
     private var link: WatchConnectivityClient?
@@ -35,6 +39,7 @@ final class WatchDataStore {
     private init() {
         snapshot = cache.loadSnapshot() ?? .empty
         pending = cache.loadPending()
+        pendingTimerCommands = cache.loadPendingTimerCommands()
         applyPending()
     }
 
@@ -53,6 +58,7 @@ final class WatchDataStore {
         guard let link else { return }
         link.requestSnapshot()
         flushPending()
+        flushPendingTimerCommands()
     }
 
     // MARK: - Incoming
@@ -67,12 +73,36 @@ final class WatchDataStore {
         // Anything the phone already knew about is no longer pending.
         pending = pending.filter { $0.value.changedAt > incoming.generatedAt }
         applyPending()
-        cache.save(snapshot: snapshot, pending: pending)
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands
+        )
+    }
+
+    func receive(_ acknowledgement: WatchCookingTimerCommandAcknowledgement) {
+        guard pendingTimerCommands.removeValue(forKey: acknowledgement.commandID) != nil else {
+            return
+        }
+        timerCommandFeedback = WatchTimerCommandFeedback(
+            id: acknowledgement.commandID,
+            timerID: acknowledgement.timerID,
+            accepted: acknowledgement.accepted,
+            message: acknowledgement.message
+        )
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands
+        )
     }
 
     func setReachable(_ reachable: Bool) {
         isReachable = reachable
-        if reachable { flushPending() }
+        if reachable {
+            flushPending()
+            flushPendingTimerCommands()
+        }
     }
 
     // MARK: - Ticking a line
@@ -86,8 +116,38 @@ final class WatchDataStore {
         snapshot.shopping[index].isChecked = checked
         let check = WatchShoppingCheck(id: item.id, isChecked: checked, changedAt: .now)
         pending[item.id] = check
-        cache.save(snapshot: snapshot, pending: pending)
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands
+        )
         link?.send([check])
+    }
+
+    /// Enqueues an ID-scoped command. No timer state is changed locally; the
+    /// next phone snapshot is the only source of truth for the result.
+    func sendTimerCommand(
+        for timer: WatchCookingTimer,
+        action: WatchCookingTimerAction
+    ) {
+        guard let revision = snapshot.cookingTimers?.revision else { return }
+        let command = WatchCookingTimerCommand(
+            timerID: timer.id,
+            action: action,
+            baseRevision: revision
+        )
+        pendingTimerCommands[command.id] = command
+        timerCommandFeedback = nil
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands
+        )
+        link?.send(command)
+    }
+
+    func isTimerCommandPending(for timerID: UUID) -> Bool {
+        pendingTimerCommands.values.contains { $0.timerID == timerID }
     }
 
     /// Re-sends everything still unconfirmed. Cheap: `transferUserInfo` is
@@ -95,6 +155,13 @@ final class WatchDataStore {
     private func flushPending() {
         guard !pending.isEmpty, let link else { return }
         link.send(Array(pending.values))
+    }
+
+    private func flushPendingTimerCommands() {
+        guard let link else { return }
+        for command in pendingTimerCommands.values {
+            link.send(command)
+        }
     }
 
     private func applyPending() {
@@ -123,6 +190,9 @@ private struct WatchSnapshotCache {
 
     private var snapshotURL: URL { directory.appending(path: "WatchSnapshot.json") }
     private var pendingURL: URL { directory.appending(path: "WatchPendingChecks.json") }
+    private var pendingTimerCommandsURL: URL {
+        directory.appending(path: "WatchPendingTimerCommands.json")
+    }
 
     func loadSnapshot() -> WatchPlanSnapshot? {
         guard let data = try? Data(contentsOf: snapshotURL) else { return nil }
@@ -136,12 +206,35 @@ private struct WatchSnapshotCache {
         return Dictionary(checks.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     }
 
-    func save(snapshot: WatchPlanSnapshot, pending: [UUID: WatchShoppingCheck]) {
+    func loadPendingTimerCommands() -> [UUID: WatchCookingTimerCommand] {
+        guard let data = try? Data(contentsOf: pendingTimerCommandsURL),
+              let commands = try? WatchSyncPayload.decoder.decode(
+                [WatchCookingTimerCommand].self,
+                from: data
+              )
+        else { return [:] }
+        return Dictionary(commands.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+    }
+
+    func save(
+        snapshot: WatchPlanSnapshot,
+        pending: [UUID: WatchShoppingCheck],
+        pendingTimerCommands: [UUID: WatchCookingTimerCommand]
+    ) {
         do {
             try WatchSyncPayload.encoder.encode(snapshot).write(to: snapshotURL, options: .atomic)
             try WatchSyncPayload.encoder.encode(Array(pending.values)).write(to: pendingURL, options: .atomic)
+            try WatchSyncPayload.encoder.encode(Array(pendingTimerCommands.values))
+                .write(to: pendingTimerCommandsURL, options: .atomic)
         } catch {
             Self.logger.error("Could not cache the plan: \(error.localizedDescription)")
         }
     }
+}
+
+struct WatchTimerCommandFeedback: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let timerID: UUID
+    let accepted: Bool
+    let message: String?
 }

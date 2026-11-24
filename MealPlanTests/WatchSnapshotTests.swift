@@ -136,4 +136,99 @@ struct WatchSnapshotTests {
     @Test func nothingIsSentForAnEmptyBatchOfTicks() {
         #expect(WatchSyncPayload.message(for: []) == nil)
     }
+
+    // MARK: - Cooking timers
+
+    @Test func cookingTimerCountsDownLocallyAndKeepsPausedTimeStable() {
+        let start = Date(timeIntervalSince1970: 1_800_000_000)
+        let running = WatchCookingTimer(
+            id: UUID(),
+            dishName: "Dough",
+            stepNumber: 1,
+            stepText: "Proof",
+            label: "Dough",
+            duration: 3_600,
+            endDate: start.addingTimeInterval(3_600),
+            pausedRemaining: nil
+        )
+        let paused = WatchCookingTimer(
+            id: UUID(),
+            dishName: "Sauce",
+            stepNumber: 2,
+            stepText: "Simmer",
+            label: "Sauce",
+            duration: 1_500,
+            endDate: start.addingTimeInterval(1_500),
+            pausedRemaining: 900
+        )
+        let completed = WatchCookingTimer(
+            id: UUID(),
+            dishName: "Oven",
+            stepNumber: 3,
+            stepText: "Bake",
+            label: "Oven",
+            duration: 900,
+            endDate: start.addingTimeInterval(900),
+            pausedRemaining: nil
+        )
+
+        #expect(running.remaining(at: start.addingTimeInterval(600)) == 3_000)
+        #expect(running.state(at: start.addingTimeInterval(600)) == .running)
+        #expect(paused.remaining(at: start.addingTimeInterval(2_000)) == 900)
+        #expect(paused.state(at: start.addingTimeInterval(2_000)) == .paused)
+        #expect(completed.remaining(at: start.addingTimeInterval(901)) == 0)
+        #expect(completed.state(at: start.addingTimeInterval(901)) == .completed)
+    }
+
+    @Test func cookingTimerCommandsRoundTripWithStableIdentityAndRevision() throws {
+        let timerID = UUID()
+        let command = WatchCookingTimerCommand(
+            id: UUID(),
+            timerID: timerID,
+            action: .pauseOrResume,
+            baseRevision: Date(timeIntervalSince1970: 1_800_000_000),
+            issuedAt: Date(timeIntervalSince1970: 1_800_000_010)
+        )
+        let message = try #require(WatchSyncPayload.message(for: command))
+        #expect(WatchSyncPayload.command(in: message) == command)
+
+        let acknowledgement = WatchCookingTimerCommandAcknowledgement(
+            commandID: command.id,
+            timerID: timerID,
+            accepted: true,
+            message: nil,
+            revision: Date(timeIntervalSince1970: 1_800_000_020)
+        )
+        let acknowledgementMessage = try #require(
+            WatchSyncPayload.message(for: acknowledgement)
+        )
+        #expect(
+            WatchSyncPayload.acknowledgement(in: acknowledgementMessage) == acknowledgement
+        )
+    }
+
+    @Test func timerSnapshotSurvivesInsideAnOlderPlanSnapshot() throws {
+        let revision = Date(timeIntervalSince1970: 1_800_000_000)
+        let timer = WatchCookingTimer(
+            id: UUID(),
+            dishName: "Dough",
+            stepNumber: 1,
+            stepText: "Proof",
+            label: "Dough",
+            duration: 3_600,
+            endDate: revision.addingTimeInterval(3_600),
+            pausedRemaining: nil
+        )
+        let snapshot = WatchPlanSnapshot(
+            generatedAt: revision,
+            cookingTimers: WatchCookingTimersSnapshot(
+                sessionID: UUID(),
+                revision: revision,
+                timers: [timer]
+            )
+        )
+        let message = try #require(WatchSyncPayload.message(for: snapshot))
+        #expect(WatchSyncPayload.snapshot(in: message)?.cookingTimers?.timers == [timer])
+        #expect(WatchSyncPayload.snapshot(in: message)?.cookingTimers?.revision == revision)
+    }
 }

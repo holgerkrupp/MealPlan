@@ -41,11 +41,16 @@ final class PhoneWatchSyncService: NSObject {
     private var shoppingRangeName: (@MainActor () -> String?)?
 
     private var saveObserver: NSObjectProtocol?
+    private var cookingSessionObserver: NSObjectProtocol?
     private var pushTask: Task<Void, Never>?
     /// The last snapshot actually handed to the session, so a burst of saves
     /// that changes nothing the watch shows costs one comparison, not a
     /// transfer.
     private var lastPushed: WatchPlanSnapshot?
+    /// Command IDs are local phone state, not household data. Keeping a small
+    /// journal makes a live-message retry followed by queued delivery safe.
+    private let commandDefaults = UserDefaults.standard
+    private let processedCommandIDsKey = "MealPlan.Watch.processedCookingTimerCommandIDs"
 
     private var session: WCSession? {
         WCSession.isSupported() ? .default : nil
@@ -78,6 +83,18 @@ final class PhoneWatchSyncService: NSObject {
                 Task { @MainActor in self?.schedulePush() }
             }
         }
+        if cookingSessionObserver == nil {
+            // CookingSessionStore persists outside SwiftData. Its local
+            // UserDefaults write is the only change signal available here
+            // without coupling the domain store to WatchConnectivity.
+            cookingSessionObserver = NotificationCenter.default.addObserver(
+                forName: UserDefaults.didChangeNotification,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                Task { @MainActor in self?.schedulePush() }
+            }
+        }
         schedulePush()
     }
 
@@ -102,13 +119,15 @@ final class PhoneWatchSyncService: NSObject {
         guard session.isPaired, session.isWatchAppInstalled else { return }
         #endif
 
-        let snapshot = WatchSnapshotBuilder.snapshot(
+        var snapshot = WatchSnapshotBuilder.snapshot(
             context: context,
             shoppingRangeName: shoppingRangeName?()
         )
+        snapshot.cookingTimers = cookingTimersSnapshot()
         if !force, let lastPushed, lastPushed.days == snapshot.days,
            lastPushed.shopping == snapshot.shopping,
-           lastPushed.shoppingRangeName == snapshot.shoppingRangeName {
+           lastPushed.shoppingRangeName == snapshot.shoppingRangeName,
+           lastPushed.cookingTimers == snapshot.cookingTimers {
             return
         }
         guard let message = WatchSyncPayload.message(for: snapshot) else { return }
@@ -121,6 +140,26 @@ final class PhoneWatchSyncService: NSObject {
     }
 
     // MARK: - Receiving
+
+    private func cookingTimersSnapshot() -> WatchCookingTimersSnapshot? {
+        guard let session = CookingSessionStore.shared.session else { return nil }
+        return WatchCookingTimersSnapshot(
+            sessionID: session.id,
+            revision: session.updatedAt,
+            timers: session.timers.map {
+                WatchCookingTimer(
+                    id: $0.id,
+                    dishName: $0.dishName,
+                    stepNumber: $0.stepNumber,
+                    stepText: $0.stepText,
+                    label: $0.label,
+                    duration: $0.duration,
+                    endDate: $0.endDate,
+                    pausedRemaining: $0.pausedRemaining
+                )
+            }
+        )
+    }
 
     /// Applies ticks made on the watch. A tick is only about `isChecked`, so
     /// it touches nothing else on the line — and it loses to a newer change
@@ -165,11 +204,115 @@ final class PhoneWatchSyncService: NSObject {
     /// The main-actor half of a delegate callback, working from values the
     /// callback already decoded — never the dictionary itself, which is not
     /// `Sendable` and belongs to WatchConnectivity's queue.
-    private func handle(checks: [WatchShoppingCheck], isRefreshRequest: Bool) {
+    private func handle(
+        checks: [WatchShoppingCheck],
+        command: WatchCookingTimerCommand?,
+        isRefreshRequest: Bool,
+        replyHandler: WatchReplyHandler? = nil
+    ) {
         let rejectedReadOnlyEdit = !checks.isEmpty && apply(checks)
         // A tick already triggers a save, and the save observer a push; only
         // an explicit request or rejected edit needs one forced snapshot.
         if isRefreshRequest || rejectedReadOnlyEdit { push(force: true) }
+
+        guard let command else {
+            replyHandler?.call([:])
+            return
+        }
+        let acknowledgement = apply(command: command)
+        if acknowledgement.accepted || acknowledgement.revision != nil {
+            push(force: true)
+        }
+        guard let message = WatchSyncPayload.message(for: acknowledgement) else {
+            replyHandler?.call([:])
+            return
+        }
+        if let replyHandler {
+            replyHandler.call(message)
+        } else {
+            // Queued commands need a queued acknowledgement. The watch keeps
+            // the button pending until this arrives, so offline actions never
+            // look successful merely because they were enqueued.
+            session?.transferUserInfo(message)
+        }
+    }
+
+    /// Applies a watch command only at the phone-owned store boundary.
+    private func apply(
+        command: WatchCookingTimerCommand
+    ) -> WatchCookingTimerCommandAcknowledgement {
+        let sessionStore = CookingSessionStore.shared
+        guard let current = sessionStore.session else {
+            return WatchCookingTimerCommandAcknowledgement(
+                commandID: command.id,
+                timerID: command.timerID,
+                accepted: false,
+                message: String(localized: "No active cooking session."),
+                revision: nil
+            )
+        }
+
+        if hasProcessedCommand(command.id) {
+            return WatchCookingTimerCommandAcknowledgement(
+                commandID: command.id,
+                timerID: command.timerID,
+                accepted: true,
+                message: String(localized: "Already applied."),
+                revision: current.updatedAt
+            )
+        }
+
+        // A command based on an older snapshot must not undo a newer phone or
+        // watch action. Send the current snapshot so the watch can reconcile.
+        guard command.baseRevision >= current.updatedAt else {
+            rememberProcessedCommand(command.id)
+            return WatchCookingTimerCommandAcknowledgement(
+                commandID: command.id,
+                timerID: command.timerID,
+                accepted: false,
+                message: String(localized: "The timer changed on iPhone."),
+                revision: current.updatedAt
+            )
+        }
+
+        guard current.timers.contains(where: { $0.id == command.timerID }) else {
+            rememberProcessedCommand(command.id)
+            return WatchCookingTimerCommandAcknowledgement(
+                commandID: command.id,
+                timerID: command.timerID,
+                accepted: false,
+                message: String(localized: "That timer is no longer active."),
+                revision: current.updatedAt
+            )
+        }
+
+        switch command.action {
+        case .pauseOrResume:
+            sessionStore.pauseOrResumeTimer(command.timerID, at: .now)
+        case .cancel:
+            sessionStore.cancelTimer(command.timerID)
+        }
+        rememberProcessedCommand(command.id)
+        return WatchCookingTimerCommandAcknowledgement(
+            commandID: command.id,
+            timerID: command.timerID,
+            accepted: true,
+            message: nil,
+            revision: sessionStore.session?.updatedAt
+        )
+    }
+
+    private func hasProcessedCommand(_ id: UUID) -> Bool {
+        (commandDefaults.stringArray(forKey: processedCommandIDsKey) ?? [])
+            .contains(id.uuidString)
+    }
+
+    private func rememberProcessedCommand(_ id: UUID) {
+        var ids = commandDefaults.stringArray(forKey: processedCommandIDsKey) ?? []
+        ids.removeAll { $0 == id.uuidString }
+        ids.append(id.uuidString)
+        if ids.count > 512 { ids.removeFirst(ids.count - 512) }
+        commandDefaults.set(ids, forKey: processedCommandIDsKey)
     }
 }
 
@@ -217,8 +360,22 @@ extension PhoneWatchSyncService: WCSessionDelegate {
         didReceiveMessage message: [String: Any],
         replyHandler: @escaping ([String: Any]) -> Void
     ) {
-        deliver(message)
-        replyHandler([:])
+        let checks = WatchSyncPayload.checks(in: message)
+        let command = WatchSyncPayload.command(in: message)
+        let isRefreshRequest = WatchSyncPayload.isRefreshRequest(message)
+        guard !checks.isEmpty || command != nil || isRefreshRequest else {
+            replyHandler([:])
+            return
+        }
+        let boxedReplyHandler = WatchReplyHandler(replyHandler)
+        Task { @MainActor in
+            self.handle(
+                checks: checks,
+                command: command,
+                isRefreshRequest: isRefreshRequest,
+                replyHandler: boxedReplyHandler
+            )
+        }
     }
 
     /// The queued, guaranteed-delivery path — how ticks made out of range
@@ -231,9 +388,32 @@ extension PhoneWatchSyncService: WCSessionDelegate {
     /// but plain values.
     private nonisolated func deliver(_ message: [String: Any]) {
         let checks = WatchSyncPayload.checks(in: message)
+        let command = WatchSyncPayload.command(in: message)
         let isRefreshRequest = WatchSyncPayload.isRefreshRequest(message)
-        guard !checks.isEmpty || isRefreshRequest else { return }
-        Task { @MainActor in self.handle(checks: checks, isRefreshRequest: isRefreshRequest) }
+        guard !checks.isEmpty || command != nil || isRefreshRequest else { return }
+        Task { @MainActor in
+            self.handle(
+                checks: checks,
+                command: command,
+                isRefreshRequest: isRefreshRequest
+            )
+        }
+    }
+}
+
+/// WatchConnectivity's reply closure is supplied by a nonisolated delegate
+/// callback. This tiny bridge lets the main actor finish the authoritative
+/// store mutation before answering without moving WCSession or its dictionary
+/// across actor boundaries.
+private final class WatchReplyHandler: @unchecked Sendable {
+    private let handler: ([String: Any]) -> Void
+
+    init(_ handler: @escaping ([String: Any]) -> Void) {
+        self.handler = handler
+    }
+
+    func call(_ message: [String: Any]) {
+        handler(message)
     }
 }
 #endif

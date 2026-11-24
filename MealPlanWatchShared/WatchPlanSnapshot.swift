@@ -102,6 +102,9 @@ struct WatchPlanSnapshot: Codable, Hashable, Sendable {
     var shopping: [WatchShoppingItem] = []
     /// The range the list was built for ("This week"), for the list's subtitle.
     var shoppingRangeName: String?
+    /// The optional phone-owned cooking session projection. Kept optional so
+    /// older phone/watch combinations continue decoding plan snapshots.
+    var cookingTimers: WatchCookingTimersSnapshot? = nil
 
     static let empty = WatchPlanSnapshot(generatedAt: .distantPast)
 

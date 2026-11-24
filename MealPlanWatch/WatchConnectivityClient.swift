@@ -42,6 +42,10 @@ final class WatchConnectivityClient: NSObject {
         Task { @MainActor in WatchDataStore.shared.receive(snapshot) }
     }
 
+    private static func deliver(_ acknowledgement: WatchCookingTimerCommandAcknowledgement) {
+        Task { @MainActor in WatchDataStore.shared.receive(acknowledgement) }
+    }
+
     private static func deliver(reachable: Bool, thenRefresh: Bool = false) {
         Task { @MainActor in
             WatchDataStore.shared.setReachable(reachable)
@@ -71,6 +75,27 @@ final class WatchConnectivityClient: NSObject {
         else { return }
         session.transferUserInfo(message)
     }
+
+    /// Sends a timer command live when possible and falls back to the queued
+    /// path if the live request fails. The phone deduplicates by command ID,
+    /// making this retry safe.
+    func send(_ command: WatchCookingTimerCommand) {
+        guard let session, session.activationState == .activated,
+              let message = WatchSyncPayload.message(for: command)
+        else { return }
+
+        guard session.isReachable else {
+            session.transferUserInfo(message)
+            return
+        }
+        session.sendMessage(message) { reply in
+            guard let acknowledgement = WatchSyncPayload.acknowledgement(in: reply) else { return }
+            Self.deliver(acknowledgement)
+        } errorHandler: { error in
+            Self.logger.error("Live cooking timer command failed: \(error.localizedDescription)")
+            session.transferUserInfo(message)
+        }
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -98,8 +123,17 @@ extension WatchConnectivityClient: WCSessionDelegate {
     }
 
     func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        if let acknowledgement = WatchSyncPayload.acknowledgement(in: message) {
+            Self.deliver(acknowledgement)
+            return
+        }
         guard let snapshot = WatchSyncPayload.snapshot(in: message) else { return }
         Self.deliver(snapshot)
+    }
+
+    func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
+        guard let acknowledgement = WatchSyncPayload.acknowledgement(in: userInfo) else { return }
+        Self.deliver(acknowledgement)
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {

@@ -6,7 +6,7 @@ import SwiftUI
 /// mid-task, and a menu in front of them would cost a tap every time.
 struct WatchRootView: View {
 
-    private enum Tab: Hashable { case plan, shopping }
+    private enum Tab: Hashable { case plan, shopping, cooking }
 
     @Environment(WatchDataStore.self) private var store
     @State private var tab: Tab = .plan
@@ -22,6 +22,11 @@ struct WatchRootView: View {
                 WatchShoppingListView()
             }
             .tag(Tab.shopping)
+
+            NavigationStack {
+                WatchCookingTimersView()
+            }
+            .tag(Tab.cooking)
         }
         .tabViewStyle(.page)
     }

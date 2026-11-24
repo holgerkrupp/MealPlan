@@ -16,6 +16,10 @@ enum WatchSyncPayload {
     static let checksKey = "mealplan.shoppingChecks"
     /// Watch → phone: "send me a fresh snapshot".
     static let refreshRequestKey = "mealplan.refreshRequest"
+    /// Watch → phone: an ID-scoped cooking timer command.
+    static let cookingTimerCommandKey = "mealplan.cookingTimerCommand"
+    /// Phone → watch: the result of a cooking timer command.
+    static let cookingTimerAcknowledgementKey = "mealplan.cookingTimerAcknowledgement"
 
     // MARK: Coders
 
@@ -61,5 +65,31 @@ enum WatchSyncPayload {
 
     static func isRefreshRequest(_ message: [String: Any]) -> Bool {
         message[refreshRequestKey] != nil
+    }
+
+    // MARK: Cooking timers
+
+    static func message(for command: WatchCookingTimerCommand) -> [String: Any]? {
+        guard let data = try? encoder.encode(command) else { return nil }
+        return [cookingTimerCommandKey: data]
+    }
+
+    static func command(in message: [String: Any]) -> WatchCookingTimerCommand? {
+        guard let data = message[cookingTimerCommandKey] as? Data else { return nil }
+        return try? decoder.decode(WatchCookingTimerCommand.self, from: data)
+    }
+
+    static func message(
+        for acknowledgement: WatchCookingTimerCommandAcknowledgement
+    ) -> [String: Any]? {
+        guard let data = try? encoder.encode(acknowledgement) else { return nil }
+        return [cookingTimerAcknowledgementKey: data]
+    }
+
+    static func acknowledgement(
+        in message: [String: Any]
+    ) -> WatchCookingTimerCommandAcknowledgement? {
+        guard let data = message[cookingTimerAcknowledgementKey] as? Data else { return nil }
+        return try? decoder.decode(WatchCookingTimerCommandAcknowledgement.self, from: data)
     }
 }
