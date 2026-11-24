@@ -62,6 +62,8 @@ enum MealPlanBackupRestore {
         try deleteAll(RecipeBookmark.self, in: context)
         try deleteAll(WeekTemplateEntry.self, in: context)
         try deleteAll(WeekTemplate.self, in: context)
+        try deleteAll(MealMenuEntry.self, in: context)
+        try deleteAll(MealMenu.self, in: context)
         try deleteAll(ShoppingListItem.self, in: context)
         try deleteAll(CookedLog.self, in: context)
         try deleteAll(MealRoutine.self, in: context)
@@ -117,6 +119,7 @@ enum MealPlanBackupRestore {
         household.bringShadowKeys = backup.household.bringShadowKeys ?? []
         household.bringAutoSync = backup.household.bringAutoSync ?? true
         household.bringLastSyncedAt = backup.household.bringLastSyncedAt
+        household.reusableMenusData = backup.household.reusableMenusData
         household.localeIdentifier = backup.household.localeIdentifier
         household.dateCreated = backup.household.dateCreated
         // A restored library brings its own staples with it; an older file
@@ -362,6 +365,27 @@ enum MealPlanBackupRestore {
                 entry.servingsOverride = storedEntry.servingsOverride
                 entry.sortIndex = storedEntry.sortIndex
                 entry.template = template
+                context.insert(entry)
+            }
+        }
+
+        for stored in backup.menus {
+            let menu = MealMenu(name: stored.name)
+            menu.uuid = stored.uuid
+            menu.createdByName = stored.createdByName
+            menu.dateCreated = stored.dateCreated
+            menu.household = household
+            context.insert(menu)
+
+            for storedEntry in stored.entries {
+                let entry = MealMenuEntry(
+                    dish: storedEntry.dishUUID.flatMap { dishes[$0] },
+                    mealKey: storedEntry.mealKey,
+                    servingsOverride: storedEntry.servingsOverride,
+                    sortIndex: storedEntry.sortIndex
+                )
+                entry.uuid = storedEntry.uuid
+                entry.menu = menu
                 context.insert(entry)
             }
         }

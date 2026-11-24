@@ -48,6 +48,7 @@ struct MealPlanBackup: Codable, Sendable {
     var shoppingLists: [PortableShoppingList]? = nil
     var shoppingItems: [PortableShoppingItem] = []
     var weekTemplates: [PortableWeekTemplate] = []
+    var menus: [PortableMealMenu] = []
     /// Optional so backups from before recipe discovery still decode. Article
     /// bodies never appear here; only the synced feed metadata does.
     var recipeFeeds: [PortableRecipeFeed]? = nil
@@ -92,6 +93,7 @@ struct MealPlanBackup: Codable, Sendable {
         var bringShadowKeys: [String]? = nil
         var bringAutoSync: Bool? = nil
         var bringLastSyncedAt: Date? = nil
+        var reusableMenusData: Data? = nil
     }
 
     struct PortableMealType: Codable, Sendable {
@@ -363,6 +365,22 @@ struct MealPlanBackup: Codable, Sendable {
         var sortIndex: Int
     }
 
+    struct PortableMealMenu: Codable, Sendable, Equatable {
+        var uuid: UUID
+        var name: String
+        var createdByName: String?
+        var dateCreated: Date
+        var entries: [PortableMealMenuEntry]
+    }
+
+    struct PortableMealMenuEntry: Codable, Sendable, Equatable {
+        var uuid: UUID
+        var mealKey: String?
+        var dishUUID: UUID?
+        var servingsOverride: Int?
+        var sortIndex: Int
+    }
+
     struct PortableRecipeFeed: Codable, Sendable {
         var uuid: UUID
         var title: String
@@ -418,6 +436,7 @@ struct MealPlanBackup: Codable, Sendable {
         var cookedMeals = 0
         var shoppingItems = 0
         var weekTemplates = 0
+        var menus = 0
         var packageSizes = 0
         var photos = 0
     }
@@ -431,6 +450,7 @@ struct MealPlanBackup: Codable, Sendable {
             cookedMeals: cookedLogs.count,
             shoppingItems: shoppingItems.count,
             weekTemplates: weekTemplates.count,
+            menus: menus.count,
             packageSizes: packageSizes.count,
             photos: dishes.reduce(0) { $0 + $1.images.count }
                 + cookedLogs.filter { $0.photoData != nil }.count
@@ -498,6 +518,7 @@ extension MealPlanBackup {
         var shoppingLists: [ShoppingList] = []
         var shoppingItems: [ShoppingListItem] = []
         var weekTemplates: [WeekTemplate] = []
+        var menus: [MealMenu] = []
         var recipeFeeds: [RecipeFeed] = []
         var recipeBookmarks: [RecipeBookmark] = []
 
@@ -528,6 +549,7 @@ extension MealPlanBackup {
             shoppingLists = try context.fetch(FetchDescriptor<ShoppingList>())
             shoppingItems = try context.fetch(FetchDescriptor<ShoppingListItem>())
             weekTemplates = try context.fetch(FetchDescriptor<WeekTemplate>())
+            menus = try context.fetch(FetchDescriptor<MealMenu>())
             recipeFeeds = try context.fetch(FetchDescriptor<RecipeFeed>())
             recipeBookmarks = try context.fetch(FetchDescriptor<RecipeBookmark>())
         }
@@ -652,7 +674,8 @@ extension MealPlanBackup {
                 bringListName: primary?.bringListName,
                 bringShadowKeys: primary?.bringShadowKeys,
                 bringAutoSync: primary?.bringAutoSync,
-                bringLastSyncedAt: primary?.bringLastSyncedAt
+                bringLastSyncedAt: primary?.bringLastSyncedAt,
+                reusableMenusData: primary?.reusableMenusData
             )
         )
         backup.includesPhotos = includePhotos
@@ -891,6 +914,24 @@ extension MealPlanBackup {
                     PortableWeekTemplateEntry(
                         weekday: $0.weekday,
                         mealKey: $0.mealSlotRaw,
+                        dishUUID: $0.dish?.uuid,
+                        servingsOverride: $0.servingsOverride,
+                        sortIndex: $0.sortIndex
+                    )
+                }
+            )
+        }
+
+        backup.menus = rows.menus.map { menu in
+            PortableMealMenu(
+                uuid: menu.uuid,
+                name: menu.name,
+                createdByName: menu.createdByName,
+                dateCreated: menu.dateCreated,
+                entries: menu.sortedEntries.map {
+                    PortableMealMenuEntry(
+                        uuid: $0.uuid,
+                        mealKey: $0.mealKey,
                         dishUUID: $0.dish?.uuid,
                         servingsOverride: $0.servingsOverride,
                         sortIndex: $0.sortIndex

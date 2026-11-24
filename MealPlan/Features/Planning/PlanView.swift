@@ -14,6 +14,7 @@ struct PlanView: View {
     @AppStorage("plan.showsDishSidebar") private var showsSidebar = true
     @AppStorage("plan.dishSidebarWidth") private var sidebarWidth: Double = 300
     @State private var dragStartWidth: Double?
+    @State private var showingMenus = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -63,6 +64,17 @@ struct PlanView: View {
                         }
                     }
                 }
+                ToolbarItem(placement: .secondaryAction) {
+                    Button {
+                        showingMenus = true
+                    } label: {
+                        Label(String(localized: "Menus"), systemImage: "rectangle.3.group")
+                    }
+                    .disabled(appState.currentHousehold == nil)
+                }
+            }
+            .sheet(isPresented: $showingMenus) {
+                ReusableMenuLibraryView()
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
@@ -89,6 +101,58 @@ struct PlanView: View {
             #endif
             .help(String(localized: "Drag to resize the dish list"))
             .accessibilityLabel(String(localized: "Resize dish list"))
+    }
+}
+
+@MainActor
+private struct ReusableMenuLibraryView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.dismiss) private var dismiss
+    @State private var name = ""
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if let household = appState.currentHousehold {
+                    if household.reusableMenus.isEmpty {
+                        ContentUnavailableView(
+                            String(localized: "No menus yet"),
+                            systemImage: "rectangle.3.group",
+                            description: Text("Save a few dishes together for a quick planning shortcut.")
+                        )
+                    } else {
+                        ForEach(household.reusableMenus) { menu in
+                            VStack(alignment: .leading) {
+                                Text(menu.name)
+                                Text(String(localized: "\(menu.items.count) dishes"))
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                        }
+                        .onDelete { offsets in
+                            for index in offsets {
+                                ReusableMenuStore.delete(household.reusableMenus[index].id, from: household)
+                            }
+                        }
+                    }
+                    Section(String(localized: "New menu")) {
+                        TextField(String(localized: "Menu name"), text: $name)
+                        Button(String(localized: "Create empty menu")) {
+                            let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+                            guard !trimmed.isEmpty else { return }
+                            ReusableMenuStore.save(ReusableMenu(name: trimmed), in: household)
+                            name = ""
+                        }
+                        .disabled(name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                }
+            }
+            .navigationTitle(String(localized: "Reusable menus"))
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                }
+            }
+        }
     }
 }
 

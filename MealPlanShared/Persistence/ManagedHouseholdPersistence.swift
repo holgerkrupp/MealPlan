@@ -23,6 +23,8 @@ enum ManagedHouseholdEntity: String, CaseIterable, Sendable {
     case shoppingListItem = "ShoppingListItem"
     case weekTemplate = "WeekTemplate"
     case weekTemplateEntry = "WeekTemplateEntry"
+    case mealMenu = "MealMenu"
+    case mealMenuEntry = "MealMenuEntry"
     case recipeFeed = "RecipeFeed"
     case recipeFeedItem = "RecipeFeedItem"
     case recipeBookmark = "RecipeBookmark"
@@ -362,7 +364,7 @@ private enum ManagedHouseholdModel {
     private static func attributes(for entity: ManagedHouseholdEntity) -> [ManagedHouseholdAttribute] {
         switch entity {
         case .household:
-            attributes(.uuid, .modifiedAt, .string("name"), .string("unitSystemRaw"), .string("unitPresentationOverrideRaw", optional: true), .bool("roundsDisplayedAmounts"), .string("calendarStyleRaw"), .integer("standardServings"), .bool("showsNutritionEstimates"), .bool("leftoverSuggestionsEnabled"), .bool("inventoryEnabled"), .string("packageSizeCountryCode"), .string("energyUnitRaw"), .string("localeIdentifier"), .date("dateCreated"), .bool("didSeedPantryStaples"), .binary("ingredientMergeAuditData", external: true), .bool("unlockedByPurchase"), .string("bringListUuid", optional: true), .string("bringListName", optional: true), .binary("bringShadowKeys"), .bool("bringAutoSync"), .date("bringLastSyncedAt", optional: true))
+            attributes(.uuid, .modifiedAt, .string("name"), .string("unitSystemRaw"), .string("unitPresentationOverrideRaw", optional: true), .bool("roundsDisplayedAmounts"), .string("calendarStyleRaw"), .integer("standardServings"), .bool("showsNutritionEstimates"), .bool("leftoverSuggestionsEnabled"), .bool("inventoryEnabled"), .string("packageSizeCountryCode"), .string("energyUnitRaw"), .string("localeIdentifier"), .date("dateCreated"), .bool("didSeedPantryStaples"), .binary("ingredientMergeAuditData", external: true), .bool("unlockedByPurchase"), .string("bringListUuid", optional: true), .string("bringListName", optional: true), .binary("bringShadowKeys"), .bool("bringAutoSync"), .date("bringLastSyncedAt", optional: true), .binary("reusableMenusData", external: true))
         case .householdMember:
             attributes(.uuid, .modifiedAt, .string("cloudKitParticipantID", optional: true), .bool("isActive"), .string("name"), .string("roleRaw"), .bool("isCurrentUser"), .date("dateAdded"), .date("shareMetadataModifiedAt"), .date("profileModifiedAt"), .binary("allergies"), .binary("mustAvoidIngredients"), .binary("dietaryPatterns"), .binary("dislikes"), .binary("favorites"), .binary("preferredCuisines"), .integer("spiceTolerance", optional: true))
         case .mealType:
@@ -395,6 +397,10 @@ private enum ManagedHouseholdModel {
             attributes(.uuid, .modifiedAt, .string("name"), .string("createdByName", optional: true), .date("dateCreated"))
         case .weekTemplateEntry:
             attributes(.uuid, .modifiedAt, .integer("weekday"), .string("mealSlotRaw"), .integer("servingsOverride", optional: true), .integer("sortIndex"))
+        case .mealMenu:
+            attributes(.uuid, .modifiedAt, .string("name"), .string("createdByName", optional: true), .date("dateCreated"))
+        case .mealMenuEntry:
+            attributes(.uuid, .modifiedAt, .string("mealKey", optional: true), .integer("servingsOverride", optional: true), .integer("sortIndex"))
         case .recipeFeed:
             attributes(.uuid, .modifiedAt, .string("title"), .string("siteURLString"), .string("feedURLString"), .string("sourceKindRaw"), .string("sourceID", optional: true), .string("contentURLString", optional: true), .string("etag", optional: true), .string("lastModified", optional: true), .date("lastFetchedAt", optional: true), .date("firstFailureAt", optional: true), .integer("consecutiveFailures"), .date("nextRetryAt", optional: true), .integer("lastHTTPStatus", optional: true), .string("lastErrorMessage", optional: true), .date("dateAdded"))
         case .recipeFeedItem:
@@ -417,6 +423,7 @@ private enum ManagedHouseholdModel {
         link(.household, "shoppingLists", .shoppingList, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "cookedLogs", .cookedLog, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "weekTemplates", .weekTemplate, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
+        link(.household, "menus", .mealMenu, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "mealRoutines", .mealRoutine, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "recipeFeeds", .recipeFeed, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "recipeBookmarks", .recipeBookmark, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
@@ -430,6 +437,7 @@ private enum ManagedHouseholdModel {
         link(.dish, "cookedLogs", .cookedLog, "dish", deleteRule: .nullifyDeleteRule, entities: &entities)
         link(.dish, "templateEntries", .weekTemplateEntry, "dish", deleteRule: .nullifyDeleteRule, entities: &entities)
         link(.dish, "mealRoutines", .mealRoutine, "dish", deleteRule: .cascadeDeleteRule, entities: &entities)
+        link(.dish, "menuEntries", .mealMenuEntry, "dish", deleteRule: .nullifyDeleteRule, entities: &entities)
 
         link(.ingredient, "aliases", .ingredientAlias, "ingredient", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.ingredient, "dishIngredients", .dishIngredient, "ingredient", deleteRule: .nullifyDeleteRule, entities: &entities)
@@ -438,6 +446,7 @@ private enum ManagedHouseholdModel {
 
         link(.mealPlanEntry, "cookedLog", .cookedLog, "entry", deleteRule: .cascadeDeleteRule, entities: &entities, toMany: false)
         link(.weekTemplate, "entries", .weekTemplateEntry, "template", deleteRule: .cascadeDeleteRule, entities: &entities)
+        link(.mealMenu, "entries", .mealMenuEntry, "menu", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.recipeFeed, "items", .recipeFeedItem, "feed", deleteRule: .cascadeDeleteRule, entities: &entities)
     }
 

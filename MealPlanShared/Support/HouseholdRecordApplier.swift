@@ -141,6 +141,8 @@ enum HouseholdRecordApplier {
             }
         case .weekTemplate: try touch(WeekTemplate.self, identity.uuid, date, context)
         case .weekTemplateEntry: try touch(WeekTemplateEntry.self, identity.uuid, date, context)
+        case .menu: try touch(MealMenu.self, identity.uuid, date, context)
+        case .menuEntry: try touch(MealMenuEntry.self, identity.uuid, date, context)
         case .recipeFeed: try touch(RecipeFeed.self, identity.uuid, date, context)
         case .recipeFeedItem: try touch(RecipeFeedItem.self, identity.uuid, date, context)
         case .recipeBookmark: try touch(RecipeBookmark.self, identity.uuid, date, context)
@@ -193,6 +195,7 @@ enum HouseholdRecordApplier {
             household.bringShadowKeys = value.bringShadowKeys
             household.bringAutoSync = value.bringAutoSync
             household.bringLastSyncedAt = value.bringLastSyncedAt
+            household.reusableMenusData = value.reusableMenusData
             household.modifiedAt = modifiedAt
 
         case .member(let value):
@@ -463,6 +466,24 @@ enum HouseholdRecordApplier {
             model.modifiedAt = modifiedAt
             model.template = template
 
+        case .menu(let value):
+            let model = try find(MealMenu.self, identity.uuid, context) ?? insert(MealMenu(name: value.name), identity.uuid, context)
+            model.name = value.name
+            model.createdByName = value.createdByName
+            model.dateCreated = value.dateCreated
+            model.modifiedAt = modifiedAt
+            model.household = household
+
+        case .menuEntry(let value):
+            guard let menu = try find(MealMenu.self, value.menuID, context) else { throw HouseholdRecordCodecError.missingRelationship }
+            let model = try find(MealMenuEntry.self, identity.uuid, context) ?? insert(MealMenuEntry(), identity.uuid, context)
+            model.mealKey = value.mealKey
+            model.dish = try findOptional(Dish.self, value.dishID, context)
+            model.servingsOverride = value.servingsOverride
+            model.sortIndex = value.sortIndex
+            model.modifiedAt = modifiedAt
+            model.menu = menu
+
         case .recipeFeed(let value):
             guard let site = URL(string: value.siteURLString) else { return }
             let url = value.feedURLString.isEmpty ? nil : URL(string: value.feedURLString)
@@ -538,6 +559,8 @@ enum HouseholdRecordApplier {
         case .shoppingItem: try delete(ShoppingListItem.self, uuid, context)
         case .weekTemplate: try delete(WeekTemplate.self, uuid, context)
         case .weekTemplateEntry: try delete(WeekTemplateEntry.self, uuid, context)
+        case .menu: try delete(MealMenu.self, uuid, context)
+        case .menuEntry: try delete(MealMenuEntry.self, uuid, context)
         case .recipeFeed: try delete(RecipeFeed.self, uuid, context)
         case .recipeFeedItem: try delete(RecipeFeedItem.self, uuid, context)
         case .recipeBookmark: try delete(RecipeBookmark.self, uuid, context)
@@ -618,6 +641,10 @@ enum HouseholdRecordApplier {
             return try first(WeekTemplate.self, predicate: #Predicate<WeekTemplate> { $0.uuid == uuid })
         case is WeekTemplateEntry.Type:
             return try first(WeekTemplateEntry.self, predicate: #Predicate<WeekTemplateEntry> { $0.uuid == uuid })
+        case is MealMenu.Type:
+            return try first(MealMenu.self, predicate: #Predicate<MealMenu> { $0.uuid == uuid })
+        case is MealMenuEntry.Type:
+            return try first(MealMenuEntry.self, predicate: #Predicate<MealMenuEntry> { $0.uuid == uuid })
         case is RecipeFeed.Type:
             return try first(RecipeFeed.self, predicate: #Predicate<RecipeFeed> { $0.uuid == uuid })
         case is RecipeFeedItem.Type:

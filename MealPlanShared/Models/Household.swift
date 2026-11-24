@@ -81,6 +81,15 @@ final class Household {
     var bringAutoSync: Bool = true
     var bringLastSyncedAt: Date?
 
+    /// Reusable multi-dish menus are stored as a versioned household payload
+    /// so older stores and CloudKit records can decode them as absent.
+    var reusableMenusData: Data?
+
+    var reusableMenus: [ReusableMenu] {
+        get { (try? JSONDecoder().decode([ReusableMenu].self, from: reusableMenusData ?? Data())) ?? [] }
+        set { reusableMenusData = try? JSONEncoder().encode(newValue) }
+    }
+
     @Relationship(deleteRule: .cascade, inverse: \Dish.household)
     var dishes: [Dish]? = []
 
@@ -104,6 +113,9 @@ final class Household {
 
     @Relationship(deleteRule: .cascade, inverse: \WeekTemplate.household)
     var weekTemplates: [WeekTemplate]? = []
+
+    @Relationship(deleteRule: .cascade, inverse: \MealMenu.household)
+    var menus: [MealMenu]? = []
 
     @Relationship(deleteRule: .cascade, inverse: \HouseholdMember.household)
     var members: [HouseholdMember]? = []
