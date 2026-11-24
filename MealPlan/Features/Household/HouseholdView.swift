@@ -141,6 +141,16 @@ struct HouseholdSettingsView: View {
 
                 Section {
                     NavigationLink {
+                        HouseholdSyncStatusView()
+                    } label: {
+                        Label(String(localized: "Sync status"), systemImage: "arrow.triangle.2.circlepath.icloud")
+                    }
+                } footer: {
+                    Text("iCloud sync continues in the background. Check here for pending changes, retry status and diagnostics.")
+                }
+
+                Section {
+                    NavigationLink {
                         HouseholdRecoveryView()
                     } label: {
                         Label(String(localized: "Household Recovery"), systemImage: "arrow.triangle.2.circlepath.icloud")
@@ -268,6 +278,151 @@ struct HouseholdSettingsView: View {
         }
     }
 
+}
+
+@MainActor
+struct HouseholdSyncStatusView: View {
+    @Environment(AppState.self) private var appState
+    @Environment(\.modelContext) private var context
+    @State private var health = HouseholdRecordSyncService.shared.healthSnapshot
+    @State private var isRetrying = false
+
+    var body: some View {
+        Form {
+            Section {
+                Label(statusTitle, systemImage: statusSymbol)
+                    .foregroundStyle(statusColor)
+                Text(statusDetail)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                if let category = health.failureCategory {
+                    LabeledContent(String(localized: "Reason"), value: categoryTitle(category))
+                }
+            } header: {
+                Text(String(localized: "Current status"))
+            }
+
+            Section {
+                LabeledContent(
+                    String(localized: "Last successful sync"),
+                    value: health.lastSuccessfulAt.map { $0.formatted(date: .abbreviated, time: .shortened) }
+                        ?? String(localized: "Not yet recorded")
+                )
+                LabeledContent(
+                    String(localized: "Pending changes"),
+                    value: String(localized: "About (health.pendingCount)")
+                )
+                if let retryAt = health.retryAt {
+                    LabeledContent(
+                        String(localized: "Next retry"),
+                        value: retryAt.formatted(date: .omitted, time: .shortened)
+                    )
+                }
+            } header: {
+                Text(String(localized: "Activity"))
+            }
+
+            Section {
+                Button {
+                    Task { await retrySync() }
+                } label: {
+                    if isRetrying {
+                        ProgressView()
+                    } else {
+                        Label(String(localized: "Retry sync now"), systemImage: "arrow.clockwise")
+                    }
+                }
+                .disabled(isRetrying || appState.currentHousehold == nil)
+
+                ShareLink(item: HouseholdSyncDiagnostics.supportReport()) {
+                    Label(String(localized: "Share Diagnostics"), systemImage: "square.and.arrow.up")
+                }
+            } footer: {
+                Text("Diagnostics contain identifiers, scopes, pending counts and error categories only—not recipe or member content.")
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(String(localized: "Sync status"))
+        .task { refreshHealth() }
+        .onReceive(NotificationCenter.default.publisher(for: .mealPlanSyncHealthDidChange)) { _ in
+            refreshHealth()
+        }
+    }
+
+    private var statusTitle: String {
+        switch health.state {
+        case .healthy: String(localized: "Up to date")
+        case .syncing: String(localized: "Syncing")
+        case .retrying: String(localized: "Retrying in the background")
+        case .needsUserAction: String(localized: "Action needed")
+        case .unresolved: String(localized: "Sync needs review")
+        }
+    }
+
+    private var statusDetail: String {
+        switch health.state {
+        case .healthy: String(localized: "CloudKit sync is running without blocking your planning.")
+        case .syncing: String(localized: "MealPlan is checking for changes and sending local edits.")
+        case .retrying: String(localized: "A temporary problem was recorded. Pending changes remain queued and MealPlan will retry without interrupting you.")
+        case .needsUserAction: String(localized: "CloudKit needs attention from this device. Your planning remains available while you review the reason below.")
+        case .unresolved: String(localized: "MealPlan could not classify this sync problem. Retry here or share diagnostics with support.")
+        }
+    }
+
+    private var statusSymbol: String {
+        switch health.state {
+        case .healthy: "checkmark.icloud"
+        case .syncing: "arrow.triangle.2.circlepath.icloud"
+        case .retrying: "clock.arrow.circlepath"
+        case .needsUserAction, .unresolved: "exclamationmark.icloud"
+        }
+    }
+
+    private var statusColor: Color {
+        switch health.state {
+        case .healthy: .green
+        case .syncing: .accentColor
+        case .retrying: .orange
+        case .needsUserAction, .unresolved: .orange
+        }
+    }
+
+    private func categoryTitle(_ category: HouseholdSyncFailureCategory) -> String {
+        switch category {
+        case .offline: String(localized: "No network connection")
+        case .serviceUnavailable: String(localized: "iCloud is temporarily unavailable")
+        case .rateLimited: String(localized: "iCloud asked MealPlan to slow down")
+        case .notAuthenticated: String(localized: "iCloud sign-in required")
+        case .permissionDenied: String(localized: "Access or permission changed")
+        case .quotaExceeded: String(localized: "iCloud storage is full")
+        case .accountConflict: String(localized: "Different iCloud account")
+        case .recordRecovery: String(localized: "A record needs recovery")
+        case .localStore: String(localized: "Saved sync state needs review")
+        case .unknown: String(localized: "Unclassified CloudKit error")
+        }
+    }
+
+    private func refreshHealth() {
+        health = HouseholdRecordSyncService.shared.healthSnapshot
+    }
+
+    private func retrySync() async {
+        guard let household = appState.currentHousehold else { return }
+        isRetrying = true
+        defer {
+            isRetrying = false
+            refreshHealth()
+        }
+        do {
+            try await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                household: household,
+                context: context,
+                session: appState.collaboration
+            )
+        } catch {
+            HouseholdRecordSyncService.shared.recordBackgroundFailure(error)
+        }
+    }
 }
 
 @MainActor

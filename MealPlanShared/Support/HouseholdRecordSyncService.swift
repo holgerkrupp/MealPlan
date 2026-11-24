@@ -388,6 +388,10 @@ final class HouseholdRecordSyncService {
     /// older app is deliberately treated as dirty once, not as clean.
     private var lastObservedStoreGeneration: UInt64?
     private(set) var lastError: Error?
+    private(set) var health = HouseholdSyncHealth()
+    private var retryTask: Task<Void, Never>?
+    private var retryAttempt = 0
+    private static let retryDelays: [Duration] = [.seconds(5), .seconds(15), .seconds(60), .seconds(300)]
     private let logger = Logger(subsystem: "de.holgerkrupp.mealplan", category: "household-record-sync")
     private let metadataWriter = HouseholdMetadataWriter()
 
@@ -399,17 +403,50 @@ final class HouseholdRecordSyncService {
     /// the scene's follow-up participant/role refresh.
     var hasActiveShare: Bool { locator?.shareRecordID != nil }
 
+    var healthSnapshot: HouseholdSyncHealth {
+        var snapshot = health
+        snapshot.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+        if snapshot.lastSuccessfulAt == nil {
+            snapshot.lastSuccessfulAt = HouseholdSyncDiagnostics.latestSuccessfulDate()
+        }
+        return snapshot
+    }
+
+    /// Records a failure from a passive coordinator caller. The state remains
+    /// observable in Household settings, while the primary planning surfaces
+    /// stay free of modal sync alerts.
+    func recordBackgroundFailure(_ error: Error) {
+        lastError = error
+        let disposition = HouseholdCloudSharingService.syncFailureDisposition(for: error)
+        health.state = switch disposition {
+        case .retryable: .retrying
+        case .needsUserAction: .needsUserAction
+        case .unresolved: .unresolved
+        }
+        health.failureCategory = HouseholdCloudSharingService.syncFailureCategory(for: error)
+        health.lastAttemptAt = .now
+        health.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+        publishHealth()
+        if disposition != .needsUserAction { scheduleRetry(for: error) }
+    }
+
     func synchronize(household: Household, context: ModelContext) async throws {
         guard admitsForegroundWork else { return }
-        try await activateIfNeeded(household: household, context: context)
-        #if os(iOS)
-        startForegroundPolling()
-        #endif
-        guard let locator else { return }
-        observeExternalStoreGeneration()
-        if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
-        await performCloudOperation(fetch: true, send: !locator.isReadOnly)
-        if let lastError { throw lastError }
+        do {
+            markSyncing()
+            try await activateIfNeeded(household: household, context: context)
+            #if os(iOS)
+            startForegroundPolling()
+            #endif
+            guard let locator else { return }
+            observeExternalStoreGeneration()
+            if !locator.isReadOnly, needsLocalScan { try await scanLocalChanges() }
+            await performCloudOperation(fetch: true, send: !locator.isReadOnly)
+            if let lastError { throw lastError }
+        } catch {
+            recordBackgroundFailure(error)
+            throw error
+        }
     }
 
     /// The person chose to keep this household under the iCloud account now
@@ -444,10 +481,16 @@ final class HouseholdRecordSyncService {
             startForegroundPolling()
             #endif
             if needsLocalScan { scheduleScan() }
+            if let lastError, health.state == .retrying || health.state == .unresolved {
+                scheduleRetry(for: lastError)
+            }
             return
         }
         foregroundPollTask?.cancel()
         foregroundPollTask = nil
+        retryTask?.cancel()
+        retryTask = nil
+        retryAttempt = 0
         scheduledScan?.cancel()
         scheduledScan = nil
         // A scan interrupted between persistence units remains dirty and is
@@ -486,7 +529,10 @@ final class HouseholdRecordSyncService {
         // cannot make them look acknowledged.
         if shouldScanLocalChanges, admitsForegroundWork, !locator.isReadOnly, needsLocalScan {
             do { try await scanLocalChanges() }
-            catch { lastError = error; return .failed }
+            catch {
+                recordBackgroundFailure(error)
+                return .failed
+            }
         }
         let previousAppliedCount = appliedRemoteRecordCount
         await performCloudOperation(fetch: true, send: false, backgroundFetchID: backgroundFetchID)
@@ -516,6 +562,9 @@ final class HouseholdRecordSyncService {
         scheduledScan = nil
         foregroundPollTask?.cancel()
         foregroundPollTask = nil
+        retryTask?.cancel()
+        retryTask = nil
+        retryAttempt = 0
         localScanTask?.cancel()
         try? await localScanTask?.value
         localScanTask = nil
@@ -971,9 +1020,85 @@ final class HouseholdRecordSyncService {
                 guard !Task.isCancelled, self.admitsForegroundWork else { return }
                 await self.performCloudOperation(fetch: false, send: true)
             } catch {
-                if !(error is CancellationError) { self.lastError = error }
+                if !(error is CancellationError) { self.recordBackgroundFailure(error) }
             }
         }
+    }
+
+    private func markSyncing() {
+        health.state = .syncing
+        health.failureCategory = nil
+        health.retryAt = nil
+        health.lastAttemptAt = .now
+        health.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+        publishHealth()
+    }
+
+    private func markHealthy() {
+        lastError = nil
+        retryTask?.cancel()
+        retryTask = nil
+        retryAttempt = 0
+        health.state = .healthy
+        health.failureCategory = nil
+        health.retryAt = nil
+        health.lastAttemptAt = .now
+        health.lastSuccessfulAt = .now
+        health.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+        publishHealth()
+    }
+
+    private func publishHealth() {
+        NotificationCenter.default.post(name: .mealPlanSyncHealthDidChange, object: nil)
+    }
+
+    private func scheduleRetry(for error: Error) {
+        guard admitsForegroundWork, retryTask == nil else { return }
+        let disposition = HouseholdCloudSharingService.syncFailureDisposition(for: error)
+        guard disposition != .needsUserAction else { return }
+
+        let delay: Duration
+        if let retryAfter = Self.retryAfterSeconds(in: error) {
+            let milliseconds = Int(min(max(retryAfter, 1), 300) * 1_000)
+            delay = .milliseconds(milliseconds)
+        } else {
+            delay = Self.retryDelays[min(retryAttempt, Self.retryDelays.count - 1)]
+        }
+        retryAttempt = min(retryAttempt + 1, Self.retryDelays.count)
+        health.state = .retrying
+        let components = delay.components
+        let interval = Double(components.seconds) + Double(components.attoseconds) / 1_000_000_000_000_000_000
+        health.retryAt = Date.now.addingTimeInterval(interval)
+        health.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+        publishHealth()
+
+        retryTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return
+            }
+            guard let self else { return }
+            self.retryTask = nil
+            guard self.admitsForegroundWork,
+                  let household = self.household,
+                  let context = self.context else { return }
+            do {
+                try await self.synchronize(household: household, context: context)
+            } catch {
+                // synchronize() records the typed failure and schedules the
+                // next bounded attempt. The journal remains the source of
+                // truth if this process is suspended or terminated.
+            }
+        }
+    }
+
+    private static func retryAfterSeconds(in error: Error) -> Double? {
+        guard let cloudError = error as? CKError else { return nil }
+        if let retryAfter = cloudError.retryAfterSeconds { return retryAfter }
+        guard cloudError.code == .partialFailure,
+              let failures = cloudError.partialErrorsByItemID?.values else { return nil }
+        return failures.compactMap { retryAfterSeconds(in: $0) }.max()
     }
 
     /// Foreground scans are unbounded household work. Stop them between
@@ -1219,6 +1344,7 @@ final class HouseholdRecordSyncService {
     private func runCloudOperation(fetch: Bool, send: Bool) async {
         guard let syncEnginePool, let locator = self.locator else { return }
         lastError = nil
+        markSyncing()
         let zoneID = locator.zoneID
         let maySend = send && !locator.isReadOnly
         let scope = activeScope
@@ -1285,6 +1411,16 @@ final class HouseholdRecordSyncService {
         }
         let duration = startedAt.duration(to: .now)
         if fetch, !activeBackgroundFetchIsCancelled { await retryFailedFetches() }
+        if let lastError {
+            recordBackgroundFailure(lastError)
+        } else if !metadata.fetchRetryRecordNames.isEmpty {
+            health.state = .retrying
+            health.failureCategory = .recordRecovery
+            health.pendingCount = metadata.pendingFingerprints.count + metadata.fetchRetryRecordNames.count
+            publishHealth()
+        } else {
+            markHealthy()
+        }
         if fetch { logger.info("sync.fetch.end duration=\(duration, privacy: .public)") }
         if maySend { logger.info("sync.send.end duration=\(duration, privacy: .public)") }
     }

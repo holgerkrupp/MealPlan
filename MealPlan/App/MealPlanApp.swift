@@ -168,11 +168,15 @@ struct MealPlanApp: App {
                                 // The same coalesced refresh handles an
                                 // extension-side App Group write, a push, or
                                 // a role/removal change while we were away.
-                                try? await HouseholdCollaborationRefreshCoordinator.shared.refresh(
-                                    household: household,
-                                    context: container.mainContext,
-                                    session: appState.collaboration
-                                )
+                                do {
+                                    try await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                                        household: household,
+                                        context: container.mainContext,
+                                        session: appState.collaboration
+                                    )
+                                } catch {
+                                    HouseholdRecordSyncService.shared.recordBackgroundFailure(error)
+                                }
                             }
                             if !appState.isGuest {
                                 await RecipeFeedBackgroundRefresh.run(context: container.mainContext)

@@ -658,6 +658,108 @@ enum HouseholdCloudSharingService {
         ].contains(cloudError.code)
     }
 
+    /// Classifies a background failure without using localized descriptions.
+    /// The sync service uses this to decide whether to retry quietly or leave
+    /// an actionable status item in Household settings.
+    static func syncFailureDisposition(for error: Error) -> HouseholdSyncFailureDisposition {
+        if let syncError = error as? HouseholdRecordSyncError {
+            switch syncError {
+            case .householdBelongsToAnotherAccount:
+                return .needsUserAction
+            case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal,
+                 .stateStoreUnavailable, .appGroupUnavailable, .syncLockUnavailable:
+                return .unresolved
+            case .anotherAppCopyIsSyncing, .requiredAssetUnavailable, .recordRecoveryDeferred:
+                return .retryable
+            }
+        }
+        if let sharingError = error as? HouseholdSharingError {
+            switch sharingError {
+            case .accessRemoved, .readOnlyHousehold, .notInvited, .invalidInvitation,
+                 .invitationNotFound, .differentCloudKitEnvironment:
+                return .needsUserAction
+            default:
+                return .unresolved
+            }
+        }
+        if let collaborationError = error as? CollaborationFailure {
+            switch collaborationError {
+            case .offline, .cancelled:
+                return .retryable
+            case .revokedAccess:
+                return .needsUserAction
+            @unknown default:
+                return .unresolved
+            }
+        }
+        if let backendError = error as? CloudKitShareBackendError,
+           case .cloudKit(let collaborationError) = backendError {
+            return syncFailureDisposition(for: collaborationError)
+        }
+        guard let cloudError = error as? CKError else { return .unresolved }
+        if cloudError.code == .partialFailure,
+           let failures = cloudError.partialErrorsByItemID?.values,
+           !failures.isEmpty {
+            let dispositions = Set(failures.map(syncFailureDisposition))
+            if dispositions == [.needsUserAction] { return .needsUserAction }
+            if dispositions.allSatisfy({ $0 == .retryable }) { return .retryable }
+            return .unresolved
+        }
+        switch cloudError.code {
+        case .networkUnavailable, .networkFailure, .serviceUnavailable,
+             .requestRateLimited, .zoneBusy, .accountTemporarilyUnavailable,
+             .operationCancelled, .unknownItem, .serverRecordChanged:
+            return .retryable
+        case .notAuthenticated, .permissionFailure, .quotaExceeded,
+             .managedAccountRestricted, .badContainer, .badDatabase,
+             .zoneNotFound, .userDeletedZone:
+            return .needsUserAction
+        default:
+            return .unresolved
+        }
+    }
+
+    static func syncFailureCategory(for error: Error) -> HouseholdSyncFailureCategory {
+        if let syncError = error as? HouseholdRecordSyncError {
+            switch syncError {
+            case .requiredAssetUnavailable, .recordRecoveryDeferred: return .recordRecovery
+            case .householdBelongsToAnotherAccount: return .accountConflict
+            case .migrationVerificationFailed, .metadataCopiesDiverged, .metadataMissingForPendingJournal,
+                 .stateStoreUnavailable, .appGroupUnavailable, .syncLockUnavailable: return .localStore
+            default: return .unknown
+            }
+        }
+        if let backendError = error as? CloudKitShareBackendError,
+           case .cloudKit(let collaborationError) = backendError {
+            return syncFailureCategory(for: collaborationError)
+        }
+        if let collaborationError = error as? CollaborationFailure {
+            switch collaborationError {
+            case .offline: return .offline
+            case .cancelled: return .serviceUnavailable
+            case .revokedAccess: return .permissionDenied
+            @unknown default: return .unknown
+            }
+        }
+        guard let cloudError = error as? CKError else { return .unknown }
+        if cloudError.code == .partialFailure,
+           let failures = cloudError.partialErrorsByItemID?.values,
+           let first = failures.first {
+            return syncFailureCategory(for: first)
+        }
+        switch cloudError.code {
+        case .networkUnavailable, .networkFailure: return .offline
+        case .serviceUnavailable, .accountTemporarilyUnavailable, .operationCancelled: return .serviceUnavailable
+        case .requestRateLimited, .zoneBusy: return .rateLimited
+        case .notAuthenticated: return .notAuthenticated
+        case .permissionFailure, .managedAccountRestricted, .badContainer, .badDatabase,
+             .zoneNotFound, .userDeletedZone: return .permissionDenied
+        case .quotaExceeded: return .quotaExceeded
+        case .unknownItem, .serverRecordChanged: return .recordRecovery
+        default: return .unknown
+        }
+    }
+
     /// Converts sync/share failures into concise app language. CloudKit and
     /// collaboration errors can include record IDs, zone IDs, change tags,
     /// and internal server text; none of that belongs in an ordinary alert.
@@ -670,7 +772,7 @@ enum HouseholdCloudSharingService {
             return description
         }
         if isTemporarySyncFailure(error) {
-            return String(localized: "MealPlan will retry iCloud sync in the background. Your local data is still available.")
+            return String(localized: "MealPlan will retry iCloud sync in the background.")
         }
         if let cloudError = error as? CKError {
             switch cloudError.code {
@@ -684,7 +786,7 @@ enum HouseholdCloudSharingService {
                 break
             }
         }
-        return String(localized: "iCloud sync needs attention. Your local data is safe; try again later.")
+        return String(localized: "iCloud sync needs review in Household settings.")
     }
 
     /// Moves this device off a shared household it can no longer reach onto

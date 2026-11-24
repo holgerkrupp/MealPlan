@@ -54,7 +54,8 @@ struct RootView: View {
     @State private var showOnboarding = false
     @State private var didEvaluateOnboarding = false
     @State private var rootSheet: RootSheet?
-    @State private var sharingErrorMessage: String?
+    @State private var sharingActionErrorTitle = String(localized: "iCloud sharing could not continue")
+    @State private var sharingActionErrorMessage: String?
     /// The shared household this device just lost access to, for the one
     /// alert that explains why the plan changed underneath the person.
     @State private var lostHouseholdName: String?
@@ -110,6 +111,17 @@ struct RootView: View {
         } message: {
             Text(appState.importNotice ?? "")
         }
+        .alert(
+            sharingActionErrorTitle,
+            isPresented: Binding(
+                get: { sharingActionErrorMessage != nil },
+                set: { if !$0 { sharingActionErrorMessage = nil } }
+            )
+        ) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: {
+            Text(sharingActionErrorMessage ?? "")
+        }
         .detailPresentation(isPresented: $showOnboarding, route: .gettingStarted) {
             OnboardingView()
                 .dismissesOnOutsideClick()
@@ -159,14 +171,6 @@ struct RootView: View {
         }
         .onChange(of: purchaseManager.ownsUnlock) {
             Task { await reconcileEntitlement() }
-        }
-        .alert(
-            String(localized: "iCloud sharing needs attention"),
-            isPresented: Binding(get: { sharingErrorMessage != nil }, set: { if !$0 { sharingErrorMessage = nil } })
-        ) {
-            Button(String(localized: "OK"), role: .cancel) {}
-        } message: {
-            Text(sharingErrorMessage ?? "")
         }
         .alert(
             String(localized: "You’re No Longer in “\(lostHouseholdName ?? "")”"),
@@ -301,7 +305,8 @@ struct RootView: View {
                 // A failed SwiftData fetch cannot mean "nothing to preserve".
                 // Keep the invitation eligible for redelivery and fail closed.
                 HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
-                sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
+                sharingActionErrorTitle = String(localized: "Couldn’t accept invitation")
+                sharingActionErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
                 continue
             }
             if let firstAtRisk = atRisk.first {
@@ -360,7 +365,8 @@ struct RootView: View {
         } catch {
             HouseholdShareInvitationInbox.shared.allowRedelivery(of: metadata)
             appState.finishCloudDownload()
-            sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
+            sharingActionErrorTitle = String(localized: "Couldn’t accept invitation")
+            sharingActionErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
         }
     }
 
@@ -438,11 +444,9 @@ struct RootView: View {
         } catch HouseholdSharingError.accessRemoved {
             await moveToOwnHousehold(from: household)
         } catch {
-            // CloudKit retries temporary outages. Keep the foreground plan
-            // usable and reserve the alert for failures needing an action.
-            if !HouseholdCloudSharingService.isTemporarySyncFailure(error) {
-                sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
-            }
+            // Passive sync failures are recorded by the shared health owner
+            // and surfaced in Household settings, never over the plan.
+            HouseholdRecordSyncService.shared.recordBackgroundFailure(error)
         }
     }
 
@@ -494,7 +498,8 @@ struct RootView: View {
             MealType.ensure(for: own, context: context)
             lostHouseholdName = name
         } catch {
-            sharingErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
+            sharingActionErrorTitle = String(localized: "Couldn’t leave household")
+            sharingActionErrorMessage = HouseholdCloudSharingService.userFacingErrorMessage(for: error)
         }
     }
 

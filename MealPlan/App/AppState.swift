@@ -246,11 +246,15 @@ final class AppState: HouseholdRecoveryAppState {
         if canSyncCurrentHouseholdWhileLooking {
             // Fetch the active zone first. Legacy inventory scans every old
             // zone and must not delay a normal per-record plan update.
-            try? await HouseholdCollaborationRefreshCoordinator.shared.refresh(
-                household: local,
-                context: context,
-                session: collaboration
-            )
+            do {
+                try await HouseholdCollaborationRefreshCoordinator.shared.refresh(
+                    household: local,
+                    context: context,
+                    session: collaboration
+                )
+            } catch {
+                HouseholdRecordSyncService.shared.recordBackgroundFailure(error)
+            }
         }
         var attemptedPlan: LegacyHouseholdRecoveryPlan = .noAction
         do {

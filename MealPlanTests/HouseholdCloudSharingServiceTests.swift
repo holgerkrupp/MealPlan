@@ -294,6 +294,26 @@ struct HouseholdCloudSharingServiceTests {
         ))
     }
 
+    @Test func backgroundSyncFailuresUseTypedDispositionAndCategories() {
+        #expect(HouseholdCloudSharingService.syncFailureDisposition(for: CKError(.networkUnavailable)) == .retryable)
+        #expect(HouseholdCloudSharingService.syncFailureCategory(for: CKError(.networkUnavailable)) == .offline)
+        #expect(HouseholdCloudSharingService.syncFailureDisposition(for: CKError(.notAuthenticated)) == .needsUserAction)
+        #expect(HouseholdCloudSharingService.syncFailureCategory(for: CKError(.notAuthenticated)) == .notAuthenticated)
+        #expect(HouseholdCloudSharingService.syncFailureDisposition(for: CKError(.unknownItem)) == .retryable)
+        #expect(HouseholdCloudSharingService.syncFailureCategory(for: CKError(.unknownItem)) == .recordRecovery)
+        #expect(HouseholdCloudSharingService.syncFailureDisposition(for: NSError(domain: "test", code: 1)) == .unresolved)
+        #expect(HouseholdCloudSharingService.syncFailureCategory(for: NSError(domain: "test", code: 1)) == .unknown)
+    }
+
+    @Test func fallbackSyncMessageDoesNotPromiseDataSafety() {
+        let message = HouseholdCloudSharingService.userFacingErrorMessage(
+            for: NSError(domain: "test", code: 1)
+        )
+
+        #expect(message.contains("Household settings"))
+        #expect(!message.contains("Your local data is safe"))
+    }
+
     #if canImport(UIKit)
     @Test func windowScenesUseCloudSharingDelegate() {
         let configuration = AppDelegate.sceneConfiguration(for: .windowApplication)

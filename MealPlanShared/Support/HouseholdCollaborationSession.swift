@@ -163,6 +163,42 @@ struct HouseholdSyncDiagnostic: Codable, Equatable, Sendable {
     var detail: String?
 }
 
+enum HouseholdSyncHealthState: String, Codable, Equatable, Sendable {
+    case healthy
+    case syncing
+    case retrying
+    case needsUserAction
+    case unresolved
+}
+
+enum HouseholdSyncFailureDisposition: String, Codable, Equatable, Sendable {
+    case retryable
+    case needsUserAction
+    case unresolved
+}
+
+enum HouseholdSyncFailureCategory: String, Codable, Equatable, Sendable {
+    case offline
+    case serviceUnavailable
+    case rateLimited
+    case notAuthenticated
+    case permissionDenied
+    case quotaExceeded
+    case accountConflict
+    case recordRecovery
+    case localStore
+    case unknown
+}
+
+struct HouseholdSyncHealth: Equatable, Sendable {
+    var state: HouseholdSyncHealthState = .healthy
+    var failureCategory: HouseholdSyncFailureCategory?
+    var pendingCount = 0
+    var lastAttemptAt: Date?
+    var lastSuccessfulAt: Date?
+    var retryAt: Date?
+}
+
 enum HouseholdSyncDiagnostics {
     private static let key = "HouseholdSyncDiagnostics.v1"
     private static let limit = 40
@@ -193,6 +229,12 @@ enum HouseholdSyncDiagnostics {
     static func recent(defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> [HouseholdSyncDiagnostic] {
         guard let data = defaults.data(forKey: key) else { return [] }
         return (try? JSONDecoder().decode([HouseholdSyncDiagnostic].self, from: data)) ?? []
+    }
+
+    static func latestSuccessfulDate(defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> Date? {
+        recent(defaults: defaults).last { entry in
+            entry.event == "sent" || entry.event == "fetched"
+        }?.at
     }
 
     static func supportReport(defaults: UserDefaults = HouseholdCollaborationStore.defaults) -> String {
@@ -304,6 +346,7 @@ extension Notification.Name {
     /// Posted after a CloudKit push so the scene can refresh the share's
     /// current participant and roster, not merely its zone records.
     static let mealPlanCollaborationRefreshRequested = Notification.Name("de.holgerkrupp.mealplan.collaborationRefreshRequested")
+    static let mealPlanSyncHealthDidChange = Notification.Name("de.holgerkrupp.mealplan.syncHealthDidChange")
 }
 
 /// Coalesces foreground, push, invitation and explicit refresh requests. It
@@ -333,6 +376,11 @@ final class HouseholdCollaborationRefreshCoordinator {
         }
         activeRefresh = task
         defer { activeRefresh = nil }
-        try await task.value
+        do {
+            try await task.value
+        } catch {
+            HouseholdRecordSyncService.shared.recordBackgroundFailure(error)
+            throw error
+        }
     }
 }
