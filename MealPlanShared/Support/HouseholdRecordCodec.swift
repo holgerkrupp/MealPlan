@@ -57,6 +57,12 @@ extension ShoppingListItem: HouseholdSyncModel {
 extension ShoppingList: HouseholdSyncModel {
     static func uuidPredicate(_ uuid: UUID) -> Predicate<ShoppingList> { #Predicate { $0.uuid == uuid } }
 }
+extension MealMenu: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<MealMenu> { #Predicate { $0.uuid == uuid } }
+}
+extension MealMenuEntry: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<MealMenuEntry> { #Predicate { $0.uuid == uuid } }
+}
 extension WeekTemplate: HouseholdSyncModel {
     static func uuidPredicate(_ uuid: UUID) -> Predicate<WeekTemplate> { #Predicate { $0.uuid == uuid } }
 }
@@ -92,6 +98,8 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case shoppingItem = "MPShoppingListItem"
     case weekTemplate = "MPWeekTemplate"
     case weekTemplateEntry = "MPWeekTemplateEntry"
+    case menu = "MPMealMenu"
+    case menuEntry = "MPMealMenuEntry"
     case recipeFeed = "MPRecipeFeed"
     case recipeFeedItem = "MPRecipeFeedItem"
     case recipeBookmark = "MPRecipeBookmark"
@@ -100,8 +108,8 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     var applyPriority: Int {
         switch self {
         case .household: 0
-        case .member, .mealType, .ingredient, .ingredientAlias, .packageSize, .ingredientMatchRule, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
-        case .dishIngredient, .planEntry, .routine, .shoppingList, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
+        case .member, .mealType, .ingredient, .ingredientAlias, .packageSize, .ingredientMatchRule, .dish, .weekTemplate, .menu, .recipeFeed, .recipeBookmark: 1
+        case .dishIngredient, .planEntry, .routine, .shoppingList, .shoppingItem, .weekTemplateEntry, .menuEntry, .recipeFeedItem, .cookedLog: 2
         case .dishImage, .cookedLogImage: 3
         case .deletionMarker: 4
         }
@@ -153,6 +161,7 @@ struct HouseholdPayload: Codable, Sendable {
     var bringShadowKeys: [String]
     var bringAutoSync: Bool
     var bringLastSyncedAt: Date?
+    var reusableMenusData: Data? = nil
 }
 
 struct MemberPayload: Codable, Sendable {
@@ -251,6 +260,14 @@ struct ShoppingListPayload: Codable, Sendable {
     var dateCreated: Date
 }
 
+struct MealMenuEntryPayload: Codable, Sendable {
+    var menuID: UUID
+    var mealKey: String?
+    var dishID: UUID?
+    var servingsOverride: Int?
+    var sortIndex: Int
+}
+
 struct WeekTemplateEntryPayload: Codable, Sendable {
     var templateID: UUID
     var weekday: Int
@@ -294,6 +311,8 @@ enum HouseholdRecordPayload: Codable, Sendable {
     case shoppingItem(ShoppingItemPayload)
     case weekTemplate(MealPlanBackup.PortableWeekTemplate)
     case weekTemplateEntry(WeekTemplateEntryPayload)
+    case menu(MealPlanBackup.PortableMealMenu)
+    case menuEntry(MealMenuEntryPayload)
     case recipeFeed(MealPlanBackup.PortableRecipeFeed)
     case recipeFeedItem(RecipeFeedItemPayload)
     case recipeBookmark(MealPlanBackup.PortableRecipeBookmark)
@@ -526,6 +545,24 @@ enum HouseholdRecordCodec {
                 contentModifiedAt: item.contentModifiedAt, checkStateModifiedAt: item.checkStateModifiedAt
             )), groups: ["content": content, "check": check])
         }
+        for menu in household.menus ?? [] {
+            try append(.init(type: .menu, uuid: menu.uuid), menu.modifiedAt, .menu(.init(
+                uuid: menu.uuid,
+                name: menu.name,
+                createdByName: menu.createdByName,
+                dateCreated: menu.dateCreated,
+                entries: []
+            )))
+            for entry in menu.entries ?? [] {
+                try append(.init(type: .menuEntry, uuid: entry.uuid), entry.modifiedAt, .menuEntry(.init(
+                    menuID: menu.uuid,
+                    mealKey: entry.mealKey,
+                    dishID: entry.dish?.uuid,
+                    servingsOverride: entry.servingsOverride,
+                    sortIndex: entry.sortIndex
+                )))
+            }
+        }
         for template in household.weekTemplates ?? [] {
             try append(.init(type: .weekTemplate, uuid: template.uuid), template.modifiedAt, .weekTemplate(.init(
                 uuid: template.uuid, name: template.name, createdByName: template.createdByName,
@@ -634,7 +671,8 @@ enum HouseholdRecordCodec {
             bringListName: household.bringListName,
             bringShadowKeys: household.bringShadowKeys,
             bringAutoSync: household.bringAutoSync,
-            bringLastSyncedAt: household.bringLastSyncedAt
+            bringLastSyncedAt: household.bringLastSyncedAt,
+            reusableMenusData: household.reusableMenusData
         ))
     }
 
@@ -861,6 +899,8 @@ actor HouseholdSnapshotActor {
         touchModels(household.shoppingLists ?? [], type: .shoppingList)
         touchModels(household.weekTemplates ?? [], type: .weekTemplate)
         touchModels((household.weekTemplates ?? []).flatMap { $0.entries ?? [] }, type: .weekTemplateEntry)
+        touchModels(household.menus ?? [], type: .menu)
+        touchModels((household.menus ?? []).flatMap { $0.entries ?? [] }, type: .menuEntry)
         touchModels(household.recipeFeeds ?? [], type: .recipeFeed)
         touchModels((household.recipeFeeds ?? []).flatMap { $0.items ?? [] }, type: .recipeFeedItem)
         touchModels(household.recipeBookmarks ?? [], type: .recipeBookmark)
