@@ -31,6 +31,12 @@ struct CookingTimerState: Codable, Equatable, Identifiable, Sendable {
         max(0, pausedRemaining ?? endDate.timeIntervalSince(date))
     }
 
+    var isPaused: Bool { pausedRemaining != nil }
+
+    func isExpired(at date: Date) -> Bool {
+        pausedRemaining == nil && endDate <= date
+    }
+
     var contextLabel: String {
         "\(dishName) · \(String(localized: "Step \(stepNumber)"))"
     }
@@ -45,7 +51,9 @@ struct CookingSessionState: Codable, Equatable, Sendable {
     var dishes: [CookingDishProgress]
     var timers: [CookingTimerState] = []
 
-    init(dishID: UUID, dishName: String, servings: Int) {
+    init(dishID: UUID, dishName: String, servings: Int, now: Date = .now) {
+        startedAt = now
+        updatedAt = now
         selectedDishID = dishID
         dishes = [CookingDishProgress(id: dishID, name: dishName, targetServings: max(1, servings))]
     }
@@ -54,45 +62,45 @@ struct CookingSessionState: Codable, Equatable, Sendable {
         dishes.first { $0.id == selectedDishID }
     }
 
-    mutating func addDish(id: UUID, name: String, servings: Int) {
+    mutating func addDish(id: UUID, name: String, servings: Int, at date: Date = .now) {
         if !dishes.contains(where: { $0.id == id }) {
             dishes.append(CookingDishProgress(id: id, name: name, targetServings: max(1, servings)))
         }
         selectedDishID = id
-        touch()
+        touch(at: date)
     }
 
-    mutating func selectDish(_ id: UUID) {
+    mutating func selectDish(_ id: UUID, at date: Date = .now) {
         guard dishes.contains(where: { $0.id == id }) else { return }
         selectedDishID = id
-        touch()
+        touch(at: date)
     }
 
-    mutating func setServings(_ servings: Int, for dishID: UUID) {
+    mutating func setServings(_ servings: Int, for dishID: UUID, at date: Date = .now) {
         guard let index = dishes.firstIndex(where: { $0.id == dishID }) else { return }
         dishes[index].targetServings = max(1, servings)
-        touch()
+        touch(at: date)
     }
 
-    mutating func setCurrentStep(_ step: Int, for dishID: UUID, stepCount: Int) {
+    mutating func setCurrentStep(_ step: Int, for dishID: UUID, stepCount: Int, at date: Date = .now) {
         guard let index = dishes.firstIndex(where: { $0.id == dishID }) else { return }
         dishes[index].currentStep = min(max(0, step), max(0, stepCount - 1))
-        touch()
+        touch(at: date)
     }
 
-    mutating func toggleIngredient(_ ingredientIndex: Int, for dishID: UUID) {
+    mutating func toggleIngredient(_ ingredientIndex: Int, for dishID: UUID, at date: Date = .now) {
         guard let index = dishes.firstIndex(where: { $0.id == dishID }) else { return }
         if dishes[index].checkedIngredientIndexes.contains(ingredientIndex) {
             dishes[index].checkedIngredientIndexes.remove(ingredientIndex)
         } else {
             dishes[index].checkedIngredientIndexes.insert(ingredientIndex)
         }
-        touch()
+        touch(at: date)
     }
 
-    mutating func addTimer(_ timer: CookingTimerState) {
+    mutating func addTimer(_ timer: CookingTimerState, at date: Date = .now) {
         timers.append(timer)
-        touch()
+        touch(at: date)
     }
 
     mutating func pauseOrResumeTimer(_ id: UUID, at date: Date) -> CookingTimerState? {
@@ -103,16 +111,16 @@ struct CookingSessionState: Codable, Equatable, Sendable {
         } else {
             timers[index].pausedRemaining = timers[index].remaining(at: date)
         }
-        touch()
+        touch(at: date)
         return timers[index]
     }
 
-    mutating func removeTimer(_ id: UUID) {
+    mutating func removeTimer(_ id: UUID, at date: Date = .now) {
         timers.removeAll { $0.id == id }
-        touch()
+        touch(at: date)
     }
 
-    private mutating func touch() {
-        updatedAt = .now
+    private mutating func touch(at date: Date = .now) {
+        updatedAt = date
     }
 }

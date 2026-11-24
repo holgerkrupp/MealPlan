@@ -1,6 +1,5 @@
 import Foundation
 import Observation
-import UserNotifications
 #if canImport(ActivityKit) && os(iOS)
 import ActivityKit
 #endif
@@ -18,22 +17,57 @@ final class CookingSessionStore {
     static let shared = CookingSessionStore()
 
     private(set) var session: CookingSessionState?
+    private(set) var timerDeliveryStatuses: [UUID: CookingTimerDeliveryStatus] = [:]
 
     private let defaults: UserDefaults
+    private let clock: any CookingTimerClock
+    private let scheduler: any CookingTimerScheduling
     private let storageKey = "CookingSession.active.v1"
+    private var schedulingTask: Task<Void, Never>?
 
-    init(defaults: UserDefaults = UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard) {
+    init(
+        defaults: UserDefaults = UserDefaults(suiteName: SharedStore.appGroupID) ?? .standard,
+        clock: any CookingTimerClock = SystemCookingTimerClock(),
+        scheduler: (any CookingTimerScheduling)? = nil
+    ) {
         self.defaults = defaults
+        self.clock = clock
+        self.scheduler = scheduler ?? CookingTimerSchedulerFactory.make(defaults: defaults)
         if let data = defaults.data(forKey: storageKey),
            let decoded = try? JSONDecoder().decode(CookingSessionState.self, from: data) {
             session = decoded
+            reconcileTimers()
         }
     }
 
     var hasInterruptedSession: Bool { session != nil }
 
+    var alertPreference: CookingTimerAlertPreference {
+        get {
+            guard let rawValue = defaults.string(forKey: CookingTimerSchedulingKeys.alertPreference),
+                  let preference = CookingTimerAlertPreference(rawValue: rawValue) else {
+                return .localNotifications
+            }
+            return preference
+        }
+        set {
+            defaults.set(newValue.rawValue, forKey: CookingTimerSchedulingKeys.alertPreference)
+            reconcileTimers()
+        }
+    }
+
+    func timerAlertAuthorizationStatus() async -> CookingTimerAlertAuthorization {
+        await scheduler.authorizationStatus()
+    }
+
     func begin(with dish: Dish, servings: Int) {
-        session = CookingSessionState(dishID: dish.uuid, dishName: dish.name, servings: servings)
+        session = CookingSessionState(
+            dishID: dish.uuid,
+            dishName: dish.name,
+            servings: servings,
+            now: clock.now
+        )
+        timerDeliveryStatuses = [:]
         saveAndRefreshActivity()
     }
 
@@ -42,30 +76,31 @@ final class CookingSessionStore {
             begin(with: dish, servings: servings)
             return
         }
-        session?.addDish(id: dish.uuid, name: dish.name, servings: servings)
+        session?.addDish(id: dish.uuid, name: dish.name, servings: servings, at: clock.now)
         saveAndRefreshActivity()
     }
 
     func select(_ dishID: UUID) {
-        session?.selectDish(dishID)
+        session?.selectDish(dishID, at: clock.now)
         saveAndRefreshActivity()
     }
 
     func setServings(_ servings: Int, for dishID: UUID) {
-        session?.setServings(servings, for: dishID)
+        session?.setServings(servings, for: dishID, at: clock.now)
         saveAndRefreshActivity()
     }
 
     func setCurrentStep(_ step: Int, for dishID: UUID, stepCount: Int) {
-        session?.setCurrentStep(step, for: dishID, stepCount: stepCount)
+        session?.setCurrentStep(step, for: dishID, stepCount: stepCount, at: clock.now)
         saveAndRefreshActivity()
     }
 
     func toggleIngredient(_ ingredientIndex: Int, for dishID: UUID) {
-        session?.toggleIngredient(ingredientIndex, for: dishID)
+        session?.toggleIngredient(ingredientIndex, for: dishID, at: clock.now)
         saveAndRefreshActivity()
     }
 
+    @discardableResult
     func startTimer(
         dishID: UUID,
         dishName: String,
@@ -73,7 +108,9 @@ final class CookingSessionStore {
         stepText: String,
         label: String,
         duration: TimeInterval
-    ) {
+    ) -> UUID? {
+        guard session != nil else { return nil }
+        let now = clock.now
         let timer = CookingTimerState(
             dishID: dishID,
             dishName: dishName,
@@ -81,28 +118,29 @@ final class CookingSessionStore {
             stepText: stepText,
             label: label,
             duration: duration,
-            endDate: .now.addingTimeInterval(duration)
+            endDate: now.addingTimeInterval(max(0.1, duration))
         )
-        session?.addTimer(timer)
+        session?.addTimer(timer, at: now)
         saveAndRefreshActivity()
-        Task { await CookingTimerNotifier.schedule(timer) }
+        schedule(timer)
+        return timer.id
     }
 
     func pauseOrResumeTimer(_ id: UUID, at date: Date) {
         guard let timer = session?.pauseOrResumeTimer(id, at: date) else { return }
         saveAndRefreshActivity()
         if let remaining = timer.pausedRemaining {
-            CookingTimerNotifier.cancel(id)
-            _ = remaining
+            scheduleCancellation(for: id)
         } else {
-            Task { await CookingTimerNotifier.schedule(timer, after: timer.remaining(at: date)) }
+            schedule(timer)
         }
     }
 
     func cancelTimer(_ id: UUID) {
-        session?.removeTimer(id)
+        session?.removeTimer(id, at: clock.now)
+        timerDeliveryStatuses.removeValue(forKey: id)
         saveAndRefreshActivity()
-        CookingTimerNotifier.cancel(id)
+        scheduleCancellation(for: id)
     }
 
     /// Finishing is the only action that discards progress. Merely dismissing
@@ -110,9 +148,23 @@ final class CookingSessionStore {
     func finish() {
         let timerIDs = session?.timers.map(\.id) ?? []
         session = nil
+        timerDeliveryStatuses = [:]
         defaults.removeObject(forKey: storageKey)
-        CookingTimerNotifier.cancel(timerIDs)
+        scheduleCancellation(for: timerIDs)
         Task { await CookingLiveActivityManager.endAll() }
+    }
+
+    /// Reconcile persisted domain timers with platform alerts after relaunch,
+    /// foregrounding, or a scheduling permission change. This never mutates
+    /// the canonical timer state.
+    func reconcileTimers() {
+        guard let session else { return }
+        let timers = session.timers
+        let date = clock.now
+        enqueueScheduling { [weak self] scheduler in
+            let statuses = await scheduler.reconcile(timers, at: date)
+            await MainActor.run { self?.timerDeliveryStatuses = statuses }
+        }
     }
 
     private func saveAndRefreshActivity() {
@@ -122,38 +174,37 @@ final class CookingSessionStore {
         let session = session
         Task { await CookingLiveActivityManager.refresh(with: session) }
     }
-}
 
-enum CookingTimerNotifier {
-    static func schedule(_ timer: CookingTimerState, after interval: TimeInterval? = nil) async {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.notificationSettings()
-        if settings.authorizationStatus == .notDetermined {
-            _ = try? await center.requestAuthorization(options: [.alert, .sound])
+    private func schedule(_ timer: CookingTimerState) {
+        let date = clock.now
+        enqueueScheduling { [weak self] scheduler in
+            let status = await scheduler.schedule(timer, at: date)
+            await MainActor.run { self?.timerDeliveryStatuses[timer.id] = status }
         }
-        let content = UNMutableNotificationContent()
-        content.title = String(localized: "Cooking timer finished")
-        content.body = "\(timer.contextLabel): \(timer.label)"
-        content.sound = .default
-        let trigger = UNTimeIntervalNotificationTrigger(
-            timeInterval: max(1, interval ?? timer.duration), repeats: false
-        )
-        try? await center.add(UNNotificationRequest(
-            identifier: identifier(timer.id), content: content, trigger: trigger
-        ))
     }
 
-    static func cancel(_ id: UUID) {
-        cancel([id])
+    private func scheduleCancellation(for id: UUID) {
+        scheduleCancellation(for: [id])
     }
 
-    static func cancel(_ ids: [UUID]) {
-        UNUserNotificationCenter.current().removePendingNotificationRequests(
-            withIdentifiers: ids.map(identifier)
-        )
+    private func scheduleCancellation(for ids: [UUID]) {
+        guard !ids.isEmpty else { return }
+        enqueueScheduling { scheduler in await scheduler.cancel(ids) }
     }
 
-    private static func identifier(_ id: UUID) -> String { "cooking-timer-\(id.uuidString)" }
+    /// Platform scheduling is asynchronous, but user actions are synchronous
+    /// MainActor mutations. Serializing adapter calls prevents a fast
+    /// start/pause/cancel sequence from allowing an older schedule to win.
+    private func enqueueScheduling(
+        _ operation: @escaping @Sendable (any CookingTimerScheduling) async -> Void
+    ) {
+        let previous = schedulingTask
+        let scheduler = scheduler
+        schedulingTask = Task {
+            _ = await previous?.value
+            await operation(scheduler)
+        }
+    }
 }
 
 @MainActor
