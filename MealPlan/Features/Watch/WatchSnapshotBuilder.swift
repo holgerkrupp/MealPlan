@@ -168,10 +168,12 @@ enum WatchSnapshotBuilder {
             sortBy: [SortDescriptor(\.sortIndex)]
         )
         guard let items = try? context.fetch(descriptor) else { return [] }
+        let generatedID = (try? context.fetch(FetchDescriptor<Household>()).first).map { ShoppingList.generatedID(for: $0.uuid) }
+        let generatedItems = items.filter { $0.list?.uuid == generatedID || $0.list == nil }
         // Ordered — and cut — by `ShoppingListGrouping`, the same call the
         // app's list, the printed list and the widget make, so a truncated
         // list still reads as the start of one walk through the shop.
-        let ordered = ShoppingListGrouping.aisles(items).flatMap(\.items)
+        let ordered = ShoppingListGrouping.aisles(generatedItems).flatMap(\.items)
         return ordered.prefix(limit).map {
             WatchShoppingItem(
                 id: $0.uuid,

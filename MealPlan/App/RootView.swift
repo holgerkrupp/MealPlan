@@ -347,6 +347,7 @@ struct RootView: View {
             // rather than calling it outright: bootstrap re-fetches
             // "the first household", which could pick a different local
             // one if this device had already seeded its own.
+            ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
             MealType.ensure(for: household, context: context)
             CookedLogMaintenance.run(for: household, context: context)
             MealRoutineScheduler.apply(

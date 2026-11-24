@@ -132,6 +132,7 @@ enum HouseholdRecordApplier {
             }
         case .routine: try touch(MealRoutine.self, identity.uuid, date, context)
         case .cookedLog, .cookedLogImage: try touch(CookedLog.self, identity.uuid, date, context)
+        case .shoppingList: try touch(ShoppingList.self, identity.uuid, date, context)
         case .shoppingItem:
             if let model = try find(ShoppingListItem.self, identity.uuid, context) {
                 if changedGroups.contains("content") { model.contentModifiedAt = date }
@@ -404,6 +405,16 @@ enum HouseholdRecordApplier {
             if let assetData { log.photoData = assetData }
             log.modifiedAt = max(log.modifiedAt, modifiedAt)
 
+        case .shoppingList(let value):
+            let model = try find(ShoppingList.self, identity.uuid, context)
+                ?? insert(ShoppingList(name: value.name, isGenerated: value.isGenerated), identity.uuid, context)
+            model.name = value.name
+            model.isGenerated = value.isGenerated
+            model.sortIndex = value.sortIndex
+            model.dateCreated = value.dateCreated
+            model.modifiedAt = modifiedAt
+            model.household = household
+
         case .shoppingItem(let wrapped):
             let value = wrapped.value
             let model = try find(ShoppingListItem.self, identity.uuid, context) ?? insert(ShoppingListItem(), identity.uuid, context)
@@ -426,6 +437,8 @@ enum HouseholdRecordApplier {
             model.sourceDishNames = value.sourceDishNames
             model.dateCreated = value.dateCreated
             model.ingredient = try findOptional(Ingredient.self, wrapped.ingredientID, context)
+            model.list = try findOptional(ShoppingList.self, wrapped.listID, context)
+                ?? ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
             model.contentModifiedAt = wrapped.contentModifiedAt
             model.checkStateModifiedAt = wrapped.checkStateModifiedAt
             model.modifiedAt = modifiedAt
@@ -521,6 +534,7 @@ enum HouseholdRecordApplier {
         case .cookedLog: try delete(CookedLog.self, uuid, context)
         case .cookedLogImage:
             if let log = try find(CookedLog.self, uuid, context) { log.photoData = nil }
+        case .shoppingList: try delete(ShoppingList.self, uuid, context)
         case .shoppingItem: try delete(ShoppingListItem.self, uuid, context)
         case .weekTemplate: try delete(WeekTemplate.self, uuid, context)
         case .weekTemplateEntry: try delete(WeekTemplateEntry.self, uuid, context)
@@ -598,6 +612,8 @@ enum HouseholdRecordApplier {
             return try first(CookedLog.self, predicate: #Predicate<CookedLog> { $0.uuid == uuid })
         case is ShoppingListItem.Type:
             return try first(ShoppingListItem.self, predicate: #Predicate<ShoppingListItem> { $0.uuid == uuid })
+        case is ShoppingList.Type:
+            return try first(ShoppingList.self, predicate: #Predicate<ShoppingList> { $0.uuid == uuid })
         case is WeekTemplate.Type:
             return try first(WeekTemplate.self, predicate: #Predicate<WeekTemplate> { $0.uuid == uuid })
         case is WeekTemplateEntry.Type:

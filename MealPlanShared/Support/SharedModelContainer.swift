@@ -30,6 +30,7 @@ enum SharedStore {
             MealPlanEntry.self,
             MealRoutine.self,
             CookedLog.self,
+            ShoppingList.self,
             ShoppingListItem.self,
             WeekTemplate.self,
             WeekTemplateEntry.self,

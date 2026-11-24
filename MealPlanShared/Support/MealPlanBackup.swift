@@ -45,6 +45,7 @@ struct MealPlanBackup: Codable, Sendable {
     var entries: [PortableEntry] = []
     var routines: [PortableRoutine] = []
     var cookedLogs: [PortableCookedLog] = []
+    var shoppingLists: [PortableShoppingList]? = nil
     var shoppingItems: [PortableShoppingItem] = []
     var weekTemplates: [PortableWeekTemplate] = []
     /// Optional so backups from before recipe discovery still decode. Article
@@ -328,11 +329,22 @@ struct MealPlanBackup: Codable, Sendable {
         var sourceDishNames: [String]
         var dateCreated: Date
         var ingredientKey: String?
+        /// The owning list. Missing in older backups, where the row belongs
+        /// to the generated plan list.
+        var listID: UUID? = nil
         /// The merged line's other amounts and how many of its recipe lines
         /// gave none. Optional so files written before shopping lines were
         /// merged still decode.
         var additionalAmountsRaw: [String]? = nil
         var unmeasuredCount: Int? = nil
+    }
+
+    struct PortableShoppingList: Codable, Sendable {
+        var uuid: UUID
+        var name: String
+        var isGenerated: Bool
+        var sortIndex: Int
+        var dateCreated: Date
     }
 
     struct PortableWeekTemplate: Codable, Sendable {
@@ -483,6 +495,7 @@ extension MealPlanBackup {
         var entries: [MealPlanEntry] = []
         var routines: [MealRoutine] = []
         var cookedLogs: [CookedLog] = []
+        var shoppingLists: [ShoppingList] = []
         var shoppingItems: [ShoppingListItem] = []
         var weekTemplates: [WeekTemplate] = []
         var recipeFeeds: [RecipeFeed] = []
@@ -512,6 +525,7 @@ extension MealPlanBackup {
             entries = try context.fetch(FetchDescriptor<MealPlanEntry>())
             routines = try context.fetch(FetchDescriptor<MealRoutine>())
             cookedLogs = try context.fetch(FetchDescriptor<CookedLog>())
+            shoppingLists = try context.fetch(FetchDescriptor<ShoppingList>())
             shoppingItems = try context.fetch(FetchDescriptor<ShoppingListItem>())
             weekTemplates = try context.fetch(FetchDescriptor<WeekTemplate>())
             recipeFeeds = try context.fetch(FetchDescriptor<RecipeFeed>())
@@ -832,6 +846,15 @@ extension MealPlanBackup {
             )
         }
 
+        backup.shoppingLists = rows.shoppingLists.map { list in
+            PortableShoppingList(
+                uuid: list.uuid,
+                name: list.name,
+                isGenerated: list.isGenerated,
+                sortIndex: list.sortIndex,
+                dateCreated: list.dateCreated
+            )
+        }
         backup.shoppingItems = rows.shoppingItems.map { item in
             PortableShoppingItem(
                 uuid: item.uuid,
@@ -852,6 +875,7 @@ extension MealPlanBackup {
                 sourceDishNames: item.sourceDishNames,
                 dateCreated: item.dateCreated,
                 ingredientKey: key(for: item.ingredient),
+                listID: item.list?.uuid,
                 additionalAmountsRaw: item.additionalAmountsRaw,
                 unmeasuredCount: item.unmeasuredCount
             )

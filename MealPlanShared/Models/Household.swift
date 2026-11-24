@@ -96,6 +96,9 @@ final class Household {
     @Relationship(deleteRule: .cascade, inverse: \ShoppingListItem.household)
     var shoppingItems: [ShoppingListItem]? = []
 
+    @Relationship(deleteRule: .cascade, inverse: \ShoppingList.household)
+    var shoppingLists: [ShoppingList]? = []
+
     @Relationship(deleteRule: .cascade, inverse: \CookedLog.household)
     var cookedLogs: [CookedLog]? = []
 

@@ -54,6 +54,9 @@ extension CookedLog: HouseholdSyncModel {
 extension ShoppingListItem: HouseholdSyncModel {
     static func uuidPredicate(_ uuid: UUID) -> Predicate<ShoppingListItem> { #Predicate { $0.uuid == uuid } }
 }
+extension ShoppingList: HouseholdSyncModel {
+    static func uuidPredicate(_ uuid: UUID) -> Predicate<ShoppingList> { #Predicate { $0.uuid == uuid } }
+}
 extension WeekTemplate: HouseholdSyncModel {
     static func uuidPredicate(_ uuid: UUID) -> Predicate<WeekTemplate> { #Predicate { $0.uuid == uuid } }
 }
@@ -85,6 +88,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
     case routine = "MPMealRoutine"
     case cookedLog = "MPCookedLog"
     case cookedLogImage = "MPCookedLogImage"
+    case shoppingList = "MPShoppingList"
     case shoppingItem = "MPShoppingListItem"
     case weekTemplate = "MPWeekTemplate"
     case weekTemplateEntry = "MPWeekTemplateEntry"
@@ -97,7 +101,7 @@ enum HouseholdRecordType: String, CaseIterable, Codable, Sendable {
         switch self {
         case .household: 0
         case .member, .mealType, .ingredient, .ingredientAlias, .packageSize, .ingredientMatchRule, .dish, .weekTemplate, .recipeFeed, .recipeBookmark: 1
-        case .dishIngredient, .planEntry, .routine, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
+        case .dishIngredient, .planEntry, .routine, .shoppingList, .shoppingItem, .weekTemplateEntry, .recipeFeedItem, .cookedLog: 2
         case .dishImage, .cookedLogImage: 3
         case .deletionMarker: 4
         }
@@ -235,8 +239,16 @@ struct PlanEntryPayload: Codable, Sendable {
 struct ShoppingItemPayload: Codable, Sendable {
     var value: MealPlanBackup.PortableShoppingItem
     var ingredientID: UUID?
+    var listID: UUID? = nil
     var contentModifiedAt: Date
     var checkStateModifiedAt: Date
+}
+
+struct ShoppingListPayload: Codable, Sendable {
+    var name: String
+    var isGenerated: Bool
+    var sortIndex: Int
+    var dateCreated: Date
 }
 
 struct WeekTemplateEntryPayload: Codable, Sendable {
@@ -278,6 +290,7 @@ enum HouseholdRecordPayload: Codable, Sendable {
     case routine(MealPlanBackup.PortableRoutine)
     case cookedLog(MealPlanBackup.PortableCookedLog)
     case cookedLogImage(CookedLogImagePayload)
+    case shoppingList(ShoppingListPayload)
     case shoppingItem(ShoppingItemPayload)
     case weekTemplate(MealPlanBackup.PortableWeekTemplate)
     case weekTemplateEntry(WeekTemplateEntryPayload)
@@ -494,6 +507,14 @@ enum HouseholdRecordCodec {
                 try append(.init(type: .cookedLogImage, uuid: log.uuid), log.modifiedAt, .cookedLogImage(.init(cookedLogID: log.uuid)), asset: photo)
             }
         }
+        for list in household.shoppingLists ?? [] {
+            try append(.init(type: .shoppingList, uuid: list.uuid), list.modifiedAt, .shoppingList(.init(
+                name: list.name,
+                isGenerated: list.isGenerated,
+                sortIndex: list.sortIndex,
+                dateCreated: list.dateCreated
+            )))
+        }
         for item in household.shoppingItems ?? [] {
             let value = portableShoppingItem(item)
             var contentValue = value
@@ -501,7 +522,7 @@ enum HouseholdRecordCodec {
             let content = try hash(encode(["value": try hash(encode(contentValue)), "ingredient": item.ingredient?.uuid.uuidString ?? ""]))
             let check = item.isChecked ? "1" : "0"
             try append(.init(type: .shoppingItem, uuid: item.uuid), item.modifiedAt, .shoppingItem(.init(
-                value: value, ingredientID: item.ingredient?.uuid,
+                value: value, ingredientID: item.ingredient?.uuid, listID: item.list?.uuid,
                 contentModifiedAt: item.contentModifiedAt, checkStateModifiedAt: item.checkStateModifiedAt
             )), groups: ["content": content, "check": check])
         }
@@ -744,7 +765,7 @@ enum HouseholdRecordCodec {
             displayUnit: item.displayUnit, isChecked: item.isChecked, isManual: item.isManual,
             isApproximate: item.isApproximate, sortIndex: item.sortIndex, rangeStart: item.rangeStart,
             rangeEnd: item.rangeEnd, sourceDishNames: item.sourceDishNames, dateCreated: item.dateCreated,
-            ingredientKey: item.ingredient?.normalizedName, additionalAmountsRaw: item.additionalAmountsRaw,
+            ingredientKey: item.ingredient?.normalizedName, listID: item.list?.uuid, additionalAmountsRaw: item.additionalAmountsRaw,
             unmeasuredCount: item.unmeasuredCount
         )
     }
@@ -837,6 +858,7 @@ actor HouseholdSnapshotActor {
         touchModels(household.mealRoutines ?? [], type: .routine)
         touchModels(household.cookedLogs ?? [], type: .cookedLog)
         touchModels(household.cookedLogs ?? [], type: .cookedLogImage)
+        touchModels(household.shoppingLists ?? [], type: .shoppingList)
         touchModels(household.weekTemplates ?? [], type: .weekTemplate)
         touchModels((household.weekTemplates ?? []).flatMap { $0.entries ?? [] }, type: .weekTemplateEntry)
         touchModels(household.recipeFeeds ?? [], type: .recipeFeed)

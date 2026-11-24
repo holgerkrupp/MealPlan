@@ -155,6 +155,7 @@ enum HouseholdRecordConflictResolver {
         return ShoppingItemPayload(
             value: value,
             ingredientID: content.ingredientID,
+            listID: content.listID,
             contentModifiedAt: max(lhs.contentModifiedAt, rhs.contentModifiedAt),
             checkStateModifiedAt: max(lhs.checkStateModifiedAt, rhs.checkStateModifiedAt)
         )

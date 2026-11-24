@@ -17,6 +17,7 @@ enum MealPlanPrintBuilder {
         energyUnit: EnergyUnit,
         showsNutritionEstimates: Bool,
         context: ModelContext,
+        shoppingListID: UUID? = nil,
         now: Date = .now
     ) -> MealPlanPrintDocument {
         let start = range.start.startOfDay
@@ -25,7 +26,10 @@ enum MealPlanPrintBuilder {
             ? (try? context.fetch(FetchDescriptor<MealPlanEntry>(
                 predicate: #Predicate { $0.date >= start && $0.date < end && $0.skipped == false },
                 sortBy: [SortDescriptor(\.date), SortDescriptor(\.sortIndex)]
-            ))) ?? []
+            )))?.filter { item in
+                guard let shoppingListID else { return true }
+                return item.list?.uuid == shoppingListID
+            } ?? []
             : []
 
         let mealTypes = (try? context.fetch(FetchDescriptor<MealType>(

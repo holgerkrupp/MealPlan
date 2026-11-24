@@ -19,6 +19,7 @@ enum ManagedHouseholdEntity: String, CaseIterable, Sendable {
     case mealPlanEntry = "MealPlanEntry"
     case mealRoutine = "MealRoutine"
     case cookedLog = "CookedLog"
+    case shoppingList = "ShoppingList"
     case shoppingListItem = "ShoppingListItem"
     case weekTemplate = "WeekTemplate"
     case weekTemplateEntry = "WeekTemplateEntry"
@@ -386,6 +387,8 @@ private enum ManagedHouseholdModel {
             attributes(.uuid, .modifiedAt, .string("mealKey"), .integer("weekday"), .integer("intervalWeeks"), .date("startDate"), .bool("isActive"), .date("plannedThrough", optional: true), .date("dateCreated"))
         case .cookedLog:
             attributes(.uuid, .modifiedAt, .date("date"), .string("dishName", optional: true), .integer("servings", optional: true), .binary("photoData", external: true))
+        case .shoppingList:
+            attributes(.uuid, .modifiedAt, .string("name"), .bool("isGenerated"), .integer("sortIndex"), .date("dateCreated"))
         case .shoppingListItem:
             attributes(.uuid, .modifiedAt, .date("contentModifiedAt"), .date("checkStateModifiedAt"), .string("name"), .string("normalizedName"), .string("categoryRaw"), .string("customAisleName", optional: true), .double("canonicalValue", optional: true), .string("canonicalDimensionRaw", optional: true), .binary("additionalAmountsRaw"), .integer("unmeasuredCount"), .string("displayText", optional: true), .string("displayUnit", optional: true), .bool("isChecked"), .bool("isManual"), .bool("isApproximate"), .integer("sortIndex"), .date("rangeStart", optional: true), .date("rangeEnd", optional: true), .binary("sourceDishNames"), .date("dateCreated"))
         case .weekTemplate:
@@ -411,6 +414,7 @@ private enum ManagedHouseholdModel {
         link(.household, "matchRules", .ingredientMatchRule, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "entries", .mealPlanEntry, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "shoppingItems", .shoppingListItem, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
+        link(.household, "shoppingLists", .shoppingList, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "cookedLogs", .cookedLog, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "weekTemplates", .weekTemplate, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.household, "mealRoutines", .mealRoutine, "household", deleteRule: .cascadeDeleteRule, entities: &entities)
@@ -430,6 +434,7 @@ private enum ManagedHouseholdModel {
         link(.ingredient, "aliases", .ingredientAlias, "ingredient", deleteRule: .cascadeDeleteRule, entities: &entities)
         link(.ingredient, "dishIngredients", .dishIngredient, "ingredient", deleteRule: .nullifyDeleteRule, entities: &entities)
         link(.ingredient, "shoppingItems", .shoppingListItem, "ingredient", deleteRule: .nullifyDeleteRule, entities: &entities)
+        link(.shoppingList, "items", .shoppingListItem, "list", deleteRule: .cascadeDeleteRule, entities: &entities)
 
         link(.mealPlanEntry, "cookedLog", .cookedLog, "entry", deleteRule: .cascadeDeleteRule, entities: &entities, toMany: false)
         link(.weekTemplate, "entries", .weekTemplateEntry, "template", deleteRule: .cascadeDeleteRule, entities: &entities)

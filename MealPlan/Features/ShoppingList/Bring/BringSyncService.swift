@@ -155,7 +155,7 @@ final class BringSyncService {
         isSyncing = true
         defer { isSyncing = false }
 
-        let local = localItems(of: household)
+        let local = localItems(of: household, context: context)
         let remote = try await client.purchases(in: listUUID).map {
             BringSyncItem(name: $0.itemId, specification: $0.specification ?? "")
         }
@@ -176,14 +176,16 @@ final class BringSyncService {
 
     /// What is still to buy, as Bring! would see it. Ticked-off lines are
     /// bought, so as far as a sync is concerned they are already gone.
-    private func localItems(of household: Household) -> [BringSyncItem] {
-        (household.shoppingItems ?? [])
+    private func localItems(of household: Household, context: ModelContext) -> [BringSyncItem] {
+        let generated = ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
+        return (generated.items ?? [])
             .filter { !$0.isChecked }
             .map { BringSyncItem(name: $0.name, specification: $0.displayText ?? "") }
     }
 
     private func apply(_ plan: BringSyncPlan, to household: Household, context: ModelContext) {
-        let items = household.shoppingItems ?? []
+        let generated = ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
+        let items = generated.items ?? []
 
         for gone in plan.checkOffLocally {
             for item in items where IngredientMatching.key(for: item.name) == gone.key && !item.isChecked {
@@ -202,6 +204,7 @@ final class BringSyncService {
                 isManual: true
             )
             item.household = household
+            item.list = generated
             item.ingredient = ingredient
             item.customAisleName = ingredient?.customAisleName
             item.displayText = new.specification.isEmpty ? nil : new.specification

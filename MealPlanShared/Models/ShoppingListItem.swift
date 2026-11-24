@@ -1,6 +1,37 @@
 import Foundation
 import SwiftData
 
+/// A household shopping list. The generated list is the durable home for
+/// groceries derived from the meal plan; named lists are independent and are
+/// never touched by a plan rebuild.
+@Model
+final class ShoppingList {
+    var uuid: UUID = UUID()
+    var modifiedAt: Date = Date.now
+    var name: String = ""
+    var isGenerated: Bool = false
+    var sortIndex: Int = 0
+    var dateCreated: Date = Date.now
+    @Relationship(deleteRule: .cascade, inverse: \ShoppingListItem.list)
+    var items: [ShoppingListItem]? = []
+
+    var household: Household?
+
+    init(name: String, isGenerated: Bool = false, uuid: UUID = UUID(), sortIndex: Int = 0) {
+        self.uuid = uuid
+        self.name = name
+        self.isGenerated = isGenerated
+        self.sortIndex = sortIndex
+        self.dateCreated = .now
+    }
+
+    /// A household's plan-derived list must have the same identity on every
+    /// device before CloudKit has exchanged the first new-list record.
+    static func generatedID(for householdID: UUID) -> UUID { householdID }
+
+    static let generatedName = String(localized: "Plan groceries")
+}
+
 /// One line on the shopping list. Generated lines are rebuilt from the plan
 /// each time the list is regenerated; manual lines are kept untouched.
 @Model
@@ -46,6 +77,7 @@ final class ShoppingListItem {
 
     var ingredient: Ingredient?
     var household: Household?
+    var list: ShoppingList?
 
     init(
         name: String = "",

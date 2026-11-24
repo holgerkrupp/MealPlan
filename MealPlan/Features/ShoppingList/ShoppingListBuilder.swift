@@ -262,6 +262,7 @@ enum ShoppingListBuilder {
         context: ModelContext
     ) {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { return }
+        let generatedList = ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
         let start = range.start
         let end = range.end
         let predicate = #Predicate<MealPlanEntry> { $0.date >= start && $0.date < end && $0.skipped == false }
@@ -281,7 +282,7 @@ enum ShoppingListBuilder {
                 return subtractingInventory(line, ingredient: ingredient)
             }
 
-        let existing = household.shoppingItems ?? []
+        let existing = generatedList.items ?? []
         let catalogue = household.ingredients ?? []
 
         withoutUndoRegistration(in: context) {
@@ -305,6 +306,7 @@ enum ShoppingListBuilder {
                 } else {
                     item = ShoppingListItem(name: line.name, category: line.category)
                     item.household = household
+                    item.list = generatedList
                     context.insert(item)
                 }
 
@@ -415,9 +417,12 @@ enum ShoppingListBuilder {
         household: Household,
         system: UnitSystem,
         roundsAmounts: Bool = true,
+        list: ShoppingList? = nil,
         context: ModelContext
     ) -> ShoppingListItem? {
         guard HouseholdMutationAuthorization.canMutate(household: household) else { return nil }
+        let destination = list ?? ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
+        guard destination.household?.uuid == household.uuid else { return nil }
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return nil }
 
@@ -428,6 +433,7 @@ enum ShoppingListBuilder {
 
         let item = ShoppingListItem(name: name, category: ingredient?.category ?? .other, isManual: true)
         item.household = household
+        item.list = destination
         item.ingredient = ingredient
         item.customAisleName = ingredient?.customAisleName
         if let quantity = parsed.quantity {
@@ -462,10 +468,13 @@ enum ShoppingListBuilder {
     static func addManualItem(
         for ingredient: Ingredient,
         household: Household,
+        list: ShoppingList? = nil,
         context: ModelContext
     ) -> ShoppingListItem {
+        let destination = list ?? ShoppingListStoreMigration.ensureGeneratedList(for: household, context: context)
         let item = ShoppingListItem(name: ingredient.name, category: ingredient.category, isManual: true)
         item.household = household
+        item.list = destination
         item.ingredient = ingredient
         item.customAisleName = ingredient.customAisleName
         item.sortIndex = ingredient.category.sortOrder * 1000 + 999

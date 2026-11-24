@@ -16,6 +16,7 @@ struct PrintPlanSheet: View {
     /// What to print when the sheet opens, overriding what was printed last
     /// time. Set by the Shopping screen, whose Print… means the list.
     var initialContent: PrintContent?
+    var shoppingListID: UUID? = nil
 
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
@@ -129,6 +130,7 @@ struct PrintPlanSheet: View {
             settings.orientation.rawValue,
             "\(nutrition.perMeal)\(nutrition.perDay)\(nutrition.summary)\(nutrition.macros)",
             "\(settings.showsNotes)\(settings.showsEmptyMeals)\(settings.fitsOnOnePage)",
+            shoppingListID?.uuidString ?? "",
         ].joined(separator: "|")
     }
 
@@ -274,7 +276,8 @@ struct PrintPlanSheet: View {
             householdName: appState.currentHousehold?.name ?? "MealPlan",
             energyUnit: appState.energyUnit,
             showsNutritionEstimates: appState.showsNutritionEstimates,
-            context: context
+            context: context,
+            shoppingListID: shoppingListID
         )
     }
 

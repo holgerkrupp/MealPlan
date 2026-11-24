@@ -39,12 +39,15 @@ struct ShoppingListRowGroup: Identifiable {
 @MainActor
 struct ShoppingListRow: View {
     let snapshot: ShoppingListRowSnapshot
+    var otherLists: [ShoppingList] = []
     var onToggle: () -> Void
     var onCategoryChange: (IngredientCategory) -> Void
     var onCustomAisle: () -> Void
     /// Make this line's ingredient a household staple, or stop it being one.
     var onSetStaple: (Bool) -> Void
     var onMarkOwned: () -> Void
+    var onMoveTo: (ShoppingList) -> Void = { _ in }
+    var onCopyTo: (ShoppingList) -> Void = { _ in }
 
     private var isStaple: Bool { snapshot.isStaple }
 
@@ -123,6 +126,19 @@ struct ShoppingListRow: View {
                         onSetStaple(true)
                     } label: {
                         Label(String(localized: "Usually have this"), systemImage: "shippingbox")
+                    }
+                }
+                if !otherLists.isEmpty {
+                    Divider()
+                    Menu(String(localized: "Move to list")) {
+                        ForEach(otherLists) { list in
+                            Button(list.name) { onMoveTo(list) }
+                        }
+                    }
+                    Menu(String(localized: "Copy to list")) {
+                        ForEach(otherLists) { list in
+                            Button(list.name) { onCopyTo(list) }
+                        }
                     }
                 }
             } label: {

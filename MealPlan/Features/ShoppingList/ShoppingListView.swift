@@ -16,7 +16,8 @@ struct ShoppingListView: View {
 private struct ShoppingListContentView: View {
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
-    @Query private var items: [ShoppingListItem]
+    @Query private var storedItems: [ShoppingListItem]
+    @Query private var lists: [ShoppingList]
     @Query private var pantryIngredients: [Ingredient]
 
     let householdID: UUID?
@@ -33,17 +34,30 @@ private struct ShoppingListContentView: View {
     @State private var showingPrint = false
     @State private var customAisleItemID: UUID?
     @State private var customAisleName = ""
+    @State private var listNameDraft = ""
+    @State private var listNameAction: ListNameAction?
+    @State private var confirmingDeleteList = false
     @AppStorage("shoppingList.hideCheckedItems") private var hideCheckedItems = false
     /// Lets the menu bar's "New Shopping Item" drop the caret straight into
     /// the add field.
     @FocusState private var addItemFocused: Bool
 
+    private enum ListNameAction {
+        case create
+        case rename
+        case duplicate
+    }
+
     init(householdID: UUID?) {
         self.householdID = householdID
         let scopedHouseholdID = householdID ?? UUID()
-        _items = Query(FetchDescriptor<ShoppingListItem>(
+        _storedItems = Query(FetchDescriptor<ShoppingListItem>(
             predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
             sortBy: [SortDescriptor(\ShoppingListItem.sortIndex)]
+        ))
+        _lists = Query(FetchDescriptor<ShoppingList>(
+            predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
+            sortBy: [SortDescriptor(\ShoppingList.sortIndex), SortDescriptor(\ShoppingList.name)]
         ))
         _pantryIngredients = Query(FetchDescriptor<Ingredient>(
             predicate: #Predicate { $0.isPantryStaple && $0.household?.uuid == scopedHouseholdID },
@@ -56,6 +70,28 @@ private struct ShoppingListContentView: View {
             customStart: appState.shoppingCustomStart,
             customEnd: appState.shoppingCustomEnd
         )
+    }
+
+    private var generatedList: ShoppingList? {
+        guard let householdID else { return lists.first(where: \ShoppingList.isGenerated) }
+        return lists.first { $0.uuid == ShoppingList.generatedID(for: householdID) }
+            ?? lists.first(where: \ShoppingList.isGenerated)
+    }
+
+    private var activeList: ShoppingList? {
+        let selectedID = selectedListID ?? generatedList?.uuid
+        return lists.first { $0.uuid == selectedID } ?? generatedList
+    }
+
+    private var activeListID: UUID { activeList?.uuid ?? UUID() }
+
+    @State private var selectedListID: UUID?
+
+    private var items: [ShoppingListItem] {
+        guard let activeList else { return [] }
+        return storedItems.filter { item in
+            item.list?.uuid == activeList.uuid || (activeList.isGenerated && item.list == nil)
+        }
     }
 
     private var visibleItems: [ShoppingListItem] {
@@ -108,6 +144,18 @@ private struct ShoppingListContentView: View {
             #endif
 
             Section {
+                Picker(String(localized: "List"), selection: Binding(
+                    get: { activeListID },
+                    set: { selectedListID = $0 }
+                )) {
+                    ForEach(lists) { list in
+                        Label(list.name, systemImage: list.isGenerated ? "calendar" : "list.bullet")
+                            .tag(list.uuid)
+                    }
+                }
+                .accessibilityHint(String(localized: "Choose which household shopping list to view and edit."))
+
+                if activeList?.isGenerated == true {
                 Picker(String(localized: "For"), selection: $appState.shoppingRange) {
                     ForEach(ShoppingRangeOption.allCases) { Text($0.localizedName).tag($0) }
                 }
@@ -119,6 +167,10 @@ private struct ShoppingListContentView: View {
                     regenerate()
                 } label: {
                     Label(String(localized: "Rebuild from plan"), systemImage: "arrow.triangle.2.circlepath")
+                }
+                } else {
+                    Label(String(localized: "This list is independent of the meal plan."), systemImage: "checklist")
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -143,11 +195,14 @@ private struct ShoppingListContentView: View {
                     ForEach(group.items) { item in
                         ShoppingListRow(
                             snapshot: item,
+                            otherLists: lists.filter { $0.uuid != activeList?.uuid },
                             onToggle: { toggle(item.id) },
                             onCategoryChange: { changeCategory(item.id, to: $0) },
                             onCustomAisle: { beginCustomAisle(for: item.id) },
                             onSetStaple: { setStaple(item.id, $0) },
-                            onMarkOwned: { markOwned(item.id) }
+                            onMarkOwned: { markOwned(item.id) },
+                            onMoveTo: { move(item.id, to: $0) },
+                            onCopyTo: { copy(item.id, to: $0) }
                         )
                     }
                     .onDelete { offsets in delete(offsets, in: group.items) }
@@ -184,10 +239,12 @@ private struct ShoppingListContentView: View {
                     }
                 }
             } footer: {
-                Text("Pantry staples never come out of the plan onto the list. Run out of one? Add it here — it stays put when the list is rebuilt.")
+                Text(activeList?.isGenerated == true
+                     ? "Pantry staples never come out of the plan onto this list. Run out of one? Add it here — it stays put when the list is rebuilt."
+                     : "This list is independent from the meal plan. Items stay here until you move, check off, or remove them.")
             }
         }
-        .navigationTitle(AppSection.shopping.title)
+        .navigationTitle(activeList?.name ?? AppSection.shopping.title)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 ShareLink(item: shareText) {
@@ -197,6 +254,29 @@ private struct ShoppingListContentView: View {
             }
             ToolbarItem(placement: .primaryAction) {
                 Menu {
+                    Button {
+                        beginListNameEdit(.create)
+                    } label: {
+                        Label(String(localized: "New shopping list…"), systemImage: "plus")
+                    }
+                    if activeList?.isGenerated == false {
+                        Button {
+                            beginListNameEdit(.rename)
+                        } label: {
+                            Label(String(localized: "Rename list…"), systemImage: "pencil")
+                        }
+                        Button {
+                            beginListNameEdit(.duplicate)
+                        } label: {
+                            Label(String(localized: "Duplicate list…"), systemImage: "plus.square.on.square")
+                        }
+                        Button(role: .destructive) {
+                            confirmingDeleteList = true
+                        } label: {
+                            Label(String(localized: "Delete list"), systemImage: "trash")
+                        }
+                    }
+                    Divider()
                     Button {
                         showingPantryStaples = true
                     } label: {
@@ -233,7 +313,7 @@ private struct ShoppingListContentView: View {
 
                     Divider()
 
-                    if isConnectedToBring {
+                    if isConnectedToBring, activeList?.isGenerated == true {
                         Button {
                             Task { await sendToBring() }
                         } label: {
@@ -273,7 +353,9 @@ private struct ShoppingListContentView: View {
         }
         .macWindowMargins()
         .focusedSceneValue(\.shoppingCommands, shoppingCommands)
-        .onChange(of: appState.shoppingRange) { _, _ in regenerate() }
+        .onChange(of: appState.shoppingRange) { _, _ in
+            if activeList?.isGenerated == true { regenerate() }
+        }
         .detailPresentation(isPresented: $showingBringSetup, route: .bringSettings) {
             NavigationStack {
                 BringSettingsView()
@@ -285,7 +367,7 @@ private struct ShoppingListContentView: View {
             }
         }
         .detailPresentation(isPresented: $showingPrint, route: .printShoppingList) {
-            PrintPlanSheet(referenceWeek: .now, initialContent: .shoppingList)
+            PrintPlanSheet(referenceWeek: .now, initialContent: .shoppingList, shoppingListID: activeList?.uuid)
                 .dismissesOnOutsideClick()
         }
         .detailPresentation(isPresented: $showingPantryStaples, route: .pantryStaples) {
@@ -344,6 +426,29 @@ private struct ShoppingListContentView: View {
         } message: {
             Text("This aisle name will be remembered for the ingredient.")
         }
+        .alert(
+            String(localized: "Shopping list"),
+            isPresented: Binding(
+                get: { listNameAction != nil },
+                set: { if !$0 { listNameAction = nil } }
+            )
+        ) {
+            TextField(String(localized: "List name"), text: $listNameDraft)
+            Button(String(localized: "Save")) { saveListName() }
+            Button(String(localized: "Cancel"), role: .cancel) { listNameAction = nil }
+        } message: {
+            Text(String(localized: "Named lists are shared with your household and are independent of the meal plan."))
+        }
+        .confirmationDialog(
+            String(localized: "Delete this shopping list?"),
+            isPresented: $confirmingDeleteList,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete list"), role: .destructive) { deleteActiveList() }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "Its items will also be removed from this household list. The plan groceries list is not affected."))
+        }
     }
 
     /// What the Shopping menu can do right now. Reminders export exists only
@@ -380,7 +485,7 @@ private struct ShoppingListContentView: View {
     // MARK: - Text for sharing
 
     private var shareText: String {
-        var lines: [String] = [String(localized: "Shopping list")]
+        var lines: [String] = [activeList?.name ?? String(localized: "Shopping list")]
         for group in groupedSnapshots {
             lines.append("")
             lines.append(group.name.uppercased())
@@ -407,6 +512,41 @@ private struct ShoppingListContentView: View {
             context: context
         )
         Task { await autoSyncWithBring() }
+    }
+
+    private func beginListNameEdit(_ action: ListNameAction) {
+        listNameAction = action
+        switch action {
+        case .create: listNameDraft = ""
+        case .rename: listNameDraft = activeList?.name ?? ""
+        case .duplicate:
+            listNameDraft = String(localized: "Copy of \(activeList?.name ?? String(localized: "Shopping list"))")
+        }
+    }
+
+    private func saveListName() {
+        guard let household = appState.currentHousehold else { return }
+        let action = listNameAction
+        listNameAction = nil
+        switch action {
+        case .create:
+            if let created = ShoppingListMutationService.createList(named: listNameDraft, household: household, context: context) {
+                selectedListID = created.uuid
+            }
+        case .rename:
+            if let activeList { _ = ShoppingListMutationService.rename(activeList, to: listNameDraft, context: context) }
+        case .duplicate:
+            if let activeList, let copy = ShoppingListMutationService.duplicate(activeList, named: listNameDraft, context: context) {
+                selectedListID = copy.uuid
+            }
+        case nil:
+            break
+        }
+    }
+
+    private func deleteActiveList() {
+        guard let activeList, ShoppingListMutationService.deleteList(activeList, context: context) else { return }
+        selectedListID = generatedList?.uuid
     }
 
     private func currentItem(_ id: UUID) -> ShoppingListItem? {
@@ -455,6 +595,7 @@ private struct ShoppingListContentView: View {
                 household: household,
                 system: appState.unitSystem,
                 roundsAmounts: appState.roundsDisplayedAmounts,
+                list: activeList,
                 context: context
             )
         }
@@ -463,7 +604,7 @@ private struct ShoppingListContentView: View {
     /// Put a staple on the list by hand — "we've run out of salt".
     private func addStaple(_ ingredient: Ingredient) {
         guard let household = appState.currentHousehold else { return }
-        ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: context)
+        ShoppingListBuilder.addManualItem(for: ingredient, household: household, list: activeList, context: context)
     }
 
     private func delete(_ offsets: IndexSet, in list: [ShoppingListRowSnapshot]) {
@@ -489,6 +630,16 @@ private struct ShoppingListContentView: View {
             ShoppingListMutationService.delete(ids: ids, context: context)
         }
         Task { await autoSyncWithBring() }
+    }
+
+    private func move(_ id: UUID, to list: ShoppingList) {
+        guard let item = currentItem(id) else { return }
+        ShoppingListMutationService.move(item, to: list, context: context)
+    }
+
+    private func copy(_ id: UUID, to list: ShoppingList) {
+        guard let item = currentItem(id) else { return }
+        _ = ShoppingListMutationService.copy(item, to: list, context: context)
     }
 
     // MARK: - Bring!

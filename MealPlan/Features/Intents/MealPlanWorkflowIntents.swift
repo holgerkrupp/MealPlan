@@ -40,9 +40,14 @@ struct ShoppingListItemEntity: AppEntity {
 struct ShoppingListItemEntityQuery: EnumerableEntityQuery, EntityStringQuery {
     @MainActor
     private func items() throws -> [ShoppingListItem] {
-        try MealPlanIntentStore.context.fetch(
-            FetchDescriptor<ShoppingListItem>(sortBy: [SortDescriptor(\.sortIndex), SortDescriptor(\.name)])
+        let household = MealPlanIntentStore.household()
+        let generated = ShoppingListStoreMigration.ensureGeneratedList(
+            for: household,
+            context: MealPlanIntentStore.context
         )
+        return (generated.items ?? []).sorted {
+            ($0.sortIndex, $0.name) < ($1.sortIndex, $1.name)
+        }
     }
 
     @MainActor
@@ -469,7 +474,12 @@ struct ClearCompletedShoppingItemsIntent: AppIntent {
     @MainActor
     func perform() async throws -> some IntentResult & ProvidesDialog {
         try MealPlanIntentResolver.requireEditingAllowed()
-        let items = try MealPlanIntentStore.context.fetch(FetchDescriptor<ShoppingListItem>())
+        let household = MealPlanIntentStore.household()
+        let generated = ShoppingListStoreMigration.ensureGeneratedList(
+            for: household,
+            context: MealPlanIntentStore.context
+        )
+        let items = generated.items ?? []
         let count = items.filter(\.isChecked).count
         ShoppingListMutationService.clearCompleted(from: items, context: MealPlanIntentStore.context)
         return .result(dialog: (count == 0 ? "There were no completed shopping items." : "Cleared \(count) completed shopping items.").intentDialog)
@@ -823,7 +833,11 @@ struct AddLowOrOutIngredientsToShoppingListIntent: AppIntent {
         try MealPlanIntentResolver.requireEditingAllowed()
         let household = try MealPlanWorkflowIntentSupport.activeHousehold()
         let candidates = (household.ingredients ?? []).filter { $0.inventoryMode == .low || $0.inventoryMode == .out }
-        let existing = Set((household.shoppingItems ?? []).map { IngredientMatching.key(for: $0.name) })
+        let generated = ShoppingListStoreMigration.ensureGeneratedList(
+            for: household,
+            context: MealPlanIntentStore.context
+        )
+        let existing = Set((generated.items ?? []).map { IngredientMatching.key(for: $0.name) })
         for ingredient in candidates where !existing.contains(IngredientMatching.key(for: ingredient.name)) {
             _ = ShoppingListBuilder.addManualItem(for: ingredient, household: household, context: MealPlanIntentStore.context)
         }

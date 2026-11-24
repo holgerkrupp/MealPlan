@@ -23,6 +23,7 @@ extension DishIngredient: LegacyMigrationModel {}
 extension MealPlanEntry: LegacyMigrationModel {}
 extension MealRoutine: LegacyMigrationModel {}
 extension CookedLog: LegacyMigrationModel {}
+extension ShoppingList: LegacyMigrationModel {}
 extension ShoppingListItem: LegacyMigrationModel {}
 extension WeekTemplate: LegacyMigrationModel {}
 extension WeekTemplateEntry: LegacyMigrationModel {}
@@ -639,11 +640,20 @@ final class SwiftDataLegacyHouseholdMigrationSource: LegacyHouseholdMigrationSou
                     "date", date(log.date), "dishName", log.dishName.map(ManagedHouseholdMigrationValue.string) as Any, "servings", log.servings.map(integer) as Any, "photoData", log.photoData.map(ManagedHouseholdMigrationValue.data) as Any
                 ), relationships: relationships("entry", log.entry?.uuid, "dish", log.dish?.uuid, "household", log.household?.uuid))
             }
+        case .shoppingList:
+            return try context.fetch(FetchDescriptor<ShoppingList>()).map { list in
+                try record(.shoppingList, list, scope: scope(for: list.household), attributes: attributes(
+                    "name", string(list.name),
+                    "isGenerated", bool(list.isGenerated),
+                    "sortIndex", integer(list.sortIndex),
+                    "dateCreated", date(list.dateCreated)
+                ), relationships: relationship("household", list.household?.uuid))
+            }
         case .shoppingListItem:
             return try context.fetch(FetchDescriptor<ShoppingListItem>()).map { item in
                 try record(.shoppingListItem, item, scope: scope(for: item.household), attributes: attributes(
                     "contentModifiedAt", date(item.contentModifiedAt), "checkStateModifiedAt", date(item.checkStateModifiedAt), "name", string(item.name), "normalizedName", string(item.normalizedName), "categoryRaw", string(item.categoryRaw), "customAisleName", item.customAisleName.map(ManagedHouseholdMigrationValue.string) as Any, "canonicalValue", item.canonicalValue.map(ManagedHouseholdMigrationValue.double) as Any, "canonicalDimensionRaw", item.canonicalDimensionRaw.map(ManagedHouseholdMigrationValue.string) as Any, "additionalAmountsRaw", try json(item.additionalAmountsRaw), "unmeasuredCount", integer(item.unmeasuredCount), "displayText", item.displayText.map(ManagedHouseholdMigrationValue.string) as Any, "displayUnit", item.displayUnit.map(ManagedHouseholdMigrationValue.string) as Any, "isChecked", bool(item.isChecked), "isManual", bool(item.isManual), "isApproximate", bool(item.isApproximate), "sortIndex", integer(item.sortIndex), "rangeStart", item.rangeStart.map(ManagedHouseholdMigrationValue.date) as Any, "rangeEnd", item.rangeEnd.map(ManagedHouseholdMigrationValue.date) as Any, "sourceDishNames", try json(item.sourceDishNames), "dateCreated", date(item.dateCreated)
-                ), relationships: relationships("ingredient", item.ingredient?.uuid, "household", item.household?.uuid))
+                ), relationships: relationships("ingredient", item.ingredient?.uuid, "household", item.household?.uuid, "list", item.list?.uuid))
             }
         case .weekTemplate:
             return try context.fetch(FetchDescriptor<WeekTemplate>()).map { template in

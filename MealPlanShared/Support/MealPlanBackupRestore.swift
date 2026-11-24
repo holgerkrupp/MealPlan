@@ -303,6 +303,20 @@ enum MealPlanBackupRestore {
             context.insert(log)
         }
 
+        var shoppingLists: [UUID: ShoppingList] = [:]
+        for stored in backup.shoppingLists ?? [] {
+            let list = ShoppingList(name: stored.name, isGenerated: stored.isGenerated, uuid: stored.uuid, sortIndex: stored.sortIndex)
+            list.dateCreated = stored.dateCreated
+            list.household = household
+            context.insert(list)
+            shoppingLists[stored.uuid] = list
+        }
+        let generatedList = shoppingLists[ShoppingList.generatedID(for: household.uuid)]
+            ?? ShoppingList(name: ShoppingList.generatedName, isGenerated: true, uuid: ShoppingList.generatedID(for: household.uuid))
+        generatedList.household = household
+        if generatedList.modelContext == nil { context.insert(generatedList) }
+        shoppingLists[generatedList.uuid] = generatedList
+
         for stored in backup.shoppingItems {
             let item = ShoppingListItem(
                 name: stored.name,
@@ -327,6 +341,7 @@ enum MealPlanBackupRestore {
             item.dateCreated = stored.dateCreated
             item.ingredient = stored.ingredientKey.flatMap { ingredients[$0] }
             item.household = household
+            item.list = stored.listID.flatMap { shoppingLists[$0] } ?? generatedList
             context.insert(item)
         }
 

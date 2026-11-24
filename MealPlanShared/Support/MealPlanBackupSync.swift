@@ -214,6 +214,28 @@ enum MealPlanBackupSync {
 
         // MARK: Shopping list
 
+        var shoppingLists = partition(household.shoppingLists ?? [], by: \.uuid)
+        if let storedLists = backup.shoppingLists {
+            for stored in storedLists {
+                let model = shoppingLists.map[stored.uuid] ?? insert(
+                    ShoppingList(name: stored.name, isGenerated: stored.isGenerated, uuid: stored.uuid, sortIndex: stored.sortIndex),
+                    uuid: stored.uuid, into: context, map: &shoppingLists.map
+                )
+                model.name = stored.name
+                model.isGenerated = stored.isGenerated
+                model.sortIndex = stored.sortIndex
+                model.dateCreated = stored.dateCreated
+                model.household = household
+            }
+            deleteMissing(shoppingLists, keeping: storedLists.map(\.uuid), context: context)
+        }
+        let generatedList = shoppingLists.map[ShoppingList.generatedID(for: household.uuid)]
+            ?? insert(
+                ShoppingList(name: ShoppingList.generatedName, isGenerated: true, uuid: ShoppingList.generatedID(for: household.uuid)),
+                uuid: ShoppingList.generatedID(for: household.uuid), into: context, map: &shoppingLists.map
+            )
+        generatedList.household = household
+
         var shoppingItems = partition(household.shoppingItems ?? [], by: \.uuid)
         for stored in backup.shoppingItems {
             let uuid = stored.uuid ?? UUID()
@@ -241,6 +263,7 @@ enum MealPlanBackupSync {
             model.dateCreated = stored.dateCreated
             model.ingredient = stored.ingredientKey.flatMap { ingredients[$0] }
             model.household = household
+            model.list = stored.listID.flatMap { shoppingLists.map[$0] } ?? generatedList
         }
         deleteMissing(shoppingItems, keeping: backup.shoppingItems.compactMap(\.uuid), context: context)
 
@@ -461,6 +484,7 @@ enum MealPlanBackupSync {
         merged.entries = union(base.entries, other.entries, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.routines = union(base.routines, other.routines, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.cookedLogs = union(base.cookedLogs, other.cookedLogs, baseIsNewer: baseIsNewer, id: { $0.uuid?.uuidString ?? "\($0.date.timeIntervalSince1970)-\($0.dishUUID?.uuidString ?? "")" })
+        merged.shoppingLists = union(base.shoppingLists ?? [], other.shoppingLists ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
         merged.shoppingItems = union(base.shoppingItems, other.shoppingItems, baseIsNewer: baseIsNewer, id: { $0.uuid?.uuidString ?? $0.normalizedName })
         merged.weekTemplates = union(base.weekTemplates, other.weekTemplates, baseIsNewer: baseIsNewer, id: \.uuid)
         merged.recipeFeeds = union(base.recipeFeeds ?? [], other.recipeFeeds ?? [], baseIsNewer: baseIsNewer, id: \.uuid)
