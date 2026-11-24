@@ -41,23 +41,33 @@ enum PieceWeightTable {
     /// per-ingredient weights below.
     static let unitRules: [Rule] = [
         Rule(["Knoblauch", "garlic"], unit: "Zehe", grams: 3),
+        Rule(["Knoblauch", "garlic"], unit: "clove", grams: 3),
         Rule([], unit: "Zehe", grams: 3),
+        Rule([], unit: "clove", grams: 3),
 
         Rule(["Brot", "Vollkornbrot", "bread"], unit: "Scheibe", grams: 40),
+        Rule(["Brot", "Vollkornbrot", "bread"], unit: "slice", grams: 40),
         Rule(["Toast", "Toastbrot"], unit: "Scheibe", grams: 25),
         Rule(["Käse", "Kaese", "Gouda", "cheese"], unit: "Scheibe", grams: 25),
         Rule(["Schinken", "Salami", "ham"], unit: "Scheibe", grams: 15),
         Rule([], unit: "Scheibe", grams: 30),
+        Rule([], unit: "slice", grams: 30),
 
         Rule(["Tomaten", "tomatoes"], unit: "Dose", grams: 400),
         Rule(["Kichererbsen", "Kidneybohnen", "Mais", "Bohnen", "chickpeas", "beans"], unit: "Dose", grams: 250),
         Rule(["Thunfisch", "tuna"], unit: "Dose", grams: 150),
         Rule([], unit: "Dose", grams: 400),
+        Rule(["Tomaten", "tomatoes"], unit: "can", grams: 400),
+        Rule(["Kichererbsen", "Kidneybohnen", "Mais", "Bohnen", "chickpeas", "beans"], unit: "can", grams: 250),
+        Rule(["Thunfisch", "tuna"], unit: "can", grams: 150),
+        Rule([], unit: "can", grams: 400),
 
         Rule(["Petersilie", "Basilikum", "Schnittlauch", "Dill", "Koriander", "parsley", "basil"], unit: "Bund", grams: 25),
         Rule(["Frühlingszwiebel", "Lauchzwiebel", "spring onion"], unit: "Bund", grams: 100),
         Rule(["Suppengrün", "Suppengruen"], unit: "Bund", grams: 300),
         Rule([], unit: "Bund", grams: 40),
+        Rule(["Petersilie", "Basilikum", "Schnittlauch", "Dill", "Koriander", "parsley", "basil"], unit: "bunch", grams: 25),
+        Rule([], unit: "bunch", grams: 40),
 
         Rule(["Knoblauch", "garlic"], unit: "Knolle", grams: 50),
         Rule(["Sellerie", "celeriac"], unit: "Knolle", grams: 600),
@@ -72,6 +82,11 @@ enum PieceWeightTable {
         Rule([], unit: "Handvoll", grams: 30),
         Rule([], unit: "Packung", grams: 250),
         Rule([], unit: "Flasche", grams: 700),
+        Rule([], unit: "package", grams: 250),
+        Rule([], unit: "bottle", grams: 700),
+        Rule([], unit: "handful", grams: 30),
+        Rule([], unit: "head", grams: 400),
+        Rule([], unit: "bulb", grams: 200),
     ]
 
     /// What one of the thing weighs when nothing but its name is known.

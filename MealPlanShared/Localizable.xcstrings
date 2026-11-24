@@ -8624,6 +8624,26 @@
     "Confidence" : {
 
     },
+    "Descriptive ingredient match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beschreibender Zutatenabgleich"
+          }
+        }
+      }
+    },
+    "Exact ingredient match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Exakter Zutatenabgleich"
+          }
+        }
+      }
+    },
     "Configure meals…" : {
       "localizations" : {
         "da" : {
@@ -15801,6 +15821,36 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Da build"
+          }
+        }
+      }
+    },
+    "Household value" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Haushaltswert"
+          }
+        }
+      }
+    },
+    "Normalized ingredient match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Normalisierter Zutatenabgleich"
+          }
+        }
+      }
+    },
+    "Unknown ingredient match" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unbekannter Zutatenabgleich"
           }
         }
       }

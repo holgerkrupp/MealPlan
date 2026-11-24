@@ -21,6 +21,35 @@ import Foundation
 /// than four characters must match a whole word.
 enum NutritionTable {
 
+    /// How a recipe spelling reached a generic table entry.
+    enum MatchQuality: Int, Comparable, Sendable {
+        case exact = 0
+        case normalized = 1
+        case descriptive = 2
+
+        static func < (lhs: MatchQuality, rhs: MatchQuality) -> Bool {
+            lhs.rawValue < rhs.rawValue
+        }
+    }
+
+    struct Match: Equatable, Sendable {
+        var facts: NutritionFacts
+        /// The first spelling in an entry, used as the stable human-readable
+        /// identity in review and test output.
+        var canonicalName: String
+        /// The alias that actually matched the query.
+        var matchedName: String
+        var quality: MatchQuality
+
+        var confidence: NutritionMatchConfidence {
+            switch quality {
+            case .exact: .exact
+            case .normalized: .normalized
+            case .descriptive: .descriptive
+            }
+        }
+    }
+
     struct Entry: Sendable {
         /// Every spelling that means this ingredient, German and English. The
         /// first is only for readability; all of them match.
@@ -32,6 +61,8 @@ enum NutritionTable {
             self.names = names
             self.facts = facts
         }
+
+        var canonicalName: String { names[0] }
     }
 
     /// Per 100 g: kcal, protein g, carbohydrate g, fat g.
@@ -244,15 +275,22 @@ enum NutritionTable {
 
     /// Exact normalized alias → facts. Covers the overwhelming majority of
     /// lookups without any scanning.
-    private static let exactIndex: [String: NutritionFacts] = {
-        var index: [String: NutritionFacts] = [:]
+    private static let exactIndex: [String: Match] = {
+        var index: [String: Match] = [:]
         for entry in entries {
             for name in entry.names {
                 let key = Ingredient.normalize(name)
                 guard !key.isEmpty else { continue }
                 // First entry wins, so a later generic alias ("Öl") can never
                 // take a key a specific one ("Olivenöl") already claimed.
-                if index[key] == nil { index[key] = entry.facts }
+                if index[key] == nil {
+                    index[key] = Match(
+                        facts: entry.facts,
+                        canonicalName: entry.canonicalName,
+                        matchedName: name,
+                        quality: .exact
+                    )
+                }
             }
         }
         return index
@@ -260,14 +298,22 @@ enum NutritionTable {
 
     /// Aliases long enough to be safe as substrings, longest first so
     /// "olivenöl" is tried before "öl" and "hähnchenbrust" before "hähnchen".
-    private static let substringAliases: [(key: String, facts: NutritionFacts)] = {
-        var pairs: [(String, NutritionFacts)] = []
+    private static let substringAliases: [(key: String, match: Match)] = {
+        var pairs: [(String, Match)] = []
         var seen: Set<String> = []
         for entry in entries {
             for name in entry.names {
                 let key = Ingredient.normalize(name)
                 guard key.count >= 4, seen.insert(key).inserted else { continue }
-                pairs.append((key, entry.facts))
+                pairs.append((
+                    key,
+                    Match(
+                        facts: entry.facts,
+                        canonicalName: entry.canonicalName,
+                        matchedName: name,
+                        quality: .descriptive
+                    )
+                ))
             }
         }
         return pairs.sorted { $0.0.count > $1.0.count }
@@ -283,24 +329,29 @@ enum NutritionTable {
     /// stating out loud, since the obvious `contains` version silently makes
     /// rice into eggs.
     static func facts(for rawName: String) -> NutritionFacts? {
+        match(for: rawName)?.facts
+    }
+
+    /// Resolves a recipe spelling and retains the reason for the match.
+    ///
+    /// Matching is intentionally deterministic and local. It does not use a
+    /// locale-dependent tokenizer, a model call, or a remote food database.
+    static func match(for rawName: String) -> Match? {
         let normalized = Ingredient.normalize(rawName)
         guard !normalized.isEmpty else { return nil }
 
-        if let hit = cached(normalized) { return hit.facts }
-        return nil
+        return cached(normalized)
     }
 
     // MARK: - Resolution
 
-    private struct Hit: Sendable { var facts: NutritionFacts }
-
     /// Resolved names, so a week of meal cards doesn't rescan the alias list
     /// for the same twenty ingredients on every redraw. `NSCache` would be
     /// overkill: the working set is a household's catalogue.
-    nonisolated(unsafe) private static var resolutionCache: [String: Hit?] = [:]
+    nonisolated(unsafe) private static var resolutionCache: [String: Match?] = [:]
     private static let cacheLock = NSLock()
 
-    private static func cached(_ normalized: String) -> Hit? {
+    private static func cached(_ normalized: String) -> Match? {
         cacheLock.lock()
         if let memo = resolutionCache[normalized] {
             cacheLock.unlock()
@@ -319,8 +370,8 @@ enum NutritionTable {
         return resolved
     }
 
-    private static func resolve(_ normalized: String) -> Hit? {
-        if let facts = exactIndex[normalized] { return Hit(facts: facts) }
+    private static func resolve(_ normalized: String) -> Match? {
+        if let match = exactIndex[normalized] { return match }
 
         let words = normalized
             .split(whereSeparator: { !$0.isLetter && !$0.isNumber })
@@ -329,13 +380,20 @@ enum NutritionTable {
         // A whole word that is itself an alias. Longest word first, so
         // "rote bete" prefers "bete"-style specifics over a stray short word.
         for word in words.sorted(by: { $0.count > $1.count }) {
-            if let facts = exactIndex[word] { return Hit(facts: facts) }
+            if let match = exactIndex[word] {
+                return Match(
+                    facts: match.facts,
+                    canonicalName: match.canonicalName,
+                    matchedName: match.matchedName,
+                    quality: .normalized
+                )
+            }
         }
 
         // Multi-word aliases ("passierte tomaten", "grune bohnen") that the
         // name contains, plus compounds ("Bio-Olivenöl", "Hähnchenbrustfilet").
         for alias in substringAliases where normalized.contains(alias.key) {
-            return Hit(facts: alias.facts)
+            return alias.match
         }
 
         return nil

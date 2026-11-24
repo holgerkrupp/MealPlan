@@ -27,50 +27,74 @@ enum NutritionEstimator {
         case unknown
     }
 
+    /// A reviewable result for one recipe line. The legacy `LineOutcome`
+    /// remains intentionally small for planner callers; this richer value is
+    /// available to editors and accessibility surfaces that need to explain
+    /// which local value was used.
+    struct LineAssessment: Equatable, Sendable {
+        var outcome: LineOutcome
+        var source: NutritionSource?
+        var matchedIngredient: String?
+        var matchConfidence: NutritionMatchConfidence?
+    }
+
     /// The source of a line's values, exposed for review UIs without making
     /// callers duplicate the estimator's matching rules.
     static func source(for line: DishIngredient) -> NutritionSource? {
-        if let ingredient = line.ingredient, ingredient.nutritionFacts != nil {
-            return ingredient.nutritionSource
-        }
-        let candidates = [line.ingredient?.name, line.rawText].compactMap { $0 }
-        return candidates.contains(where: { NutritionTable.facts(for: $0) != nil }) ? .builtIn : nil
+        assessment(for: line).source
     }
 
     static func outcome(for line: DishIngredient) -> LineOutcome {
-        guard let quantity = line.quantity else { return .unmeasured }
+        assessment(for: line).outcome
+    }
+
+    /// Performs one deterministic, local assessment of a line. This is pure
+    /// work over transient model values and is safe to call from a background
+    /// snapshot loader; UI views should use a precomputed estimate rather than
+    /// repeatedly invoking it during layout.
+    static func assessment(for line: DishIngredient) -> LineAssessment {
+        let empty = LineAssessment(outcome: .unmeasured, source: nil, matchedIngredient: nil, matchConfidence: nil)
+        guard let quantity = line.quantity else { return empty }
 
         let name = line.ingredient?.name ?? line.rawText
-        guard let reference = referenceFacts(for: line) else { return .unknown }
+        guard let reference = referenceFacts(for: line) else {
+            return LineAssessment(outcome: .unknown, source: nil, matchedIngredient: nil, matchConfidence: .unknown)
+        }
 
-        // Everything below answers one question: how many multiples of the
-        // reference amount does this line contain?
+        let outcome: LineOutcome
         switch reference.reference {
         case .perPiece:
             guard let pieces = pieces(of: quantity, name: name, unit: line.displayUnit) else {
-                return .unknown
+                return LineAssessment(outcome: .unknown, source: reference.source, matchedIngredient: reference.matchedIngredient, matchConfidence: reference.matchConfidence)
             }
             let confidence: NutritionConfidence = quantity.dimension == .count ? .weighed : .converted
-            return .counted(reference.facts.scaled(by: pieces.value), max(confidence, pieces.confidence))
+            outcome = .counted(reference.facts.scaled(by: pieces.value), max(confidence, pieces.confidence))
 
         case .per100Grams:
             guard let grams = grams(of: quantity, name: name, unit: line.displayUnit) else {
-                return .unknown
+                return LineAssessment(outcome: .unknown, source: reference.source, matchedIngredient: reference.matchedIngredient, matchConfidence: reference.matchConfidence)
             }
-            return .counted(
+            outcome = .counted(
                 reference.facts.scaled(by: grams.value / 100),
                 combined(grams.confidence, line)
             )
 
         case .per100Millilitres:
             guard let millilitres = millilitres(of: quantity, name: name, unit: line.displayUnit) else {
-                return .unknown
+                return LineAssessment(outcome: .unknown, source: reference.source, matchedIngredient: reference.matchedIngredient, matchConfidence: reference.matchConfidence)
             }
-            return .counted(
+            outcome = .counted(
                 reference.facts.scaled(by: millilitres.value / 100),
                 combined(millilitres.confidence, line)
             )
         }
+
+        return LineAssessment(
+            outcome: outcome,
+            source: reference.source,
+            matchedIngredient: reference.matchedIngredient,
+            matchConfidence: reference.matchConfidence
+        )
     }
 
     /// A line the cook already flagged as approximate ("1 EL", "1 Prise") can
@@ -83,18 +107,38 @@ enum NutritionEstimator {
     /// the ingredient if it has one, otherwise MealPlan's bundled table.
     private static func referenceFacts(
         for line: DishIngredient
-    ) -> (facts: NutritionFacts, reference: NutritionReference)? {
+    ) -> ReferenceFacts? {
         if let ingredient = line.ingredient, let own = ingredient.nutritionFacts {
-            return (own, ingredient.nutritionReference)
+            return ReferenceFacts(
+                facts: own,
+                reference: ingredient.nutritionReference,
+                source: ingredient.nutritionSource,
+                matchedIngredient: ingredient.name,
+                matchConfidence: .explicit
+            )
         }
         // The catalogue name first, then the raw imported line — "200 g
         // Basmatireis" still finds rice even before anyone tidies it up.
         for candidate in [line.ingredient?.name, line.rawText].compactMap({ $0 }) {
-            if let facts = NutritionTable.facts(for: candidate) {
-                return (facts, .per100Grams)
+            if let match = NutritionTable.match(for: candidate) {
+                return ReferenceFacts(
+                    facts: match.facts,
+                    reference: .per100Grams,
+                    source: .builtIn,
+                    matchedIngredient: match.canonicalName,
+                    matchConfidence: match.confidence
+                )
             }
         }
         return nil
+    }
+
+    private struct ReferenceFacts {
+        var facts: NutritionFacts
+        var reference: NutritionReference
+        var source: NutritionSource
+        var matchedIngredient: String
+        var matchConfidence: NutritionMatchConfidence
     }
 
     // MARK: - Amount conversions
@@ -107,6 +151,7 @@ enum NutritionEstimator {
             return Amount(value: quantity.value, confidence: .weighed)
         case .volume:
             let converted = UnitConversion.weight(fromVolume: quantity.value, ingredientName: name)
+            guard converted.known else { return nil }
             return Amount(value: converted.grams, confidence: .converted)
         case .count:
             guard let perPiece = PieceWeightTable.grams(forIngredient: name, unitLabel: unit) else {
@@ -122,10 +167,12 @@ enum NutritionEstimator {
             return Amount(value: quantity.value, confidence: .weighed)
         case .mass:
             let converted = UnitConversion.volume(fromWeight: quantity.value, ingredientName: name)
+            guard converted.known else { return nil }
             return Amount(value: converted.millilitres, confidence: .converted)
         case .count:
             guard let grams = grams(of: quantity, name: name, unit: unit) else { return nil }
             let converted = UnitConversion.volume(fromWeight: grams.value, ingredientName: name)
+            guard converted.known else { return nil }
             return Amount(value: converted.millilitres, confidence: .converted)
         }
     }
@@ -158,6 +205,8 @@ enum NutritionEstimator {
                 unmeasuredLines: 0,
                 convertedLines: 0,
                 missingNames: [],
+                sources: [statedSource(for: dish)],
+                matchConfidence: .explicit,
                 origin: .statedByRecipe
             )
         }
@@ -171,13 +220,20 @@ enum NutritionEstimator {
         var unmeasured = 0
         var converted = 0
         var missing: [String] = []
+        var sources: [NutritionSource] = []
+        var matchConfidence: NutritionMatchConfidence = .explicit
 
         for line in lines {
-            switch outcome(for: line) {
+            let assessment = assessment(for: line)
+            switch assessment.outcome {
             case let .counted(facts, confidence):
                 total += facts
                 counted += 1
                 if confidence == .converted { converted += 1 }
+                if let source = assessment.source, !sources.contains(source) { sources.append(source) }
+                if let lineMatchConfidence = assessment.matchConfidence {
+                    matchConfidence = max(matchConfidence, lineMatchConfidence)
+                }
             case .unmeasured:
                 unmeasured += 1
             case .unknown:
@@ -195,8 +251,17 @@ enum NutritionEstimator {
             unmeasuredLines: unmeasured,
             convertedLines: converted,
             missingNames: missing.sorted { Ingredient.normalize($0) < Ingredient.normalize($1) },
+            sources: sources.sorted { $0.rawValue < $1.rawValue },
+            matchConfidence: counted == 0 ? .unknown : matchConfidence,
             origin: .computed
         )
+    }
+
+    private static func statedSource(for dish: Dish) -> NutritionSource {
+        switch dish.statedNutritionProvenanceRaw.flatMap(RecipeNutritionProvenance.init(rawValue:)) {
+        case .manuallyEntered: .user
+        case .imported, .calculated, .none: .imported
+        }
     }
 
     // MARK: - A day, or any set of planned meals
@@ -249,6 +314,10 @@ struct NutritionEstimate: Equatable, Sendable {
     var convertedLines = 0
     /// What we couldn't work out, for the "so you know what's missing" line.
     var missingNames: [String] = []
+    /// Sources contributing values to this estimate, in stable order.
+    var sources: [NutritionSource] = []
+    /// The least certain deterministic identity match included in the total.
+    var matchConfidence: NutritionMatchConfidence = .unknown
     /// Planned dishes with no ingredient list at all, when this covers a day.
     var dishesWithoutEstimate = 0
     var origin: Origin = .none
@@ -266,8 +335,8 @@ struct NutritionEstimate: Equatable, Sendable {
 
     var quality: Quality {
         switch origin {
-        case .none: .unavailable
-        case .statedByRecipe: .stated
+        case .none: return .unavailable
+        case .statedByRecipe: return .stated
         case .computed, .mixed:
             guard countedLines > 0 else { return .unavailable }
             let percent = Int((coverage * 100).rounded())
@@ -327,6 +396,14 @@ struct NutritionEstimate: Equatable, Sendable {
         dishesWithoutEstimate += other.dishesWithoutEstimate
         for name in other.missingNames where !missingNames.contains(name) {
             missingNames.append(name)
+        }
+        for source in other.sources where !sources.contains(source) {
+            sources.append(source)
+        }
+        if other.countedLines > 0 {
+            matchConfidence = countedLines == other.countedLines
+                ? other.matchConfidence
+                : max(matchConfidence, other.matchConfidence)
         }
         origin = switch (origin, other.origin) {
         case (.none, let new): new

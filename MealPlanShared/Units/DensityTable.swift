@@ -6,27 +6,30 @@ import Foundation
 /// approximate.
 enum DensityTable {
     /// grams per millilitre
-    static let densities: [String: Double] = [
-        "wasser": 1.0,
-        "milch": 1.03,
-        "sahne": 1.0,
-        "öl": 0.92,
-        "olivenöl": 0.92,
-        "butter": 0.96,
-        "mehl": 0.53,
-        "zucker": 0.85,
-        "puderzucker": 0.56,
-        "salz": 1.2,
-        "reis": 0.85,
-        "honig": 1.42,
-        "haferflocken": 0.35,
+    static let densities: [(names: [String], value: Double)] = [
+        (["olivenöl", "olive oil"], 0.92),
+        (["puderzucker", "icing sugar", "powdered sugar"], 0.56),
+        (["haferflocken", "oats", "porridge oats"], 0.35),
+        (["wasser", "water"], 1.0),
+        (["milch", "milk"], 1.03),
+        (["sahne", "cream"], 1.0),
+        (["öl", "oel", "oil"], 0.92),
+        (["butter"], 0.96),
+        (["mehl", "flour"], 0.53),
+        (["zucker", "sugar"], 0.85),
+        (["salz", "salt"], 1.2),
+        (["reis", "rice"], 0.85),
+        (["honig", "honey"], 1.42),
     ]
 
     /// Density for an ingredient name, defaulting to water if unknown.
     static func gramsPerMillilitre(for ingredientName: String?) -> (value: Double, known: Bool) {
-        guard let key = ingredientName?.lowercased() else { return (1.0, false) }
-        for (name, density) in densities where key.contains(name) {
-            return (density, true)
+        guard let ingredientName else { return (1.0, false) }
+        let key = Ingredient.normalize(ingredientName)
+        for entry in densities {
+            if entry.names.contains(where: { key.contains(Ingredient.normalize($0)) }) {
+                return (entry.value, true)
+            }
         }
         return (1.0, false)
     }

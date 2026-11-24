@@ -234,6 +234,69 @@ struct NutritionEstimatorTests {
         #expect(NutritionTable.facts(for: "sweet potato") != nil)
     }
 
+    @Test func matchingRetainsCanonicalIdentityAndConfidence() throws {
+        let german = try #require(NutritionTable.match(for: "gehackte Tomaten"))
+        let english = try #require(NutritionTable.match(for: "chopped tomatoes"))
+
+        #expect(german.canonicalName == "Tomate")
+        #expect(english.canonicalName == german.canonicalName)
+        #expect(german.confidence == .normalized)
+        #expect(english.confidence == .normalized)
+        #expect(german.matchedName == "Tomaten")
+    }
+
+    @Test func normalizesMetricImperialAndRecipeUnitsBeforeEstimation() throws {
+        let metric = GermanUnitParser.parse("250 grams flour")
+        let imperial = GermanUnitParser.parse("8 ounces flour")
+        let recipeUnit = GermanUnitParser.parse("1 can tomatoes")
+
+        #expect(metric.quantity == .grams(250))
+        #expect(abs((imperial.quantity?.value ?? 0) - 226.796) < 0.001)
+        #expect(imperial.quantity?.dimension == .mass)
+        #expect(recipeUnit.quantity == .pieces(1))
+        #expect(recipeUnit.displayUnit == "Dose")
+
+        let d = dish("Dosen-Tomaten", servings: 1)
+        let item = line(d, "tomatoes", recipeUnit.quantity?.value, recipeUnit.quantity?.dimension, unit: recipeUnit.displayUnit)
+        let value = try #require(kcal(NutritionEstimator.outcome(for: item)))
+        #expect(abs(value - 72) < 0.1) // 400 g × 18 kcal/100 g
+    }
+
+    @Test func unknownDensityDoesNotBecomeWater() {
+        let d = dish("Unbekannte Dichte", servings: 1)
+        let item = line(d, "Mysterious powder", 250, .volume, unit: "ml")
+        item.ingredient?.setNutrition(NutritionFacts(energyKcal: 300))
+
+        #expect(NutritionEstimator.outcome(for: item) == .unknown)
+    }
+
+    @Test func knownZeroIsCountedAndRemainsDifferentFromUnknown() throws {
+        let d = dish("Wasser", servings: 1)
+        let water = line(d, "Wasser", 250, .mass)
+        let known = try #require(NutritionEstimator.outcome(for: water))
+        guard case let .counted(facts, _) = known else {
+            Issue.record("Water should be a known zero-valued ingredient")
+            return
+        }
+        #expect(facts.energyKcal == 0)
+
+        let unknown = line(d, "Unbekannt", 250, .mass)
+        #expect(NutritionEstimator.outcome(for: unknown) == .unknown)
+    }
+
+    @Test func estimateExposesSourceAndDeterministicMatchConfidence() throws {
+        let d = dish("Öl", servings: 1)
+        let item = line(d, "Bio-Olivenöl extra vergine", 15, .volume, unit: "EL", approximate: true)
+        let estimate = NutritionEstimator.perServing(for: d)
+        let assessment = NutritionEstimator.assessment(for: item)
+
+        #expect(estimate.sources == [.builtIn])
+        #expect(estimate.matchConfidence == .normalized)
+        #expect(assessment.matchedIngredient == "Olivenöl")
+        #expect(assessment.source == .builtIn)
+        #expect(assessment.matchConfidence == .normalized)
+    }
+
     @Test func aDishWithNoIngredientsHasNoEstimate() {
         #expect(NutritionEstimator.perServing(for: dish("Nur ein Name")).origin == .none)
     }

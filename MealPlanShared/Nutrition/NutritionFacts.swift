@@ -150,7 +150,7 @@ enum NutritionReference: String, CaseIterable, Identifiable, Codable, Sendable {
 
 /// Where an ingredient's values came from, so the app can tell a figure it
 /// guessed from one somebody checked.
-enum NutritionSource: String, CaseIterable, Codable, Sendable {
+enum NutritionSource: String, CaseIterable, Codable, Equatable, Sendable {
     /// MealPlan's own reference table — a generic ingredient, not a product.
     case builtIn
     /// Typed by someone in the household, usually off a package.
@@ -178,5 +178,38 @@ enum NutritionConfidence: Int, Comparable, Sendable {
 
     static func < (lhs: NutritionConfidence, rhs: NutritionConfidence) -> Bool {
         lhs.rawValue < rhs.rawValue
+    }
+}
+
+/// How confidently the bundled table identified the ingredient text.
+///
+/// This is separate from `NutritionConfidence`: a directly weighed amount can
+/// still be based on a descriptive match such as "chopped tomatoes". Both
+/// dimensions are kept so a caller can explain an estimate without implying
+/// medical or allergen certainty.
+enum NutritionMatchConfidence: Int, Comparable, Sendable {
+    /// Values were entered or imported for this exact household ingredient.
+    case explicit = 0
+    /// The text matched one of the table's canonical aliases exactly.
+    case exact = 1
+    /// A stable token or inflection matched a table alias.
+    case normalized = 2
+    /// A longer recipe description contained a known ingredient alias.
+    case descriptive = 3
+    /// No ingredient identity was established.
+    case unknown = 4
+
+    static func < (lhs: NutritionMatchConfidence, rhs: NutritionMatchConfidence) -> Bool {
+        lhs.rawValue < rhs.rawValue
+    }
+
+    var localizedName: String {
+        switch self {
+        case .explicit: String(localized: "Household value")
+        case .exact: String(localized: "Exact ingredient match")
+        case .normalized: String(localized: "Normalized ingredient match")
+        case .descriptive: String(localized: "Descriptive ingredient match")
+        case .unknown: String(localized: "Unknown ingredient match")
+        }
     }
 }

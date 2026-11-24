@@ -76,6 +76,17 @@ struct NutritionLabel: Equatable, Sendable {
         }
     }
 
+    /// A short, non-medical explanation of the least certain ingredient
+    /// identity used by an estimate. Direct household values do not need this
+    /// extra warning.
+    var confidenceNote: String? {
+        guard source == .estimated,
+              estimate.matchConfidence != .explicit,
+              estimate.matchConfidence != .unknown
+        else { return nil }
+        return String(localized: "Confidence") + ": " + estimate.matchConfidence.localizedName
+    }
+
     func value(of nutrient: Nutrient) -> Double? {
         rows.first { $0.nutrient == nutrient }?.value
     }

@@ -151,6 +151,10 @@ struct NutritionSummaryView: View {
         VStack(alignment: .leading, spacing: 4) {
             if let label {
                 Text(label.sourceNote).font(.caption).foregroundStyle(.secondary)
+                Text(label.disclosure).font(.caption).foregroundStyle(.secondary)
+                if let confidenceNote = label.confidenceNote {
+                    Text(confidenceNote).font(.caption).foregroundStyle(.secondary)
+                }
                 if label.source == .estimated {
                     if label.estimate.unmeasuredLines > 0 {
                         Text("\(label.estimate.unmeasuredLines) ingredients have no amount and were left out.")

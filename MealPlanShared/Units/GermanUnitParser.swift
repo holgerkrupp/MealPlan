@@ -221,17 +221,17 @@ enum GermanUnitParser {
         func add(_ keys: [String], _ alias: UnitAlias) { for k in keys { t[unitKey(k)] = alias } }
 
         // Mass
-        add(["g", "gr", "gramm", "gramms"], .init(dimension: .mass, factor: 1, approximate: false, displayLabel: "g"))
-        add(["kg", "kilo", "kilogramm"], .init(dimension: .mass, factor: 1000, approximate: false, displayLabel: "kg"))
+        add(["g", "gr", "gramm", "gramms", "gram", "grams"], .init(dimension: .mass, factor: 1, approximate: false, displayLabel: "g"))
+        add(["kg", "kilo", "kilogramm", "kilogram", "kilograms"], .init(dimension: .mass, factor: 1000, approximate: false, displayLabel: "kg"))
         add(["mg"], .init(dimension: .mass, factor: 0.001, approximate: false, displayLabel: "mg"))
         add(["dag", "dkg", "deka"], .init(dimension: .mass, factor: 10, approximate: false, displayLabel: "dag"))
         add(["pfund"], .init(dimension: .mass, factor: 500, approximate: true, displayLabel: "Pfund"))
 
         // Volume
-        add(["ml", "milliliter"], .init(dimension: .volume, factor: 1, approximate: false, displayLabel: "ml"))
-        add(["cl"], .init(dimension: .volume, factor: 10, approximate: false, displayLabel: "cl"))
-        add(["dl"], .init(dimension: .volume, factor: 100, approximate: false, displayLabel: "dl"))
-        add(["l", "liter", "ltr"], .init(dimension: .volume, factor: 1000, approximate: false, displayLabel: "l"))
+        add(["ml", "milliliter", "milliliters", "millilitre", "millilitres"], .init(dimension: .volume, factor: 1, approximate: false, displayLabel: "ml"))
+        add(["cl", "centiliter", "centiliters", "centilitre", "centilitres"], .init(dimension: .volume, factor: 10, approximate: false, displayLabel: "cl"))
+        add(["dl", "deciliter", "deciliters", "decilitre", "decilitres"], .init(dimension: .volume, factor: 100, approximate: false, displayLabel: "dl"))
+        add(["l", "liter", "liters", "litre", "litres", "ltr"], .init(dimension: .volume, factor: 1000, approximate: false, displayLabel: "l"))
         add(["el", "essl", "essloffel", "eslloffel", "eßlöffel"], .init(dimension: .volume, factor: 15, approximate: true, displayLabel: "EL"))
         add(["tl", "teel", "teeloffel"], .init(dimension: .volume, factor: 5, approximate: true, displayLabel: "TL"))
         add(["msp", "messerspitze"], .init(dimension: .volume, factor: 0.5, approximate: true, displayLabel: "Msp."))
@@ -242,20 +242,23 @@ enum GermanUnitParser {
         add(["becher"], .init(dimension: .volume, factor: 250, approximate: true, displayLabel: "Becher"))
         add(["glas", "glaser"], .init(dimension: .volume, factor: 200, approximate: true, displayLabel: "Glas"))
 
-        // Count / containers
-        add(["stuck", "stk", "st", "stck", "x", "×"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Stück"))
-        add(["bund"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Bund"))
-        add(["zehe", "zehen"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Zehe"))
-        add(["scheibe", "scheiben"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Scheibe"))
-        add(["kopf", "kopfe"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Kopf"))
-        add(["knolle", "knollen"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Knolle"))
-        add(["dose", "dosen"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Dose"))
-        add(["packung", "packungen", "pkg", "pck", "packchen", "paket", "beutel"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Packung"))
-        add(["flasche", "flaschen"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Flasche"))
-        add(["handvoll"], .init(dimension: .count, factor: 1, approximate: true, displayLabel: "Handvoll"))
+        // Count / containers. English recipe units are deliberately kept as
+        // first-class aliases; the canonical quantity remains a piece count.
+        add(["stuck", "stk", "st", "stck", "x", "×", "piece", "pieces", "item", "items"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Stück"))
+        add(["bund", "bunch", "bunches"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Bund"))
+        add(["zehe", "zehen", "clove", "cloves"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Zehe"))
+        add(["scheibe", "scheiben", "slice", "slices"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Scheibe"))
+        add(["kopf", "kopfe", "head", "heads"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Kopf"))
+        add(["knolle", "knollen", "bulb", "bulbs"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Knolle"))
+        add(["dose", "dosen", "can", "cans", "tin", "tins"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Dose"))
+        add(["packung", "packungen", "pkg", "pck", "packchen", "paket", "beutel", "package", "packages", "packet", "packets"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Packung"))
+        add(["flasche", "flaschen", "bottle", "bottles"], .init(dimension: .count, factor: 1, approximate: false, displayLabel: "Flasche"))
+        add(["handvoll", "handful", "handfuls"], .init(dimension: .count, factor: 1, approximate: true, displayLabel: "Handvoll"))
 
         // Imperial
         add(["cup", "cups"], .init(dimension: .volume, factor: 236.588, approximate: true, displayLabel: "cup"))
+        add(["pint", "pints"], .init(dimension: .volume, factor: 473.176, approximate: true, displayLabel: "pint"))
+        add(["quart", "quarts"], .init(dimension: .volume, factor: 946.353, approximate: true, displayLabel: "quart"))
         add(["oz", "ounce", "ounces"], .init(dimension: .mass, factor: 28.3495, approximate: false, displayLabel: "oz"))
         add(["lb", "lbs", "pound", "pounds"], .init(dimension: .mass, factor: 453.592, approximate: false, displayLabel: "lb"))
         add(["tbsp", "tablespoon", "tablespoons"], .init(dimension: .volume, factor: 14.787, approximate: true, displayLabel: "tbsp"))
