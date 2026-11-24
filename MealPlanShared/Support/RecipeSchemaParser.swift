@@ -124,7 +124,7 @@ struct RecipeSchemaParser: RecipeImporter {
         if SocialRecipeImporter.platform(for: sourceURL) != nil {
             return try await SocialRecipeImporter(session: session).importExtraction(fromHTML: html, sourceURL: sourceURL)
         }
-        await extract(fromHTML: html, sourceURL: sourceURL)
+        return await extract(fromHTML: html, sourceURL: sourceURL)
     }
 
     /// Structured data remains authoritative, but a page can have a useful
