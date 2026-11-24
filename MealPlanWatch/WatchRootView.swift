@@ -1,9 +1,9 @@
 import SwiftUI
 
-/// The two screens, side by side: swipe between the plan and the list.
+/// The watch's focused surfaces: swipe between plan, shopping and cooking.
 ///
-/// Deliberately two pages rather than a root menu — both are things one opens
-/// mid-task, and a menu in front of them would cost a tap every time.
+/// Deliberately paged rather than a root menu — each surface is something one
+/// opens mid-task, and a menu in front of it would cost a tap every time.
 struct WatchRootView: View {
 
     private enum Tab: Hashable { case plan, shopping, cooking }

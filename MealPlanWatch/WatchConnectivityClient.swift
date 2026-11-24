@@ -46,6 +46,10 @@ final class WatchConnectivityClient: NSObject {
         Task { @MainActor in WatchDataStore.shared.receive(acknowledgement) }
     }
 
+    private static func deliver(_ acknowledgement: WatchCookingSessionCommandAcknowledgement) {
+        Task { @MainActor in WatchDataStore.shared.receive(acknowledgement) }
+    }
+
     private static func deliver(reachable: Bool, thenRefresh: Bool = false) {
         Task { @MainActor in
             WatchDataStore.shared.setReachable(reachable)
@@ -96,6 +100,26 @@ final class WatchConnectivityClient: NSObject {
             session.transferUserInfo(message)
         }
     }
+
+    /// Sends a step, ingredient or handoff command using the same live/queued
+    /// transport policy as timer controls.
+    func send(_ command: WatchCookingSessionCommand) {
+        guard let session, session.activationState == .activated,
+              let message = WatchSyncPayload.message(for: command)
+        else { return }
+
+        guard session.isReachable else {
+            session.transferUserInfo(message)
+            return
+        }
+        session.sendMessage(message) { reply in
+            guard let acknowledgement = WatchSyncPayload.sessionAcknowledgement(in: reply) else { return }
+            Self.deliver(acknowledgement)
+        } errorHandler: { error in
+            Self.logger.error("Live cooking session command failed: \(error.localizedDescription)")
+            session.transferUserInfo(message)
+        }
+    }
 }
 
 // MARK: - WCSessionDelegate
@@ -127,13 +151,22 @@ extension WatchConnectivityClient: WCSessionDelegate {
             Self.deliver(acknowledgement)
             return
         }
+        if let acknowledgement = WatchSyncPayload.sessionAcknowledgement(in: message) {
+            Self.deliver(acknowledgement)
+            return
+        }
         guard let snapshot = WatchSyncPayload.snapshot(in: message) else { return }
         Self.deliver(snapshot)
     }
 
     func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any]) {
-        guard let acknowledgement = WatchSyncPayload.acknowledgement(in: userInfo) else { return }
-        Self.deliver(acknowledgement)
+        if let acknowledgement = WatchSyncPayload.acknowledgement(in: userInfo) {
+            Self.deliver(acknowledgement)
+            return
+        }
+        if let acknowledgement = WatchSyncPayload.sessionAcknowledgement(in: userInfo) {
+            Self.deliver(acknowledgement)
+        }
     }
 
     func sessionReachabilityDidChange(_ session: WCSession) {

@@ -13,7 +13,11 @@ struct WatchCookingTimersView: View {
     var body: some View {
         TimelineView(.periodic(from: .now, by: 1)) { timeline in
             Group {
-                if timers.isEmpty {
+                if let session = store.snapshot.cookingSession {
+                    List {
+                        WatchCookingSessionOverview(session: session, now: timeline.date)
+                    }
+                } else if timers.isEmpty {
                     WatchEmptyState(
                         symbol: "timer",
                         title: String(localized: "No cooking timers"),
@@ -39,6 +43,206 @@ struct WatchCookingTimersView: View {
             }
         }
         .navigationTitle(String(localized: "Cooking"))
+    }
+}
+
+private struct WatchCookingSessionOverview: View {
+
+    @Environment(WatchDataStore.self) private var store
+    let session: WatchCookingSessionSnapshot
+    let now: Date
+
+    private var selectedDish: WatchCookingDish? { session.selectedDish }
+    private var selectedStepPending: Bool {
+        store.isCookingCommandPending(for: selectedDish?.id)
+    }
+
+    @ViewBuilder
+    var body: some View {
+        Section {
+            if let dish = selectedDish {
+                VStack(alignment: .leading, spacing: 8) {
+                    Label(dish.name, systemImage: "fork.knife")
+                        .font(.headline)
+                        .lineLimit(2)
+                    if let stepText = dish.currentStepText {
+                        Text(stepText)
+                            .font(.body)
+                            .fixedSize(horizontal: false, vertical: true)
+                    } else {
+                        Text(String(localized: "This recipe has no cooking steps yet."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(
+                        dish.steps.isEmpty
+                            ? String(localized: "No steps")
+                            : String(localized: "Step \(dish.currentStep + 1) of \(dish.steps.count)")
+                    )
+                    .font(.caption2.monospacedDigit())
+                    .foregroundStyle(.secondary)
+                    .accessibilityLabel(String(localized: "Current step"))
+                    .accessibilityValue(
+                        dish.steps.isEmpty
+                            ? String(localized: "No steps")
+                            : String(localized: "Step \(dish.currentStep + 1) of \(dish.steps.count)")
+                    )
+                }
+                .accessibilityElement(children: .combine)
+
+                HStack(spacing: 8) {
+                    Button {
+                        store.sendCookingCommand(
+                            action: .setStep(
+                                dishID: dish.id,
+                                step: max(0, dish.currentStep - 1)
+                            )
+                        )
+                    } label: {
+                        Label(String(localized: "Previous"), systemImage: "chevron.left")
+                    }
+                    .disabled(dish.currentStep <= 0 || selectedStepPending)
+
+                    Button {
+                        store.sendCookingCommand(
+                            action: .setStep(
+                                dishID: dish.id,
+                                step: min(dish.steps.count - 1, dish.currentStep + 1)
+                            )
+                        )
+                    } label: {
+                        Label(String(localized: "Next"), systemImage: "chevron.right")
+                    }
+                    .disabled(
+                        dish.steps.isEmpty ||
+                        dish.currentStep >= dish.steps.count - 1 ||
+                        selectedStepPending
+                    )
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+                .accessibilityElement(children: .contain)
+            } else {
+                Label(
+                    String(localized: "Recipe unavailable"),
+                    systemImage: "exclamationmark.triangle"
+                )
+            }
+
+            Button {
+                store.sendCookingCommand(action: .handoff)
+            } label: {
+                Label(String(localized: "Refresh from iPhone"), systemImage: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.bordered)
+            .disabled(store.isCookingCommandPending())
+        } header: {
+            Text(String(localized: "Cooking session"))
+        }
+
+        if session.dishes.count > 1 {
+            Section(String(localized: "Dishes")) {
+                ForEach(session.dishes) { dish in
+                    Button {
+                        store.sendCookingCommand(action: .selectDish(dish.id))
+                    } label: {
+                        HStack {
+                            Text(dish.name)
+                                .lineLimit(2)
+                            Spacer()
+                            if dish.id == session.selectedDishID {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.tint)
+                            }
+                        }
+                    }
+                    .disabled(dish.id == session.selectedDishID || store.isCookingCommandPending())
+                    .accessibilityLabel(dish.name)
+                    .accessibilityValue(
+                        dish.id == session.selectedDishID
+                            ? String(localized: "Current dish")
+                            : String(localized: "Not selected")
+                    )
+                }
+            }
+        }
+
+        if let dish = selectedDish {
+            Section {
+                if dish.ingredients.isEmpty {
+                    Text(String(localized: "No ingredients added."))
+                        .foregroundStyle(.secondary)
+                } else {
+                    ForEach(dish.ingredients) { ingredient in
+                        Button {
+                            store.sendCookingCommand(
+                                action: .toggleIngredient(
+                                    dishID: dish.id,
+                                    ingredientIndex: ingredient.index
+                                )
+                            )
+                        } label: {
+                            HStack(alignment: .top, spacing: 8) {
+                                Image(systemName: ingredient.isChecked ? "checkmark.circle.fill" : "circle")
+                                    .foregroundStyle(ingredient.isChecked ? .green : .secondary)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(ingredient.name)
+                                        .strikethrough(ingredient.isChecked)
+                                    if let amount = ingredient.amount {
+                                        Text(amount)
+                                            .font(.caption)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                    if let note = ingredient.note {
+                                        Text(note)
+                                            .font(.caption2)
+                                            .foregroundStyle(.secondary)
+                                    }
+                                }
+                                Spacer(minLength: 0)
+                            }
+                        }
+                        .disabled(store.isCookingCommandPending(for: dish.id))
+                        .accessibilityLabel(ingredient.name)
+                        .accessibilityValue(
+                            ingredient.isChecked
+                                ? String(localized: "Checked off")
+                                : String(localized: "Not checked off")
+                        )
+                    }
+                }
+            } header: {
+                Text(String(localized: "Ingredients"))
+            }
+        }
+
+        Section {
+            if session.timers.isEmpty {
+                Text(String(localized: "No active cooking timers."))
+                    .foregroundStyle(.secondary)
+            } else {
+                ForEach(session.timers) { timer in
+                    WatchCookingTimerRow(timer: timer, now: now)
+                }
+            }
+        } header: {
+            Text(String(localized: "Timers"))
+        }
+
+        if let feedback = store.cookingCommandFeedback {
+            WatchCookingCommandFeedbackView(feedback: feedback)
+        }
+
+        if !store.isReachable {
+            Label(
+                String(localized: "Showing the last handoff. Changes will sync when iPhone is reachable."),
+                systemImage: "iphone.slash"
+            )
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+            .accessibilityElement(children: .combine)
+        }
+        WatchSyncFooter()
     }
 }
 
@@ -226,6 +430,27 @@ private struct WatchTimerFeedbackView: View {
                 feedback.accepted
                     ? String(localized: "Updated on iPhone.")
                     : String(localized: "iPhone could not update this timer.")
+            ))
+        } icon: {
+            Image(systemName: feedback.accepted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                .foregroundStyle(feedback.accepted ? .green : .orange)
+        }
+        .font(.caption)
+        .listRowBackground(Color.clear)
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct WatchCookingCommandFeedbackView: View {
+
+    let feedback: WatchCookingCommandFeedback
+
+    var body: some View {
+        Label {
+            Text(feedback.message ?? (
+                feedback.accepted
+                    ? String(localized: "Updated on iPhone.")
+                    : String(localized: "iPhone could not update the cooking session.")
             ))
         } icon: {
             Image(systemName: feedback.accepted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")

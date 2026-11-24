@@ -123,7 +123,14 @@ final class PhoneWatchSyncService: NSObject {
             context: context,
             shoppingRangeName: shoppingRangeName?()
         )
-        snapshot.cookingTimers = cookingTimersSnapshot()
+        snapshot.cookingSession = WatchSnapshotBuilder.cookingSession(context: context)
+        if let cookingSession = snapshot.cookingSession {
+            snapshot.cookingTimers = WatchCookingTimersSnapshot(
+                sessionID: cookingSession.sessionID,
+                revision: cookingSession.revision,
+                timers: cookingSession.timers
+            )
+        }
         if !force, let lastPushed, lastPushed.days == snapshot.days,
            lastPushed.shopping == snapshot.shopping,
            lastPushed.shoppingRangeName == snapshot.shoppingRangeName,
@@ -140,26 +147,6 @@ final class PhoneWatchSyncService: NSObject {
     }
 
     // MARK: - Receiving
-
-    private func cookingTimersSnapshot() -> WatchCookingTimersSnapshot? {
-        guard let session = CookingSessionStore.shared.session else { return nil }
-        return WatchCookingTimersSnapshot(
-            sessionID: session.id,
-            revision: session.updatedAt,
-            timers: session.timers.map {
-                WatchCookingTimer(
-                    id: $0.id,
-                    dishName: $0.dishName,
-                    stepNumber: $0.stepNumber,
-                    stepText: $0.stepText,
-                    label: $0.label,
-                    duration: $0.duration,
-                    endDate: $0.endDate,
-                    pausedRemaining: $0.pausedRemaining
-                )
-            }
-        )
-    }
 
     /// Applies ticks made on the watch. A tick is only about `isChecked`, so
     /// it touches nothing else on the line — and it loses to a newer change
@@ -207,6 +194,7 @@ final class PhoneWatchSyncService: NSObject {
     private func handle(
         checks: [WatchShoppingCheck],
         command: WatchCookingTimerCommand?,
+        sessionCommand: WatchCookingSessionCommand?,
         isRefreshRequest: Bool,
         replyHandler: WatchReplyHandler? = nil
     ) {
@@ -215,15 +203,28 @@ final class PhoneWatchSyncService: NSObject {
         // an explicit request or rejected edit needs one forced snapshot.
         if isRefreshRequest || rejectedReadOnlyEdit { push(force: true) }
 
-        guard let command else {
+        guard command != nil || sessionCommand != nil else {
             replyHandler?.call([:])
             return
         }
-        let acknowledgement = apply(command: command)
-        if acknowledgement.accepted || acknowledgement.revision != nil {
-            push(force: true)
+
+        let message: [String: Any]?
+        if let command {
+            let acknowledgement = apply(command: command)
+            if acknowledgement.accepted || acknowledgement.revision != nil {
+                push(force: true)
+            }
+            message = WatchSyncPayload.message(for: acknowledgement)
+        } else if let sessionCommand {
+            let acknowledgement = apply(sessionCommand: sessionCommand)
+            if acknowledgement.accepted || acknowledgement.revision != nil {
+                push(force: true)
+            }
+            message = WatchSyncPayload.message(for: acknowledgement)
+        } else {
+            message = nil
         }
-        guard let message = WatchSyncPayload.message(for: acknowledgement) else {
+        guard let message else {
             replyHandler?.call([:])
             return
         }
@@ -306,6 +307,121 @@ final class PhoneWatchSyncService: NSObject {
         )
     }
 
+    /// Applies step navigation and ingredient checkoffs at the phone-owned
+    /// session boundary. The watch never mutates or persists a competing
+    /// cooking session.
+    private func apply(
+        sessionCommand command: WatchCookingSessionCommand
+    ) -> WatchCookingSessionCommandAcknowledgement {
+        let sessionStore = CookingSessionStore.shared
+        guard let current = sessionStore.session else {
+            return WatchCookingSessionCommandAcknowledgement(
+                commandID: command.id,
+                sessionID: command.sessionID,
+                accepted: false,
+                message: String(localized: "No active cooking session."),
+                revision: nil
+            )
+        }
+
+        if hasProcessedCommand(command.id) {
+            return WatchCookingSessionCommandAcknowledgement(
+                commandID: command.id,
+                sessionID: command.sessionID,
+                accepted: true,
+                message: String(localized: "Already applied."),
+                revision: current.updatedAt
+            )
+        }
+
+        guard command.sessionID == current.id else {
+            rememberProcessedCommand(command.id)
+            return WatchCookingSessionCommandAcknowledgement(
+                commandID: command.id,
+                sessionID: command.sessionID,
+                accepted: false,
+                message: String(localized: "That cooking session is no longer active."),
+                revision: current.updatedAt
+            )
+        }
+
+        guard command.baseRevision >= current.updatedAt else {
+            rememberProcessedCommand(command.id)
+            return WatchCookingSessionCommandAcknowledgement(
+                commandID: command.id,
+                sessionID: command.sessionID,
+                accepted: false,
+                message: String(localized: "The cooking session changed on iPhone."),
+                revision: current.updatedAt
+            )
+        }
+
+        let accepted: Bool
+        switch command.action {
+        case .handoff:
+            accepted = true
+        case .selectDish(let dishID):
+            guard current.dishes.contains(where: { $0.id == dishID }) else {
+                rememberProcessedCommand(command.id)
+                return WatchCookingSessionCommandAcknowledgement(
+                    commandID: command.id,
+                    sessionID: command.sessionID,
+                    accepted: false,
+                    message: String(localized: "That dish is no longer in the session."),
+                    revision: current.updatedAt
+                )
+            }
+            sessionStore.select(dishID)
+            accepted = true
+        case .setStep(let dishID, let step):
+            guard let context,
+                  let stepCount = WatchSnapshotBuilder.cookingStepCount(
+                      dishID: dishID,
+                      context: context
+                  ),
+                  current.dishes.contains(where: { $0.id == dishID }),
+                  step >= 0, step < stepCount else {
+                rememberProcessedCommand(command.id)
+                return WatchCookingSessionCommandAcknowledgement(
+                    commandID: command.id,
+                    sessionID: command.sessionID,
+                    accepted: false,
+                    message: String(localized: "That cooking step is unavailable."),
+                    revision: current.updatedAt
+                )
+            }
+            sessionStore.setCurrentStep(step, for: dishID, stepCount: stepCount)
+            accepted = true
+        case .toggleIngredient(let dishID, let ingredientIndex):
+            guard let context,
+                  let dish = try? context.fetch(
+                      FetchDescriptor<Dish>(predicate: #Predicate { $0.uuid == dishID })
+                  ).first,
+                  current.dishes.contains(where: { $0.id == dishID }),
+                  dish.sortedIngredients.indices.contains(ingredientIndex) else {
+                rememberProcessedCommand(command.id)
+                return WatchCookingSessionCommandAcknowledgement(
+                    commandID: command.id,
+                    sessionID: command.sessionID,
+                    accepted: false,
+                    message: String(localized: "That ingredient is unavailable."),
+                    revision: current.updatedAt
+                )
+            }
+            sessionStore.toggleIngredient(ingredientIndex, for: dishID)
+            accepted = true
+        }
+
+        rememberProcessedCommand(command.id)
+        return WatchCookingSessionCommandAcknowledgement(
+            commandID: command.id,
+            sessionID: command.sessionID,
+            accepted: accepted,
+            message: nil,
+            revision: sessionStore.session?.updatedAt
+        )
+    }
+
     private func hasProcessedCommand(_ id: UUID) -> Bool {
         (commandDefaults.stringArray(forKey: processedCommandIDsKey) ?? [])
             .contains(id.uuidString)
@@ -366,8 +482,9 @@ extension PhoneWatchSyncService: WCSessionDelegate {
     ) {
         let checks = WatchSyncPayload.checks(in: message)
         let command = WatchSyncPayload.command(in: message)
+        let sessionCommand = WatchSyncPayload.sessionCommand(in: message)
         let isRefreshRequest = WatchSyncPayload.isRefreshRequest(message)
-        guard !checks.isEmpty || command != nil || isRefreshRequest else {
+        guard !checks.isEmpty || command != nil || sessionCommand != nil || isRefreshRequest else {
             replyHandler([:])
             return
         }
@@ -376,6 +493,7 @@ extension PhoneWatchSyncService: WCSessionDelegate {
             self.handle(
                 checks: checks,
                 command: command,
+                sessionCommand: sessionCommand,
                 isRefreshRequest: isRefreshRequest,
                 replyHandler: boxedReplyHandler
             )
@@ -393,12 +511,14 @@ extension PhoneWatchSyncService: WCSessionDelegate {
     private nonisolated func deliver(_ message: [String: Any]) {
         let checks = WatchSyncPayload.checks(in: message)
         let command = WatchSyncPayload.command(in: message)
+        let sessionCommand = WatchSyncPayload.sessionCommand(in: message)
         let isRefreshRequest = WatchSyncPayload.isRefreshRequest(message)
-        guard !checks.isEmpty || command != nil || isRefreshRequest else { return }
+        guard !checks.isEmpty || command != nil || sessionCommand != nil || isRefreshRequest else { return }
         Task { @MainActor in
             self.handle(
                 checks: checks,
                 command: command,
+                sessionCommand: sessionCommand,
                 isRefreshRequest: isRefreshRequest
             )
         }

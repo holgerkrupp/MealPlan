@@ -105,6 +105,9 @@ struct WatchPlanSnapshot: Codable, Hashable, Sendable {
     /// The optional phone-owned cooking session projection. Kept optional so
     /// older phone/watch combinations continue decoding plan snapshots.
     var cookingTimers: WatchCookingTimersSnapshot? = nil
+    /// Full recipe handoff for the active cooking session. `cookingTimers`
+    /// remains for compatibility with the #159 timer surface and older builds.
+    var cookingSession: WatchCookingSessionSnapshot? = nil
 
     static let empty = WatchPlanSnapshot(generatedAt: .distantPast)
 

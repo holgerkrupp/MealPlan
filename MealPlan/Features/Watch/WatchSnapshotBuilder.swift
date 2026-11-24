@@ -33,6 +33,86 @@ enum WatchSnapshotBuilder {
         )
     }
 
+    /// Builds the resumable cooking handoff from the phone's canonical
+    /// CookingSessionStore. Recipe models are read only long enough to make a
+    /// small value projection; the watch never gets a second SwiftData store.
+    @MainActor
+    static func cookingSession(context: ModelContext) -> WatchCookingSessionSnapshot? {
+        guard let session = CookingSessionStore.shared.session else { return nil }
+
+        let dishIDs = Set(session.dishes.map(\.id))
+        let descriptor = FetchDescriptor<Dish>(predicate: #Predicate { dishIDs.contains($0.uuid) })
+        let fetchedDishes = (try? context.fetch(descriptor)) ?? []
+        let dishesByID = Dictionary(
+            fetchedDishes.map { ($0.uuid, $0) },
+            uniquingKeysWith: { first, _ in first }
+        )
+
+        let dishes = session.dishes.compactMap { progress -> WatchCookingDish? in
+            guard let dish = dishesByID[progress.id] else { return nil }
+            let translated = dish.prefersTranslation
+            let steps = CookingRecipe.steps(from: dish.displayRecipeText(translated: translated))
+                .map { WatchCookingStep(id: $0.id, text: $0.text) }
+            let scaler = ServingScaler(
+                baseServings: dish.servings,
+                targetServings: progress.targetServings,
+                system: dish.household?.unitSystem ?? .metric,
+                roundsAmounts: dish.household?.roundsDisplayedAmounts ?? true
+            )
+            let ingredients = dish.sortedIngredients.enumerated().map { index, line in
+                let name = line.displayName(translated: translated)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                let note = line.displayNote(translated: translated)?
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+                return WatchCookingIngredient(
+                    id: line.uuid,
+                    index: index,
+                    name: name.flatMap { $0.isEmpty ? nil : $0 } ?? String(localized: "Ingredient"),
+                    amount: scaler.amountText(for: line),
+                    note: (note?.isEmpty == false) ? note : nil,
+                    isChecked: progress.checkedIngredientIndexes.contains(index)
+                )
+            }
+            return WatchCookingDish(
+                id: progress.id,
+                name: dish.displayName(translated: translated),
+                targetServings: progress.targetServings,
+                currentStep: steps.isEmpty
+                    ? 0
+                    : min(max(0, progress.currentStep), steps.count - 1),
+                steps: steps,
+                ingredients: ingredients
+            )
+        }
+
+        let timers = session.timers.map {
+            WatchCookingTimer(
+                id: $0.id,
+                dishName: $0.dishName,
+                stepNumber: $0.stepNumber,
+                stepText: $0.stepText,
+                label: $0.label,
+                duration: $0.duration,
+                endDate: $0.endDate,
+                pausedRemaining: $0.pausedRemaining
+            )
+        }
+        return WatchCookingSessionSnapshot(
+            sessionID: session.id,
+            revision: session.updatedAt,
+            selectedDishID: session.selectedDishID,
+            dishes: dishes,
+            timers: timers
+        )
+    }
+
+    @MainActor
+    static func cookingStepCount(dishID: UUID, context: ModelContext) -> Int? {
+        let descriptor = FetchDescriptor<Dish>(predicate: #Predicate { $0.uuid == dishID })
+        guard let dishes = try? context.fetch(descriptor), let dish = dishes.first else { return nil }
+        return CookingRecipe.steps(from: dish.displayRecipeText(translated: dish.prefersTranslation)).count
+    }
+
     // MARK: - Plan
 
     @MainActor

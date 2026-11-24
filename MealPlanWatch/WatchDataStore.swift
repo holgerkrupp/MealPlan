@@ -32,6 +32,8 @@ final class WatchDataStore {
     /// result. WatchConnectivity queues the command while disconnected.
     private var pendingTimerCommands: [UUID: WatchCookingTimerCommand] = [:]
     private(set) var timerCommandFeedback: WatchTimerCommandFeedback?
+    private var pendingCookingCommands: [UUID: WatchCookingSessionCommand] = [:]
+    private(set) var cookingCommandFeedback: WatchCookingCommandFeedback?
 
     private let cache = WatchSnapshotCache()
     private var link: WatchConnectivityClient?
@@ -40,6 +42,7 @@ final class WatchDataStore {
         snapshot = cache.loadSnapshot() ?? .empty
         pending = cache.loadPending()
         pendingTimerCommands = cache.loadPendingTimerCommands()
+        pendingCookingCommands = cache.loadPendingCookingCommands()
         applyPending()
     }
 
@@ -59,6 +62,7 @@ final class WatchDataStore {
         link.requestSnapshot()
         flushPending()
         flushPendingTimerCommands()
+        flushPendingCookingCommands()
     }
 
     // MARK: - Incoming
@@ -69,14 +73,37 @@ final class WatchDataStore {
         // Out-of-order delivery is normal: an application context can land
         // after the reply to a request that was sent later.
         guard incoming.generatedAt >= snapshot.generatedAt else { return }
-        snapshot = incoming
+        var reconciled = incoming
+        if !WatchCookingSessionReconciler.shouldApply(
+            incoming: incoming.cookingSession,
+            over: snapshot.cookingSession
+        ) {
+            reconciled.cookingSession = snapshot.cookingSession
+        }
+        if let incomingTimers = incoming.cookingTimers,
+           let currentTimers = snapshot.cookingTimers,
+           incomingTimers.sessionID == currentTimers.sessionID,
+           incomingTimers.revision < currentTimers.revision {
+            reconciled.cookingTimers = currentTimers
+        }
+        snapshot = reconciled
+        if let currentCookingSession = snapshot.cookingSession {
+            // A snapshot newer than a queued command proves that the phone
+            // has moved past that command's base. Drop it rather than retrying
+            // an action that can no longer be safely applied after a lost ack.
+            pendingCookingCommands = pendingCookingCommands.filter {
+                $0.value.sessionID != currentCookingSession.sessionID ||
+                $0.value.baseRevision >= currentCookingSession.revision
+            }
+        }
         // Anything the phone already knew about is no longer pending.
         pending = pending.filter { $0.value.changedAt > incoming.generatedAt }
         applyPending()
         cache.save(
             snapshot: snapshot,
             pending: pending,
-            pendingTimerCommands: pendingTimerCommands
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
         )
     }
 
@@ -93,8 +120,28 @@ final class WatchDataStore {
         cache.save(
             snapshot: snapshot,
             pending: pending,
-            pendingTimerCommands: pendingTimerCommands
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
         )
+    }
+
+    func receive(_ acknowledgement: WatchCookingSessionCommandAcknowledgement) {
+        guard pendingCookingCommands.removeValue(forKey: acknowledgement.commandID) != nil else {
+            return
+        }
+        cookingCommandFeedback = WatchCookingCommandFeedback(
+            id: acknowledgement.commandID,
+            sessionID: acknowledgement.sessionID,
+            accepted: acknowledgement.accepted,
+            message: acknowledgement.message
+        )
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
+        )
+        if acknowledgement.accepted { link?.requestSnapshot() }
     }
 
     func setReachable(_ reachable: Bool) {
@@ -102,6 +149,7 @@ final class WatchDataStore {
         if reachable {
             flushPending()
             flushPendingTimerCommands()
+            flushPendingCookingCommands()
         }
     }
 
@@ -119,7 +167,8 @@ final class WatchDataStore {
         cache.save(
             snapshot: snapshot,
             pending: pending,
-            pendingTimerCommands: pendingTimerCommands
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
         )
         link?.send([check])
     }
@@ -141,13 +190,48 @@ final class WatchDataStore {
         cache.save(
             snapshot: snapshot,
             pending: pending,
-            pendingTimerCommands: pendingTimerCommands
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
+        )
+        link?.send(command)
+    }
+
+    /// Enqueues a step, ingredient or explicit handoff action. Navigation and
+    /// checkoffs are optimistic on the wrist, but remain marked pending until
+    /// the phone accepts them.
+    func sendCookingCommand(action: WatchCookingSessionAction) {
+        guard let cookingSession = snapshot.cookingSession else { return }
+        let command = WatchCookingSessionCommand(
+            sessionID: cookingSession.sessionID,
+            action: action,
+            baseRevision: cookingSession.revision
+        )
+        pendingCookingCommands[command.id] = command
+        cookingCommandFeedback = nil
+        applyPending()
+        cache.save(
+            snapshot: snapshot,
+            pending: pending,
+            pendingTimerCommands: pendingTimerCommands,
+            pendingCookingCommands: pendingCookingCommands
         )
         link?.send(command)
     }
 
     func isTimerCommandPending(for timerID: UUID) -> Bool {
         pendingTimerCommands.values.contains { $0.timerID == timerID }
+    }
+
+    func isCookingCommandPending(for dishID: UUID? = nil) -> Bool {
+        pendingCookingCommands.values.contains { command in
+            guard let dishID else { return true }
+            switch command.action {
+            case .selectDish(let selectedID): return selectedID == dishID
+            case .setStep(let commandDishID, _), .toggleIngredient(let commandDishID, _):
+                return commandDishID == dishID
+            case .handoff: return false
+            }
+        }
     }
 
     /// Re-sends everything still unconfirmed. Cheap: `transferUserInfo` is
@@ -164,12 +248,43 @@ final class WatchDataStore {
         }
     }
 
-    private func applyPending() {
-        guard !pending.isEmpty else { return }
-        for index in snapshot.shopping.indices {
-            guard let check = pending[snapshot.shopping[index].id] else { continue }
-            snapshot.shopping[index].isChecked = check.isChecked
+    private func flushPendingCookingCommands() {
+        guard let link else { return }
+        for command in pendingCookingCommands.values {
+            link.send(command)
         }
+    }
+
+    private func applyPending() {
+        if !pending.isEmpty {
+            for index in snapshot.shopping.indices {
+                guard let check = pending[snapshot.shopping[index].id] else { continue }
+                snapshot.shopping[index].isChecked = check.isChecked
+            }
+        }
+        guard !pendingCookingCommands.isEmpty, var cookingSession = snapshot.cookingSession else {
+            return
+        }
+        for command in pendingCookingCommands.values.sorted(by: { $0.issuedAt < $1.issuedAt }) {
+            switch command.action {
+            case .selectDish(let dishID):
+                guard cookingSession.dishes.contains(where: { $0.id == dishID }) else { continue }
+                cookingSession.selectedDishID = dishID
+            case .setStep(let dishID, let step):
+                guard let index = cookingSession.dishes.firstIndex(where: { $0.id == dishID }) else { continue }
+                let maxStep = max(0, cookingSession.dishes[index].steps.count - 1)
+                cookingSession.dishes[index].currentStep = min(max(0, step), maxStep)
+            case .toggleIngredient(let dishID, let ingredientIndex):
+                guard let dishIndex = cookingSession.dishes.firstIndex(where: { $0.id == dishID }),
+                      let ingredientIndex = cookingSession.dishes[dishIndex].ingredients.firstIndex(
+                          where: { $0.index == ingredientIndex }
+                      ) else { continue }
+                cookingSession.dishes[dishIndex].ingredients[ingredientIndex].isChecked.toggle()
+            case .handoff:
+                break
+            }
+        }
+        snapshot.cookingSession = cookingSession
     }
 }
 
@@ -192,6 +307,9 @@ private struct WatchSnapshotCache {
     private var pendingURL: URL { directory.appending(path: "WatchPendingChecks.json") }
     private var pendingTimerCommandsURL: URL {
         directory.appending(path: "WatchPendingTimerCommands.json")
+    }
+    private var pendingCookingCommandsURL: URL {
+        directory.appending(path: "WatchPendingCookingCommands.json")
     }
 
     func loadSnapshot() -> WatchPlanSnapshot? {
@@ -216,16 +334,29 @@ private struct WatchSnapshotCache {
         return Dictionary(commands.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
     }
 
+    func loadPendingCookingCommands() -> [UUID: WatchCookingSessionCommand] {
+        guard let data = try? Data(contentsOf: pendingCookingCommandsURL),
+              let commands = try? WatchSyncPayload.decoder.decode(
+                  [WatchCookingSessionCommand].self,
+                  from: data
+              )
+        else { return [:] }
+        return Dictionary(commands.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
+    }
+
     func save(
         snapshot: WatchPlanSnapshot,
         pending: [UUID: WatchShoppingCheck],
-        pendingTimerCommands: [UUID: WatchCookingTimerCommand]
+        pendingTimerCommands: [UUID: WatchCookingTimerCommand],
+        pendingCookingCommands: [UUID: WatchCookingSessionCommand]
     ) {
         do {
             try WatchSyncPayload.encoder.encode(snapshot).write(to: snapshotURL, options: .atomic)
             try WatchSyncPayload.encoder.encode(Array(pending.values)).write(to: pendingURL, options: .atomic)
             try WatchSyncPayload.encoder.encode(Array(pendingTimerCommands.values))
                 .write(to: pendingTimerCommandsURL, options: .atomic)
+            try WatchSyncPayload.encoder.encode(Array(pendingCookingCommands.values))
+                .write(to: pendingCookingCommandsURL, options: .atomic)
         } catch {
             Self.logger.error("Could not cache the plan: \(error.localizedDescription)")
         }
@@ -235,6 +366,13 @@ private struct WatchSnapshotCache {
 struct WatchTimerCommandFeedback: Identifiable, Equatable, Sendable {
     let id: UUID
     let timerID: UUID
+    let accepted: Bool
+    let message: String?
+}
+
+struct WatchCookingCommandFeedback: Identifiable, Equatable, Sendable {
+    let id: UUID
+    let sessionID: UUID
     let accepted: Bool
     let message: String?
 }

@@ -231,4 +231,119 @@ struct WatchSnapshotTests {
         #expect(WatchSyncPayload.snapshot(in: message)?.cookingTimers?.timers == [timer])
         #expect(WatchSyncPayload.snapshot(in: message)?.cookingTimers?.revision == revision)
     }
+
+    @Test func cookingSessionHandoffRoundTripsRecipeStateAndCheckoffs() throws {
+        let revision = Date(timeIntervalSince1970: 1_800_000_100)
+        let dishID = UUID()
+        let ingredient = WatchCookingIngredient(
+            id: UUID(),
+            index: 0,
+            name: "Onion",
+            amount: "1",
+            note: "chopped",
+            isChecked: true
+        )
+        let dish = WatchCookingDish(
+            id: dishID,
+            name: "Pasta",
+            targetServings: 2,
+            currentStep: 1,
+            steps: [
+                WatchCookingStep(id: 0, text: "Boil water"),
+                WatchCookingStep(id: 1, text: "Add the onion")
+            ],
+            ingredients: [ingredient]
+        )
+        let session = WatchCookingSessionSnapshot(
+            sessionID: UUID(),
+            revision: revision,
+            selectedDishID: dishID,
+            dishes: [dish],
+            timers: []
+        )
+        let command = WatchCookingSessionCommand(
+            sessionID: session.sessionID,
+            action: .toggleIngredient(dishID: dishID, ingredientIndex: 0),
+            baseRevision: revision,
+            issuedAt: revision.addingTimeInterval(1)
+        )
+        let snapshot = WatchPlanSnapshot(cookingSession: session)
+        let snapshotMessage = try #require(WatchSyncPayload.message(for: snapshot))
+        let commandMessage = try #require(WatchSyncPayload.message(for: command))
+
+        #expect(WatchSyncPayload.snapshot(in: snapshotMessage)?.cookingSession == session)
+        #expect(WatchSyncPayload.sessionCommand(in: commandMessage) == command)
+        #expect(session.selectedDish?.currentStepText == "Add the onion")
+    }
+
+    @Test func olderCookingHandoffCannotOverwriteRestoredState() {
+        let sessionID = UUID()
+        let dishID = UUID()
+        func session(revision: TimeInterval, step: Int, checked: Bool) -> WatchCookingSessionSnapshot {
+            WatchCookingSessionSnapshot(
+                sessionID: sessionID,
+                revision: Date(timeIntervalSince1970: revision),
+                selectedDishID: dishID,
+                dishes: [
+                    WatchCookingDish(
+                        id: dishID,
+                        name: "Soup",
+                        targetServings: 2,
+                        currentStep: step,
+                        steps: [WatchCookingStep(id: 0, text: "Stir")],
+                        ingredients: [
+                            WatchCookingIngredient(
+                                id: UUID(),
+                                index: 0,
+                                name: "Salt",
+                                amount: nil,
+                                note: nil,
+                                isChecked: checked
+                            )
+                        ]
+                    )
+                ],
+                timers: []
+            )
+        }
+
+        let restored = session(revision: 200, step: 0, checked: true)
+        let delayed = session(revision: 100, step: 0, checked: false)
+        let current = session(revision: 200, step: 0, checked: true)
+        #expect(!WatchCookingSessionReconciler.shouldApply(incoming: delayed, over: current))
+        #expect(WatchCookingSessionReconciler.shouldApply(incoming: restored, over: nil))
+        #expect(WatchCookingSessionReconciler.shouldApply(
+            incoming: session(revision: 300, step: 0, checked: true),
+            over: current
+        ))
+    }
+
+    @Test func cookingSessionCommandsKeepDistinctOrderingAndAcknowledgements() throws {
+        let revision = Date(timeIntervalSince1970: 1_800_000_000)
+        let sessionID = UUID()
+        let first = WatchCookingSessionCommand(
+            sessionID: sessionID,
+            action: .setStep(dishID: UUID(), step: 0),
+            baseRevision: revision,
+            issuedAt: revision.addingTimeInterval(1)
+        )
+        let second = WatchCookingSessionCommand(
+            sessionID: sessionID,
+            action: .handoff,
+            baseRevision: revision,
+            issuedAt: revision.addingTimeInterval(2)
+        )
+        let acknowledgement = WatchCookingSessionCommandAcknowledgement(
+            commandID: first.id,
+            sessionID: sessionID,
+            accepted: false,
+            message: "Stale",
+            revision: revision.addingTimeInterval(3)
+        )
+        let message = try #require(WatchSyncPayload.message(for: acknowledgement))
+
+        #expect(first.id != second.id)
+        #expect(WatchSyncPayload.sessionAcknowledgement(in: message) == acknowledgement)
+        #expect(first.baseRevision < acknowledgement.revision!)
+    }
 }
