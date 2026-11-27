@@ -16,6 +16,11 @@ struct RecipeArticleReaderView: View {
 
     @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
+    /// Set when Discover was opened from a meal slot: *Plan this meal* then
+    /// lands the recipe there and closes Discover.
+    @Environment(\.recipePlanningContext) private var planningContext
+    @Environment(\.finishRecipePlanning) private var finishPlanning
+    @Query private var mealTypes: [MealType]
     @State private var articleText: String?
     @State private var html: String?
     @State private var recipe: ImportedRecipe?
@@ -26,6 +31,10 @@ struct RecipeArticleReaderView: View {
     @State private var planningDish: Dish?
     @State private var saveNotice: String?
     @State private var errorMessage: String?
+    @State private var planError: String?
+    /// The article handed to the in-app browser's extractor, for a page whose
+    /// recipe could not be read here.
+    @State private var importTarget: ArticleImportTarget?
     /// A picture found on the page itself, for an article whose feed had none.
     @State private var resolvedImageURL: URL?
 
@@ -39,6 +48,19 @@ struct RecipeArticleReaderView: View {
     /// unsaved recipe and for one that is already in the library.
     private var canPlan: Bool {
         savedDish != nil || canSave
+    }
+
+    /// The page was read and holds nothing that can honestly become a dish.
+    private var showsFallback: Bool {
+        !loading && savedDish == nil && recipe == nil && article.articleURL != nil
+    }
+
+    private var planningText: String? {
+        guard let planningContext else { return nil }
+        let name = MealType.isExtra(planningContext.mealKey)
+            ? MealType.extraName
+            : mealTypes.first { $0.key == planningContext.mealKey }?.name ?? ""
+        return RecipePlanningContextLabel.text(day: planningContext.date, mealName: name)
     }
 
     var body: some View {
@@ -99,26 +121,40 @@ struct RecipeArticleReaderView: View {
         .navigationTitle(String(localized: "Recipe article"))
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
-        #endif
+        // Within thumb's reach rather than in the navigation bar.
+        .safeAreaInset(edge: .bottom) { actionBar }
+        #else
         .toolbar {
             ToolbarItemGroup(placement: .primaryAction) {
-                Button(String(localized: "Plan"), systemImage: "calendar.badge.plus") {
-                    Task { await planRecipe() }
+                if showsFallback {
+                    readOnWebsiteButton
+                    tryImportingButton
+                } else {
+                    saveButton
+                    planButton
                 }
-                .disabled(!canPlan)
-
-                Button {
-                    Task { await saveRecipe() }
-                } label: {
-                    if saving { ProgressView() }
-                    else if savedDish != nil { Label(String(localized: "Saved"), systemImage: "checkmark.circle") }
-                    else if noRecipeFound { Label(String(localized: "No recipe found"), systemImage: "xmark.circle") }
-                    else { Label(String(localized: "Save recipe"), systemImage: "square.and.arrow.down") }
-                }
-                .disabled(!canSave)
             }
         }
+        #endif
         .task { await load() }
+        .task(id: saveNotice) {
+            guard let saveNotice else { return }
+            AccessibilityNotification.Announcement(saveNotice).post()
+        }
+        .detailPresentation(
+            item: $importTarget,
+            route: { .browseSite(url: $0.url, title: article.title, planningContext: planningContext) }
+        ) { target in
+            NavigationStack {
+                RecipeFinderView(query: "", planningContext: planningContext, initialURL: target.url)
+            }
+            .dismissesOnOutsideClick()
+        }
+        .alert(String(localized: "Couldn’t plan the recipe"), isPresented: Binding(
+            get: { planError != nil }, set: { if !$0 { planError = nil } }
+        )) {
+            Button(String(localized: "OK"), role: .cancel) {}
+        } message: { Text(planError ?? "") }
         .detailPresentation(item: $planningDish, route: { .planRecipe($0.uuid) }) { dish in
             NavigationStack {
                 PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
@@ -131,6 +167,107 @@ struct RecipeArticleReaderView: View {
         )) {
             Button(String(localized: "OK"), role: .cancel) {}
         } message: { Text(errorMessage ?? "") }
+    }
+
+    // MARK: - Actions bar
+
+    /// Save and Plan for a readable recipe; for a page with none, the honest
+    /// alternatives — the site itself, or the browser's own extractor.
+    @ViewBuilder
+    private var actionBar: some View {
+        if !appState.isGuest || showsFallback {
+            VStack(spacing: 8) {
+                if showsFallback {
+                    Text(String(localized: "Meals couldn’t find a recipe it can save on this page."))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.center)
+                } else if let planningText {
+                    Label(planningText, systemImage: "calendar")
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) { actionButtons }
+                    VStack(spacing: 8) { actionButtons }
+                }
+                .controlSize(.large)
+            }
+            .padding(.horizontal)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity)
+            .background(.bar)
+        }
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        if showsFallback {
+            readOnWebsiteButton
+                .buttonStyle(.bordered)
+            if !appState.isGuest {
+                tryImportingButton
+                    .buttonStyle(.borderedProminent)
+            }
+        } else {
+            saveButton
+                .buttonStyle(.bordered)
+            planButton
+                .buttonStyle(.borderedProminent)
+        }
+    }
+
+    private var saveButton: some View {
+        Button {
+            Task { await saveRecipe() }
+        } label: {
+            Group {
+                if saving { ProgressView() }
+                else if savedDish != nil { Label(String(localized: "Saved"), systemImage: "checkmark.circle") }
+                else { Label(String(localized: "Save recipe"), systemImage: "square.and.arrow.down") }
+            }
+            .frame(maxWidth: .infinity)
+        }
+        .labelStyle(.titleAndIcon)
+        .disabled(!canSave)
+    }
+
+    private var planButton: some View {
+        Button {
+            Task { await planRecipe() }
+        } label: {
+            Label(String(localized: "Plan this meal"), systemImage: "calendar.badge.plus")
+                .frame(maxWidth: .infinity)
+        }
+        .labelStyle(.titleAndIcon)
+        .disabled(!canPlan)
+        .accessibilityHint(planningText.map { String(localized: "Saves the recipe and plans it for \($0)") }
+                           ?? String(localized: "Saves the recipe and lets you pick a day"))
+    }
+
+    @ViewBuilder
+    private var readOnWebsiteButton: some View {
+        if let url = article.articleURL {
+            Link(destination: url) {
+                Label(String(localized: "Read on website"), systemImage: "safari")
+                    .frame(maxWidth: .infinity)
+            }
+            .labelStyle(.titleAndIcon)
+        }
+    }
+
+    @ViewBuilder
+    private var tryImportingButton: some View {
+        if let url = article.articleURL {
+            Button {
+                importTarget = ArticleImportTarget(url: url)
+            } label: {
+                Label(String(localized: "Try importing"), systemImage: "square.and.arrow.down.on.square")
+                    .frame(maxWidth: .infinity)
+            }
+            .labelStyle(.titleAndIcon)
+            .accessibilityHint(String(localized: "Opens the page in Meals’ browser to read the recipe from it"))
+        }
     }
 
     // MARK: - Layout
@@ -330,7 +467,37 @@ struct RecipeArticleReaderView: View {
     /// screen — a site worth one recipe is usually worth two.
     private func planRecipe() async {
         if savedDish == nil { await saveRecipe() }
-        planningDish = savedDish
+        guard let dish = savedDish else { return }
+        guard let planningContext else {
+            planningDish = dish
+            return
+        }
+        // Idempotent: planning the same recipe into the same slot twice
+        // leaves one entry.
+        switch MealPlanner.planOnce(
+            dish: dish,
+            on: planningContext.date,
+            mealKey: planningContext.mealKey,
+            household: appState.currentHousehold,
+            memberName: appState.currentMemberName,
+            context: context
+        ) {
+        case .saved, .alreadyPlanned:
+            if let finishPlanning {
+                // Back to the plan, where the dish now sits in its slot.
+                finishPlanning()
+            } else {
+                saveNotice = String(localized: "Planned for \(planningText ?? "")")
+            }
+        case .failed:
+            planError = String(localized: "The recipe is in your recipes, but it couldn’t be added to the plan. Try planning it again.")
+        }
     }
 
+}
+
+/// Identity from the value, so a redraw never re-presents the browser.
+private struct ArticleImportTarget: Identifiable, Hashable {
+    let url: URL
+    var id: URL { url }
 }

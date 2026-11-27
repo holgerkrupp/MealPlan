@@ -33,6 +33,7 @@ struct RecipeFinderView: View {
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
     @Environment(\.openURL) private var openURL
+    @Environment(\.finishRecipePlanning) private var finishPlanning
     @AppStorage("search.engine") private var searchEngineRaw = SearchEngine.fallback.rawValue
 
     @State private var page = WebPage()
@@ -356,8 +357,9 @@ struct RecipeFinderView: View {
                 context: context
             ) {
             case .saved, .alreadyPlanned:
-                // Back to the slot the search was started for.
-                dismiss()
+                // Back to the slot the search was started for. Opened from
+                // Discover-for-a-slot, that closes Discover too.
+                if let finishPlanning { finishPlanning() } else { dismiss() }
             case .failed:
                 saveError = String(localized: "The recipe is in your recipes, but it couldn’t be added to the plan. Try planning it again.")
             }
