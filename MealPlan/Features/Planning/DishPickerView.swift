@@ -19,6 +19,9 @@ struct DishPickerView: View {
     /// the recipe. The editor belongs to whoever presented this view: on macOS
     /// this is a popover, and a sheet raised from one dies with it.
     var onEditNewDish: (Dish) -> Void = { _ in }
+    /// "Find something new": Discover, opened for this day and meal. Like the
+    /// editor, the presenter shows it once this picker has gone away.
+    var onFindSomethingNew: ((RecipePlanningContext) -> Void)? = nil
 
     /// The two halves of the planning sheet.
     private enum Tab: String, CaseIterable, Identifiable {
@@ -72,8 +75,10 @@ struct DishPickerView: View {
         mealTitle: String,
         mealSymbol: String = "fork.knife",
         householdID: UUID? = nil,
-        onEditNewDish: @escaping (Dish) -> Void = { _ in }
+        onEditNewDish: @escaping (Dish) -> Void = { _ in },
+        onFindSomethingNew: ((RecipePlanningContext) -> Void)? = nil
     ) {
+        self.onFindSomethingNew = onFindSomethingNew
         self.date = date
         self.mealKey = mealKey
         self.mealTitle = mealTitle
@@ -441,6 +446,30 @@ struct DishPickerView: View {
                 }
             }
 
+            if query.isEmpty, onFindSomethingNew != nil, !appState.isGuest {
+                Section {
+                    Button(action: findSomethingNew) {
+                        HStack(spacing: 12) {
+                            leadingBadge(symbol: "sparkle.magnifyingglass", filled: false)
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(String(localized: "Find something new"))
+                                Text(String(localized: "Recipe ideas and web search, planned straight into this meal"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                            Spacer(minLength: 0)
+                            Image(systemName: "chevron.forward")
+                                .font(.footnote.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .accessibilityHidden(true)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityElement(children: .combine)
+                }
+            }
+
             if !results.isEmpty {
                 Section(query.isEmpty ? String(localized: "Suggestions") : String(localized: "Your dishes")) {
                     ForEach(results) { result in
@@ -557,6 +586,11 @@ struct DishPickerView: View {
     }
 
     // MARK: - Actions
+
+    private func findSomethingNew() {
+        onFindSomethingNew?(RecipePlanningContext(date: date, mealKey: mealKey))
+        dismiss()
+    }
 
     /// Return in the search field: plan the dish that already carries this
     /// name, or make one on the spot. Typing the name is the whole gesture —

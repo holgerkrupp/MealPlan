@@ -1048,6 +1048,9 @@ private struct DishLibraryContent: View {
             } actions: {
                 Button(String(localized: "New dish")) { addDish() }
                     .buttonStyle(.borderedProminent)
+                // Or start from someone else's recipe.
+                DiscoverRecipesButton()
+                    .buttonStyle(.bordered)
             }
         } else {
             let hasFilters = appState.dishFilter.isActive

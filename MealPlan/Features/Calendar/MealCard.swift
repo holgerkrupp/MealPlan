@@ -223,6 +223,10 @@ struct MealCard: View {
     /// Presented here rather than from inside the picker: on macOS the picker
     /// is a popover, and a sheet put up by a popover goes down with it.
     @State private var newDishToEdit: Dish?
+    /// "Find something new" from the picker waits here until the picker has
+    /// gone, then opens Discover for this slot.
+    @State private var pendingDiscovery: RecipePlanningContext?
+    @State private var discovery: RecipePlanningContext?
     @State private var showingPaywall = false
     @State private var currentLocalDay = Date.now.startOfDay
 
@@ -385,9 +389,17 @@ struct MealCard: View {
         // a modal sheet there would trap the click and beep instead.
         #if os(macOS)
         .popover(isPresented: $showingPicker, arrowEdge: .top) { picker }
+        .onChange(of: showingPicker) { _, showing in
+            if !showing { presentPendingDiscovery() }
+        }
         #else
-        .sheet(isPresented: $showingPicker) { picker }
+        // Only once the picker sheet is fully gone: a sheet presented while
+        // another is still dismissing is dropped.
+        .sheet(isPresented: $showingPicker, onDismiss: presentPendingDiscovery) { picker }
         #endif
+        .detailPresentation(item: $discovery, route: { .discoverForMeal($0) }) { planningContext in
+            PlanningDiscoveryView(planningContext: planningContext)
+        }
         // A planned meal is a place you come back to, so where the platform
         // has windows it gets one of its own instead of a sheet over the plan.
         .detailPresentation(item: $selectedEntry, route: { .plannedMeal($0.uuid) }) { entry in
@@ -427,8 +439,15 @@ struct MealCard: View {
             mealTitle: title,
             mealSymbol: symbolName,
             householdID: appState.currentHousehold?.uuid,
-            onEditNewDish: { newDishToEdit = $0 }
+            onEditNewDish: { newDishToEdit = $0 },
+            onFindSomethingNew: { pendingDiscovery = $0 }
         )
+    }
+
+    private func presentPendingDiscovery() {
+        guard let pendingDiscovery else { return }
+        self.pendingDiscovery = nil
+        discovery = pendingDiscovery
     }
 
     // MARK: - Background

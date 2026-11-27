@@ -20,6 +20,8 @@ struct WeekSectionView: View {
     /// The day whose "plan an extra" picker is up. Presented from here rather
     /// than from a meal card: a day with no extra yet has no card to tap.
     @State private var extraPickerDay: IdentifiableDate?
+    @State private var pendingDiscovery: RecipePlanningContext?
+    @State private var discovery: RecipePlanningContext?
     /// Raised by the picker when a freshly added dish wants its recipe filled
     /// in; owned here for the same reason as in `MealCard`.
     @State private var newDishToEdit: Dish?
@@ -208,21 +210,32 @@ struct WeekSectionView: View {
             PaywallView()
                 .dismissesOnOutsideClick()
         }
-        .sheet(item: $extraPickerDay) { wrapper in
+        .sheet(item: $extraPickerDay, onDismiss: presentPendingDiscovery) { wrapper in
             DishPickerView(
                 date: wrapper.date,
                 mealKey: MealType.extraKey,
                 mealTitle: MealType.extraName,
                 mealSymbol: MealType.extraSymbolName,
                 householdID: appState.currentHousehold?.uuid,
-                onEditNewDish: { newDishToEdit = $0 }
+                onEditNewDish: { newDishToEdit = $0 },
+                onFindSomethingNew: { pendingDiscovery = $0 }
             )
             .dismissesOnOutsideClick()
+        }
+        .detailPresentation(item: $discovery, route: { .discoverForMeal($0) }) { planningContext in
+            PlanningDiscoveryView(planningContext: planningContext)
         }
         .detailPresentation(item: $newDishToEdit, route: { .newRecipe($0.uuid) }) { dish in
             NavigationStack { DishEditorView(dish: dish, isNew: true) }
                 .dismissesOnOutsideClick()
         }
+    }
+
+    /// Opens Discover for the extra's day once the picker sheet has gone.
+    private func presentPendingDiscovery() {
+        guard let pendingDiscovery else { return }
+        self.pendingDiscovery = nil
+        discovery = pendingDiscovery
     }
 
     /// Cheap revision key for the expensive ingredient-based calculation.
