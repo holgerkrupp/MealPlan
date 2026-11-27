@@ -190,6 +190,9 @@ struct RecipeWebSearchTests {
         for route in [
             DetailWindowRoute.searchWeb(query: "Pilz Risotto", planningContext: context),
             DetailWindowRoute.searchWeb(query: "curry", planningContext: nil),
+            DetailWindowRoute.discoverForMeal(context),
+            DetailWindowRoute.browseSite(url: URL(string: "https://example.com/r")!, title: "R", planningContext: context),
+            DetailWindowRoute.browseSite(url: URL(string: "https://example.com/r")!, title: "R"),
         ] {
             let data = try JSONEncoder().encode(route)
             #expect(try JSONDecoder().decode(DetailWindowRoute.self, from: data) == route)

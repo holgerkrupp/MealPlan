@@ -39,6 +39,8 @@ struct RecipeDiscoveryArticle: Identifiable, Hashable, Sendable {
     let categories: Set<RecipeDiscoveryCategory>
     let mayLookUpImage: Bool
     let isRead: Bool
+    /// Which "What sounds good today?" choices this article honestly fits.
+    var inspirationThemes: Set<RecipeInspirationTheme> = []
 
     func withReadState(_ isRead: Bool) -> Self {
         Self(
@@ -76,7 +78,8 @@ struct RecipeDiscoveryArticle: Identifiable, Hashable, Sendable {
             isArchived: isArchived,
             categories: categories,
             mayLookUpImage: false,
-            isRead: isRead
+            isRead: isRead,
+            inspirationThemes: inspirationThemes
         )
     }
 }
@@ -214,6 +217,11 @@ struct RecipeDiscoverySnapshot: Sendable {
                 providerTags: seed.providerTags,
                 body: seed.body
             ) else { return nil }
+            let categories = RecipeDiscoveryCategory.categories(
+                title: seed.title,
+                summary: seed.summary,
+                providerTags: seed.providerTags
+            )
             return RecipeDiscoveryArticle(
                 id: seed.id,
                 readStateID: seed.readStateID,
@@ -227,13 +235,15 @@ struct RecipeDiscoverySnapshot: Sendable {
                 sourceName: seed.sourceName,
                 date: seed.date,
                 isArchived: seed.isArchived,
-                categories: RecipeDiscoveryCategory.categories(
+                categories: categories,
+                mayLookUpImage: seed.mayLookUpImage,
+                isRead: readIDs.contains(seed.readStateID),
+                inspirationThemes: RecipeInspirationTheme.themes(
                     title: seed.title,
                     summary: seed.summary,
-                    providerTags: seed.providerTags
-                ),
-                mayLookUpImage: seed.mayLookUpImage,
-                isRead: readIDs.contains(seed.readStateID)
+                    providerTags: seed.providerTags,
+                    categories: categories
+                )
             )
         }
     }

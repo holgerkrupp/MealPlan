@@ -181,3 +181,80 @@ struct RecipeArticleGrid<Destination: View>: View {
         }
     }
 }
+
+/// The wide lead card of "Ideas for this week": the same photo, title capsule
+/// and unread dot as `RecipeArticleCard`, in a landscape frame.
+@MainActor
+struct RecipeArticleHeroCard: View {
+    let article: RecipeArticleContent
+    var onImageResolved: ((URL?) -> Void)? = nil
+
+    @State private var resolvedImageURL: URL?
+    @ScaledMetric(relativeTo: .headline) private var height: CGFloat = 210
+
+    private var imageURL: URL? { article.imageURL ?? resolvedImageURL }
+    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: 24, style: .continuous) }
+
+    var body: some View {
+        GeometryReader { proxy in
+            ZStack(alignment: .bottomLeading) {
+                RemoteRecipeImage(
+                    url: imageURL,
+                    tint: DishGlyph.tint(forName: article.title),
+                    cornerRadius: 24,
+                    width: proxy.size.width,
+                    height: proxy.size.height
+                )
+                VStack(alignment: .leading, spacing: 2) {
+                    if let sourceName = article.sourceName {
+                        Text(sourceName)
+                            .font(.caption.weight(.semibold))
+                            .lineLimit(1)
+                            .opacity(0.82)
+                    }
+                    Text(article.title)
+                        .font(.title3.weight(.semibold))
+                        .multilineTextAlignment(.leading)
+                }
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
+                .background(.black.opacity(0.62), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                .padding(12)
+
+                if !article.isRead {
+                    Circle()
+                        .fill(Color.accentColor)
+                        .frame(width: 12, height: 12)
+                        .padding(14)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                }
+            }
+        }
+        .frame(height: height)
+        .clipShape(shape)
+        .contentShape(shape)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(article.title)
+        .accessibilityValue([article.sourceName, article.isRead ? nil : String(localized: "Unread")]
+            .compactMap { $0 }
+            .joined(separator: ", "))
+        .task(id: article.id) { await lookUpImage() }
+    }
+
+    private func lookUpImage() async {
+        guard article.imageURL == nil, article.mayLookUpImage, resolvedImageURL == nil,
+              let link = article.articleURL else { return }
+        let result = await RecipeFeedImageResolver.shared.lookUpImage(forArticleAt: link)
+        guard !Task.isCancelled else { return }
+        switch result {
+        case .found(let url):
+            resolvedImageURL = url
+            onImageResolved?(url)
+        case .none:
+            onImageResolved?(nil)
+        case .unreachable:
+            return
+        }
+    }
+}

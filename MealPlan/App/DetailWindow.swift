@@ -32,9 +32,11 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
 
     // Discovery
     case discoverRecipes
+    /// Discover opened from a meal slot's "Find something new".
+    case discoverForMeal(RecipePlanningContext)
     case subscribeToSite
     case addRecipeSite
-    case browseSite(url: URL, title: String)
+    case browseSite(url: URL, title: String, planningContext: RecipePlanningContext? = nil)
     case searchWeb(query: String, planningContext: RecipePlanningContext?)
     case importRecipes(URL)
 
@@ -53,7 +55,7 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
     /// form wants a different floor from one that opens onto a web view.
     var minimumSize: CGSize {
         switch self {
-        case .recipe, .newRecipe, .editRecipe, .cookRecipe, .discoverRecipes:
+        case .recipe, .newRecipe, .editRecipe, .cookRecipe, .discoverRecipes, .discoverForMeal:
             CGSize(width: 640, height: 560)
         case .findRecipe, .browseSite, .searchWeb, .importRecipes, .printPlan, .printShoppingList, .dataTransfer:
             CGSize(width: 720, height: 600)
@@ -270,12 +272,14 @@ struct DetailWindow: View {
 
         case .discoverRecipes:
             windowStack { RecipeDiscoveryView() }
+        case .discoverForMeal(let planningContext):
+            PlanningDiscoveryView(planningContext: planningContext)
         case .subscribeToSite:
             FeedSubscriptionSheet()
         case .addRecipeSite:
             RecipeBookmarkSheet()
-        case .browseSite(let url, _):
-            windowStack { RecipeFinderView(query: "", initialURL: url) }
+        case .browseSite(let url, _, let planningContext):
+            windowStack { RecipeFinderView(query: "", planningContext: planningContext, initialURL: url) }
         case .searchWeb(let query, let planningContext):
             windowStack { RecipeFinderView(query: query, planningContext: planningContext) }
         case .importRecipes(let url):

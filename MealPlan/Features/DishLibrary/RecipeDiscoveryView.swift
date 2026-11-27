@@ -44,6 +44,8 @@ private struct RecipeDiscoveryContent: View {
     /// nil means built-in and subscribed sources together.
     @State private var sourceFilter: String?
     @State private var snapshot = RecipeDiscoverySnapshot.empty
+    /// The curated top of the page, built with the snapshot off the main actor.
+    @State private var inspiration = DiscoveryInspiration.empty
     /// Changes when one of the value-only snapshot inputs changes. Keeping a
     /// generation avoids rebuilding a task key from every cached article.
     @State private var snapshotInputRevision = 0
@@ -106,7 +108,9 @@ private struct RecipeDiscoveryContent: View {
 
     private var trimmedSearch: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
 
-    var body: some View {
+    var body: some View { chrome(scrollContent) }
+
+    private var scrollContent: some View {
         ScrollView {
             #if os(iOS)
             FullPageScreenshotBridge()
@@ -115,6 +119,10 @@ private struct RecipeDiscoveryContent: View {
             #endif
 
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                if let planningContext {
+                    planningBanner(planningContext)
+                        .padding(.horizontal, MacLayout.gutter)
+                }
                 if !trimmedSearch.isEmpty {
                     searchOnlineRow
                         .padding(.horizontal, MacLayout.gutter)
@@ -130,21 +138,20 @@ private struct RecipeDiscoveryContent: View {
                 } else if isFiltering && !hasVisibleArticles {
                     noMatchesEmptyState
                 }
-                if !subscribedSites.isEmpty {
-                    subscribedSitesSection
-                }
-                ForEach(SeasonalRecipeShelfPolicy.overviewCollections(seasonalCollections)) { collection in
-                    SeasonalRecipeShelf(
-                        title: collection.moment.localizedTitle,
-                        symbolName: collection.moment.symbolName ?? "leaf",
-                        articles: collection.articles,
-                        readIDs: seasonalReadIDs,
-                        onSeeAll: { seasonalRoute = SeasonalRecipeShelfPolicy.route(for: collection) },
-                        onRead: markRead,
-                        onImageResolved: { article, imageURL in
-                            recordSeasonalImage(imageURL: imageURL, forArticle: article)
-                        }
-                    )
+                // The curated top steps aside while a search is typed: the
+                // matches and "Search online" are what the cook wants then.
+                if trimmedSearch.isEmpty {
+                    if !inspiration.themes.isEmpty {
+                        inspirationLanding
+                            .padding(.horizontal, MacLayout.gutter)
+                    }
+                    if !inspiration.weekIdeas.isEmpty {
+                        weekIdeasSection
+                    }
+                    if !subscribedSites.isEmpty {
+                        fromYourSitesSection
+                    }
+                    seasonalShelves
                 }
                 if hasVisibleArticles {
                     articleSection
@@ -153,6 +160,27 @@ private struct RecipeDiscoveryContent: View {
             }
             .padding(.vertical)
         }
+    }
+
+    @ViewBuilder
+    private var seasonalShelves: some View {
+        ForEach(SeasonalRecipeShelfPolicy.overviewCollections(seasonalCollections)) { collection in
+            SeasonalRecipeShelf(
+                title: collection.moment.localizedTitle,
+                symbolName: collection.moment.symbolName ?? "leaf",
+                articles: collection.articles,
+                readIDs: seasonalReadIDs,
+                onSeeAll: { seasonalRoute = SeasonalRecipeShelfPolicy.route(for: collection) },
+                onRead: markRead,
+                onImageResolved: { article, imageURL in
+                    recordSeasonalImage(imageURL: imageURL, forArticle: article)
+                }
+            )
+        }
+    }
+
+    private func chrome<V: View>(_ view: V) -> some View {
+        view
         .navigationTitle(String(localized: "Discover recipes"))
         .refreshable { await refresh(force: true) }
         .searchable(
@@ -212,7 +240,7 @@ private struct RecipeDiscoveryContent: View {
         }
         .detailPresentation(
             item: $browserTarget,
-            route: { .browseSite(url: $0.url, title: $0.title) }
+            route: { .browseSite(url: $0.url, title: $0.title, planningContext: planningContext) }
         ) { target in
             NavigationStack {
                 RecipeFinderView(query: "", planningContext: planningContext, initialURL: target.url)
@@ -228,9 +256,7 @@ private struct RecipeDiscoveryContent: View {
             }
         }
         .navigationDestination(item: $surpriseArticle) { article in
-            RecipeArticleReaderView(article: article, onImageResolved: { url in
-                record(imageURL: url, forArticle: article)
-            })
+            reader(for: article)
         }
         .navigationDestination(item: $seasonalRoute) { route in
             SeasonalRecipeMomentGrid(
@@ -303,8 +329,110 @@ private struct RecipeDiscoveryContent: View {
         .padding(.top, 40)
     }
 
-    private var subscribedSitesSection: some View {
-        Section {
+    // MARK: - Curated top
+
+    private func planningBanner(_ planningContext: RecipePlanningContext) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(String(localized: "Finding something new for"))
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+            RecipePlanningContextLabel(planningContext: planningContext)
+                .font(.headline)
+            Text(String(localized: "Open a recipe and choose Plan this meal to add it there."))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(12)
+        .background(Color.accentColor.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .accessibilityElement(children: .combine)
+    }
+
+    /// "What sounds good today?": a handful of honest starting points. A
+    /// choice opens its own grid, so Back is the way out.
+    private var inspirationLanding: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text(String(localized: "What sounds good today?"))
+                .font(.title2.bold())
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 280), spacing: 12)], spacing: 12) {
+                ForEach(inspiration.themes) { choice in
+                    InspirationThemeTile(choice: choice) {
+                        seasonalRoute = SeasonalRecipeMomentRoute(
+                            momentID: "theme:\(choice.theme.rawValue)",
+                            title: choice.theme.localizedTitle,
+                            symbolName: choice.theme.symbolName,
+                            articles: choice.articles
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var weekIdeasSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            shelfHeader(
+                String(localized: "Ideas for this week"),
+                symbol: "sparkles",
+                caption: String(localized: "Fresh recipes from different sites")
+            )
+            .padding(.horizontal, MacLayout.gutter)
+
+            if let hero = inspiration.weekIdeas.first {
+                let heroContent = content(hero)
+                NavigationLink {
+                    reader(for: heroContent)
+                } label: {
+                    RecipeArticleHeroCard(article: heroContent) { url in
+                        record(imageURL: url, forArticle: heroContent)
+                    }
+                }
+                .buttonStyle(.plain)
+                .frame(maxWidth: 720)
+                .padding(.horizontal, MacLayout.gutter)
+            }
+            articleRow(Array(inspiration.weekIdeas.dropFirst()))
+        }
+    }
+
+    /// Unread recipes from followed sites, with the sites themselves as
+    /// chips underneath. Shown only once something is followed.
+    private var fromYourSitesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                shelfHeader(
+                    String(localized: "New from your sites"),
+                    symbol: "dot.radiowaves.left.and.right",
+                    caption: String(localized: "Unread, from the sites you follow")
+                )
+                Spacer(minLength: 8)
+                if !inspiration.allFromYourSites.isEmpty {
+                    Button(String(localized: "See all")) {
+                        seasonalRoute = SeasonalRecipeMomentRoute(
+                            momentID: "followed-sites",
+                            title: String(localized: "New from your sites"),
+                            symbolName: "dot.radiowaves.left.and.right",
+                            articles: inspiration.allFromYourSites
+                        )
+                    }
+                    .font(.subheadline.weight(.semibold))
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "See all new recipes from your sites"))
+                }
+            }
+            .padding(.horizontal, MacLayout.gutter)
+
+            if inspiration.fromYourSites.isEmpty {
+                Text(String(localized: "You’re all caught up."))
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, MacLayout.gutter)
+            } else {
+                articleRow(inspiration.fromYourSites)
+            }
+
             ScrollView(.horizontal) {
                 HStack(spacing: 8) {
                     ForEach(subscribedSites) { site in
@@ -322,11 +450,51 @@ private struct RecipeDiscoveryContent: View {
                 .padding(.horizontal, MacLayout.gutter)
             }
             .scrollIndicators(.hidden)
-        } header: {
-            Text(String(localized: "Subscribed sites"))
+        }
+    }
+
+    private func shelfHeader(_ title: String, symbol: String, caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Label(title, systemImage: symbol)
                 .font(.title3.weight(.semibold))
+                .fixedSize(horizontal: false, vertical: true)
+                .accessibilityAddTraits(.isHeader)
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    /// The same horizontal row of cards the seasonal shelf draws.
+    @ViewBuilder
+    private func articleRow(_ articles: [RecipeDiscoveryArticle]) -> some View {
+        if !articles.isEmpty {
+            ScrollView(.horizontal) {
+                HStack(alignment: .top, spacing: 16) {
+                    ForEach(articles) { article in
+                        let item = content(article)
+                        NavigationLink {
+                            reader(for: item)
+                        } label: {
+                            RecipeArticleCard(article: item) { url in
+                                record(imageURL: url, forArticle: item)
+                            }
+                        }
+                        .frame(width: 174)
+                        .buttonStyle(.plain)
+                    }
+                }
                 .padding(.horizontal, MacLayout.gutter)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private func reader(for article: RecipeArticleContent) -> some View {
+        RecipeArticleReaderView(article: article, onRead: {
+            markRead(article)
+        }) { url in
+            record(imageURL: url, forArticle: article)
         }
     }
 
@@ -341,11 +509,7 @@ private struct RecipeDiscoveryContent: View {
                     record(imageURL: url, forArticle: article)
                 }
             ) { article in
-                RecipeArticleReaderView(article: article, onRead: {
-                    markRead(article)
-                }) { url in
-                    record(imageURL: url, forArticle: article)
-                }
+                reader(for: article)
             }
             .padding(.horizontal, MacLayout.gutter)
 
@@ -356,7 +520,7 @@ private struct RecipeDiscoveryContent: View {
                 Text(sourceFilter.flatMap { selected in
                     sourceOptions.first(where: { $0.id == selected })?.name
                 } ?? (trimmedSearch.isEmpty
-                      ? String(localized: "Recipes from across the web")
+                      ? String(localized: "Explore all recipes")
                       : String(localized: "Matches in Discover and your sites")))
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
@@ -383,7 +547,7 @@ private struct RecipeDiscoveryContent: View {
                 Button(String(localized: "Surprise me"), systemImage: "dice") {
                     surpriseArticle = snapshot.visibleArticles.randomElement().map(content)
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.bordered)
                 .disabled(snapshot.visibleArticles.isEmpty)
             }
 
@@ -585,19 +749,52 @@ private struct RecipeDiscoveryContent: View {
         let marketContext = discoveryMarketContext
         let query = discoveryQuery
         let readIDs = RecipeFeedReadState.readIDs()
-        let next = await Task.detached(priority: .userInitiated) {
+        let seasonal = seasonalCollections
+        let (next, nextInspiration) = await Task.detached(priority: .userInitiated) {
             let sourceOrder = RecipeDiscoveryService.sources(for: marketContext).map { "discovery:\($0.id)" }
                 + subscribedSourceOrder
-            return RecipeDiscoverySnapshot.build(
+            let lowAffinity = RecipeDiscoveryService.lowAffinitySourceIDs(for: marketContext)
+            let built = RecipeDiscoverySnapshot.build(
                 seeds: seeds,
                 sourceOrder: sourceOrder,
                 query: query,
                 readIDs: readIDs,
-                lowAffinitySourceIDs: RecipeDiscoveryService.lowAffinitySourceIDs(for: marketContext)
+                lowAffinitySourceIDs: lowAffinity
             )
+            return (built, Self.makeInspiration(built.allArticles, lowAffinity: lowAffinity, seasonal: seasonal))
         }.value
         guard !Task.isCancelled else { return }
         snapshot = next
+        inspiration = nextInspiration
+    }
+
+    /// The shelves skip whatever "In season" already shows, and the seasonal
+    /// choice offers every active moment's recipes.
+    private nonisolated static func makeInspiration(
+        _ articles: [RecipeDiscoveryArticle],
+        lowAffinity: Set<String>,
+        seasonal: [SeasonalRecipeCollection]
+    ) -> DiscoveryInspiration {
+        let onShelf = SeasonalRecipeShelfPolicy.overviewCollections(seasonal)
+        return DiscoveryInspirationPolicy.make(
+            articles: articles,
+            lowAffinitySourceIDs: lowAffinity,
+            excludingIDs: Set(onShelf.flatMap { $0.articles.map(\.id) }),
+            seasonalArticles: DiscoveryInspirationPolicy.seasonalArticles(seasonal)
+        )
+    }
+
+    /// Seasonal collections arrive after the snapshot; re-pick the shelves
+    /// from the articles already built rather than rebuilding the snapshot.
+    private func rebuildInspiration() async {
+        let articles = snapshot.allArticles
+        let seasonal = seasonalCollections
+        let lowAffinity = RecipeDiscoveryService.lowAffinitySourceIDs(for: discoveryMarketContext)
+        let next = await Task.detached(priority: .utility) {
+            Self.makeInspiration(articles, lowAffinity: lowAffinity, seasonal: seasonal)
+        }.value
+        guard !Task.isCancelled else { return }
+        inspiration = next
     }
 
     private func makeDiscoverySeeds() -> [RecipeDiscoveryArticleSeed] {
@@ -668,6 +865,7 @@ private struct RecipeDiscoveryContent: View {
     private func markRead(_ article: RecipeArticleContent) {
         RecipeFeedReadState.markRead(article.readStateID)
         snapshot = snapshot.applying(readID: article.readStateID)
+        inspiration = inspiration.applying(readID: article.readStateID)
         seasonalReadIDs.insert(article.readStateID)
     }
 
@@ -737,6 +935,7 @@ private struct RecipeDiscoveryContent: View {
         nextSeasonalTransition = SeasonalRecipeCalendar.nextTransition(after: now, context: context)
         completedSeasonalContextKey = contextKey
         completedSeasonalRefreshRevision = refreshRevision
+        await rebuildInspiration()
     }
 
     private func refresh(force: Bool) async {
@@ -786,4 +985,92 @@ private struct RecipeWebSearchRequest: Identifiable, Hashable {
     let query: String
     let planningContext: RecipePlanningContext?
     var id: Self { self }
+}
+
+extension RecipeInspirationTheme {
+    var localizedTitle: String {
+        switch self {
+        case .quickDinner: String(localized: "Quick dinner")
+        case .seasonal: String(localized: "Seasonal ideas")
+        case .vegetarian: String(localized: "Vegetarian")
+        case .baking: String(localized: "Something to bake")
+        }
+    }
+
+    /// Why these recipes are here, said plainly: the label is the source's
+    /// own, never a promise Meals checked.
+    var localizedReason: String {
+        switch self {
+        case .quickDinner: String(localized: "Their authors call them quick")
+        case .seasonal: String(localized: "Right for this time of year")
+        case .vegetarian: String(localized: "Marked vegetarian or vegan by the site")
+        case .baking: String(localized: "Breads, cakes and bakes")
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .quickDinner: "timer"
+        case .seasonal: "leaf"
+        case .vegetarian: "carrot"
+        case .baking: "birthday.cake"
+        }
+    }
+}
+
+/// One "What sounds good today?" choice: a photo from its own recipes behind
+/// the name, so the tile shows what it leads to.
+@MainActor
+private struct InspirationThemeTile: View {
+    let choice: DiscoveryInspiration.ThemeChoice
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            VStack(alignment: .leading, spacing: 4) {
+                Spacer(minLength: 0)
+                Image(systemName: choice.theme.symbolName)
+                    .font(.title3.weight(.semibold))
+                Text(choice.theme.localizedTitle)
+                    .font(.headline)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+                Text(choice.theme.localizedReason)
+                    .font(.caption)
+                    .opacity(0.9)
+                    .multilineTextAlignment(.leading)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .foregroundStyle(.white)
+            .padding(12)
+            .frame(maxWidth: .infinity, minHeight: 110, alignment: .bottomLeading)
+            .background {
+                GeometryReader { proxy in
+                    RemoteRecipeImage(
+                        url: choice.coverImageURL,
+                        placeholderSymbol: choice.theme.symbolName,
+                        tint: DishGlyph.tint(forName: choice.theme.rawValue),
+                        cornerRadius: 18,
+                        width: proxy.size.width,
+                        height: proxy.size.height
+                    )
+                    .overlay(
+                        LinearGradient(
+                            colors: [.black.opacity(0.15), .black.opacity(0.72)],
+                            startPoint: .top,
+                            endPoint: .bottom
+                        )
+                    )
+                }
+            }
+            .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(choice.theme.localizedTitle)
+        .accessibilityValue(choice.theme.localizedReason)
+        .accessibilityHint(String(localized: "Shows \(choice.articles.count) recipes"))
+        .accessibilityAddTraits(.isButton)
+    }
 }
