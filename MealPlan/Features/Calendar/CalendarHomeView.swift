@@ -7,10 +7,15 @@ struct ExportedPDF: Identifiable { let id = UUID(); let url: URL }
 @MainActor
 struct CalendarHomeView: View {
     @Environment(AppState.self) private var appState
+    /// Whether the surrounding `PlanView` has room for its dish list, so the
+    /// Plan toolbar — composed only here — can offer the show/hide button.
+    /// A plain `Bool` on purpose: it changes only when the layout crosses the
+    /// split threshold, so resizing the divider doesn't re-run the calendar.
+    var supportsDishSidebar = false
 
     var body: some View {
         let householdID = appState.currentHousehold?.uuid
-        CalendarHomeContent(householdID: householdID)
+        CalendarHomeContent(householdID: householdID, supportsDishSidebar: supportsDishSidebar)
             .id(householdID)
     }
 }
@@ -22,6 +27,9 @@ private struct CalendarHomeContent: View {
     @Environment(\.modelContext) private var context
     @Query private var mealTypes: [MealType]
     let householdID: UUID?
+    let supportsDishSidebar: Bool
+    /// Shared with `PlanView`, which lays the dish list out from the same key.
+    @AppStorage("plan.showsDishSidebar") private var showsDishSidebar = true
     /// The Monday-based week sitting at the top of the plan. Written by the
     /// scroll view only when it actually changes weeks, so ordinary scrolling
     /// no longer re-runs this body — and with it the week grouping over every
@@ -35,6 +43,7 @@ private struct CalendarHomeContent: View {
     @State private var showingPaywall = false
     @State private var showingMealsSettings = false
     @State private var showingShareImages = false
+    @State private var showingMenus = false
     /// Kept separate from `AppState`: day visibility changes rapidly during a
     /// scroll and only the small week strip needs to observe them. If this
     /// lives on the app state, every change invalidates the whole calendar.
@@ -48,8 +57,9 @@ private struct CalendarHomeContent: View {
     @State private var paginator = CalendarPaginator()
     @State private var entrySnapshots = CalendarEntrySnapshotStore()
 
-    init(householdID: UUID?) {
+    init(householdID: UUID?, supportsDishSidebar: Bool) {
         self.householdID = householdID
+        self.supportsDishSidebar = supportsDishSidebar
         let scopedHouseholdID = householdID ?? UUID()
         _mealTypes = Query(FetchDescriptor<MealType>(
             predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
@@ -159,32 +169,19 @@ private struct CalendarHomeContent: View {
         #if os(iOS)
         .navigationBarTitleDisplayMode(.inline)
         #endif
+        // The only place the Plan toolbar is composed: one More menu, plus the
+        // dish-list toggle as its own button so it never ends up in overflow.
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button(String(localized: "Today")) { goTo(.now) }
             }
             ToolbarItem(placement: .primaryAction) {
-                Menu {
-                    Button(String(localized: "Share Images"), systemImage: "photo.stack") {
-                        showingShareImages = true
-                    }
-                    Button(String(localized: "Print plan…"), systemImage: "printer") {
-                        printingWeek = focusWeek
-                    }
-                    Divider()
-                    Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
-                        showingMealsSettings = true
-                    }
-                    Menu(String(localized: "This week"), systemImage: "square.on.square") {
-                        Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
-                            savingTemplateWeek = focusWeek
-                        }
-                        Button(String(localized: "Apply a template…"), systemImage: "square.on.square.dashed") {
-                            applyingTemplateWeek = focusWeek
-                        }
-                    }
-                } label: {
-                    Label(String(localized: "More"), systemImage: "ellipsis")
+                moreMenu
+            }
+            if supportsDishSidebar {
+                ToolbarSpacer(.fixed, placement: .primaryAction)
+                ToolbarItem(placement: .primaryAction) {
+                    dishListToggle
                 }
             }
         }
@@ -227,6 +224,12 @@ private struct CalendarHomeContent: View {
             }
             .dismissesOnOutsideClick()
         }
+        .sheet(isPresented: $showingMenus) {
+            NavigationStack {
+                MealMenusView(initialDate: appState.selectedDate, householdID: householdID)
+            }
+            .dismissesOnOutsideClick()
+        }
         .sheet(isPresented: $showingShareImages) {
             NavigationStack {
                 MealShareGalleryView(initialDate: appState.selectedDate)
@@ -241,6 +244,50 @@ private struct CalendarHomeContent: View {
             }
         }
         .animation(.snappy, value: appState.undoOffer?.id)
+    }
+
+    private var moreMenu: some View {
+        Menu {
+            Section {
+                Button(String(localized: "Share Images"), systemImage: "photo.stack") {
+                    showingShareImages = true
+                }
+                Button(String(localized: "Print plan…"), systemImage: "printer") {
+                    printingWeek = focusWeek
+                }
+            }
+            Section {
+                Button(String(localized: "Reusable menus"), systemImage: "square.stack.3d.up") {
+                    showingMenus = true
+                }
+                .accessibilityHint(String(localized: "Opens reusable dish menus"))
+                Button(String(localized: "Save week as template"), systemImage: "square.and.arrow.down") {
+                    savingTemplateWeek = focusWeek
+                }
+                Button(String(localized: "Apply a template…"), systemImage: "square.on.square.dashed") {
+                    applyingTemplateWeek = focusWeek
+                }
+            }
+            Section {
+                Button(String(localized: "Configure meals…"), systemImage: "fork.knife") {
+                    showingMealsSettings = true
+                }
+            }
+        } label: {
+            Label(String(localized: "More"), systemImage: "ellipsis")
+        }
+    }
+
+    private var dishListToggle: some View {
+        let title = showsDishSidebar
+            ? String(localized: "Hide dish list")
+            : String(localized: "Show dish list")
+        return Button {
+            withAnimation(.snappy) { showsDishSidebar.toggle() }
+        } label: {
+            Label(title, systemImage: "sidebar.trailing")
+        }
+        .help(title)
     }
 
     /// A meal dragged onto the week strip moves to that day and keeps the meal

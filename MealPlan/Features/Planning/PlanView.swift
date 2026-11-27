@@ -14,7 +14,6 @@ struct PlanView: View {
     @AppStorage("plan.showsDishSidebar") private var showsSidebar = true
     @AppStorage("plan.dishSidebarWidth") private var sidebarWidth: Double = 300
     @GestureState private var resizeGesture = PlanResizeGestureState()
-    @State private var showingMenus = false
 
     var body: some View {
         GeometryReader { geometry in
@@ -33,7 +32,9 @@ struct PlanView: View {
             )
 
             HStack(spacing: 0) {
-                CalendarHomeView()
+                // The calendar owns the whole Plan toolbar, including the
+                // dish-list toggle, so there is only ever one More menu.
+                CalendarHomeView(supportsDishSidebar: fits)
                     .frame(maxWidth: .infinity)
 
                 if fits && showsSidebar {
@@ -58,37 +59,7 @@ struct PlanView: View {
                     )
                     : nil
             )
-            .toolbar {
-                ToolbarItem(placement: .secondaryAction) {
-                    Button {
-                        showingMenus = true
-                    } label: {
-                        Label(String(localized: "Menus"), systemImage: "square.stack.3d.up")
-                    }
-                    .accessibilityHint(String(localized: "Opens reusable dish menus"))
-                }
-                if fits {
-                    ToolbarItem(placement: .secondaryAction) {
-                        Button {
-                            withAnimation(.snappy) { showsSidebar.toggle() }
-                        } label: {
-                            Label(
-                                showsSidebar
-                                    ? String(localized: "Hide dish list")
-                                    : String(localized: "Show dish list"),
-                                systemImage: showsSidebar ? "sidebar.trailing" : "sidebar.leading"
-                            )
-                        }
-                    }
-                }
-            }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .sheet(isPresented: $showingMenus) {
-            NavigationStack {
-                MealMenusView(initialDate: appState.selectedDate, householdID: appState.currentHousehold?.uuid)
-            }
-            .dismissesOnOutsideClick()
         }
     }
 
