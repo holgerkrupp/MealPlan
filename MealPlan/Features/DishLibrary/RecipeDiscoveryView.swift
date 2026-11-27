@@ -4,11 +4,15 @@ import os
 
 @MainActor
 struct RecipeDiscoveryView: View {
+    /// The day and meal Discover was opened for, if any. An online search
+    /// carries it into the browser so *Save & plan* lands in that slot.
+    var planningContext: RecipePlanningContext? = nil
+
     @Environment(AppState.self) private var appState
 
     var body: some View {
         let householdID = appState.currentHousehold?.uuid
-        RecipeDiscoveryContent(householdID: householdID)
+        RecipeDiscoveryContent(householdID: householdID, planningContext: planningContext)
             .id(householdID)
     }
 }
@@ -20,10 +24,13 @@ private struct RecipeDiscoveryContent: View {
     @Query private var feeds: [RecipeFeed]
     @Query private var bookmarks: [RecipeBookmark]
     let householdID: UUID?
+    let planningContext: RecipePlanningContext?
+    @AppStorage("search.engine") private var searchEngineRaw = SearchEngine.fallback.rawValue
 
     @State private var showingSubscription = false
     @State private var showingBookmark = false
     @State private var browserTarget: BookmarkBrowserTarget?
+    @State private var webSearch: RecipeWebSearchRequest?
     @State private var refreshing = false
     @State private var loadingDiscovery = true
     @State private var loadingSeasonal = false
@@ -48,8 +55,9 @@ private struct RecipeDiscoveryContent: View {
     @State private var completedSeasonalContextKey = ""
     @State private var nextSeasonalTransition: Date?
 
-    init(householdID: UUID?) {
+    init(householdID: UUID?, planningContext: RecipePlanningContext?) {
         self.householdID = householdID
+        self.planningContext = planningContext
         let scopedHouseholdID = householdID ?? UUID()
         _feeds = Query(FetchDescriptor<RecipeFeed>(
             predicate: #Predicate { $0.household?.uuid == scopedHouseholdID },
@@ -96,6 +104,8 @@ private struct RecipeDiscoveryContent: View {
 
     private var hasVisibleArticles: Bool { !snapshot.visibleArticles.isEmpty }
 
+    private var trimmedSearch: String { search.trimmingCharacters(in: .whitespacesAndNewlines) }
+
     var body: some View {
         ScrollView {
             #if os(iOS)
@@ -105,6 +115,10 @@ private struct RecipeDiscoveryContent: View {
             #endif
 
             LazyVStack(alignment: .leading, spacing: 20, pinnedViews: [.sectionHeaders]) {
+                if !trimmedSearch.isEmpty {
+                    searchOnlineRow
+                        .padding(.horizontal, MacLayout.gutter)
+                }
                 if loadingDiscovery && snapshot.allArticles.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -143,8 +157,11 @@ private struct RecipeDiscoveryContent: View {
         .refreshable { await refresh(force: true) }
         .searchable(
             text: $search,
-            prompt: Text(String(localized: "Search recipes and sites"))
+            prompt: Text(String(localized: "Search for dishes, ingredients or ideas"))
         )
+        // Typing filters what Discover already has, locally. Only an explicit
+        // Search / Return goes online.
+        .onSubmit(of: .search) { searchOnline() }
         .toolbar {
             ToolbarItem(placement: .secondaryAction) { browsingMenu }
             if !appState.isGuest {
@@ -195,12 +212,20 @@ private struct RecipeDiscoveryContent: View {
         }
         .detailPresentation(
             item: $browserTarget,
-            route: { .browseSite(url: $0.url, title: $0.dish.name) }
+            route: { .browseSite(url: $0.url, title: $0.title) }
         ) { target in
             NavigationStack {
-                RecipeFinderView(dish: target.dish, initialURL: target.url, createsDish: true)
+                RecipeFinderView(query: "", planningContext: planningContext, initialURL: target.url)
             }
             .dismissesOnOutsideClick()
+        }
+        .detailPresentation(
+            item: $webSearch,
+            route: { .searchWeb(query: $0.query, planningContext: $0.planningContext) }
+        ) { request in
+            NavigationStack {
+                RecipeFinderView(query: request.query, planningContext: request.planningContext)
+            }
         }
         .navigationDestination(item: $surpriseArticle) { article in
             RecipeArticleReaderView(article: article, onImageResolved: { url in
@@ -219,6 +244,46 @@ private struct RecipeDiscoveryContent: View {
                 }
             )
         }
+    }
+
+    /// Always offered while there is a query, whether or not Discover has
+    /// matches of its own: the web is bigger than any list of sources.
+    private var searchOnlineRow: some View {
+        let engine = SearchEngine.resolved(from: searchEngineRaw)
+        return Button(action: searchOnline) {
+            HStack(spacing: 12) {
+                Image(systemName: "globe")
+                    .font(.title3)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 28)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "Search online for “\(trimmedSearch)”"))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                    Text(String(localized: "Searches the whole web with \(engine.localizedName), inside Meals."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .multilineTextAlignment(.leading)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "magnifyingglass")
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.secondary.opacity(0.12), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
+    }
+
+    private func searchOnline() {
+        guard !trimmedSearch.isEmpty else { return }
+        webSearch = RecipeWebSearchRequest(query: trimmedSearch, planningContext: planningContext)
     }
 
     private var discoveryEmptyState: some View {
@@ -290,7 +355,9 @@ private struct RecipeDiscoveryContent: View {
             HStack {
                 Text(sourceFilter.flatMap { selected in
                     sourceOptions.first(where: { $0.id == selected })?.name
-                } ?? String(localized: "Recipes from across the web"))
+                } ?? (trimmedSearch.isEmpty
+                      ? String(localized: "Recipes from across the web")
+                      : String(localized: "Matches in Discover and your sites")))
                     .font(.title3.weight(.semibold))
                     .lineLimit(1)
                 Spacer()
@@ -691,10 +758,7 @@ private struct RecipeDiscoveryContent: View {
 
     private func open(_ bookmark: RecipeBookmark) {
         guard let url = bookmark.url else { return }
-        let dish = Dish(name: bookmark.title)
-        dish.household = appState.currentHousehold
-        dish.createdByName = appState.currentMemberName
-        browserTarget = BookmarkBrowserTarget(dish: dish, url: url)
+        browserTarget = BookmarkBrowserTarget(title: bookmark.title, url: url)
     }
 }
 
@@ -712,6 +776,14 @@ private struct SubscribedSite: Identifiable {
 
 private struct BookmarkBrowserTarget: Identifiable {
     let id = UUID()
-    let dish: Dish
+    let title: String
     let url: URL
+}
+
+/// One explicit online search. Stored in `@State`, and its identity comes
+/// from its value, so a redraw never re-presents it.
+private struct RecipeWebSearchRequest: Identifiable, Hashable {
+    let query: String
+    let planningContext: RecipePlanningContext?
+    var id: Self { self }
 }

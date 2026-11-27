@@ -7,63 +7,112 @@ import UIKit
 import AppKit
 #endif
 
-/// An in-app browser for finding a recipe for a dish that hasn't got one.
+/// An in-app browser for finding a recipe on the web.
 ///
-/// Opens on a web search for the dish and adds one thing a browser doesn't
-/// have: "Use this recipe", which reads the page currently on screen and
-/// saves what it finds onto the dish.
+/// Opens on a web search with the person's chosen engine and adds one thing a
+/// browser doesn't have: "Use this recipe", which reads the page currently on
+/// screen and offers what it finds for review. It works in two ways:
+///
+/// * **For a dish** (`init(dish:…)`) — find a recipe for a dish that hasn't
+///   got one, or refresh one from its source. The result is saved onto that
+///   dish.
+/// * **For the library** (`init(query:planningContext:…)`) — free-text search
+///   from Discover. Nothing exists in the store until the person confirms a
+///   recipe; it then goes through `RecipeImportCommitter` (so the same page
+///   tried twice is found, not duplicated) and, for *Save & plan*, onto the
+///   planning context's day and meal — or into `PlanDishSheet` when the search
+///   was not started from a slot. Cancelling leaves nothing behind.
 @MainActor
 struct RecipeFinderView: View {
-    @Bindable var dish: Dish
+    let dish: Dish?
     let initialURL: URL?
-    let createsDish: Bool
     let refreshesExisting: Bool
+    let planningContext: RecipePlanningContext?
 
+    @Environment(AppState.self) private var appState
     @Environment(\.modelContext) private var context
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.openURL) private var openURL
     @AppStorage("search.engine") private var searchEngineRaw = SearchEngine.fallback.rawValue
 
     @State private var page = WebPage()
+    @State private var searchText: String
     @State private var isImporting = false
     @State private var importError: String?
     @State private var noRecipeFound = false
     @State private var pendingImport: RecipeExtractionResult?
+    /// Library mode: a dish saved by *Save & plan* waiting for the review
+    /// sheet to finish dismissing before `PlanDishSheet` goes up.
+    @State private var dishToPlanAfterReview: Dish?
+    @State private var planningDish: Dish?
+    @State private var savedAnything = false
+    @State private var saveNotice: String?
+    @State private var saveError: String?
 
     private var engine: SearchEngine { SearchEngine.resolved(from: searchEngineRaw) }
+
+    /// Free-text search from Discover: no dish exists until one is confirmed.
+    private var isLibraryMode: Bool { dish == nil }
 
     init(
         dish: Dish,
         initialURL: URL? = nil,
-        createsDish: Bool = false,
         refreshesExisting: Bool = false
     ) {
         self.dish = dish
         self.initialURL = initialURL
-        self.createsDish = createsDish
         self.refreshesExisting = refreshesExisting
+        self.planningContext = nil
+        _searchText = State(initialValue: dish.name)
     }
 
-    /// Only a real web page can be imported — not the search results
-    /// themselves, and not an about:blank while the first load is in flight.
-    private var importableURL: URL? {
-        guard let url = page.url,
-              url.scheme?.hasPrefix("http") == true,
-              !isSearchResultsPage(url) else { return nil }
-        return url
+    /// A web search for whatever was typed, saving into the library. Pass
+    /// `planningContext` when the search was started for a particular day and
+    /// meal, and `initialURL` to open a site instead of a search.
+    init(
+        query: String,
+        planningContext: RecipePlanningContext? = nil,
+        initialURL: URL? = nil
+    ) {
+        self.dish = nil
+        self.initialURL = initialURL
+        self.refreshesExisting = false
+        self.planningContext = planningContext
+        _searchText = State(initialValue: query)
+    }
+
+    private var importableURL: URL? { SearchEngine.importableURL(page.url) }
+
+    private var currentSearchURL: URL? {
+        isLibraryMode
+            ? RecipeSearch.url(forFreeText: searchText, engine: engine)
+            : RecipeSearch.url(for: searchText, engine: engine)
+    }
+
+    private var canImport: Bool {
+        importableURL != nil && !isImporting && !(isLibraryMode && appState.isGuest)
     }
 
     var body: some View {
         WebView(page)
             .ignoresSafeArea(edges: .bottom)
             .overlay(alignment: .top) { progressBar }
+            .overlay(alignment: .bottom) { saveNoticeBanner }
             .navigationTitle(page.title.isEmpty ? String(localized: "Find a recipe") : page.title)
             #if os(iOS)
             .navigationBarTitleDisplayMode(.inline)
             #endif
+            .modifier(EditableWebSearch(isEnabled: isLibraryMode, text: $searchText, onSubmit: runSearch))
             .toolbar { toolbarContent }
             .task {
-                guard let url = initialURL ?? RecipeSearch.url(for: dish.name, engine: engine) else { return }
+                guard let url = initialURL ?? currentSearchURL else { return }
                 _ = page.load(url)
+            }
+            .task(id: saveNotice) {
+                guard let saveNotice else { return }
+                AccessibilityNotification.Announcement(saveNotice).post()
+                try? await Task.sleep(for: .seconds(4))
+                if !Task.isCancelled { self.saveNotice = nil }
             }
             .alert(
                 String(localized: "Couldn’t read that page"),
@@ -83,37 +132,74 @@ struct RecipeFinderView: View {
             } message: {
                 Text("Open the page with the actual recipe on it, then try again.")
             }
-            .sheet(item: $pendingImport) { result in
-                if refreshesExisting {
-                    RecipeRefreshPreview(
-                        result: result,
-                        dish: dish,
-                        onApply: { recipe, selection in
-                            do {
-                                try DishBuilder.refresh(recipe, to: dish, context: context, selection: selection)
-                                pendingImport = nil
-                                dismiss()
-                            } catch {
-                                importError = String(localized: "The refreshed recipe could not be saved. Your existing recipe was kept. Try again.")
-                            }
-                        },
-                        onCancel: { pendingImport = nil }
-                    )
-                } else {
-                    RecipeImportPreview(
-                        result: result,
-                        onConfirm: { recipe in
-                            pendingImport = nil
-                            applyConfirmedRecipe(recipe)
-                        },
-                        onSaveLinkOnly: {
-                            pendingImport = nil
-                            saveLinkOnly()
-                        },
-                        onCancel: { pendingImport = nil }
-                    )
-                }
+            .alert(
+                String(localized: "Couldn’t save the recipe"),
+                isPresented: Binding(get: { saveError != nil }, set: { if !$0 { saveError = nil } })
+            ) {
+                Button(String(localized: "OK"), role: .cancel) {}
+            } message: {
+                Text(saveError ?? "")
             }
+            .sheet(item: $pendingImport, onDismiss: presentPendingPlan) { result in
+                reviewSheet(for: result)
+            }
+            .detailPresentation(item: $planningDish, route: { .planRecipe($0.uuid) }) { dish in
+                NavigationStack {
+                    PlanDishSheet(dish: dish, defaultDate: appState.selectedDate)
+                }
+                .presentationDetents([.medium, .large])
+                .dismissesOnOutsideClick()
+            }
+    }
+
+    @ViewBuilder
+    private func reviewSheet(for result: RecipeExtractionResult) -> some View {
+        if refreshesExisting, let dish {
+            RecipeRefreshPreview(
+                result: result,
+                dish: dish,
+                onApply: { recipe, selection in
+                    do {
+                        try DishBuilder.refresh(recipe, to: dish, context: context, selection: selection)
+                        pendingImport = nil
+                        dismiss()
+                    } catch {
+                        importError = String(localized: "The refreshed recipe could not be saved. Your existing recipe was kept. Try again.")
+                    }
+                },
+                onCancel: { pendingImport = nil }
+            )
+        } else if isLibraryMode {
+            RecipeImportPreview(
+                result: result,
+                onConfirm: { recipe in
+                    pendingImport = nil
+                    saveToLibrary(recipe, andPlan: false)
+                },
+                onConfirmAndPlan: { recipe in
+                    pendingImport = nil
+                    saveToLibrary(recipe, andPlan: true)
+                },
+                onSaveLinkOnly: {
+                    pendingImport = nil
+                    saveLinkOnly()
+                },
+                onCancel: { pendingImport = nil }
+            )
+        } else {
+            RecipeImportPreview(
+                result: result,
+                onConfirm: { recipe in
+                    pendingImport = nil
+                    applyConfirmedRecipe(recipe)
+                },
+                onSaveLinkOnly: {
+                    pendingImport = nil
+                    saveLinkOnly()
+                },
+                onCancel: { pendingImport = nil }
+            )
+        }
     }
 
     // MARK: - Chrome
@@ -126,10 +212,27 @@ struct RecipeFinderView: View {
         }
     }
 
+    @ViewBuilder
+    private var saveNoticeBanner: some View {
+        if let saveNotice {
+            Label(saveNotice, systemImage: "checkmark.circle.fill")
+                .font(.subheadline.weight(.medium))
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(.regularMaterial, in: Capsule())
+                .padding(.bottom, 24)
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .cancellationAction) {
-            Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+            if isLibraryMode && savedAnything {
+                Button(String(localized: "Done")) { dismiss() }
+            } else {
+                Button(String(localized: "Cancel"), role: .cancel) { dismiss() }
+            }
         }
 
         ToolbarItem(placement: .confirmationAction) {
@@ -142,7 +245,7 @@ struct RecipeFinderView: View {
                     Label(String(localized: "Use this recipe"), systemImage: "square.and.arrow.down")
                 }
             }
-            .disabled(importableURL == nil || isImporting)
+            .disabled(!canImport)
         }
 
         ToolbarItemGroup(placement: .navigation) {
@@ -157,16 +260,28 @@ struct RecipeFinderView: View {
             .disabled(page.backForwardList.forwardList.isEmpty)
 
             Button(String(localized: "Search again"), systemImage: "magnifyingglass") {
-                if let url = RecipeSearch.url(for: dish.name, engine: engine) { _ = page.load(url) }
+                runSearch()
             }
+            .disabled(currentSearchURL == nil)
+
+            Button(String(localized: "Open website"), systemImage: "safari") {
+                if let url = page.url, url.scheme?.hasPrefix("http") == true { openURL(url) }
+            }
+            .disabled(page.url?.scheme?.hasPrefix("http") != true)
         }
+    }
+
+    /// Runs only on an explicit Search / Return / "Search again" — never per
+    /// keystroke.
+    private func runSearch() {
+        if let url = currentSearchURL { _ = page.load(url) }
     }
 
     // MARK: - Import
 
     /// Reads the page as rendered — so cookie walls the user has clicked
-    /// through and lazily inserted markup are included — and saves what the
-    /// parser can make of it onto the dish.
+    /// through and lazily inserted markup are included — and offers what the
+    /// parser can make of it for review.
     private func importCurrentPage() async {
         guard let url = importableURL else { return }
         isImporting = true
@@ -175,7 +290,7 @@ struct RecipeFinderView: View {
         let html = await renderedHTML()
         let parser = RecipeSchemaParser()
         do {
-            let result: RecipeExtractionResult
+            var result: RecipeExtractionResult
             if let html {
                 result = try await parser.importExtraction(fromHTML: html, sourceURL: url)
             } else {
@@ -186,6 +301,7 @@ struct RecipeFinderView: View {
                 noRecipeFound = true
                 return
             }
+            result.recipe = RecipeSearch.attributed(result.recipe, to: url)
             pendingImport = result
         } catch {
             importError = error.localizedDescription
@@ -193,13 +309,8 @@ struct RecipeFinderView: View {
     }
 
     private func applyConfirmedRecipe(_ recipe: ImportedRecipe) {
-        // A newly discovered dish starts with the search query as its name;
-        // the preview's corrected title must win when it is confirmed. An
-        // existing dish keeps the name the cook already chose.
-        if createsDish, !recipe.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-            dish.name = recipe.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        }
-        if createsDish { context.insert(dish) }
+        // An existing dish keeps the name the cook already chose.
+        guard let dish else { return }
         if refreshesExisting {
             do {
                 try DishBuilder.refresh(recipe, to: dish, context: context)
@@ -213,6 +324,56 @@ struct RecipeFinderView: View {
         }
     }
 
+    /// Library mode: the one way a found recipe enters the store. The
+    /// committer's duplicate check makes a second try of the same page reuse
+    /// the dish already there, and planning is idempotent per day and meal.
+    private func saveToLibrary(_ recipe: ImportedRecipe, andPlan: Bool) {
+        let result = RecipeImportCommitter.importAll(
+            [recipe],
+            household: appState.currentHousehold,
+            createdByName: appState.currentMemberName,
+            context: context
+        )
+        guard !result.persistenceFailed, let saved = result.dishesForPlanning.first else {
+            saveError = result.summary
+            return
+        }
+        savedAnything = true
+        // A local notice, not `appState.importNotice`: the root alert would
+        // tear down this sheet (and any sheet it was opened from).
+        saveNotice = result.imported > 0
+            ? String(localized: "Saved to your recipes.")
+            : String(localized: "Already in your recipes.")
+
+        guard andPlan else { return }
+        if let planningContext {
+            switch MealPlanner.planOnce(
+                dish: saved,
+                on: planningContext.date,
+                mealKey: planningContext.mealKey,
+                household: appState.currentHousehold,
+                memberName: appState.currentMemberName,
+                context: context
+            ) {
+            case .saved, .alreadyPlanned:
+                // Back to the slot the search was started for.
+                dismiss()
+            case .failed:
+                saveError = String(localized: "The recipe is in your recipes, but it couldn’t be added to the plan. Try planning it again.")
+            }
+        } else {
+            dishToPlanAfterReview = saved
+        }
+    }
+
+    /// The plan sheet goes up only once the review sheet is fully gone —
+    /// presenting while another sheet is still dismissing is dropped on iOS.
+    private func presentPendingPlan() {
+        guard let dish = dishToPlanAfterReview else { return }
+        dishToPlanAfterReview = nil
+        planningDish = dish
+    }
+
     /// The live DOM, or nil if the page won't hand it over — the caller then
     /// falls back to fetching the URL fresh.
     private func renderedHTML() async -> String? {
@@ -222,18 +383,32 @@ struct RecipeFinderView: View {
 
     private func saveLinkOnly() {
         guard let url = importableURL else { return }
-        if createsDish { context.insert(dish) }
+        guard let dish else {
+            saveToLibrary(RecipeSearch.linkOnlyRecipe(title: page.title, url: url), andPlan: false)
+            return
+        }
         dish.sourceURL = url
         dish.needsReview = true
         try? context.save()
         dismiss()
     }
+}
 
-    /// True for the engines' own results pages, which have nothing to import.
-    private func isSearchResultsPage(_ url: URL) -> Bool {
-        guard let host = url.host()?.lowercased() else { return false }
-        let engines = ["ecosia.org", "duckduckgo.com", "startpage.com", "google.", "bing.com"]
-        return engines.contains { host.contains($0) }
+/// The finder's own editable search field, for free-text search only: a
+/// dish-bound search keeps searching for the dish.
+private struct EditableWebSearch: ViewModifier {
+    let isEnabled: Bool
+    @Binding var text: String
+    let onSubmit: () -> Void
+
+    func body(content: Content) -> some View {
+        if isEnabled {
+            content
+                .searchable(text: $text, prompt: Text(String(localized: "Search the web for recipes")))
+                .onSubmit(of: .search, onSubmit)
+        } else {
+            content
+        }
     }
 }
 
@@ -252,12 +427,16 @@ struct RecipeImportPreview: View {
     let warnings: [String]
     let provenance: [RecipeExtractionField: RecipeExtractionProvenance]
     let onConfirm: (ImportedRecipe) -> Void
+    /// Set for a library import: the confirm button becomes "Save recipe"
+    /// and a second one saves and plans. Nil keeps the dish-bound "Import".
+    let onConfirmAndPlan: ((ImportedRecipe) -> Void)?
     let onSaveLinkOnly: () -> Void
     let onCancel: () -> Void
 
     init(
         result: RecipeExtractionResult,
         onConfirm: @escaping (ImportedRecipe) -> Void,
+        onConfirmAndPlan: ((ImportedRecipe) -> Void)? = nil,
         onSaveLinkOnly: @escaping () -> Void,
         onCancel: @escaping () -> Void
     ) {
@@ -269,6 +448,7 @@ struct RecipeImportPreview: View {
         warnings = result.warnings
         provenance = result.provenance
         self.onConfirm = onConfirm
+        self.onConfirmAndPlan = onConfirmAndPlan
         self.onSaveLinkOnly = onSaveLinkOnly
         self.onCancel = onCancel
     }
@@ -378,10 +558,27 @@ struct RecipeImportPreview: View {
                         dismiss()
                     }
                 }
-                ToolbarItem(placement: .confirmationAction) {
-                    Button(String(localized: "Import")) {
-                        onConfirm(editedRecipe())
-                        dismiss()
+                if let onConfirmAndPlan {
+                    ToolbarItem(placement: .primaryAction) {
+                        Button(String(localized: "Save & plan"), systemImage: "calendar.badge.plus") {
+                            onConfirmAndPlan(editedRecipe())
+                            dismiss()
+                        }
+                        .disabled(!hasTitle)
+                    }
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "Save recipe")) {
+                            onConfirm(editedRecipe())
+                            dismiss()
+                        }
+                        .disabled(!hasTitle)
+                    }
+                } else {
+                    ToolbarItem(placement: .confirmationAction) {
+                        Button(String(localized: "Import")) {
+                            onConfirm(editedRecipe())
+                            dismiss()
+                        }
                     }
                 }
             }
@@ -389,6 +586,11 @@ struct RecipeImportPreview: View {
             .environment(\.editMode, .constant(.active))
             #endif
         }
+    }
+
+    /// A library dish needs a name; the dish-bound import keeps the dish's own.
+    private var hasTitle: Bool {
+        !recipe.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
     private func editedRecipe() -> ImportedRecipe {
@@ -660,7 +862,14 @@ struct RecipeSourceEditorView: View {
     }
 }
 
-#Preview {
-    RecipeFinderView(dish: PreviewData.dish)
+#Preview("For a dish") {
+    NavigationStack { RecipeFinderView(dish: PreviewData.dish) }
+        .environment(AppState.preview)
+        .modelContainer(PreviewData.container)
+}
+
+#Preview("Free-text search") {
+    NavigationStack { RecipeFinderView(query: "neapolitanische Pizza") }
+        .environment(AppState.preview)
         .modelContainer(PreviewData.container)
 }

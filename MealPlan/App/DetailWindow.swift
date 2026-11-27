@@ -35,6 +35,7 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
     case subscribeToSite
     case addRecipeSite
     case browseSite(url: URL, title: String)
+    case searchWeb(query: String, planningContext: RecipePlanningContext?)
     case importRecipes(URL)
 
     // Household and settings
@@ -54,7 +55,7 @@ enum DetailWindowRoute: Codable, Hashable, Identifiable {
         switch self {
         case .recipe, .newRecipe, .editRecipe, .cookRecipe, .discoverRecipes:
             CGSize(width: 640, height: 560)
-        case .findRecipe, .browseSite, .importRecipes, .printPlan, .printShoppingList, .dataTransfer:
+        case .findRecipe, .browseSite, .searchWeb, .importRecipes, .printPlan, .printShoppingList, .dataTransfer:
             CGSize(width: 720, height: 600)
         case .plannedMeal:
             // Wide enough for the fortnight of slots the planner strip draws.
@@ -273,8 +274,10 @@ struct DetailWindow: View {
             FeedSubscriptionSheet()
         case .addRecipeSite:
             RecipeBookmarkSheet()
-        case .browseSite(let url, let title):
-            BrowseSiteWindow(url: url, title: title)
+        case .browseSite(let url, _):
+            windowStack { RecipeFinderView(query: "", initialURL: url) }
+        case .searchWeb(let query, let planningContext):
+            windowStack { RecipeFinderView(query: query, planningContext: planningContext) }
         case .importRecipes(let url):
             ImportRecipesSheet(fileURL: url)
 
@@ -391,37 +394,6 @@ struct OpenInNewWindowButton: View {
     }
 }
 
-
-/// A bookmarked site, opened in its own browser window. The dish it would
-/// become is made here and stays out of the store until "Use this recipe"
-/// saves it — see `RecipeFinderView.createsDish`.
-@MainActor
-private struct BrowseSiteWindow: View {
-    let url: URL
-    let title: String
-
-    @Environment(AppState.self) private var appState
-    @State private var dish: Dish?
-
-    var body: some View {
-        Group {
-            if let dish {
-                NavigationStack {
-                    RecipeFinderView(dish: dish, initialURL: url, createsDish: true)
-                }
-            } else {
-                ProgressView()
-            }
-        }
-        .onAppear {
-            guard dish == nil else { return }
-            let candidate = Dish(name: title)
-            candidate.household = appState.currentHousehold
-            candidate.createdByName = appState.currentMemberName
-            dish = candidate
-        }
-    }
-}
 
 extension View {
     /// Adds a one-item context menu offering this row in a window of its own.

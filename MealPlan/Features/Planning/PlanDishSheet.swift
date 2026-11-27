@@ -99,7 +99,9 @@ struct PlanDishSheet: View {
     /// household has a matching meal, else the first configured meal.
     private var resolvedMealKey: String {
         let keys = Set(mealTypes.map(\.key))
-        if let defaultMealKey, keys.contains(defaultMealKey) { return defaultMealKey }
+        if let defaultMealKey, keys.contains(defaultMealKey) || defaultMealKey == MealType.extraKey {
+            return defaultMealKey
+        }
         if let tagKey = dish.mealTypeTags.first?.slot.rawValue, keys.contains(tagKey) { return tagKey }
         return mealTypes.first?.key ?? ""
     }
